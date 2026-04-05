@@ -1,5 +1,16 @@
-import type { CfOrg, CfRegion, SyncProgress } from '../types/index.js';
+import type { CfOrg, SyncProgress } from '../types/index.js';
 import { CF_REGIONS } from '../core/regionList.js';
+
+// ─── XSS Helpers ─────────────────────────────────────────────────────────────
+
+function esc(raw: string): string {
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // ─── Setup Screens ────────────────────────────────────────────────────────────
 
@@ -37,7 +48,7 @@ export function renderConnectingScreen(regionLabel: string): string {
   return `
     <div class="spinner-wrap">
       <div class="spinner"></div>
-      <div>Connecting to ${regionLabel}…</div>
+      <div>Connecting to ${esc(regionLabel)}…</div>
       <div style="font-size:11px;opacity:0.6">Reading credentials from shell environment</div>
     </div>`;
 }
@@ -45,9 +56,9 @@ export function renderConnectingScreen(regionLabel: string): string {
 export function renderOrgScreen(orgs: CfOrg[]): string {
   const items = orgs
     .map(org => `
-      <label class="list-item" data-org="${org.name}">
-        <input type="radio" name="org" value="${org.name}">
-        <span>${org.name}</span>
+      <label class="list-item" data-org="${esc(org.name)}">
+        <input type="radio" name="org" value="${esc(org.name)}">
+        <span>${esc(org.name)}</span>
       </label>`)
     .join('');
 
@@ -70,7 +81,7 @@ export function renderFolderScreen(orgName: string, mappedPath?: string): string
   return `
     <div class="section-title">Map Local Folder</div>
     <div style="margin-bottom:10px;font-size:12px">
-      Org: <strong>${orgName}</strong>
+      Org: <strong>${esc(orgName)}</strong>
     </div>
     ${hint}
     <button class="btn btn-secondary btn-full" id="btnBrowse" style="margin-bottom:8px">
@@ -115,23 +126,24 @@ export function renderDebugTab(opts: {
     const isStarted = app.state === 'STARTED';
     const isDebugging = opts.activeSessions.some(s => s.appName === app.name);
     return `
-      <label class="list-item ${isDebugging ? 'selected' : ''}" data-app="${app.name}">
-        <input type="checkbox" name="app" value="${app.name}" ${isDebugging ? 'checked disabled' : ''}>
+      <label class="list-item ${isDebugging ? 'selected' : ''}" data-app="${esc(app.name)}">
+        <input type="checkbox" name="app" value="${esc(app.name)}" ${isDebugging ? 'checked disabled' : ''}>
         <span class="dot dot-${isStarted ? 'started' : 'stopped'}"></span>
-        <span style="flex:1">${app.name}</span>
+        <span style="flex:1">${esc(app.name)}</span>
         ${isDebugging ? '<span style="font-size:10px;opacity:0.6">active</span>' : ''}
       </label>`;
   };
 
   const sessionCard = (s: { appName: string; status: string; port: number; appUrl?: string; error?: string }): string => {
-    const badge = `<span class="status-badge badge-${s.status.toLowerCase()}">${s.status}</span>`;
-    const stopBtn = `<button class="btn btn-ghost" style="padding:2px 6px;font-size:10px" onclick="stopDebug('${s.appName}')">■ Stop</button>`;
+    const badge = `<span class="status-badge badge-${esc(s.status.toLowerCase())}">${esc(s.status)}</span>`;
+    // Use data attribute + event delegation instead of inline onclick to avoid XSS
+    const stopBtn = `<button class="btn btn-ghost stop-debug-btn" data-app="${esc(s.appName)}" style="padding:2px 6px;font-size:10px">■ Stop</button>`;
     const urlBtn = s.appUrl
-      ? `<a href="${s.appUrl}" class="btn btn-ghost" style="padding:2px 6px;font-size:10px">🔗</a>`
+      ? `<a href="${esc(s.appUrl)}" class="btn btn-ghost" style="padding:2px 6px;font-size:10px">🔗</a>`
       : '';
     return `
       <div class="session-card">
-        <span class="app-name">${s.appName}</span>
+        <span class="app-name">${esc(s.appName)}</span>
         ${badge}
         <span style="font-size:10px;opacity:0.5">:${s.port}</span>
         ${urlBtn}${stopBtn}
@@ -144,7 +156,7 @@ export function renderDebugTab(opts: {
   return `
     <div class="screen active" id="debugScreen">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" id="btnChangeOrg">◀ ${opts.orgName}</button>
+        <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" id="btnChangeOrg">◀ ${esc(opts.orgName)}</button>
         <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" id="btnRefreshApps">↺ Refresh</button>
       </div>
 
@@ -187,15 +199,15 @@ export function renderCredentialsTab(opts: {
   results?: Array<{ appName: string; ok: boolean; error?: string }>;
 }): string {
   const spaceOptions = opts.spaces
-    .map(s => `<option value="${s.name}" ${s.name === opts.selectedSpace ? 'selected' : ''}>${s.name}</option>`)
+    .map(s => `<option value="${esc(s.name)}" ${s.name === opts.selectedSpace ? 'selected' : ''}>${esc(s.name)}</option>`)
     .join('');
 
   const appRows = opts.apps
     .map(a => `
-      <label class="list-item" data-app="${a.name}">
-        <input type="checkbox" name="credApp" value="${a.name}">
+      <label class="list-item" data-app="${esc(a.name)}">
+        <input type="checkbox" name="credApp" value="${esc(a.name)}">
         <span class="dot dot-${a.state === 'STARTED' ? 'started' : 'stopped'}"></span>
-        <span>${a.name}</span>
+        <span>${esc(a.name)}</span>
       </label>`)
     .join('');
 
@@ -203,8 +215,8 @@ export function renderCredentialsTab(opts: {
     .map(r => `
       <div class="result-row">
         <span class="result-icon">${r.ok ? '✅' : '❌'}</span>
-        <span class="result-app">${r.appName}</span>
-        <span class="result-status">${r.ok ? 'Extracted' : (r.error ?? 'No HANA binding')}</span>
+        <span class="result-app">${esc(r.appName)}</span>
+        <span class="result-status">${r.ok ? 'Extracted' : esc(r.error ?? 'No HANA binding')}</span>
       </div>`)
     .join('');
 

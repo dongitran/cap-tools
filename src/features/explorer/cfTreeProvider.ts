@@ -7,7 +7,7 @@ import {
   LoadingNode,
   type CfTreeNode,
 } from './nodes.js';
-import type { CfApp, CfOrg, CfSpace } from '../../types/index.js';
+import type { CfApp, CfSpace } from '../../types/index.js';
 import type { CacheManager } from '../../core/cacheManager.js';
 import { cfApps, cfOrgs, cfSpaces, cfTarget } from '../../core/cfClient.js';
 import { logger } from '../../core/logger.js';
@@ -70,8 +70,7 @@ export class CfTreeProvider implements vscode.TreeDataProvider<CfTreeNode> {
     if (cached) return this.renderSpaces(cached, orgName);
 
     const loader = new LoadingNode(`Loading spaces for ${orgName}...`);
-    // Kick off async load, re-render when done
-    this.fetchSpaces(orgName);
+    void this.fetchSpaces(orgName);
     return [loader];
   }
 
@@ -96,7 +95,7 @@ export class CfTreeProvider implements vscode.TreeDataProvider<CfTreeNode> {
     const cached = this.cache.getApps(this.regionId, orgName, spaceName);
     if (cached) return this.renderApps(cached, orgName, spaceName);
 
-    this.fetchApps(orgName, spaceName);
+    void this.fetchApps(orgName, spaceName);
     return [new LoadingNode(`Loading apps in ${spaceName}...`)];
   }
 

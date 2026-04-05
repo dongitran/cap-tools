@@ -88,9 +88,14 @@ export function getMainScript(): string {
     });
   };
 
-  window.stopDebug = function(appName) {
-    post('stopDebug', { appName });
-  };
+  // Stop debug via data attribute (avoids XSS from inline onclick)
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.stop-debug-btn');
+    if (btn) {
+      const appName = btn.dataset.app;
+      if (appName) post('stopDebug', { appName });
+    }
+  });
 
   document.addEventListener('click', function(e) {
     if (e.target.id === 'btnStartDebug') {

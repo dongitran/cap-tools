@@ -11,5 +11,8 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/webview/**', 'src/extension.ts'],
     },
+    alias: {
+      vscode: new URL('./test/__mocks__/vscode.ts', import.meta.url).pathname,
+    },
   },
 });

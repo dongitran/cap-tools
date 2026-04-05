@@ -3,13 +3,9 @@ import type { CacheManager } from '../../core/cacheManager.js';
 import { cfApps, cfTarget } from '../../core/cfClient.js';
 import { logger } from '../../core/logger.js';
 import type { ProcessManager } from '../../core/processManager.js';
-import type { CfApp, ExtensionConfig, OrgFolderMapping } from '../../types/index.js';
+import type { ExtensionConfig } from '../../types/index.js';
 import type { MainPanel } from '../../webview/mainPanel.js';
-import { findLocalFolder } from './appMapper.js';
-import {
-  allocatePort,
-  findLocalFolder as _findLocalFolder,
-} from './appMapper.js';
+import { findLocalFolder, allocatePort } from './appMapper.js';
 import { getUsedPorts, mergeLaunchConfig } from './launchConfigurator.js';
 
 export class DebugPanelController {
@@ -77,27 +73,26 @@ export class DebugPanelController {
         localFolderPath: localFolder,
       });
 
-      // Start the tunnel process
-      void this.processManager.startDebug(appName, port).then(() => {
-        // Attach debugger once tunnel is ready (processManager emits ATTACHING status)
-      });
-
-      // Listen for ATTACHING status then attach debugger
+      // Listen for ATTACHING/ERROR/EXITED to attach debugger or cleanup
       const unsubscribe = this.processManager.onSessionUpdate(async session => {
-        if (session.appName !== appName || session.status !== 'ATTACHING') return;
-        unsubscribe();
-        try {
-          const folder = workspaceFolders?.[0];
-          const started = await vscode.debug.startDebugging(folder, configName);
-          if (started) {
+        if (session.appName !== appName) return;
+
+        // Always unsubscribe on terminal states to prevent memory leak
+        if (session.status === 'ATTACHING') {
+          unsubscribe();
+          try {
+            const folder = workspaceFolders?.[0];
+            await vscode.debug.startDebugging(folder, configName);
             this.processManager.notifyAttached(appName);
-          } else {
-            this.processManager.notifyAttached(appName); // still mark as attached on failure
+          } catch (err) {
+            logger.error(`Failed to attach debugger to ${appName}`, err);
           }
-        } catch (err) {
-          logger.error(`Failed to attach debugger to ${appName}`, err);
+        } else if (session.status === 'ERROR' || session.status === 'EXITED') {
+          unsubscribe();
         }
       });
+
+      void this.processManager.startDebug(appName, port);
     }
   }
 

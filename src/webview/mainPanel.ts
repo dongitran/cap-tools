@@ -17,13 +17,11 @@ import type {
   CfSpace,
   CredentialResult,
   DebugSession,
-  ExtensionConfig,
   MainTab,
   SyncProgress,
   WebviewMessage,
 } from '../types/index.js';
-import { CF_REGIONS, getOrCustomRegion } from '../core/regionList.js';
-import { logger } from '../core/logger.js';
+import { getOrCustomRegion } from '../core/regionList.js';
 
 type ScreenState =
   | { id: 'region' }
@@ -190,7 +188,7 @@ export class MainPanel implements vscode.WebviewViewProvider {
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+    content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src data:; font-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style nonce="${nonce}">${getSharedStyles()}</style>
 </head>

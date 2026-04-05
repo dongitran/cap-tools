@@ -34,7 +34,6 @@ let syncTimer: ReturnType<typeof setInterval> | undefined;
 
 let config: ExtensionConfig = { orgMappings: [] };
 let currentRegionId = 'ap11';
-let currentCustomEndpoint: string | undefined;
 
 function loadConfig(state: vscode.Memento): void {
   const saved = state.get<ExtensionConfig>(CONFIG_KEY);
@@ -162,7 +161,6 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
 
     case 'login':
       currentRegionId = msg.payload.regionId;
-      currentCustomEndpoint = msg.payload.customEndpoint;
       await handleLogin(msg.payload.regionId, context, msg.payload.customEndpoint);
       break;
 
@@ -405,12 +403,18 @@ function scheduleSync(): void {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
-async function applySettings(payload: Partial<SettingsPayload>, context: vscode.ExtensionContext): Promise<void> {
+// Map SettingsPayload keys → VSCode config keys (payload uses camelCase short forms)
+const SETTINGS_KEY_MAP: Record<string, string> = {
+  syncInterval: 'cacheSyncInterval',
+};
+
+async function applySettings(payload: Partial<SettingsPayload>, _context: vscode.ExtensionContext): Promise<void> {
   const cfg = vscode.workspace.getConfiguration('sapDevSuite');
   for (const [key, value] of Object.entries(payload)) {
-    await cfg.update(key, value, vscode.ConfigurationTarget.Global);
+    const configKey = SETTINGS_KEY_MAP[key] ?? key;
+    await cfg.update(configKey, value, vscode.ConfigurationTarget.Global);
   }
-  if (payload.syncInterval !== undefined) {
+  if (payload.syncInterval !== undefined || payload.autoSync !== undefined) {
     scheduleSync();
   }
 }
@@ -424,7 +428,6 @@ async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
   cache.clear();
   clearCachedCredentials();
   currentRegionId = 'ap11';
-  currentCustomEndpoint = undefined;
   await vscode.commands.executeCommand('setContext', 'sapDevSuite.loggedIn', false);
   mainPanel.showRegion();
   treeProvider.refresh();
