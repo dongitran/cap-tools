@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint & Type check
+        run: pnpm typecheck && pnpm lint
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build (production)
+        run: pnpm build:prod
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Package VSIX
+        run: pnpm package --out sap-dev-suite-${{ steps.version.outputs.VERSION }}.vsix
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "SAP Dev Suite v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## SAP Dev Suite ${{ github.ref_name }}
+
+            ### Installation
+            Download the `.vsix` file below and install via:
+            ```
+            code --install-extension sap-dev-suite-${{ steps.version.outputs.VERSION }}.vsix
+            ```
+
+            ### Changes
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          files: sap-dev-suite-${{ steps.version.outputs.VERSION }}.vsix
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+
+      - name: Publish to VS Marketplace
+        if: "!contains(github.ref, '-')"
+        run: pnpm publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  notify:
+    name: Notify on Failure
+    needs: release
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Release failed for ${context.ref}`,
+              body: `Release workflow failed. [View run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              labels: ['bug', 'release']
+            })

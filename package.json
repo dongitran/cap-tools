@@ -1,0 +1,222 @@
+{
+  "name": "sap-dev-suite",
+  "displayName": "SAP Dev Suite",
+  "description": "All-in-one toolbox for SAP BTP, CAP/CDS, Cloud Foundry, and HANA development",
+  "version": "0.1.0",
+  "publisher": "dongtran",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dongtran/sap-dev-suite"
+  },
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=20"
+  },
+  "categories": ["Other", "Debuggers"],
+  "keywords": ["SAP", "CAP", "CDS", "Cloud Foundry", "HANA", "BTP", "debug", "SQLTools"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "icon": "resources/icon.png",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sap-dev-suite",
+          "title": "SAP Dev Suite",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sap-dev-suite": [
+        {
+          "type": "webview",
+          "id": "sapDevSuite.mainPanel",
+          "name": "SAP Dev Suite"
+        },
+        {
+          "id": "sapDevSuite.cfExplorer",
+          "name": "CF Explorer",
+          "when": "sapDevSuite.loggedIn"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sapDevSuite.resetConfig",
+        "title": "SAP Dev Suite: Reset Configuration",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sapDevSuite.syncCache",
+        "title": "SAP Dev Suite: Sync CF Cache",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "sapDevSuite.refreshExplorer",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sapDevSuite.copyAppName",
+        "title": "Copy App Name",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "sapDevSuite.openAppUrl",
+        "title": "Open App URL",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "sapDevSuite.debugApp",
+        "title": "Debug This App",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "sapDevSuite.extractAppCreds",
+        "title": "Extract HANA Credentials",
+        "icon": "$(key)"
+      },
+      {
+        "command": "sapDevSuite.viewAppEnv",
+        "title": "View App Environment",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "sapDevSuite.stopAllSessions",
+        "title": "SAP Dev Suite: Stop All Debug Sessions",
+        "icon": "$(debug-stop)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sapDevSuite.refreshExplorer",
+          "when": "view == sapDevSuite.cfExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "sapDevSuite.syncCache",
+          "when": "view == sapDevSuite.cfExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sapDevSuite.debugApp",
+          "when": "viewItem == cfApp-started",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "sapDevSuite.extractAppCreds",
+          "when": "viewItem =~ /cfApp/",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "sapDevSuite.openAppUrl",
+          "when": "viewItem == cfApp-started",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "sapDevSuite.viewAppEnv",
+          "when": "viewItem =~ /cfApp/",
+          "group": "2_info@1"
+        },
+        {
+          "command": "sapDevSuite.copyAppName",
+          "when": "viewItem =~ /cfApp/",
+          "group": "2_info@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sapDevSuite.debugApp",
+          "when": "false"
+        },
+        {
+          "command": "sapDevSuite.extractAppCreds",
+          "when": "false"
+        },
+        {
+          "command": "sapDevSuite.copyAppName",
+          "when": "false"
+        },
+        {
+          "command": "sapDevSuite.openAppUrl",
+          "when": "false"
+        },
+        {
+          "command": "sapDevSuite.viewAppEnv",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SAP Dev Suite",
+      "properties": {
+        "sapDevSuite.defaultRegion": {
+          "type": "string",
+          "default": "ap11",
+          "description": "Default Cloud Foundry region to connect to"
+        },
+        "sapDevSuite.cacheSyncInterval": {
+          "type": "number",
+          "default": 240,
+          "minimum": 30,
+          "maximum": 1440,
+          "description": "Background cache sync interval in minutes (30–1440)"
+        },
+        "sapDevSuite.autoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic CF app cache sync on startup"
+        },
+        "sapDevSuite.sqlToolsIntegration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically write extracted HANA credentials to SQLTools settings"
+        },
+        "sapDevSuite.debugBasePort": {
+          "type": "number",
+          "default": 9229,
+          "description": "Starting port for CDS debug sessions (increments per session)"
+        },
+        "sapDevSuite.explorerDepth": {
+          "type": "number",
+          "default": 6,
+          "minimum": 2,
+          "maximum": 10,
+          "description": "Max folder depth when scanning for local app folders"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "build:prod": "node esbuild.mjs --production",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test --max-warnings=0",
+    "lint:fix": "eslint src test --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.23.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

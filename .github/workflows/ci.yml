@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test:coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/lcov.info
+          flags: unittests
+        if: always()
+
+  build:
+    name: Build Extension
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (production)
+        run: pnpm build:prod
+
+      - name: Verify bundle size
+        run: |
+          SIZE=$(stat -c%s dist/extension.js 2>/dev/null || stat -f%z dist/extension.js)
+          echo "Bundle size: ${SIZE} bytes"
+          # Fail if over 5MB
+          if [ "$SIZE" -gt 5242880 ]; then
+            echo "ERROR: Bundle exceeds 5MB limit"
+            exit 1
+          fi
+
+      - name: Package VSIX (dry run)
+        run: pnpm package --out /tmp/sap-dev-suite-ci.vsix
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-ci-${{ github.run_number }}
+          path: /tmp/sap-dev-suite-ci.vsix
+          retention-days: 7
