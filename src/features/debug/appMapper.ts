@@ -19,7 +19,7 @@ export function findLocalFolder(appName: string, groupFolderPath: string, maxDep
 
   // Exact match first
   const exact = folders.find(f => normalize(path.basename(f)) === normalizedApp);
-  if (exact) return exact;
+  if (exact !== undefined) {return exact;}
 
   // Prefix match (CF app name often includes env suffix like -dev, -test)
   const prefix = folders.find(f => {

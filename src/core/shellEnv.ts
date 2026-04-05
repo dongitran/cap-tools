@@ -13,7 +13,7 @@ let cachedCreds: ShellCredentials | undefined;
  * Results are cached for the extension lifetime (cleared on resetConfig).
  */
 export function readShellCredentials(): ShellCredentials {
-  if (cachedCreds) return cachedCreds;
+  if (cachedCreds) {return cachedCreds;}
 
   try {
     const shell = process.env.SHELL ?? '/bin/bash';

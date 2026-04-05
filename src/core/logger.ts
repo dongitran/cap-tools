@@ -10,8 +10,8 @@ class Logger {
   }
 
   private write(level: LogLevel, message: string, ...args: unknown[]): void {
-    if (!this.channel) return;
-    const extra = args.length > 0 ? ' ' + args.map(a => JSON.stringify(a)).join(' ') : '';
+    if (!this.channel) {return;}
+    const extra = args.length > 0 ? ` ${  args.map(a => JSON.stringify(a)).join(' ')}` : '';
     this.channel.appendLine(`[${level}] ${message}${extra}`);
   }
 
@@ -24,9 +24,9 @@ class Logger {
   }
 
   error(message: string, err?: unknown): void {
-    const errStr = err instanceof Error ? `: ${err.message}` : err ? `: ${String(err)}` : '';
+    const errStr = err instanceof Error ? `: ${err.message}` : (err !== null && err !== undefined) ? `: ${String(err)}` : '';
     this.write('ERROR', `${message}${errStr}`);
-    if (err instanceof Error && err.stack) {
+    if (err instanceof Error && err.stack !== undefined) {
       this.channel?.appendLine(err.stack);
     }
   }

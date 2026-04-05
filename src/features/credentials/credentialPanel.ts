@@ -95,13 +95,13 @@ export class CredentialPanelController {
 
     switch (mode) {
       case 'sqltools': {
-        if (!workspacePath) {
+        if (workspacePath === undefined) {
           void vscode.window.showErrorMessage('Open a workspace folder first.');
           return;
         }
         const sqlToolsEnabled = vscode.workspace
           .getConfiguration('sapDevSuite')
-          .get('sqlToolsIntegration', true);
+          .get<boolean>('sqlToolsIntegration', true);
         if (sqlToolsEnabled) {
           writeSqlToolsConnections(workspacePath, connections);
           void vscode.window.showInformationMessage(

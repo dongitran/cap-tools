@@ -71,7 +71,7 @@ export function renderOrgScreen(orgs: CfOrg[]): string {
 }
 
 export function renderFolderScreen(orgName: string, mappedPath?: string): string {
-  const hint = mappedPath
+  const hint = mappedPath !== undefined
     ? `<div class="banner banner-success">📂 ${mappedPath}</div>`
     : `<div class="banner banner-info" style="font-size:11px">
          Select the root folder containing your local CAP project folders.<br>
@@ -87,7 +87,7 @@ export function renderFolderScreen(orgName: string, mappedPath?: string): string
     <button class="btn btn-secondary btn-full" id="btnBrowse" style="margin-bottom:8px">
       📁 Browse…
     </button>
-    ${mappedPath
+    ${mappedPath !== undefined
       ? `<button class="btn btn-primary btn-full" id="btnConfirmFolder">
            Continue →
          </button>`
@@ -138,7 +138,7 @@ export function renderDebugTab(opts: {
     const badge = `<span class="status-badge badge-${esc(s.status.toLowerCase())}">${esc(s.status)}</span>`;
     // Use data attribute + event delegation instead of inline onclick to avoid XSS
     const stopBtn = `<button class="btn btn-ghost stop-debug-btn" data-app="${esc(s.appName)}" style="padding:2px 6px;font-size:10px">■ Stop</button>`;
-    const urlBtn = s.appUrl
+    const urlBtn = s.appUrl !== undefined
       ? `<a href="${esc(s.appUrl)}" class="btn btn-ghost" style="padding:2px 6px;font-size:10px">🔗</a>`
       : '';
     return `
@@ -278,8 +278,8 @@ export function renderSettingsTab(opts: {
     if (p.status === 'running') {
       return `<span style="color:#fbbe00">⟳ Syncing… ${p.done}/${p.total}</span>`;
     }
-    if (p.status === 'done') return `<span style="color:#3fb950">✓ Up to date</span>`;
-    if (p.status === 'error') return `<span style="color:#f85149">✕ ${p.error ?? 'Error'}</span>`;
+    if (p.status === 'done') {return `<span style="color:#3fb950">✓ Up to date</span>`;}
+    if (p.status === 'error') {return `<span style="color:#f85149">✕ ${p.error ?? 'Error'}</span>`;}
     return `<span style="opacity:0.5">Idle</span>`;
   })();
 

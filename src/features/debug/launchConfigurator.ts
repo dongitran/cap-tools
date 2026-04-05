@@ -33,7 +33,7 @@ export function writeLaunchJson(workspacePath: string, config: LaunchConfig): vo
     fs.mkdirSync(vscodeDir, { recursive: true });
   }
   const launchPath = path.join(vscodeDir, 'launch.json');
-  fs.writeFileSync(launchPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  fs.writeFileSync(launchPath, `${JSON.stringify(config, null, 2)  }\n`, 'utf-8');
   logger.info(`Wrote launch.json at ${launchPath}`);
 }
 

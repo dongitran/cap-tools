@@ -12,7 +12,7 @@ export function findAppFolders(rootPath: string, maxDepth = 6): string[] {
 }
 
 function scanDir(dir: string, depth: number, maxDepth: number, results: string[]): void {
-  if (depth > maxDepth) return;
+  if (depth > maxDepth) {return;}
 
   let entries: fs.Dirent[];
   try {
@@ -27,8 +27,8 @@ function scanDir(dir: string, depth: number, maxDepth: number, results: string[]
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') continue;
+    if (!entry.isDirectory()) {continue;}
+    if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') {continue;}
     scanDir(path.join(dir, entry.name), depth + 1, maxDepth, results);
   }
 }

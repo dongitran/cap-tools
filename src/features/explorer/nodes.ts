@@ -56,7 +56,7 @@ export class CfAppNode extends vscode.TreeItem {
     this.tooltip = new vscode.MarkdownString(
       `**${app.name}** — ${app.state}${urlHint}`,
     );
-    this.description = app.state === 'STARTED' ? undefined : 'stopped';
+    if (app.state !== 'STARTED') { this.description = 'stopped'; }
   }
 }
 

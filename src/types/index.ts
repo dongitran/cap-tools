@@ -45,7 +45,7 @@ export interface VcapService {
   credentials: Record<string, unknown>;
 }
 
-export type VcapServices = Record<string, VcapService[]>;
+export type VcapServices = Record<string, VcapService[] | undefined>;
 
 // ─── SQLTools Integration ─────────────────────────────────────────────────────
 
@@ -72,16 +72,16 @@ export interface OrgCache {
   [orgName: string]: {
     spaces: CacheEntry<CfSpace[]>;
     apps: {
-      [spaceName: string]: CacheEntry<CfApp[]>;
+      [spaceName: string]: CacheEntry<CfApp[]> | undefined;
     };
-  };
+  } | undefined;
 }
 
 export interface RegionCache {
   [regionId: string]: {
     orgs: CacheEntry<CfOrg[]>;
     orgData: OrgCache;
-  };
+  } | undefined;
 }
 
 export interface AppCache {

@@ -34,7 +34,7 @@ export class DebugPanelController {
     }
   }
 
-  async startDebugSessions(appNames: string[], orgName: string): Promise<void> {
+  startDebugSessions(appNames: string[], orgName: string): void {
     const mapping = this.config.orgMappings.find(m => m.cfOrg === orgName);
     if (!mapping) {
       void vscode.window.showErrorMessage(
@@ -56,7 +56,7 @@ export class DebugPanelController {
 
     for (const appName of appNames) {
       const localFolder = findLocalFolder(appName, mapping.groupFolderPath, explorerDepth);
-      if (!localFolder) {
+      if (localFolder === undefined) {
         logger.warn(`No local folder found for app "${appName}" under ${mapping.groupFolderPath}`);
         void vscode.window.showWarningMessage(
           `Could not find local folder for "${appName}". Skipping.`,
@@ -75,7 +75,7 @@ export class DebugPanelController {
 
       // Listen for ATTACHING/ERROR/EXITED to attach debugger or cleanup
       const unsubscribe = this.processManager.onSessionUpdate(async session => {
-        if (session.appName !== appName) return;
+        if (session.appName !== appName) {return;}
 
         // Always unsubscribe on terminal states to prevent memory leak
         if (session.status === 'ATTACHING') {
@@ -96,11 +96,11 @@ export class DebugPanelController {
     }
   }
 
-  async stopDebugSession(appName: string): Promise<void> {
-    await this.processManager.stopDebug(appName);
+  stopDebugSession(appName: string): void {
+    this.processManager.stopDebug(appName);
   }
 
-  async stopAllSessions(): Promise<void> {
-    await this.processManager.stopAll();
+  stopAllSessions(): void {
+    this.processManager.stopAll();
   }
 }

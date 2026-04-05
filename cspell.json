@@ -1,0 +1,41 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "ignorePaths": [
+    "node_modules",
+    "dist",
+    ".git",
+    "*.lock",
+    "*.json",
+    "*.md"
+  ],
+  "words": [
+    "VCAP",
+    "Vcap",
+    "vcap",
+    "HANA",
+    "Hana",
+    "hana",
+    "hanatrial",
+    "creds",
+    "Creds",
+    "sqltools",
+    "basenames",
+    "esbuild",
+    "thenable",
+    "vsce",
+    "fsPath",
+    "appname",
+    "orgname",
+    "cfhome",
+    "subdir",
+    "memento",
+    "ondemand",
+    "dongtran",
+    "noreply",
+    "codecov",
+    "pnpm",
+    "vitest",
+    "SIGTERM"
+  ]
+}

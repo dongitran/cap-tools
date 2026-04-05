@@ -10,10 +10,10 @@ const HANA_SERVICE_LABELS = ['hana', 'hanatrial', 'hana-cloud'];
 export function extractHanaCredentials(vcap: VcapServices): HanaCredentials | undefined {
   for (const label of HANA_SERVICE_LABELS) {
     const services = vcap[label];
-    if (!services?.length) continue;
+    if (services === undefined || services.length === 0) {continue;}
 
     const binding = services[0];
-    const creds = binding.credentials as Record<string, unknown>;
+    const creds = binding.credentials;
 
     const host = String(creds['host'] ?? creds['hostname'] ?? '');
     const port = Number(creds['port'] ?? 443);
@@ -21,7 +21,7 @@ export function extractHanaCredentials(vcap: VcapServices): HanaCredentials | un
     const user = String(creds['user'] ?? creds['username'] ?? '');
     const password = String(creds['password'] ?? '');
 
-    if (!host || !user || !password) {
+    if (host.length === 0 || user.length === 0 || password.length === 0) {
       logger.debug(`HANA binding found for label "${label}" but missing required fields (host/user/password)`);
       continue;
     }
@@ -29,10 +29,10 @@ export function extractHanaCredentials(vcap: VcapServices): HanaCredentials | un
     const result: HanaCredentials = { host, port, database, user, password };
 
     const cert = creds['certificate'] ?? creds['sslCertificate'];
-    if (typeof cert === 'string') result.certificate = cert;
+    if (typeof cert === 'string') {result.certificate = cert;}
 
     const encrypt = creds['encrypt'] ?? creds['sslEncrypt'];
-    if (encrypt !== undefined) result.encrypt = Boolean(encrypt);
+    if (encrypt !== undefined) {result.encrypt = Boolean(encrypt);}
 
     return result;
   }

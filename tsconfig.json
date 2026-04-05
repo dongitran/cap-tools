@@ -6,13 +6,26 @@
     "lib": ["ES2022"],
     "outDir": "dist",
     "rootDir": "src",
+
+    // ─── Strict baseline ──────────────────────────────────────────────────────
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+
+    // ─── Extra strictness ─────────────────────────────────────────────────────
+    "exactOptionalPropertyTypes": true,       // optional props cannot be assigned undefined explicitly
+    "noImplicitOverride": true,               // must annotate override on subclass methods
+    "allowUnreachableCode": false,            // error on dead code after return/throw
+    "allowUnusedLabels": false,               // error on unused labels
+
+    // ─── Module & compat ──────────────────────────────────────────────────────
     "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+
+    // ─── Output ───────────────────────────────────────────────────────────────
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true

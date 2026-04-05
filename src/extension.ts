@@ -37,7 +37,7 @@ let currentRegionId = 'ap11';
 
 function loadConfig(state: vscode.Memento): void {
   const saved = state.get<ExtensionConfig>(CONFIG_KEY);
-  if (saved) config = saved;
+  if (saved) {config = saved;}
 }
 
 function saveConfig(state: vscode.Memento): void {
@@ -71,11 +71,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── Commands ─────────────────────────────────────────────────────────────
 
-  const cmds: [string, (...args: unknown[]) => unknown][] = [
+  const cmds: Array<[string, (...args: unknown[]) => unknown]> = [
     ['sapDevSuite.resetConfig', () => resetConfig(context)],
     ['sapDevSuite.syncCache', () => triggerSync()],
     ['sapDevSuite.refreshExplorer', () => treeProvider.refresh()],
-    ['sapDevSuite.stopAllSessions', () => processManager.stopAll()],
+    ['sapDevSuite.stopAllSessions', () => { processManager.stopAll(); }],
 
     ['sapDevSuite.copyAppName', (node: unknown) => {
       if (node instanceof CfAppNode) {
@@ -88,20 +88,20 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.env.openExternal(vscode.Uri.parse(`https://${node.appUrls[0]}`));
       }
     }],
-    ['sapDevSuite.debugApp', async (node: unknown) => {
-      if (!(node instanceof CfAppNode)) return;
-      if (!debugController) {
+    ['sapDevSuite.debugApp', (node: unknown) => {
+      if (!(node instanceof CfAppNode)) {return;}
+      if (debugController === undefined) {
         void vscode.window.showErrorMessage('SAP Dev Suite: Please login and select an org first.');
         return;
       }
-      await debugController.startDebugSessions([node.appName], node.orgName);
+      debugController.startDebugSessions([node.appName], node.orgName);
     }],
-    ['sapDevSuite.extractAppCreds', async (node: unknown) => {
-      if (!(node instanceof CfAppNode)) return;
+    ['sapDevSuite.extractAppCreds', (node: unknown) => {
+      if (!(node instanceof CfAppNode)) {return;}
       mainPanel.showDashboard(node.orgName, 'credentials');
     }],
     ['sapDevSuite.viewAppEnv', async (node: unknown) => {
-      if (!(node instanceof CfAppNode)) return;
+      if (!(node instanceof CfAppNode)) {return;}
       try {
         await cfTarget(node.orgName, node.spaceName);
         const envOutput = await cfEnv(node.appName);
@@ -129,8 +129,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── Auto-sync on startup ─────────────────────────────────────────────────
 
-  const autoSync = vscode.workspace.getConfiguration('sapDevSuite').get('autoSync', true);
-  if (autoSync && config.login) {
+  const autoSync = vscode.workspace.getConfiguration('sapDevSuite').get<boolean>('autoSync', true);
+  if (autoSync && config.login !== undefined) {
     setTimeout(() => triggerSync(), 5_000);
   }
 
@@ -153,10 +153,10 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
   switch (msg.type) {
     case 'ready':
       // Send initial state to webview
-      if (config.login && config.selectedOrg) {
+      if (config.login !== undefined && config.selectedOrg !== undefined) {
         mainPanel.showDashboard(config.selectedOrg, 'debug');
         await loadDashboardData();
-      } else if (config.login) {
+      } else if (config.login !== undefined) {
         await handleLogin(config.login.regionId, context);
       } else {
         mainPanel.showRegion();
@@ -192,28 +192,28 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       break;
 
     case 'loadSpaces':
-      if (credController) await credController.loadSpaces(msg.payload.orgName, currentRegionId);
+      if (credController) {await credController.loadSpaces(msg.payload.orgName, currentRegionId);}
       break;
 
     case 'loadSpaceApps':
-      if (credController) await credController.loadSpaceApps(msg.payload.orgName, msg.payload.spaceName, currentRegionId);
+      if (credController) {await credController.loadSpaceApps(msg.payload.orgName, msg.payload.spaceName, currentRegionId);}
       break;
 
     case 'startDebug':
-      if (debugController) await debugController.startDebugSessions(msg.payload.appNames, msg.payload.orgName);
+      if (debugController !== undefined) {debugController.startDebugSessions(msg.payload.appNames, msg.payload.orgName);}
       break;
 
     case 'stopDebug':
-      if (debugController) await debugController.stopDebugSession(msg.payload.appName);
-      else await processManager.stopDebug(msg.payload.appName);
+      if (debugController !== undefined) {debugController.stopDebugSession(msg.payload.appName);}
+      else {processManager.stopDebug(msg.payload.appName);}
       break;
 
     case 'stopAllDebug':
-      await processManager.stopAll();
+      processManager.stopAll();
       break;
 
     case 'extractCreds':
-      if (credController) await credController.extractCredentials(msg.payload);
+      if (credController) {await credController.extractCredentials(msg.payload);}
       break;
 
     case 'triggerSync':
@@ -258,7 +258,7 @@ async function handleLogin(
   mainPanel.showConnecting(regionId, customEndpoint);
 
   const creds = readShellCredentials();
-  if (!creds.email || !creds.password) {
+  if (creds.email === undefined || creds.password === undefined) {
     mainPanel.showRegion();
     void vscode.window.showErrorMessage(
       'SAP Dev Suite: SAP_EMAIL or SAP_PASSWORD not found in shell environment.',
@@ -277,7 +277,7 @@ async function handleLogin(
     saveConfig(context.globalState);
 
     // Check if org already mapped
-    if (config.selectedOrg) {
+    if (config.selectedOrg !== undefined) {
       mainPanel.showDashboard(config.selectedOrg, 'debug');
       await loadDashboardData();
       return;
@@ -314,7 +314,7 @@ async function handleSelectOrg(orgName: string, context: vscode.ExtensionContext
 
 async function loadDashboardData(): Promise<void> {
   const orgName = config.selectedOrg;
-  if (!orgName) return;
+  if (orgName === undefined) {return;}
 
   debugController = new DebugPanelController(mainPanel, processManager, cache, config);
   credController = new CredentialPanelController(mainPanel, cache);
@@ -338,7 +338,7 @@ async function loadAppsForOrg(orgName: string): Promise<void> {
 
 async function handleTabChange(tab: MainTab, _context: vscode.ExtensionContext): Promise<void> {
   mainPanel.showTab(tab);
-  if (tab === 'credentials' && config.selectedOrg) {
+  if (tab === 'credentials' && config.selectedOrg !== undefined) {
     await credController?.loadSpaces(config.selectedOrg, currentRegionId);
   }
 }
@@ -348,15 +348,15 @@ async function handleTabChange(tab: MainTab, _context: vscode.ExtensionContext):
 function updateOrgMapping(orgName: string, folderPath: string, context: vscode.ExtensionContext): void {
   const idx = config.orgMappings.findIndex(m => m.cfOrg === orgName);
   const mapping: OrgFolderMapping = { cfOrg: orgName, groupFolderPath: folderPath };
-  if (idx >= 0) config.orgMappings[idx] = mapping;
-  else config.orgMappings.push(mapping);
+  if (idx >= 0) {config.orgMappings[idx] = mapping;}
+  else {config.orgMappings.push(mapping);}
   saveConfig(context.globalState);
 }
 
 // ─── Background Cache Sync ────────────────────────────────────────────────────
 
 async function triggerSync(): Promise<void> {
-  if (!config.login) return;
+  if (!config.login) {return;}
 
   const progress: SyncProgress = { status: 'running', done: 0, total: 0 };
   cache.setSyncProgress(progress);
@@ -403,14 +403,14 @@ async function triggerSync(): Promise<void> {
 }
 
 function scheduleSync(): void {
-  if (syncTimer) clearInterval(syncTimer);
+  if (syncTimer) {clearInterval(syncTimer);}
   const intervalMin = vscode.workspace
     .getConfiguration('sapDevSuite')
     .get<number>('cacheSyncInterval', 240);
   const intervalMs = intervalMin * 60 * 1000;
   syncTimer = setInterval(() => {
-    const autoSync = vscode.workspace.getConfiguration('sapDevSuite').get('autoSync', true);
-    if (autoSync && config.login) {
+    const autoSync = vscode.workspace.getConfiguration('sapDevSuite').get<boolean>('autoSync', true);
+    if (autoSync && config.login !== undefined) {
       void triggerSync();
     }
   }, intervalMs);
@@ -437,7 +437,7 @@ async function applySettings(payload: Partial<SettingsPayload>, _context: vscode
 // ─── Reset ────────────────────────────────────────────────────────────────────
 
 async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
-  await processManager.stopAll();
+  processManager.stopAll();
   config = { orgMappings: [] };
   saveConfig(context.globalState);
   cache.clear();
@@ -452,7 +452,7 @@ async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
 // ─── Deactivate ───────────────────────────────────────────────────────────────
 
 export function deactivate(): void {
-  processManager?.dispose();
-  if (syncTimer) clearInterval(syncTimer);
+  processManager.dispose();
+  if (syncTimer) {clearInterval(syncTimer);}
   logger.info('SAP Dev Suite deactivated');
 }

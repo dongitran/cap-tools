@@ -24,7 +24,7 @@ interface ExecOptions {
 async function cf(args: string[], opts: ExecOptions = {}): Promise<string> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    ...(opts.cfHome ? { CF_HOME: opts.cfHome } : {}),
+    ...(opts.cfHome !== undefined ? { CF_HOME: opts.cfHome } : {}),
   };
 
   const cmd = `cf ${args.join(' ')}`;
@@ -70,7 +70,7 @@ export async function cfOrgs(opts?: ExecOptions): Promise<CfOrg[]> {
   // Skip header lines ("Getting orgs...", "OK", empty, then org names)
   const headerEnd = lines.findIndex(l => l === 'OK');
   const orgLines = headerEnd >= 0 ? lines.slice(headerEnd + 1) : lines.slice(2);
-  return orgLines.filter(l => l && !l.startsWith('Getting')).map(name => ({ name, guid: '' }));
+  return orgLines.filter(l => l.length > 0 && !l.startsWith('Getting')).map(name => ({ name, guid: '' }));
 }
 
 export async function cfSpaces(org: string, opts?: ExecOptions): Promise<CfSpace[]> {
@@ -79,12 +79,12 @@ export async function cfSpaces(org: string, opts?: ExecOptions): Promise<CfSpace
   const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
   const headerEnd = lines.findIndex(l => l === 'OK');
   const spaceLines = headerEnd >= 0 ? lines.slice(headerEnd + 1) : lines.slice(2);
-  return spaceLines.filter(l => l && !l.startsWith('Getting')).map(name => ({ name, guid: '' }));
+  return spaceLines.filter(l => l.length > 0 && !l.startsWith('Getting')).map(name => ({ name, guid: '' }));
 }
 
 export async function cfTarget(org: string, space?: string, opts?: ExecOptions): Promise<void> {
   const args = ['target', '-o', org];
-  if (space) args.push('-s', space);
+  if (space !== undefined) {args.push('-s', space);}
   await cf(args, opts);
 }
 
@@ -99,14 +99,14 @@ export function parseCfAppsOutput(raw: string): CfApp[] {
   const lines = raw.split('\n');
   // Find the table header line that starts with "name"
   const headerIdx = lines.findIndex(l => /^name\s+requested state/i.test(l.trim()));
-  if (headerIdx < 0) return [];
+  if (headerIdx < 0) {return [];}
 
   const apps: CfApp[] = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (!line) continue;
+    if (!line) {continue;}
     const cols = line.split(/\s{2,}/);
-    if (cols.length < 2) continue;
+    if (cols.length < 2) {continue;}
     const name = cols[0];
     const state = cols[1]?.toUpperCase() === 'STARTED' ? 'STARTED' : 'STOPPED';
     const urlsCol = cols[5] ?? '';
@@ -124,7 +124,7 @@ export async function cfEnv(appName: string, opts?: ExecOptions): Promise<string
 
 export function parseVcapServices(envOutput: string): VcapServices {
   const vcapMatch = envOutput.match(/VCAP_SERVICES:\s*(\{[\s\S]*?\})\n\n/);
-  if (!vcapMatch) return {};
+  if (!vcapMatch) {return {};}
   try {
     return JSON.parse(vcapMatch[1]) as VcapServices;
   } catch {
@@ -136,7 +136,7 @@ export function parseEnvVars(envOutput: string): Record<string, string> {
   const result: Record<string, string> = {};
   // Match "User-Provided:" section
   const userSection = envOutput.match(/User-Provided:\n([\s\S]*?)(?:\n\n|\n[A-Z])/);
-  if (!userSection) return result;
+  if (!userSection) {return result;}
   for (const line of userSection[1].split('\n')) {
     const eq = line.indexOf(':');
     if (eq > 0) {

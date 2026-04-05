@@ -54,9 +54,9 @@ export function writeSqlToolsConnections(
   settings[CONN_KEY] = merged;
 
   const vscodeDir = path.join(workspacePath, '.vscode');
-  if (!fs.existsSync(vscodeDir)) fs.mkdirSync(vscodeDir, { recursive: true });
+  if (!fs.existsSync(vscodeDir)) {fs.mkdirSync(vscodeDir, { recursive: true });}
 
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)  }\n`, 'utf-8');
   logger.info(`Wrote ${connections.length} HANA connection(s) to ${SETTINGS_FILE}`);
 }
 
@@ -65,7 +65,7 @@ export function writeSqlToolsConnections(
  */
 export function readSqlToolsConnections(workspacePath: string): SqlToolsConnection[] {
   const settingsPath = path.join(workspacePath, SETTINGS_FILE);
-  if (!fs.existsSync(settingsPath)) return [];
+  if (!fs.existsSync(settingsPath)) {return [];}
   try {
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
     const all = (settings[CONN_KEY] as SqlToolsConnection[] | undefined) ?? [];

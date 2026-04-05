@@ -97,7 +97,9 @@ export class MainPanel implements vscode.WebviewViewProvider {
   showFolderSelect(orgName: string, mappedPath?: string): void {
     this.orgName = orgName;
     this.groupFolderPath = mappedPath ?? '';
-    this.screen = { id: 'selectFolder', orgName, mappedPath };
+    this.screen = mappedPath !== undefined
+      ? { id: 'selectFolder', orgName, mappedPath }
+      : { id: 'selectFolder', orgName };
     this.render();
   }
 
@@ -111,18 +113,18 @@ export class MainPanel implements vscode.WebviewViewProvider {
 
   updateApps(apps: CfApp[]): void {
     this.apps = apps;
-    if (this.screen.id === 'dashboard') this.render();
+    if (this.screen.id === 'dashboard') {this.render();}
   }
 
   updateSpaces(spaces: CfSpace[]): void {
     this.spaces = spaces;
-    if (this.screen.id === 'dashboard') this.render();
+    if (this.screen.id === 'dashboard') {this.render();}
   }
 
   updateSpaceApps(spaceName: string, apps: CfApp[]): void {
     this.selectedSpace = spaceName;
     this.spaceApps = apps;
-    if (this.screen.id === 'dashboard') this.render();
+    if (this.screen.id === 'dashboard') {this.render();}
   }
 
   updateFolderPath(path: string): void {
@@ -136,25 +138,25 @@ export class MainPanel implements vscode.WebviewViewProvider {
   updateDebugSession(session: DebugSession): void {
     const idx = this.activeSessions.findIndex(s => s.appName === session.appName);
     if (session.status === 'EXITED') {
-      if (idx >= 0) this.activeSessions.splice(idx, 1);
+      if (idx >= 0) {this.activeSessions.splice(idx, 1);}
     } else if (idx >= 0) {
       this.activeSessions[idx] = session;
     } else {
       this.activeSessions.push(session);
     }
-    if (this.screen.id === 'dashboard') this.render();
+    if (this.screen.id === 'dashboard') {this.render();}
   }
 
   updateSyncProgress(progress: SyncProgress): void {
     this.syncProgress = progress;
-    if (this.screen.id === 'dashboard' && this.screen.tab === 'settings') this.render();
+    if (this.screen.id === 'dashboard' && this.screen.tab === 'settings') {this.render();}
   }
 
   appendCredResult(result: CredentialResult): void {
     const idx = this.credResults.findIndex(r => r.appName === result.appName);
-    if (idx >= 0) this.credResults[idx] = result;
-    else this.credResults.push(result);
-    if (this.screen.id === 'dashboard') this.render();
+    if (idx >= 0) {this.credResults[idx] = result;}
+    else {this.credResults.push(result);}
+    if (this.screen.id === 'dashboard') {this.render();}
   }
 
   clearCredResults(): void {
@@ -175,14 +177,14 @@ export class MainPanel implements vscode.WebviewViewProvider {
   }
 
   showError(message: string): void {
-    if (!this.view) return;
+    if (!this.view) {return;}
     void vscode.window.showErrorMessage(`SAP Dev Suite: ${message}`);
   }
 
   // ─── Rendering ───────────────────────────────────────────────────────────
 
   private render(): void {
-    if (!this.view) return;
+    if (!this.view) {return;}
     this.view.webview.html = this.buildHtml();
   }
 

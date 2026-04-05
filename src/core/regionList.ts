@@ -25,7 +25,7 @@ export function getRegionById(id: string): CfRegion | undefined {
 }
 
 export function getOrCustomRegion(id: string, customEndpoint?: string): CfRegion {
-  if (id === 'custom' && customEndpoint) {
+  if (id === 'custom' && customEndpoint !== undefined) {
     return { id: 'custom', label: 'Custom', apiEndpoint: customEndpoint };
   }
   return getRegionById(id) ?? CF_REGIONS[0];

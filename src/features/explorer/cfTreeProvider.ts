@@ -50,12 +50,12 @@ export class CfTreeProvider implements vscode.TreeDataProvider<CfTreeNode> {
 
   private async getOrgs(): Promise<CfTreeNode[]> {
     const cached = this.cache.getOrgs(this.regionId);
-    if (cached) return cached.map(org => new CfOrgNode(org));
+    if (cached) {return cached.map(org => new CfOrgNode(org));}
 
     try {
       const orgs = await cfOrgs();
       this.cache.setOrgs(this.regionId, orgs);
-      if (orgs.length === 0) return [new ErrorNode('No orgs found')];
+      if (orgs.length === 0) {return [new ErrorNode('No orgs found')];}
       return orgs.map(org => new CfOrgNode(org));
     } catch (err) {
       logger.error('Failed to fetch orgs for tree', err);
@@ -65,9 +65,9 @@ export class CfTreeProvider implements vscode.TreeDataProvider<CfTreeNode> {
 
   // ─── Spaces ───────────────────────────────────────────────────────────────
 
-  private async getSpaces(orgName: string): Promise<CfTreeNode[]> {
+  private getSpaces(orgName: string): CfTreeNode[] {
     const cached = this.cache.getSpaces(this.regionId, orgName);
-    if (cached) return this.renderSpaces(cached, orgName);
+    if (cached) {return this.renderSpaces(cached, orgName);}
 
     const loader = new LoadingNode(`Loading spaces for ${orgName}...`);
     void this.fetchSpaces(orgName);
@@ -85,15 +85,15 @@ export class CfTreeProvider implements vscode.TreeDataProvider<CfTreeNode> {
   }
 
   private renderSpaces(spaces: CfSpace[], orgName: string): CfTreeNode[] {
-    if (spaces.length === 0) return [new ErrorNode('No spaces found')];
+    if (spaces.length === 0) {return [new ErrorNode('No spaces found')];}
     return spaces.map(s => new CfSpaceNode(s, orgName));
   }
 
   // ─── Apps ─────────────────────────────────────────────────────────────────
 
-  private async getApps(orgName: string, spaceName: string): Promise<CfTreeNode[]> {
+  private getApps(orgName: string, spaceName: string): CfTreeNode[] {
     const cached = this.cache.getApps(this.regionId, orgName, spaceName);
-    if (cached) return this.renderApps(cached, orgName, spaceName);
+    if (cached) {return this.renderApps(cached, orgName, spaceName);}
 
     void this.fetchApps(orgName, spaceName);
     return [new LoadingNode(`Loading apps in ${spaceName}...`)];
@@ -111,7 +111,7 @@ export class CfTreeProvider implements vscode.TreeDataProvider<CfTreeNode> {
   }
 
   private renderApps(apps: CfApp[], orgName: string, spaceName: string): CfTreeNode[] {
-    if (apps.length === 0) return [new ErrorNode('No apps found')];
+    if (apps.length === 0) {return [new ErrorNode('No apps found')];}
     // Started apps first
     const started = apps.filter(a => a.state === 'STARTED');
     const stopped = apps.filter(a => a.state === 'STOPPED');

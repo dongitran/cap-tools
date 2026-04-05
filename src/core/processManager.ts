@@ -29,23 +29,25 @@ export class ProcessManager {
 
   private updateStatus(appName: string, status: DebugSessionStatus, extra?: Partial<DebugSession>): void {
     const proc = this.processes.get(appName);
-    this.emit({
+    const session: DebugSession = {
       appName,
       port: proc?.port ?? 0,
       status,
-      pid: proc?.process.pid,
+      // exactOptionalPropertyTypes: only set pid when it has a real value
+      ...(proc?.process.pid !== undefined ? { pid: proc.process.pid } : {}),
       ...extra,
-    });
+    };
+    this.emit(session);
   }
 
   /**
    * Spawns a `cds debug <appName> -f -p <port>` process and monitors it
    * for the "attach a debugger" signal.
    */
-  async startDebug(appName: string, port: number): Promise<void> {
+  startDebug(appName: string, port: number): void {
     if (this.processes.has(appName)) {
       logger.warn(`Debug session already active for ${appName}, stopping old one`);
-      await this.stopDebug(appName);
+      this.stopDebug(appName);
     }
 
     this.updateStatus(appName, 'TUNNELING', { port });
@@ -71,7 +73,10 @@ export class ProcessManager {
       }
     };
 
+    // stdout/stderr may be null if spawn is called with stdio: 'ignore'
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     proc.stdout?.on('data', onData);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     proc.stderr?.on('data', onData);
 
     proc.on('error', err => {
@@ -91,12 +96,14 @@ export class ProcessManager {
    * Call this after VSCode has successfully attached the debugger.
    */
   notifyAttached(appName: string, appUrl?: string): void {
-    this.updateStatus(appName, 'ATTACHED', { appUrl });
+    const extra: Partial<DebugSession> = {};
+    if (appUrl !== undefined) { extra.appUrl = appUrl; }
+    this.updateStatus(appName, 'ATTACHED', extra);
   }
 
-  async stopDebug(appName: string): Promise<void> {
+  stopDebug(appName: string): void {
     const active = this.processes.get(appName);
-    if (!active) return;
+    if (active === undefined) {return;}
 
     logger.info(`Stopping debug session for ${appName}`);
     this.processes.delete(appName);
@@ -104,7 +111,7 @@ export class ProcessManager {
     // Kill process group to also stop CF SSH tunnels
     const { process: proc, port } = active;
     try {
-      if (proc.pid) {
+      if (proc.pid !== undefined) {
         process.kill(-proc.pid, 'SIGTERM');
       }
     } catch {
@@ -115,9 +122,10 @@ export class ProcessManager {
     this.killByPort(port);
   }
 
-  async stopAll(): Promise<void> {
-    const appNames = [...this.processes.keys()];
-    await Promise.all(appNames.map(name => this.stopDebug(name)));
+  stopAll(): void {
+    for (const name of this.processes.keys()) {
+      this.stopDebug(name);
+    }
   }
 
   isActive(appName: string): boolean {
@@ -131,7 +139,7 @@ export class ProcessManager {
   private killByPort(port: number): void {
     try {
       const pid = execSync(`lsof -t -i:${port}`, { encoding: 'utf8' }).trim();
-      if (pid) {
+      if (pid.length > 0) {
         process.kill(Number(pid), 'SIGTERM');
         logger.debug(`Killed process ${pid} on port ${port}`);
       }
@@ -141,7 +149,7 @@ export class ProcessManager {
   }
 
   dispose(): void {
-    this.stopAll().catch(() => undefined);
+    this.stopAll();
     this.listeners.clear();
   }
 }
