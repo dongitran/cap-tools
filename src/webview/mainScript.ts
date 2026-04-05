@@ -154,6 +154,15 @@ export function getMainScript(): string {
     }
   });
 
+  // View app environment (VCAP_SERVICES + user-provided vars)
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.view-env-btn');
+    if (btn) {
+      const appName = btn.dataset.app;
+      if (appName) { post('getAppEnv', { appName, orgName: state.selectedOrg ?? '' }); }
+    }
+  });
+
   document.addEventListener('click', function(e) {
     if (e.target.id === 'btnStartDebug') {
       const checked = $all('#appList input[type="checkbox"]:checked:not(:disabled)');

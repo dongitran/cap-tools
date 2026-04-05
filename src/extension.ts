@@ -3,7 +3,7 @@ import { logger } from './core/logger.js';
 import { CacheManager } from './core/cacheManager.js';
 import { ProcessManager } from './core/processManager.js';
 import { readShellCredentials, clearCachedCredentials } from './core/shellEnv.js';
-import { cfSetApi, cfAuth, cfOrgs, cfApps, cfEnv, cfTarget, parseEnvVars } from './core/cfClient.js';
+import { cfSetApi, cfAuth, cfOrgs, cfApps, cfEnv, cfTarget, parseEnvVars, isAuthError } from './core/cfClient.js';
 import { getOrCustomRegion } from './core/regionList.js';
 import { MainPanel } from './webview/mainPanel.js';
 import { CfTreeProvider } from './features/explorer/cfTreeProvider.js';
@@ -11,6 +11,7 @@ import { CfAppNode } from './features/explorer/nodes.js';
 import { DebugPanelController } from './features/debug/debugPanel.js';
 import { CredentialPanelController } from './features/credentials/credentialPanel.js';
 import { parseVcapFromEnvOutput } from './features/credentials/vcapParser.js';
+import { cleanupLaunchConfigs } from './features/debug/launchConfigurator.js';
 import type {
   ExtensionConfig,
   MainTab,
@@ -34,6 +35,8 @@ let syncTimer: ReturnType<typeof setInterval> | undefined;
 
 let config: ExtensionConfig = { orgMappings: [] };
 let currentRegionId = 'ap11';
+let statusBar: vscode.StatusBarItem;
+let extensionContext: vscode.ExtensionContext;
 
 function loadConfig(state: vscode.Memento): void {
   const saved = state.get<ExtensionConfig>(CONFIG_KEY);
@@ -50,9 +53,17 @@ export function activate(context: vscode.ExtensionContext): void {
   logger.init();
   logger.info('SAP Dev Suite activating');
 
+  extensionContext = context;
   cache = new CacheManager(context.globalState);
   processManager = new ProcessManager();
   loadConfig(context.globalState);
+
+  // ── Status Bar ───────────────────────────────────────────────────────────
+
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  statusBar.command = 'workbench.view.extension.sapDevSuite';
+  context.subscriptions.push(statusBar);
+  refreshStatusBar();
 
   // ── Main Webview Panel ───────────────────────────────────────────────────
 
@@ -84,7 +95,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }],
     ['sapDevSuite.openAppUrl', (node: unknown) => {
-      if (node instanceof CfAppNode && node.appUrls[0]) {
+      if (node instanceof CfAppNode && node.appUrls.length > 0) {
         void vscode.env.openExternal(vscode.Uri.parse(`https://${node.appUrls[0]}`));
       }
     }],
@@ -102,18 +113,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }],
     ['sapDevSuite.viewAppEnv', async (node: unknown) => {
       if (!(node instanceof CfAppNode)) {return;}
-      try {
-        await cfTarget(node.orgName, node.spaceName);
-        const envOutput = await cfEnv(node.appName);
-        const vcap = parseVcapFromEnvOutput(envOutput);
-        const doc = await vscode.workspace.openTextDocument({
-          content: JSON.stringify(vcap, null, 2),
-          language: 'json',
-        });
-        await vscode.window.showTextDocument(doc);
-      } catch (err) {
-        logger.error('Failed to show app env', err);
+      await openAppEnvDocument(node.appName, node.orgName, node.spaceName);
+    }],
+    ['sapDevSuite.cleanupLaunchConfigs', () => {
+      const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (ws === undefined) {
+        void vscode.window.showWarningMessage('SAP Dev Suite: Open a workspace folder first.');
+        return;
       }
+      cleanupLaunchConfigs(ws);
+      void vscode.window.showInformationMessage('SAP Dev Suite: Removed all SAP debug configurations from launch.json.');
     }],
   ];
 
@@ -121,10 +130,11 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(vscode.commands.registerCommand(cmd, handler));
   }
 
-  // ── Process session updates → webview ────────────────────────────────────
+  // ── Process session updates → webview + status bar ───────────────────────
 
   processManager.onSessionUpdate(session => {
     mainPanel.updateDebugSession(session);
+    refreshStatusBar();
   });
 
   // ── Auto-sync on startup ─────────────────────────────────────────────────
@@ -145,6 +155,52 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   logger.info('SAP Dev Suite activated');
+}
+
+// ─── Status Bar ───────────────────────────────────────────────────────────────
+
+function refreshStatusBar(): void {
+  const sessions = processManager.getActiveSessions();
+  if (config.login === undefined) {
+    statusBar.text = '$(cloud) SAP: Not connected';
+    statusBar.tooltip = 'SAP Dev Suite: Click to connect';
+    statusBar.backgroundColor = undefined;
+  } else {
+    const orgLabel = config.selectedOrg ?? config.login.regionId;
+    if (sessions.length > 0) {
+      statusBar.text = `$(debug) SAP: ${orgLabel} | ${sessions.length} debugging`;
+      statusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      statusBar.tooltip = `SAP Dev Suite: ${sessions.join(', ')} debugging`;
+    } else {
+      statusBar.text = `$(cloud) SAP: ${orgLabel}`;
+      statusBar.tooltip = `SAP Dev Suite: Connected to ${config.login.regionId}`;
+      statusBar.backgroundColor = undefined;
+    }
+  }
+  statusBar.show();
+}
+
+// ─── App Environment Viewer ───────────────────────────────────────────────────
+
+async function openAppEnvDocument(appName: string, orgName: string, spaceName?: string): Promise<void> {
+  try {
+    if (spaceName !== undefined) {
+      await cfTarget(orgName, spaceName);
+    } else {
+      await cfTarget(orgName);
+    }
+    const envOutput = await cfEnv(appName);
+    const vcap = parseVcapFromEnvOutput(envOutput);
+    const envVars = parseEnvVars(envOutput);
+    const content = JSON.stringify({ vcap_services: vcap, user_provided: envVars }, null, 2);
+    const doc = await vscode.workspace.openTextDocument({ content, language: 'json' });
+    await vscode.window.showTextDocument(doc, { preview: true });
+  } catch (err) {
+    logger.error(`Failed to get app env for ${appName}`, err);
+    void vscode.window.showErrorMessage(
+      `SAP Dev Suite: Failed to fetch env for "${appName}" — ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 // ─── Webview Message Handler ──────────────────────────────────────────────────
@@ -257,15 +313,7 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       break;
 
     case 'getAppEnv': {
-      try {
-        await cfTarget(msg.payload.orgName);
-        const envOutput = await cfEnv(msg.payload.appName);
-        const vcap = parseVcapFromEnvOutput(envOutput);
-        const envVars = parseEnvVars(envOutput);
-        mainPanel.updateAppEnv(msg.payload.appName, vcap, envVars);
-      } catch (err) {
-        logger.error('Failed to get app env', err);
-      }
+      await openAppEnvDocument(msg.payload.appName, msg.payload.orgName);
       break;
     }
   }
@@ -299,6 +347,7 @@ async function handleLogin(
     config.login = { apiEndpoint: region.apiEndpoint, regionId, email: creds.email };
     currentRegionId = regionId;
     saveConfig(context.globalState);
+    refreshStatusBar();
 
     // Check if org already mapped
     if (config.selectedOrg !== undefined) {
@@ -332,6 +381,7 @@ async function handleSelectOrg(orgName: string, context: vscode.ExtensionContext
   } else {
     mainPanel.showFolderSelect(orgName);
   }
+  refreshStatusBar();
 }
 
 // ─── Dashboard Data Loading ───────────────────────────────────────────────────
@@ -414,15 +464,23 @@ async function triggerSync(): Promise<void> {
     treeProvider.refresh();
     logger.info(`Cache sync complete: ${done}/${total} orgs`);
   } catch (err) {
-    const errProgress: SyncProgress = {
-      status: 'error',
-      done: 0,
-      total: 0,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errProgress: SyncProgress = { status: 'error', done: 0, total: 0, error: errMsg };
     cache.setSyncProgress(errProgress);
     mainPanel.updateSyncProgress(errProgress);
     logger.error('Cache sync failed', err);
+
+    // Notify user if their CF session expired
+    if (isAuthError(err)) {
+      void vscode.window.showWarningMessage(
+        'SAP Dev Suite: CF session expired — re-login to resume syncing.',
+        'Re-Login',
+      ).then(action => {
+        if (action === 'Re-Login') {
+          void handleLogin(currentRegionId, extensionContext);
+        }
+      });
+    }
   }
 }
 
@@ -470,6 +528,7 @@ async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
   await vscode.commands.executeCommand('setContext', 'sapDevSuite.loggedIn', false);
   mainPanel.showRegion();
   treeProvider.refresh();
+  refreshStatusBar();
   logger.info('Configuration reset');
 }
 

@@ -212,10 +212,11 @@ export function renderDebugTab(opts: {
 
   const sessionCard = (s: { appName: string; status: string; port: number; appUrl?: string; error?: string }): string => {
     const badge = `<span class="status-badge badge-${esc(s.status.toLowerCase())}">${esc(s.status)}</span>`;
-    const stopBtn = `<button class="btn btn-ghost stop-debug-btn" data-app="${esc(s.appName)}" style="padding:2px 6px;font-size:10px;flex-shrink:0">■</button>`;
+    const stopBtn = `<button class="btn btn-ghost stop-debug-btn" data-app="${esc(s.appName)}" style="padding:2px 6px;font-size:10px;flex-shrink:0" title="Stop session">■</button>`;
     const urlBtn = s.appUrl !== undefined
       ? `<a href="${esc(s.appUrl)}" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;flex-shrink:0" title="Open app URL">🔗</a>`
       : '';
+    const envBtn = `<button class="btn-icon view-env-btn" data-app="${esc(s.appName)}" title="View app environment" style="font-size:11px">📋</button>`;
     const errorRow = (s.status === 'ERROR' && s.error !== undefined)
       ? `<div class="session-error-row">⚠ ${esc(s.error)}</div>`
       : '';
@@ -225,7 +226,7 @@ export function renderDebugTab(opts: {
           <span class="app-name">${esc(s.appName)}</span>
           ${badge}
           <span class="port-badge">:${s.port}</span>
-          ${urlBtn}${stopBtn}
+          ${envBtn}${urlBtn}${stopBtn}
         </div>
         ${errorRow}
       </div>`;

@@ -13,9 +13,23 @@
     "vscode": "^1.90.0",
     "node": ">=20"
   },
-  "categories": ["Other", "Debuggers"],
-  "keywords": ["SAP", "CAP", "CDS", "Cloud Foundry", "HANA", "BTP", "debug", "SQLTools"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other",
+    "Debuggers"
+  ],
+  "keywords": [
+    "SAP",
+    "CAP",
+    "CDS",
+    "Cloud Foundry",
+    "HANA",
+    "BTP",
+    "debug",
+    "SQLTools"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "icon": "resources/icon.png",
   "contributes": {
@@ -87,6 +101,10 @@
         "command": "sapDevSuite.stopAllSessions",
         "title": "SAP Dev Suite: Stop All Debug Sessions",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sapDevSuite.cleanupLaunchConfigs",
+        "title": "SAP Dev Suite: Clean Up Debug Configurations"
       }
     ],
     "menus": {
@@ -165,7 +183,7 @@
           "default": 240,
           "minimum": 30,
           "maximum": 1440,
-          "description": "Background cache sync interval in minutes (30–1440)"
+          "description": "Background cache sync interval in minutes (30\u20131440)"
         },
         "sapDevSuite.autoSync": {
           "type": "boolean",

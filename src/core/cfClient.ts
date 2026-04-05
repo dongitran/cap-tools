@@ -16,6 +16,19 @@ export class CfError extends Error {
   }
 }
 
+/**
+ * Returns true if the CF error indicates the session has expired or the user
+ * is not authenticated. Useful for triggering re-login flows.
+ */
+export function isAuthError(err: unknown): boolean {
+  if (!(err instanceof CfError)) {return false;}
+  const text = `${err.message} ${err.stderr}`.toLowerCase();
+  return text.includes('not logged in') ||
+    text.includes('unauthorized') ||
+    text.includes('invalid token') ||
+    text.includes('token expired');
+}
+
 interface ExecOptions {
   cfHome?: string;
   timeout?: number;
