@@ -57,6 +57,7 @@ jobs:
         with:
           files: coverage/lcov.info
           flags: unittests
+          fail_ci_if_error: false
         if: always()
 
   build:

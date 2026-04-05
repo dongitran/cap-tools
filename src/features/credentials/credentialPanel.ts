@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { cfEnv, cfSpaces, cfTarget } from '../../core/cfClient.js';
+import { cfApps, cfEnv, cfSpaces, cfTarget } from '../../core/cfClient.js';
 import { logger } from '../../core/logger.js';
 import type { CacheManager } from '../../core/cacheManager.js';
 import type { CredentialOutputMode, CredentialResult, SqlToolsConnection } from '../../types/index.js';
@@ -36,7 +36,6 @@ export class CredentialPanelController {
       return;
     }
     try {
-      const { cfApps } = await import('../../core/cfClient.js');
       await cfTarget(orgName, spaceName);
       const apps = await cfApps();
       this.cache.setApps(regionId, orgName, apps, spaceName);

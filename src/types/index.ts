@@ -20,7 +20,6 @@ export interface CfApp {
   name: string;
   state: 'STARTED' | 'STOPPED';
   urls: string[];
-  instances: number;
 }
 
 // ─── HANA / VCAP Types ────────────────────────────────────────────────────────

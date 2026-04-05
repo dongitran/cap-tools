@@ -62,7 +62,9 @@ jobs:
 
       - name: Publish to VS Marketplace
         if: "!contains(github.ref, '-')"
-        run: pnpm publish
+        run: |
+          pnpm publish
+          echo "✅ Published to VS Marketplace successfully"
         env:
           VSCE_PAT: ${{ secrets.AZURE_PAT }}
 

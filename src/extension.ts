@@ -3,7 +3,7 @@ import { logger } from './core/logger.js';
 import { CacheManager } from './core/cacheManager.js';
 import { ProcessManager } from './core/processManager.js';
 import { readShellCredentials, clearCachedCredentials } from './core/shellEnv.js';
-import { cfSetApi, cfAuth, cfOrgs, cfApps, cfEnv, cfTarget } from './core/cfClient.js';
+import { cfSetApi, cfAuth, cfOrgs, cfApps, cfEnv, cfTarget, parseEnvVars } from './core/cfClient.js';
 import { getOrCustomRegion } from './core/regionList.js';
 import { MainPanel } from './webview/mainPanel.js';
 import { CfTreeProvider } from './features/explorer/cfTreeProvider.js';
@@ -28,8 +28,8 @@ let cache: CacheManager;
 let processManager: ProcessManager;
 let mainPanel: MainPanel;
 let treeProvider: CfTreeProvider;
-let debugController: DebugPanelController;
-let credController: CredentialPanelController;
+let debugController: DebugPanelController | undefined;
+let credController: CredentialPanelController | undefined;
 let syncTimer: ReturnType<typeof setInterval> | undefined;
 
 let config: ExtensionConfig = { orgMappings: [] };
@@ -90,6 +90,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }],
     ['sapDevSuite.debugApp', async (node: unknown) => {
       if (!(node instanceof CfAppNode)) return;
+      if (!debugController) {
+        void vscode.window.showErrorMessage('SAP Dev Suite: Please login and select an org first.');
+        return;
+      }
       await debugController.startDebugSessions([node.appName], node.orgName);
     }],
     ['sapDevSuite.extractAppCreds', async (node: unknown) => {
@@ -188,27 +192,28 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       break;
 
     case 'loadSpaces':
-      await credController.loadSpaces(msg.payload.orgName, currentRegionId);
+      if (credController) await credController.loadSpaces(msg.payload.orgName, currentRegionId);
       break;
 
     case 'loadSpaceApps':
-      await credController.loadSpaceApps(msg.payload.orgName, msg.payload.spaceName, currentRegionId);
+      if (credController) await credController.loadSpaceApps(msg.payload.orgName, msg.payload.spaceName, currentRegionId);
       break;
 
     case 'startDebug':
-      await debugController.startDebugSessions(msg.payload.appNames, msg.payload.orgName);
+      if (debugController) await debugController.startDebugSessions(msg.payload.appNames, msg.payload.orgName);
       break;
 
     case 'stopDebug':
-      await debugController.stopDebugSession(msg.payload.appName);
+      if (debugController) await debugController.stopDebugSession(msg.payload.appName);
+      else await processManager.stopDebug(msg.payload.appName);
       break;
 
     case 'stopAllDebug':
-      await debugController.stopAllSessions();
+      await processManager.stopAll();
       break;
 
     case 'extractCreds':
-      await credController.extractCredentials(msg.payload);
+      if (credController) await credController.extractCredentials(msg.payload);
       break;
 
     case 'triggerSync':
@@ -227,9 +232,18 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       await handleTabChange(msg.payload.tab, context);
       break;
 
-    case 'getAppEnv':
-      // handled via command
+    case 'getAppEnv': {
+      try {
+        await cfTarget(msg.payload.orgName);
+        const envOutput = await cfEnv(msg.payload.appName);
+        const vcap = parseVcapFromEnvOutput(envOutput);
+        const envVars = parseEnvVars(envOutput);
+        mainPanel.updateAppEnv(msg.payload.appName, vcap, envVars);
+      } catch (err) {
+        logger.error('Failed to get app env', err);
+      }
       break;
+    }
   }
 }
 
@@ -364,7 +378,8 @@ async function triggerSync(): Promise<void> {
         const p: SyncProgress = { status: 'running', done, total, currentOrg: org.name };
         cache.setSyncProgress(p);
         mainPanel.updateSyncProgress(p);
-      } catch {
+      } catch (err) {
+        logger.warn(`Sync skipped org "${org.name}"`, err);
         done++;
       }
     }

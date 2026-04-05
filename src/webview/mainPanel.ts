@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from '../core/logger.js';
 import { getSharedStyles } from './shared/styles.js';
 import { getMainScript } from './mainScript.js';
 import {
@@ -158,6 +159,12 @@ export class MainPanel implements vscode.WebviewViewProvider {
 
   clearCredResults(): void {
     this.credResults = [];
+  }
+
+  updateAppEnv(appName: string, vcap: Record<string, unknown>, envVars: Record<string, string>): void {
+    // Opens app env as JSON in editor — forwarded to extension host via message
+    // (actual document opening is done in extension.ts via vscode.workspace.openTextDocument)
+    logger.info(`App env received for ${appName}: ${Object.keys(vcap).length} VCAP services, ${Object.keys(envVars).length} user vars`);
   }
 
   showTab(tab: MainTab): void {

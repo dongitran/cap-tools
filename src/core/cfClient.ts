@@ -111,7 +111,7 @@ export function parseCfAppsOutput(raw: string): CfApp[] {
     const state = cols[1]?.toUpperCase() === 'STARTED' ? 'STARTED' : 'STOPPED';
     const urlsCol = cols[5] ?? '';
     const urls = urlsCol ? urlsCol.split(',').map(u => u.trim()).filter(Boolean) : [];
-    apps.push({ name, state, urls, instances: 0 });
+    apps.push({ name, state, urls });
   }
   return apps;
 }
