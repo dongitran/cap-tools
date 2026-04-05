@@ -20,6 +20,7 @@ import type {
   DebugSession,
   MainTab,
   SyncProgress,
+  VcapServices,
   WebviewMessage,
 } from '../types/index.js';
 import { getOrCustomRegion } from '../core/regionList.js';
@@ -47,6 +48,8 @@ export class MainPanel implements vscode.WebviewViewProvider {
   private credResults: CredentialResult[] = [];
   private syncProgress: SyncProgress = { status: 'idle', done: 0, total: 0 };
   private groupFolderPath = '';
+  private cacheStats: { regions: number; orgs: number; apps: number } | undefined;
+  private lastSyncedAt: number | undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -147,8 +150,10 @@ export class MainPanel implements vscode.WebviewViewProvider {
     if (this.screen.id === 'dashboard') {this.render();}
   }
 
-  updateSyncProgress(progress: SyncProgress): void {
+  updateSyncProgress(progress: SyncProgress, stats?: { regions: number; orgs: number; apps: number }): void {
     this.syncProgress = progress;
+    if (stats !== undefined) {this.cacheStats = stats;}
+    if (progress.status === 'done') {this.lastSyncedAt = Date.now();}
     if (this.screen.id === 'dashboard' && this.screen.tab === 'settings') {this.render();}
   }
 
@@ -163,9 +168,8 @@ export class MainPanel implements vscode.WebviewViewProvider {
     this.credResults = [];
   }
 
-  updateAppEnv(appName: string, vcap: Record<string, unknown>, envVars: Record<string, string>): void {
-    // Opens app env as JSON in editor — forwarded to extension host via message
-    // (actual document opening is done in extension.ts via vscode.workspace.openTextDocument)
+  updateAppEnv(appName: string, vcap: VcapServices, envVars: Record<string, string>): void {
+    // Document opening is handled in extension.ts via vscode.workspace.openTextDocument
     logger.info(`App env received for ${appName}: ${Object.keys(vcap).length} VCAP services, ${Object.keys(envVars).length} user vars`);
   }
 
@@ -223,7 +227,11 @@ export class MainPanel implements vscode.WebviewViewProvider {
         return `<div class="screen active">${renderFolderScreen(this.screen.orgName, this.screen.mappedPath)}</div>`;
 
       case 'dashboard': {
-        const shell = renderDashboardShell(this.screen.tab);
+        const shell = renderDashboardShell({
+          activeTab: this.screen.tab,
+          orgName: this.orgName,
+          activeSessionCount: this.activeSessions.length,
+        });
         const tabContent = this.buildTabContent(this.screen.tab);
         return shell.replace('<div id="tabContent"></div>', `<div id="tabContent">${tabContent}</div>`);
       }
@@ -248,14 +256,18 @@ export class MainPanel implements vscode.WebviewViewProvider {
           results: this.credResults,
         });
 
-      case 'settings':
+      case 'settings': {
+        const cfg = vscode.workspace.getConfiguration('sapDevSuite');
         return renderSettingsTab({
-          autoSync: vscode.workspace.getConfiguration('sapDevSuite').get('autoSync', true),
-          syncInterval: vscode.workspace.getConfiguration('sapDevSuite').get('cacheSyncInterval', 240),
-          sqlToolsIntegration: vscode.workspace.getConfiguration('sapDevSuite').get('sqlToolsIntegration', true),
+          autoSync: cfg.get<boolean>('autoSync', true),
+          syncInterval: cfg.get<number>('cacheSyncInterval', 240),
+          sqlToolsIntegration: cfg.get<boolean>('sqlToolsIntegration', true),
           syncProgress: this.syncProgress,
-          defaultRegion: vscode.workspace.getConfiguration('sapDevSuite').get('defaultRegion', 'ap11'),
+          defaultRegion: cfg.get<string>('defaultRegion', 'ap11'),
+          ...(this.cacheStats !== undefined ? { cacheStats: this.cacheStats } : {}),
+          ...(this.lastSyncedAt !== undefined ? { lastSyncedAt: this.lastSyncedAt } : {}),
         });
+      }
     }
   }
 

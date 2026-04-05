@@ -35,6 +35,7 @@ export function getSharedStyles(): string {
       letter-spacing: 0.05em;
       border-bottom: 2px solid transparent;
       transition: opacity 0.15s, border-color 0.15s;
+      position: relative;
     }
 
     .tab-btn:hover { opacity: 0.9; }
@@ -45,9 +46,52 @@ export function getSharedStyles(): string {
       color: var(--vscode-foreground);
     }
 
+    .tab-btn .tab-badge {
+      display: inline-block;
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      border-radius: 8px;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 0 5px;
+      min-width: 14px;
+      text-align: center;
+      margin-left: 3px;
+      vertical-align: middle;
+    }
+
     /* ── Screen Container ────────────────────────────────────────── */
     .screen { padding: 12px; display: none; }
     .screen.active { display: block; }
+
+    /* ── Breadcrumb / org indicator ──────────────────────────────── */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 10px;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .breadcrumb-org {
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .breadcrumb-btn {
+      background: none;
+      border: none;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+      padding: 2px 4px;
+      border-radius: 2px;
+    }
+    .breadcrumb-btn:hover { background: var(--vscode-list-hoverBackground); }
 
     /* ── Headings ────────────────────────────────────────────────── */
     .section-title {
@@ -60,6 +104,16 @@ export function getSharedStyles(): string {
       margin-top: 16px;
     }
     .section-title:first-child { margin-top: 0; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+    .section-header:first-child { margin-top: 0; }
+    .section-header .section-title { margin: 0; }
 
     /* ── Buttons ─────────────────────────────────────────────────── */
     .btn {
@@ -98,6 +152,21 @@ export function getSharedStyles(): string {
       padding: 4px 8px;
     }
     .btn-ghost:hover { background: var(--vscode-list-hoverBackground); filter: none; }
+    .btn-icon {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 2px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      transition: color 0.1s, background 0.1s;
+      font-family: inherit;
+    }
+    .btn-icon:hover {
+      background: var(--vscode-list-hoverBackground);
+      color: var(--vscode-foreground);
+    }
 
     .btn-full { width: 100%; justify-content: center; }
 
@@ -128,6 +197,20 @@ export function getSharedStyles(): string {
       opacity: 0.5;
       font-size: 14px;
       pointer-events: none;
+    }
+
+    /* ── Quick action bar ────────────────────────────────────────── */
+    .quick-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      margin-bottom: 4px;
+    }
+    .quick-bar-label {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      flex: 1;
     }
 
     /* ── Radio cards (region/org picker) ─────────────────────────── */
@@ -161,6 +244,19 @@ export function getSharedStyles(): string {
     }
     .radio-card input[type="radio"] { display: none; }
 
+    /* ── Region grouping ─────────────────────────────────────────── */
+    .region-group { margin-bottom: 10px; }
+    .region-group-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--vscode-descriptionForeground);
+      margin-bottom: 5px;
+      padding-left: 2px;
+      opacity: 0.8;
+    }
+
     /* ── List items (orgs, apps) ─────────────────────────────────── */
     .list-item {
       display: flex;
@@ -176,6 +272,7 @@ export function getSharedStyles(): string {
       background: var(--vscode-list-activeSelectionBackground);
       color: var(--vscode-list-activeSelectionForeground);
     }
+    .list-item.disabled { opacity: 0.5; cursor: not-allowed; }
     .list-item input[type="checkbox"] { cursor: pointer; accent-color: var(--vscode-focusBorder); }
     .list-item input[type="radio"] { cursor: pointer; accent-color: var(--vscode-focusBorder); }
 
@@ -202,16 +299,19 @@ export function getSharedStyles(): string {
 
     /* ── Session cards ───────────────────────────────────────────── */
     .session-card {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
       background: var(--vscode-editor-inactiveSelectionBackground, rgba(255,255,255,0.05));
       border-radius: 4px;
       border: 1px solid var(--vscode-panel-border, transparent);
       margin-bottom: 6px;
+      overflow: hidden;
     }
-    .session-card .app-name { font-weight: 500; flex: 1; font-size: 12px; }
+    .session-card-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+    }
+    .session-card .app-name { font-weight: 500; flex: 1; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-card .status-badge {
       font-size: 10px;
       padding: 2px 7px;
@@ -219,6 +319,22 @@ export function getSharedStyles(): string {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    .session-card .port-badge {
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      flex-shrink: 0;
+      font-family: var(--vscode-editor-font-family, monospace);
+    }
+    .session-error-row {
+      padding: 5px 10px 7px;
+      font-size: 11px;
+      color: var(--vscode-errorForeground, #f85149);
+      border-top: 1px solid var(--vscode-inputValidation-errorBorder, rgba(248,81,73,0.3));
+      background: rgba(248,81,73,0.06);
+      font-family: var(--vscode-editor-font-family, monospace);
+      word-break: break-word;
     }
     .badge-tunneling { background: rgba(255,190,0,0.2); color: #fbbe00; }
     .badge-attaching { background: rgba(100,140,255,0.2); color: #648cff; }
@@ -244,6 +360,31 @@ export function getSharedStyles(): string {
       border-top-color: transparent;
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
+      opacity: 0.6;
+    }
+    .spinner-sm {
+      width: 12px;
+      height: 12px;
+      border-width: 1.5px;
+      display: inline-block;
+    }
+
+    /* ── Skeleton loader ─────────────────────────────────────────── */
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton-row {
+      height: 30px;
+      border-radius: 3px;
+      margin-bottom: 5px;
+      background: linear-gradient(90deg,
+        var(--vscode-list-hoverBackground) 25%,
+        rgba(255,255,255,0.04) 50%,
+        var(--vscode-list-hoverBackground) 75%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
     }
 
     /* ── Info / error banners ────────────────────────────────────── */
@@ -267,19 +408,47 @@ export function getSharedStyles(): string {
       background: rgba(63,185,80,0.1);
       border-left: 3px solid #3fb950;
     }
+    .banner-warn {
+      background: rgba(255,190,0,0.1);
+      border-left: 3px solid #fbbe00;
+    }
 
     /* ── Result rows ─────────────────────────────────────────────── */
     .result-row {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 5px 0;
+      padding: 5px 4px;
       font-size: 12px;
       border-bottom: 1px solid var(--vscode-panel-border, transparent);
     }
-    .result-icon { font-size: 14px; }
-    .result-app { font-weight: 500; flex: 1; }
-    .result-status { font-size: 11px; color: var(--vscode-descriptionForeground); }
+    .result-row:last-child { border-bottom: none; }
+    .result-icon { font-size: 13px; flex-shrink: 0; }
+    .result-app { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .result-status { font-size: 11px; color: var(--vscode-descriptionForeground); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Stats chips ─────────────────────────────────────────────── */
+    .stats-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .stat-chip {
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .sync-meta {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
     /* ── Toggle switch ───────────────────────────────────────────── */
     .toggle-row {
@@ -319,6 +488,32 @@ export function getSharedStyles(): string {
     }
     .toggle input:checked + .toggle-track::after { left: 20px; }
 
+    /* ── Stepper input (sync interval) ───────────────────────────── */
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stepper input[type="number"] {
+      width: 58px;
+      text-align: center;
+    }
+    .stepper-btn {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: none;
+      border-radius: 2px;
+      width: 22px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stepper-btn:hover { filter: brightness(1.2); }
+
     /* ── Divider ─────────────────────────────────────────────────── */
     .divider {
       height: 1px;
@@ -329,5 +524,55 @@ export function getSharedStyles(): string {
     /* ── Custom endpoint input reveal ────────────────────────────── */
     .custom-endpoint { margin-top: 8px; }
     .hidden { display: none !important; }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 20px 10px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+    .empty-state-icon {
+      font-size: 28px;
+      margin-bottom: 8px;
+      opacity: 0.5;
+    }
+
+    /* ── Folder step UI ──────────────────────────────────────────── */
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .step-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--vscode-focusBorder);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-dot.done { background: #3fb950; }
+
+    /* ── Code sample ─────────────────────────────────────────────── */
+    .code-sample {
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 11px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 3px;
+      padding: 6px 10px;
+      margin: 6px 0;
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre;
+    }
   `;
 }

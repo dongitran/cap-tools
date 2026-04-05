@@ -199,8 +199,25 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       if (credController) {await credController.loadSpaceApps(msg.payload.orgName, msg.payload.spaceName, currentRegionId);}
       break;
 
+    case 'backToOrgSelect': {
+      // Go back to org selection using cached orgs or re-fetch
+      const cachedOrgs = cache.getOrgs(currentRegionId);
+      if (cachedOrgs !== undefined && cachedOrgs.length > 0) {
+        config = { ...config };
+        delete config.selectedOrg;
+        saveConfig(context.globalState);
+        mainPanel.showOrgSelect(cachedOrgs);
+      } else {
+        await handleLogin(currentRegionId, context);
+      }
+      break;
+    }
+
     case 'startDebug':
-      if (debugController !== undefined) {debugController.startDebugSessions(msg.payload.appNames, msg.payload.orgName);}
+      // Use server-side config.selectedOrg — don't rely on webview sending orgName
+      if (debugController !== undefined && config.selectedOrg !== undefined) {
+        debugController.startDebugSessions(msg.payload.appNames, config.selectedOrg);
+      }
       break;
 
     case 'stopDebug':
@@ -213,7 +230,14 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       break;
 
     case 'extractCreds':
-      if (credController) {await credController.extractCredentials(msg.payload);}
+      if (credController !== undefined && config.selectedOrg !== undefined) {
+        await credController.extractCredentials({
+          orgName: config.selectedOrg,
+          spaceName: msg.payload.spaceName,
+          appNames: msg.payload.appNames,
+          output: msg.payload.output,
+        });
+      }
       break;
 
     case 'triggerSync':
@@ -386,7 +410,7 @@ async function triggerSync(): Promise<void> {
 
     const done2: SyncProgress = { status: 'done', done, total };
     cache.setSyncProgress(done2);
-    mainPanel.updateSyncProgress(done2);
+    mainPanel.updateSyncProgress(done2, cache.getStats());
     treeProvider.refresh();
     logger.info(`Cache sync complete: ${done}/${total} orgs`);
   } catch (err) {

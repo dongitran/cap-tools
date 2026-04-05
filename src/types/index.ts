@@ -159,14 +159,15 @@ export type WebviewMessage =
   | { type: 'ready' }
   | { type: 'login'; payload: { regionId: string; customEndpoint?: string } }
   | { type: 'selectOrg'; payload: { orgName: string } }
+  | { type: 'backToOrgSelect' }
   | { type: 'browseFolder' }
   | { type: 'loadApps'; payload: { orgName: string } }
   | { type: 'loadSpaces'; payload: { orgName: string } }
   | { type: 'loadSpaceApps'; payload: { orgName: string; spaceName: string } }
-  | { type: 'startDebug'; payload: { appNames: string[]; orgName: string } }
+  | { type: 'startDebug'; payload: { appNames: string[] } }
   | { type: 'stopDebug'; payload: { appName: string } }
   | { type: 'stopAllDebug' }
-  | { type: 'extractCreds'; payload: { orgName: string; spaceName: string; appNames: string[]; output: CredentialOutputMode } }
+  | { type: 'extractCreds'; payload: { spaceName: string; appNames: string[]; output: CredentialOutputMode } }
   | { type: 'triggerSync' }
   | { type: 'updateSettings'; payload: Partial<SettingsPayload> }
   | { type: 'resetConfig' }
