@@ -21,7 +21,7 @@ import type {
   WebviewMessage,
 } from './types/index.js';
 
-const CONFIG_KEY = 'sapDevSuite.config';
+const CONFIG_KEY = 'sapTools.config';
 
 // ─── Extension State ──────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ function saveConfig(state: vscode.Memento): void {
 
 export function activate(context: vscode.ExtensionContext): void {
   logger.init();
-  logger.info('SAP Dev Suite activating');
+  logger.info('SAP Tools activating');
 
   extensionContext = context;
   cache = new CacheManager(context.globalState);
@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // ── Status Bar ───────────────────────────────────────────────────────────
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  statusBar.command = 'workbench.view.extension.sapDevSuite';
+  statusBar.command = 'workbench.view.extension.sapTools';
   context.subscriptions.push(statusBar);
   refreshStatusBar();
 
@@ -75,7 +75,7 @@ export function activate(context: vscode.ExtensionContext): void {
     webviewOptions: { retainContextWhenHidden: true },
   });
 
-  const treeReg = vscode.window.createTreeView('sapDevSuite.cfExplorer', {
+  const treeReg = vscode.window.createTreeView('sapTools.cfExplorer', {
     treeDataProvider: treeProvider,
     showCollapseAll: true,
   });
@@ -83,46 +83,46 @@ export function activate(context: vscode.ExtensionContext): void {
   // ── Commands ─────────────────────────────────────────────────────────────
 
   const cmds: Array<[string, (...args: unknown[]) => unknown]> = [
-    ['sapDevSuite.resetConfig', () => resetConfig(context)],
-    ['sapDevSuite.syncCache', () => triggerSync()],
-    ['sapDevSuite.refreshExplorer', () => treeProvider.refresh()],
-    ['sapDevSuite.stopAllSessions', () => { processManager.stopAll(); }],
+    ['sapTools.resetConfig', () => resetConfig(context)],
+    ['sapTools.syncCache', () => triggerSync()],
+    ['sapTools.refreshExplorer', () => treeProvider.refresh()],
+    ['sapTools.stopAllSessions', () => { processManager.stopAll(); }],
 
-    ['sapDevSuite.copyAppName', (node: unknown) => {
+    ['sapTools.copyAppName', (node: unknown) => {
       if (node instanceof CfAppNode) {
         void vscode.env.clipboard.writeText(node.appName);
         void vscode.window.showInformationMessage(`Copied: ${node.appName}`);
       }
     }],
-    ['sapDevSuite.openAppUrl', (node: unknown) => {
+    ['sapTools.openAppUrl', (node: unknown) => {
       if (node instanceof CfAppNode && node.appUrls.length > 0) {
         void vscode.env.openExternal(vscode.Uri.parse(`https://${node.appUrls[0]}`));
       }
     }],
-    ['sapDevSuite.debugApp', (node: unknown) => {
+    ['sapTools.debugApp', (node: unknown) => {
       if (!(node instanceof CfAppNode)) {return;}
       if (debugController === undefined) {
-        void vscode.window.showErrorMessage('SAP Dev Suite: Please login and select an org first.');
+        void vscode.window.showErrorMessage('SAP Tools: Please login and select an org first.');
         return;
       }
       debugController.startDebugSessions([node.appName], node.orgName);
     }],
-    ['sapDevSuite.extractAppCreds', (node: unknown) => {
+    ['sapTools.extractAppCreds', (node: unknown) => {
       if (!(node instanceof CfAppNode)) {return;}
       mainPanel.showDashboard(node.orgName, 'credentials');
     }],
-    ['sapDevSuite.viewAppEnv', async (node: unknown) => {
+    ['sapTools.viewAppEnv', async (node: unknown) => {
       if (!(node instanceof CfAppNode)) {return;}
       await openAppEnvDocument(node.appName, node.orgName, node.spaceName);
     }],
-    ['sapDevSuite.cleanupLaunchConfigs', () => {
+    ['sapTools.cleanupLaunchConfigs', () => {
       const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (ws === undefined) {
-        void vscode.window.showWarningMessage('SAP Dev Suite: Open a workspace folder first.');
+        void vscode.window.showWarningMessage('SAP Tools: Open a workspace folder first.');
         return;
       }
       cleanupLaunchConfigs(ws);
-      void vscode.window.showInformationMessage('SAP Dev Suite: Removed all SAP debug configurations from launch.json.');
+      void vscode.window.showInformationMessage('SAP Tools: Removed all SAP debug configurations from launch.json.');
     }],
   ];
 
@@ -139,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── Auto-sync on startup ─────────────────────────────────────────────────
 
-  const autoSync = vscode.workspace.getConfiguration('sapDevSuite').get<boolean>('autoSync', true);
+  const autoSync = vscode.workspace.getConfiguration('sapTools').get<boolean>('autoSync', true);
   if (autoSync && config.login !== undefined) {
     setTimeout(() => triggerSync(), 5_000);
   }
@@ -154,7 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => logger.dispose() },
   );
 
-  logger.info('SAP Dev Suite activated');
+  logger.info('SAP Tools activated');
 }
 
 // ─── Status Bar ───────────────────────────────────────────────────────────────
@@ -163,17 +163,17 @@ function refreshStatusBar(): void {
   const sessions = processManager.getActiveSessions();
   if (config.login === undefined) {
     statusBar.text = '$(cloud) SAP: Not connected';
-    statusBar.tooltip = 'SAP Dev Suite: Click to connect';
+    statusBar.tooltip = 'SAP Tools: Click to connect';
     statusBar.backgroundColor = undefined;
   } else {
     const orgLabel = config.selectedOrg ?? config.login.regionId;
     if (sessions.length > 0) {
       statusBar.text = `$(debug) SAP: ${orgLabel} | ${sessions.length} debugging`;
       statusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-      statusBar.tooltip = `SAP Dev Suite: ${sessions.join(', ')} debugging`;
+      statusBar.tooltip = `SAP Tools: ${sessions.join(', ')} debugging`;
     } else {
       statusBar.text = `$(cloud) SAP: ${orgLabel}`;
-      statusBar.tooltip = `SAP Dev Suite: Connected to ${config.login.regionId}`;
+      statusBar.tooltip = `SAP Tools: Connected to ${config.login.regionId}`;
       statusBar.backgroundColor = undefined;
     }
   }
@@ -198,7 +198,7 @@ async function openAppEnvDocument(appName: string, orgName: string, spaceName?: 
   } catch (err) {
     logger.error(`Failed to get app env for ${appName}`, err);
     void vscode.window.showErrorMessage(
-      `SAP Dev Suite: Failed to fetch env for "${appName}" — ${err instanceof Error ? err.message : String(err)}`,
+      `SAP Tools: Failed to fetch env for "${appName}" — ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
@@ -333,7 +333,7 @@ async function handleLogin(
   if (creds.email === undefined || creds.password === undefined) {
     mainPanel.showRegion();
     void vscode.window.showErrorMessage(
-      'SAP Dev Suite: SAP_EMAIL or SAP_PASSWORD not found in shell environment.',
+      'SAP Tools: SAP_EMAIL or SAP_PASSWORD not found in shell environment.',
     );
     return;
   }
@@ -363,7 +363,7 @@ async function handleLogin(
     logger.error('Login failed', err);
     mainPanel.showRegion();
     void vscode.window.showErrorMessage(
-      `SAP Dev Suite: Login failed — ${err instanceof Error ? err.message : String(err)}`,
+      `SAP Tools: Login failed — ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
@@ -476,7 +476,7 @@ async function triggerSync(): Promise<void> {
     // Notify user if their CF session expired
     if (isAuthError(err)) {
       void vscode.window.showWarningMessage(
-        'SAP Dev Suite: CF session expired — re-login to resume syncing.',
+        'SAP Tools: CF session expired — re-login to resume syncing.',
         'Re-Login',
       ).then(action => {
         if (action === 'Re-Login') {
@@ -490,11 +490,11 @@ async function triggerSync(): Promise<void> {
 function scheduleSync(): void {
   if (syncTimer) {clearInterval(syncTimer);}
   const intervalMin = vscode.workspace
-    .getConfiguration('sapDevSuite')
+    .getConfiguration('sapTools')
     .get<number>('cacheSyncInterval', 240);
   const intervalMs = intervalMin * 60 * 1000;
   syncTimer = setInterval(() => {
-    const autoSync = vscode.workspace.getConfiguration('sapDevSuite').get<boolean>('autoSync', true);
+    const autoSync = vscode.workspace.getConfiguration('sapTools').get<boolean>('autoSync', true);
     if (autoSync && config.login !== undefined) {
       void triggerSync();
     }
@@ -509,7 +509,7 @@ const SETTINGS_KEY_MAP: Record<string, string> = {
 };
 
 async function applySettings(payload: Partial<SettingsPayload>, _context: vscode.ExtensionContext): Promise<void> {
-  const cfg = vscode.workspace.getConfiguration('sapDevSuite');
+  const cfg = vscode.workspace.getConfiguration('sapTools');
   for (const [key, value] of Object.entries(payload)) {
     const configKey = SETTINGS_KEY_MAP[key] ?? key;
     await cfg.update(configKey, value, vscode.ConfigurationTarget.Global);
@@ -528,7 +528,7 @@ async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
   cache.clear();
   clearCachedCredentials();
   currentRegionId = 'ap11';
-  await vscode.commands.executeCommand('setContext', 'sapDevSuite.loggedIn', false);
+  await vscode.commands.executeCommand('setContext', 'sapTools.loggedIn', false);
   mainPanel.showRegion();
   treeProvider.refresh();
   refreshStatusBar();
@@ -540,5 +540,5 @@ async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
 export function deactivate(): void {
   processManager.dispose();
   if (syncTimer) {clearInterval(syncTimer);}
-  logger.info('SAP Dev Suite deactivated');
+  logger.info('SAP Tools deactivated');
 }

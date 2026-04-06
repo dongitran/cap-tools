@@ -33,7 +33,7 @@ type ScreenState =
   | { id: 'dashboard'; tab: MainTab };
 
 export class MainPanel implements vscode.WebviewViewProvider {
-  static readonly viewId = 'sapDevSuite.mainPanel';
+  static readonly viewId = 'sapTools.mainPanel';
 
   private view: vscode.WebviewView | undefined;
   private screen: ScreenState = { id: 'region' };
@@ -182,7 +182,7 @@ export class MainPanel implements vscode.WebviewViewProvider {
 
   showError(message: string): void {
     if (!this.view) {return;}
-    void vscode.window.showErrorMessage(`SAP Dev Suite: ${message}`);
+    void vscode.window.showErrorMessage(`SAP Tools: ${message}`);
   }
 
   // ─── Rendering ───────────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ export class MainPanel implements vscode.WebviewViewProvider {
         });
 
       case 'settings': {
-        const cfg = vscode.workspace.getConfiguration('sapDevSuite');
+        const cfg = vscode.workspace.getConfiguration('sapTools');
         return renderSettingsTab({
           autoSync: cfg.get<boolean>('autoSync', true),
           syncInterval: cfg.get<number>('cacheSyncInterval', 240),

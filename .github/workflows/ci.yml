@@ -91,11 +91,11 @@ jobs:
           fi
 
       - name: Package VSIX (dry run)
-        run: pnpm package --out /tmp/sap-dev-suite-ci.vsix
+        run: pnpm package --out /tmp/sap-tools-ci.vsix
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
           name: vsix-ci-${{ github.run_number }}
-          path: /tmp/sap-dev-suite-ci.vsix
+          path: /tmp/sap-tools-ci.vsix
           retention-days: 7

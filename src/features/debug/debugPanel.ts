@@ -48,10 +48,10 @@ export class DebugPanelController {
 
     const usedPorts = getUsedPorts(workspacePath);
     const basePort = vscode.workspace
-      .getConfiguration('sapDevSuite')
+      .getConfiguration('sapTools')
       .get<number>('debugBasePort', 9229);
     const explorerDepth = vscode.workspace
-      .getConfiguration('sapDevSuite')
+      .getConfiguration('sapTools')
       .get<number>('explorerDepth', 6);
 
     for (const appName of appNames) {

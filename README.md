@@ -7,11 +7,11 @@
 **The all-in-one VSCode extension for SAP BTP, CAP/CDS, Cloud Foundry & HANA development**
 
 [![CI](https://github.com/dongitran/cap-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/dongitran/cap-tools/actions/workflows/ci.yml)
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/dongtran.sap-dev-suite?label=VS%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-dev-suite)
-[![Downloads](https://img.shields.io/visual-studio-marketplace/d/dongtran.sap-dev-suite)](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-dev-suite)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/dongtran.sap-tools?label=VS%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-tools)
+[![Downloads](https://img.shields.io/visual-studio-marketplace/d/dongtran.sap-tools)](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[**Install from Marketplace**](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-dev-suite) · [Report Bug](https://github.com/dongitran/cap-tools/issues) · [Request Feature](https://github.com/dongitran/cap-tools/issues)
+[**Install from Marketplace**](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-tools) · [Report Bug](https://github.com/dongitran/cap-tools/issues) · [Request Feature](https://github.com/dongitran/cap-tools/issues)
 
 </div>
 
@@ -69,12 +69,12 @@ Browse your Cloud Foundry landscape from the Activity Bar.
 
 **From VS Marketplace** *(recommended)*
 ```
-ext install dongtran.sap-dev-suite
+ext install dongtran.sap-tools
 ```
 
 **From VSIX**
 ```bash
-code --install-extension sap-dev-suite-<version>.vsix
+code --install-extension sap-tools-<version>.vsix
 ```
 
 ### Prerequisites
@@ -124,12 +124,12 @@ Dashboard → Credentials tab → select space → select apps → Extract
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `sapDevSuite.defaultRegion` | `ap11` | Default CF region on startup |
-| `sapDevSuite.cacheSyncInterval` | `240` | Background sync interval (minutes) |
-| `sapDevSuite.autoSync` | `true` | Auto-sync cache on startup |
-| `sapDevSuite.sqlToolsIntegration` | `true` | Write credentials to SQLTools settings |
-| `sapDevSuite.debugBasePort` | `9229` | Starting port for debug sessions |
-| `sapDevSuite.explorerDepth` | `6` | Max folder depth when scanning for local apps |
+| `sapTools.defaultRegion` | `ap11` | Default CF region on startup |
+| `sapTools.cacheSyncInterval` | `240` | Background sync interval (minutes) |
+| `sapTools.autoSync` | `true` | Auto-sync cache on startup |
+| `sapTools.sqlToolsIntegration` | `true` | Write credentials to SQLTools settings |
+| `sapTools.debugBasePort` | `9229` | Starting port for debug sessions |
+| `sapTools.explorerDepth` | `6` | Max folder depth when scanning for local apps |
 
 ---
 

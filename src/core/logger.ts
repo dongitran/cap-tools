@@ -6,7 +6,7 @@ class Logger {
   private channel: vscode.OutputChannel | undefined;
 
   init(): void {
-    this.channel = vscode.window.createOutputChannel('SAP Dev Suite', { log: true });
+    this.channel = vscode.window.createOutputChannel('SAP Tools', { log: true });
   }
 
   private write(level: LogLevel, message: string, ...args: unknown[]): void {

@@ -1,13 +1,13 @@
 {
-  "name": "sap-dev-suite",
-  "displayName": "SAP Dev Suite",
+  "name": "sap-tools",
+  "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP, CAP/CDS, Cloud Foundry, and HANA development",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "dongtran",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dongtran/sap-dev-suite"
+    "url": "https://github.com/dongtran/sap-tools"
   },
   "engines": {
     "vscode": "^1.90.0",
@@ -36,171 +36,171 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "sap-dev-suite",
-          "title": "SAP Dev Suite",
+          "id": "sap-tools",
+          "title": "SAP Tools",
           "icon": "resources/icon.svg"
         }
       ]
     },
     "views": {
-      "sap-dev-suite": [
+      "sap-tools": [
         {
           "type": "webview",
-          "id": "sapDevSuite.mainPanel",
-          "name": "SAP Dev Suite"
+          "id": "sapTools.mainPanel",
+          "name": "SAP Tools"
         },
         {
-          "id": "sapDevSuite.cfExplorer",
+          "id": "sapTools.cfExplorer",
           "name": "CF Explorer",
-          "when": "sapDevSuite.loggedIn"
+          "when": "sapTools.loggedIn"
         }
       ]
     },
     "commands": [
       {
-        "command": "sapDevSuite.resetConfig",
-        "title": "SAP Dev Suite: Reset Configuration",
+        "command": "sapTools.resetConfig",
+        "title": "SAP Tools: Reset Configuration",
         "icon": "$(trash)"
       },
       {
-        "command": "sapDevSuite.syncCache",
-        "title": "SAP Dev Suite: Sync CF Cache",
+        "command": "sapTools.syncCache",
+        "title": "SAP Tools: Sync CF Cache",
         "icon": "$(sync)"
       },
       {
-        "command": "sapDevSuite.refreshExplorer",
+        "command": "sapTools.refreshExplorer",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "sapDevSuite.copyAppName",
+        "command": "sapTools.copyAppName",
         "title": "Copy App Name",
         "icon": "$(copy)"
       },
       {
-        "command": "sapDevSuite.openAppUrl",
+        "command": "sapTools.openAppUrl",
         "title": "Open App URL",
         "icon": "$(link-external)"
       },
       {
-        "command": "sapDevSuite.debugApp",
+        "command": "sapTools.debugApp",
         "title": "Debug This App",
         "icon": "$(debug-alt)"
       },
       {
-        "command": "sapDevSuite.extractAppCreds",
+        "command": "sapTools.extractAppCreds",
         "title": "Extract HANA Credentials",
         "icon": "$(key)"
       },
       {
-        "command": "sapDevSuite.viewAppEnv",
+        "command": "sapTools.viewAppEnv",
         "title": "View App Environment",
         "icon": "$(list-unordered)"
       },
       {
-        "command": "sapDevSuite.stopAllSessions",
-        "title": "SAP Dev Suite: Stop All Debug Sessions",
+        "command": "sapTools.stopAllSessions",
+        "title": "SAP Tools: Stop All Debug Sessions",
         "icon": "$(debug-stop)"
       },
       {
-        "command": "sapDevSuite.cleanupLaunchConfigs",
-        "title": "SAP Dev Suite: Clean Up Debug Configurations"
+        "command": "sapTools.cleanupLaunchConfigs",
+        "title": "SAP Tools: Clean Up Debug Configurations"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "sapDevSuite.refreshExplorer",
-          "when": "view == sapDevSuite.cfExplorer",
+          "command": "sapTools.refreshExplorer",
+          "when": "view == sapTools.cfExplorer",
           "group": "navigation"
         },
         {
-          "command": "sapDevSuite.syncCache",
-          "when": "view == sapDevSuite.cfExplorer",
+          "command": "sapTools.syncCache",
+          "when": "view == sapTools.cfExplorer",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "sapDevSuite.debugApp",
+          "command": "sapTools.debugApp",
           "when": "viewItem == cfApp-started",
           "group": "1_actions@1"
         },
         {
-          "command": "sapDevSuite.extractAppCreds",
+          "command": "sapTools.extractAppCreds",
           "when": "viewItem =~ /cfApp/",
           "group": "1_actions@2"
         },
         {
-          "command": "sapDevSuite.openAppUrl",
+          "command": "sapTools.openAppUrl",
           "when": "viewItem == cfApp-started",
           "group": "1_actions@3"
         },
         {
-          "command": "sapDevSuite.viewAppEnv",
+          "command": "sapTools.viewAppEnv",
           "when": "viewItem =~ /cfApp/",
           "group": "2_info@1"
         },
         {
-          "command": "sapDevSuite.copyAppName",
+          "command": "sapTools.copyAppName",
           "when": "viewItem =~ /cfApp/",
           "group": "2_info@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "sapDevSuite.debugApp",
+          "command": "sapTools.debugApp",
           "when": "false"
         },
         {
-          "command": "sapDevSuite.extractAppCreds",
+          "command": "sapTools.extractAppCreds",
           "when": "false"
         },
         {
-          "command": "sapDevSuite.copyAppName",
+          "command": "sapTools.copyAppName",
           "when": "false"
         },
         {
-          "command": "sapDevSuite.openAppUrl",
+          "command": "sapTools.openAppUrl",
           "when": "false"
         },
         {
-          "command": "sapDevSuite.viewAppEnv",
+          "command": "sapTools.viewAppEnv",
           "when": "false"
         }
       ]
     },
     "configuration": {
-      "title": "SAP Dev Suite",
+      "title": "SAP Tools",
       "properties": {
-        "sapDevSuite.defaultRegion": {
+        "sapTools.defaultRegion": {
           "type": "string",
           "default": "ap11",
           "description": "Default Cloud Foundry region to connect to"
         },
-        "sapDevSuite.cacheSyncInterval": {
+        "sapTools.cacheSyncInterval": {
           "type": "number",
           "default": 240,
           "minimum": 30,
           "maximum": 1440,
           "description": "Background cache sync interval in minutes (30\u20131440)"
         },
-        "sapDevSuite.autoSync": {
+        "sapTools.autoSync": {
           "type": "boolean",
           "default": true,
           "description": "Enable automatic CF app cache sync on startup"
         },
-        "sapDevSuite.sqlToolsIntegration": {
+        "sapTools.sqlToolsIntegration": {
           "type": "boolean",
           "default": true,
           "description": "Automatically write extracted HANA credentials to SQLTools settings"
         },
-        "sapDevSuite.debugBasePort": {
+        "sapTools.debugBasePort": {
           "type": "number",
           "default": 9229,
           "description": "Starting port for CDS debug sessions (increments per session)"
         },
-        "sapDevSuite.explorerDepth": {
+        "sapTools.explorerDepth": {
           "type": "number",
           "default": 6,
           "minimum": 2,

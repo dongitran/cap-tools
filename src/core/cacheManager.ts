@@ -10,7 +10,7 @@ import type {
 } from '../types/index.js';
 import { logger } from './logger.js';
 
-const CACHE_KEY = 'sapDevSuite.appCache';
+const CACHE_KEY = 'sapTools.appCache';
 const CACHE_VERSION = 2 as const;
 
 function nowMs(): number {

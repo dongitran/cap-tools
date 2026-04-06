@@ -100,7 +100,7 @@ export class CredentialPanelController {
           return;
         }
         const sqlToolsEnabled = vscode.workspace
-          .getConfiguration('sapDevSuite')
+          .getConfiguration('sapTools')
           .get<boolean>('sqlToolsIntegration', true);
         if (sqlToolsEnabled) {
           writeSqlToolsConnections(workspacePath, connections);

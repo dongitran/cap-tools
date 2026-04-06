@@ -262,7 +262,7 @@ export function getMainScript(): string {
   document.addEventListener('click', function(e) {
     if (e.target.id === 'btnSyncNow') { post('triggerSync'); }
     if (e.target.id === 'btnReset') {
-      if (confirm('Reset all SAP Dev Suite configuration?\\n\\nThis will clear your login, org mappings, and cached app data.')) {
+      if (confirm('Reset all SAP Tools configuration?\\n\\nThis will clear your login, org mappings, and cached app data.')) {
         post('resetConfig');
       }
     }
