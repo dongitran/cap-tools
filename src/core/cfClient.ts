@@ -51,8 +51,9 @@ async function cf(args: string[], opts: ExecOptions = {}): Promise<string> {
     });
     return stdout.trim();
   } catch (err: unknown) {
-    const e = err as { message: string; stderr?: string };
-    const stderr = e.stderr ?? '';
+    const stderr = (err !== null && typeof err === 'object' && 'stderr' in err)
+      ? String((err as { stderr: unknown }).stderr ?? '')
+      : '';
     throw new CfError(`CF command failed: ${cmd}`, cmd, stderr);
   }
 }

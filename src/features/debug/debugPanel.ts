@@ -86,6 +86,7 @@ export class DebugPanelController {
             this.processManager.notifyAttached(appName);
           } catch (err) {
             logger.error(`Failed to attach debugger to ${appName}`, err);
+            this.processManager.stopDebug(appName);
           }
         } else if (session.status === 'ERROR' || session.status === 'EXITED') {
           unsubscribe();

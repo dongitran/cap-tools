@@ -432,6 +432,9 @@ function updateOrgMapping(orgName: string, folderPath: string, context: vscode.E
 async function triggerSync(): Promise<void> {
   if (!config.login) {return;}
 
+  // Capture regionId early to avoid race condition if user switches regions mid-sync
+  const regionId = currentRegionId;
+
   const progress: SyncProgress = { status: 'running', done: 0, total: 0 };
   cache.setSyncProgress(progress);
   mainPanel.updateSyncProgress(progress);
@@ -447,7 +450,7 @@ async function triggerSync(): Promise<void> {
       try {
         await cfTarget(org.name);
         const apps = await cfApps();
-        cache.setApps(currentRegionId, org.name, apps);
+        cache.setApps(regionId, org.name, apps);
         done++;
         const p: SyncProgress = { status: 'running', done, total, currentOrg: org.name };
         cache.setSyncProgress(p);

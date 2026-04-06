@@ -36,7 +36,8 @@ export function readShellCredentials(): ShellCredentials {
       password: vars['SAP_PASSWORD'] || undefined,
     };
   } catch (err) {
-    logger.warn('Failed to read shell credentials, falling back to process.env', err);
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(`Failed to read shell credentials (${reason}), checking process.env`);
     cachedCreds = {
       email: process.env['SAP_EMAIL'],
       password: process.env['SAP_PASSWORD'],

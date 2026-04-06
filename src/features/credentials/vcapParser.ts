@@ -50,6 +50,7 @@ export function parseVcapFromEnvOutput(envOutput: string): VcapServices {
     logger.debug('No VCAP_SERVICES block found in cf env output');
     return {};
   }
+  logger.debug(`Captured VCAP_SERVICES block (${match[1].length} chars)`);
   try {
     return JSON.parse(match[1]) as VcapServices;
   } catch {

@@ -2,7 +2,7 @@
   "name": "sap-dev-suite",
   "displayName": "SAP Dev Suite",
   "description": "All-in-one toolbox for SAP BTP, CAP/CDS, Cloud Foundry, and HANA development",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "dongtran",
   "license": "MIT",
   "repository": {
