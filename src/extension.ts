@@ -347,11 +347,12 @@ async function handleLogin(
     config.login = { apiEndpoint: region.apiEndpoint, regionId, email: creds.email };
     currentRegionId = regionId;
     saveConfig(context.globalState);
+    mainPanel.setRegionId(regionId);
     refreshStatusBar();
 
     // Check if org already mapped
     if (config.selectedOrg !== undefined) {
-      mainPanel.showDashboard(config.selectedOrg, 'debug');
+      mainPanel.showDashboard(config.selectedOrg, 'debug', regionId);
       await loadDashboardData();
       return;
     }
@@ -405,6 +406,8 @@ async function loadAppsForOrg(orgName: string): Promise<void> {
     mainPanel.updateApps(apps);
   } catch (err) {
     logger.error('Failed to refresh apps', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    mainPanel.showAppsError(isAuthError(err) ? `Session expired — ${msg}` : msg);
   }
 }
 

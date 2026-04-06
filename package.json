@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP, CAP/CDS, Cloud Foundry, and HANA development",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "dongtran",
   "license": "MIT",
   "repository": {

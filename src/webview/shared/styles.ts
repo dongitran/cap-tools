@@ -11,6 +11,77 @@ export function getSharedStyles(): string {
       overflow-x: hidden;
     }
 
+    /* ── Prerequisites card (region screen) ─────────────────────── */
+    .prereq-card {
+      background: rgba(255,190,0,0.08);
+      border: 1px solid rgba(255,190,0,0.3);
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .prereq-title {
+      font-weight: 600;
+      font-size: 11px;
+      color: #fbbe00;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .prereq-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-bottom: 4px;
+      color: var(--vscode-foreground);
+      opacity: 0.85;
+    }
+    .prereq-item:last-child { margin-bottom: 0; }
+    .prereq-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #fbbe00;
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+
+    /* ── Context bar (dashboard) ─────────────────────────────────── */
+    .context-bar {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      background: var(--vscode-sideBarSectionHeader-background);
+      border-bottom: 1px solid var(--vscode-panel-border, transparent);
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      overflow: hidden;
+    }
+    .context-region {
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .context-sep { opacity: 0.4; flex-shrink: 0; }
+    .context-org {
+      font-weight: 500;
+      color: var(--vscode-foreground);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .context-sync {
+      flex-shrink: 0;
+      opacity: 0.5;
+      font-size: 10px;
+    }
+
     /* ── Tab Bar ─────────────────────────────────────────────────── */
     .tab-bar {
       display: flex;

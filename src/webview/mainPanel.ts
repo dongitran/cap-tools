@@ -40,7 +40,9 @@ export class MainPanel implements vscode.WebviewViewProvider {
 
   // Dashboard state
   private orgName = '';
+  private regionId = '';
   private apps: CfApp[] = [];
+  private appsError: string | undefined;
   private spaces: CfSpace[] = [];
   private selectedSpace = '';
   private spaceApps: CfApp[] = [];
@@ -106,16 +108,27 @@ export class MainPanel implements vscode.WebviewViewProvider {
     this.render();
   }
 
-  showDashboard(orgName: string, tab: MainTab = 'debug'): void {
+  showDashboard(orgName: string, tab: MainTab = 'debug', regionId?: string): void {
     this.orgName = orgName;
+    if (regionId !== undefined) {this.regionId = regionId;}
     this.screen = { id: 'dashboard', tab };
     this.render();
+  }
+
+  setRegionId(regionId: string): void {
+    this.regionId = regionId;
   }
 
   // ─── Dashboard State Updates ─────────────────────────────────────────────
 
   updateApps(apps: CfApp[]): void {
     this.apps = apps;
+    this.appsError = undefined;
+    if (this.screen.id === 'dashboard') {this.render();}
+  }
+
+  showAppsError(message: string): void {
+    this.appsError = message;
     if (this.screen.id === 'dashboard') {this.render();}
   }
 
@@ -231,6 +244,8 @@ export class MainPanel implements vscode.WebviewViewProvider {
           activeTab: this.screen.tab,
           orgName: this.orgName,
           activeSessionCount: this.activeSessions.length,
+          ...(this.regionId.length > 0 ? { regionId: this.regionId } : {}),
+          ...(this.lastSyncedAt !== undefined ? { lastSyncedAt: this.lastSyncedAt } : {}),
         });
         const tabContent = this.buildTabContent(this.screen.tab);
         return shell.replace('<div id="tabContent"></div>', `<div id="tabContent">${tabContent}</div>`);
@@ -245,6 +260,7 @@ export class MainPanel implements vscode.WebviewViewProvider {
           orgName: this.orgName,
           apps: this.apps,
           activeSessions: this.activeSessions,
+          ...(this.appsError !== undefined ? { appsError: this.appsError } : {}),
         });
 
       case 'credentials':

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { CacheManager } from '../../core/cacheManager.js';
-import { cfApps, cfTarget } from '../../core/cfClient.js';
+import { cfApps, cfTarget, isAuthError } from '../../core/cfClient.js';
 import { logger } from '../../core/logger.js';
 import type { ProcessManager } from '../../core/processManager.js';
 import type { ExtensionConfig } from '../../types/index.js';
@@ -30,7 +30,8 @@ export class DebugPanelController {
       this.panel.updateApps(apps);
     } catch (err) {
       logger.error('Failed to load apps for debug', err);
-      this.panel.showError('Failed to load apps. Check CF login.');
+      const msg = err instanceof Error ? err.message : String(err);
+      this.panel.showAppsError(isAuthError(err) ? `Session expired — ${msg}` : msg);
     }
   }
 

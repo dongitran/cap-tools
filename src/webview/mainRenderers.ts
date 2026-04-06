@@ -60,7 +60,20 @@ export function renderRegionScreen(selectedId?: string): string {
     </div>`;
 
   return `
-    <div class="section-title" style="margin-top:0">Select SAP BTP Region</div>
+    <div class="prereq-card">
+      <div class="prereq-title">Before connecting, ensure:</div>
+      <div class="prereq-item">
+        <span class="prereq-dot"></span>
+        <span><code>SAP_EMAIL</code> &amp; <code>SAP_PASSWORD</code> set in shell profile
+          (<code>~/.zshrc</code> or <code>~/.bashrc</code>)</span>
+      </div>
+      <div class="prereq-item">
+        <span class="prereq-dot"></span>
+        <span>CF CLI installed — <code>cf --version</code> should work in terminal</span>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:12px">Select SAP BTP Region</div>
     ${groups}
     ${customCard}
     <div class="custom-endpoint ${isCustom ? '' : 'hidden'}" id="customEndpointWrap">
@@ -70,10 +83,6 @@ export function renderRegionScreen(selectedId?: string): string {
       <button class="btn btn-primary btn-full" id="btnLogin">
         Connect →
       </button>
-    </div>
-    <div class="banner banner-info" style="margin-top:12px;font-size:11px">
-      Reads <code>SAP_EMAIL</code> and <code>SAP_PASSWORD</code> from your login shell.<br>
-      <span style="opacity:0.7">Set them in <code>~/.zshrc</code> or <code>~/.bashrc</code></span>
     </div>`;
 }
 
@@ -166,6 +175,8 @@ export function renderDashboardShell(opts: {
   activeTab: 'debug' | 'credentials' | 'settings';
   orgName: string;
   activeSessionCount: number;
+  regionId?: string;
+  lastSyncedAt?: number;
 }): string {
   const tabs: Array<{ id: 'debug' | 'credentials' | 'settings'; label: string }> = [
     { id: 'debug', label: '🐛 Debug' },
@@ -182,9 +193,27 @@ export function renderDashboardShell(opts: {
     })
     .join('');
 
+  const lastSynced = opts.lastSyncedAt !== undefined
+    ? (() => {
+        const ago = Math.floor((Date.now() - opts.lastSyncedAt) / 1000);
+        if (ago < 60) {return `${ago}s ago`;}
+        if (ago < 3600) {return `${Math.floor(ago / 60)}m ago`;}
+        return `${Math.floor(ago / 3600)}h ago`;
+      })()
+    : 'never';
+
+  const contextBar = `
+    <div class="context-bar">
+      <span class="context-region" title="CF Region">${esc(opts.regionId ?? '—')}</span>
+      <span class="context-sep">›</span>
+      <span class="context-org" title="${esc(opts.orgName)}">${esc(opts.orgName)}</span>
+      <span class="context-sync" title="Last synced">⟳ ${esc(lastSynced)}</span>
+    </div>`;
+
   // Embed org context as data attribute so client-side JS can read it
   return `
     <div class="tab-bar" id="tabBar" data-org-ctx="${esc(opts.orgName)}">${tabBtns}</div>
+    ${contextBar}
     <div id="tabContent"></div>`;
 }
 
@@ -194,6 +223,7 @@ export function renderDebugTab(opts: {
   orgName: string;
   apps: Array<{ name: string; state: string }>;
   activeSessions: Array<{ appName: string; status: string; port: number; appUrl?: string; error?: string }>;
+  appsError?: string;
 }): string {
   const started = opts.apps.filter(a => a.state === 'STARTED');
   const stopped = opts.apps.filter(a => a.state === 'STOPPED');
@@ -234,8 +264,22 @@ export function renderDebugTab(opts: {
 
   const hasApps = opts.apps.length > 0;
   const hasSessions = opts.activeSessions.length > 0;
+  const hasError = opts.appsError !== undefined;
 
-  const appListHtml = hasApps ? `
+  const appListHtml = hasError ? `
+    <div class="section-header">
+      <div class="section-title">Apps</div>
+      <button class="btn-icon" id="btnRefreshApps" title="Refresh apps">↺</button>
+    </div>
+    <div class="banner banner-error" style="margin-top:8px">
+      <div style="font-weight:600;margin-bottom:4px">Failed to load apps</div>
+      <div style="font-size:11px;opacity:0.85">${esc(opts.appsError ?? '')}</div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px" id="btnRetryLoadApps">↺ Retry</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" id="btnReLogin">Re-login →</button>
+      </div>
+    </div>
+  ` : hasApps ? `
     <div class="section-header">
       <div class="section-title">Apps</div>
       <button class="btn-icon" id="btnRefreshApps" title="Refresh apps">↺</button>
@@ -265,7 +309,8 @@ export function renderDebugTab(opts: {
     <div class="empty-state">
       <div class="empty-state-icon">📭</div>
       <div>No apps found</div>
-      <div style="margin-top:4px;opacity:0.7">Try refreshing or check your CF target.</div>
+      <div style="margin-top:4px;opacity:0.7">Check your CF target or try refreshing.</div>
+      <button class="btn btn-secondary" style="margin-top:10px;font-size:11px" id="btnRetryLoadApps">↺ Retry</button>
     </div>
   `;
 

@@ -171,12 +171,18 @@ export function getMainScript(): string {
       // orgName is managed server-side — extension uses config.selectedOrg
       post('startDebug', { appNames });
     }
-    if (e.target.id === 'btnStopAll') { post('stopAllDebug'); }
+    if (e.target.id === 'btnStopAll') {
+      const count = $all('.session-card').length;
+      if (confirm('Stop ' + count + ' active debug session' + (count !== 1 ? 's' : '') + '?')) {
+        post('stopAllDebug');
+      }
+    }
     if (e.target.id === 'btnChangeOrg') { post('backToOrgSelect'); }
-    if (e.target.id === 'btnRefreshApps') {
+    if (e.target.id === 'btnRefreshApps' || e.target.id === 'btnRetryLoadApps') {
       readOrgCtx();
       post('loadApps', { orgName: state.selectedOrg });
     }
+    if (e.target.id === 'btnReLogin') { post('backToOrgSelect'); }
   });
 
   // Initialise debug button state on load
