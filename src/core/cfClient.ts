@@ -115,6 +115,13 @@ export function parseCfAppsOutput(raw: string): CfApp[] {
   const headerIdx = lines.findIndex(l => /^name\s+requested state/i.test(l.trim()));
   if (headerIdx < 0) {return [];}
 
+  // Detect the URL/routes column from the header (differs between CF CLI v6 and v7+).
+  // CF CLI v6: name requested-state instances memory disk urls   → cols[5]
+  // CF CLI v7+: name requested-state processes routes            → cols[3]
+  const headerCols = (lines[headerIdx] ?? '').trim().split(/\s{2,}/);
+  const urlColIdx = headerCols.findIndex(c => /^(urls|routes)$/i.test(c.trim()));
+  const urlCol = urlColIdx >= 0 ? urlColIdx : 5; // fall back to v6 position
+
   const apps: CfApp[] = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -123,7 +130,7 @@ export function parseCfAppsOutput(raw: string): CfApp[] {
     if (cols.length < 2) {continue;}
     const name = cols[0];
     const state = cols[1]?.toUpperCase() === 'STARTED' ? 'STARTED' : 'STOPPED';
-    const urlsCol = cols[5] ?? '';
+    const urlsCol = cols[urlCol] ?? '';
     const urls = urlsCol ? urlsCol.split(',').map(u => u.trim()).filter(Boolean) : [];
     apps.push({ name, state, urls });
   }

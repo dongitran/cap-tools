@@ -354,6 +354,10 @@ export class MainPanel implements vscode.WebviewViewProvider {
     return this.groupFolderPath;
   }
 
+  getScreenId(): string {
+    return this.screen.id;
+  }
+
   /** Returns buffered log entries as plain text (CF log format). */
   getLogExportText(): string {
     if (this.logBuffer.length === 0) { return '# No log entries captured yet.\n'; }

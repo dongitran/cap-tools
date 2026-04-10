@@ -82,6 +82,16 @@ export function getMainScript(): string {
     }
   });
 
+  // ── Input delegation (replaces all oninput="" attributes) ────────────────
+
+  document.addEventListener('input', function(e) {
+    const id = e.target.id;
+    if (id === 'orgSearch') { filterOrgs(e.target.value); }
+    else if (id === 'appSearch') { filterApps(e.target.value); }
+    else if (id === 'credSearch') { filterCredApps(e.target.value); }
+    else if (id === 'logSearchInput') { filterLogs(); }
+  });
+
   // ── Org Screen ────────────────────────────────────────────────────────────
 
   window.filterOrgs = function(q) {
@@ -97,6 +107,21 @@ export function getMainScript(): string {
       e.target.closest('.list-item')?.classList.add('selected');
       saveState({ selectedOrg: e.target.value });
       post('selectOrg', { orgName: e.target.value });
+    }
+
+    // Credentials tab — space selector (replaces onchange="" attribute)
+    if (e.target.id === 'spaceSelect') { onSpaceChange(e.target.value); }
+
+    // Logs tab — source / level filters (replaces onchange="" attributes)
+    if (e.target.id === 'logSrcFilter' || e.target.id === 'logLvlFilter') { filterLogs(); }
+
+    // Settings tab — toggles (replaces onchange="" attributes)
+    if (e.target.id === 'toggleAutoSync') { updateSetting('autoSync', e.target.checked); }
+    if (e.target.id === 'toggleSqlTools') { updateSetting('sqlToolsIntegration', e.target.checked); }
+    if (e.target.id === 'defaultRegionSelect') { updateSetting('defaultRegion', e.target.value); }
+    if (e.target.id === 'syncInterval') {
+      var val = Math.max(30, Math.min(1440, parseInt(e.target.value, 10) || 240));
+      updateSetting('syncInterval', val);
     }
   });
 
@@ -152,6 +177,21 @@ export function getMainScript(): string {
       const appName = btn.dataset.app;
       if (appName) { post('stopDebug', { appName }); }
     }
+  });
+
+  // Settings tab — stepper buttons (replaces onclick="stepInterval(±30)" attributes)
+  document.addEventListener('click', function(e) {
+    const stepperBtn = e.target.closest('.stepper-btn');
+    if (stepperBtn) {
+      var delta = parseInt(stepperBtn.dataset.delta || '0', 10);
+      stepInterval(delta);
+    }
+  });
+
+  // Logs tab — JSON expand toggle (replaces onclick="toggleLogJson(this)" attribute)
+  document.addEventListener('click', function(e) {
+    const expandBtn = e.target.closest('.log-expand');
+    if (expandBtn) { toggleLogJson(expandBtn); }
   });
 
   // View app environment (VCAP_SERVICES + user-provided vars)
@@ -315,7 +355,7 @@ export function getMainScript(): string {
       : escHtml(msg);
 
     const expandBtn = hasJson
-      ? '<button class="log-expand" onclick="toggleLogJson(this)" title="Expand JSON">▶</button>'
+      ? '<button class="log-expand" title="Expand JSON">▶</button>'
       : '<span class="log-no-expand"></span>';
 
     let jsonHtml = '';

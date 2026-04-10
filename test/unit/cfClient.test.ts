@@ -38,4 +38,22 @@ old-gateway        stopped           0/1         256M     1G
     const apps = parseCfAppsOutput('');
     expect(apps).toEqual([]);
   });
+
+  it('parses CF CLI v7/v8 format with routes column', () => {
+    const v7Output = `
+Getting apps in org my-org / space dev as user@example.com...
+
+name               requested state   processes   routes
+my-service-a       started           web:1/1     my-service-a.cfapps.ap11.hana.ondemand.com
+my-service-b       started           web:2/2     my-service-b.cfapps.ap11.hana.ondemand.com
+old-gateway        stopped           web:0/1
+`;
+    const apps = parseCfAppsOutput(v7Output);
+    expect(apps).toHaveLength(3);
+    expect(apps[0].name).toBe('my-service-a');
+    expect(apps[0].state).toBe('STARTED');
+    expect(apps[0].urls).toContain('my-service-a.cfapps.ap11.hana.ondemand.com');
+    expect(apps[2].state).toBe('STOPPED');
+    expect(apps[2].urls).toHaveLength(0);
+  });
 });

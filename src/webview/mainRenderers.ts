@@ -120,7 +120,7 @@ export function renderOrgScreen(orgs: CfOrg[]): string {
       <span style="font-size:11px;color:var(--vscode-descriptionForeground)">${orgs.length} org${orgs.length !== 1 ? 's' : ''}</span>
     </div>
     <div class="search-box">
-      <input type="text" id="orgSearch" placeholder="Filter orgs…" oninput="filterOrgs(this.value)" autofocus>
+      <input type="text" id="orgSearch" placeholder="Filter orgs…" autofocus>
     </div>
     <div id="orgList">${items}</div>`;
 }
@@ -286,7 +286,7 @@ export function renderDebugTab(opts: {
       <button class="btn-icon" id="btnRefreshApps" title="Refresh apps">↺</button>
     </div>
     <div class="search-box">
-      <input type="text" id="appSearch" placeholder="Search apps…" oninput="filterApps(this.value)">
+      <input type="text" id="appSearch" placeholder="Search apps…">
     </div>
     ${started.length > 0 ? `
       <div class="quick-bar">
@@ -373,7 +373,7 @@ export function renderCredentialsTab(opts: {
   return `
     <div class="screen active" id="credsScreen">
       <div class="section-title" style="margin-top:0">Space</div>
-      <select id="spaceSelect" onchange="onSpaceChange(this.value)">
+      <select id="spaceSelect">
         <option value="">— select space —</option>
         ${spaceOptions}
       </select>
@@ -387,7 +387,7 @@ export function renderCredentialsTab(opts: {
           </div>
         </div>
         <div class="search-box">
-          <input type="text" id="credSearch" placeholder="Search apps…" oninput="filterCredApps(this.value)">
+          <input type="text" id="credSearch" placeholder="Search apps…">
         </div>
         <div id="credAppList">${appRows}</div>
       ` : opts.selectedSpace !== undefined && opts.selectedSpace.length > 0 ? `
@@ -467,7 +467,7 @@ function renderLogEntryHtml(entry: LogEntry): string {
   }
 
   const expandBtn = hasJson
-    ? `<button class="log-expand" onclick="toggleLogJson(this)" title="Expand JSON">▶</button>`
+    ? `<button class="log-expand" title="Expand JSON">▶</button>`
     : `<span class="log-no-expand"></span>`;
 
   const displayMsg = msg.length > 400 ? `${esc(msg.slice(0, 400))}<span class="log-msg-truncated">…</span>` : esc(msg);
@@ -552,9 +552,9 @@ export function renderLogsTab(opts: {
       <div class="logs-filter-bar">
         <div class="logs-filter-row">
           <div class="search-box logs-search" style="flex:1;margin-bottom:0">
-            <input type="text" id="logSearchInput" placeholder="Filter logs…" oninput="filterLogs()">
+            <input type="text" id="logSearchInput" placeholder="Filter logs…">
           </div>
-          <select id="logSrcFilter" onchange="filterLogs()" title="Filter by source" class="logs-filter-select">
+          <select id="logSrcFilter" title="Filter by source" class="logs-filter-select">
             <option value="">All sources</option>
             <option value="APP">APP</option>
             <option value="RTR">RTR</option>
@@ -562,8 +562,9 @@ export function renderLogsTab(opts: {
             <option value="CELL">CELL</option>
             <option value="SSH">SSH</option>
             <option value="STG">STG</option>
+            <option value="LGR">LGR</option>
           </select>
-          <select id="logLvlFilter" onchange="filterLogs()" title="Filter by level" class="logs-filter-select">
+          <select id="logLvlFilter" title="Filter by level" class="logs-filter-select">
             <option value="">All levels</option>
             <option value="fatal">Fatal</option>
             <option value="error">Error</option>
@@ -656,7 +657,7 @@ export function renderSettingsTab(opts: {
           <div class="toggle-sub">Fetch all CF apps when extension loads</div>
         </div>
         <label class="toggle">
-          <input type="checkbox" id="toggleAutoSync" ${opts.autoSync ? 'checked' : ''} onchange="updateSetting('autoSync', this.checked)">
+          <input type="checkbox" id="toggleAutoSync" ${opts.autoSync ? 'checked' : ''}>
           <span class="toggle-track"></span>
         </label>
       </div>
@@ -667,11 +668,10 @@ export function renderSettingsTab(opts: {
           <div class="toggle-sub">Minutes between background syncs</div>
         </div>
         <div class="stepper">
-          <button class="stepper-btn" onclick="stepInterval(-30)">−</button>
+          <button class="stepper-btn" data-delta="-30">−</button>
           <input type="number" id="syncInterval" value="${opts.syncInterval}" min="30" max="1440"
-            style="width:58px;text-align:center"
-            onchange="updateSetting('syncInterval', Math.max(30, Math.min(1440, +this.value)))">
-          <button class="stepper-btn" onclick="stepInterval(30)">+</button>
+            style="width:58px;text-align:center">
+          <button class="stepper-btn" data-delta="30">+</button>
         </div>
       </div>
 
@@ -684,13 +684,13 @@ export function renderSettingsTab(opts: {
           <div class="toggle-sub">Auto-write HANA connections to .vscode/settings.json</div>
         </div>
         <label class="toggle">
-          <input type="checkbox" id="toggleSqlTools" ${opts.sqlToolsIntegration ? 'checked' : ''} onchange="updateSetting('sqlToolsIntegration', this.checked)">
+          <input type="checkbox" id="toggleSqlTools" ${opts.sqlToolsIntegration ? 'checked' : ''}>
           <span class="toggle-track"></span>
         </label>
       </div>
 
       <div class="section-title">Default Region</div>
-      <select onchange="updateSetting('defaultRegion', this.value)">${regionOptions}</select>
+      <select id="defaultRegionSelect">${regionOptions}</select>
 
       <div class="divider"></div>
       <div class="section-title">Danger Zone</div>

@@ -476,6 +476,16 @@ async function loadAppsForOrg(orgName: string): Promise<void> {
 // ─── Tab Changes ──────────────────────────────────────────────────────────────
 
 async function handleTabChange(tab: MainTab, _context: vscode.ExtensionContext): Promise<void> {
+  // When coming from folder-select screen (user confirmed or skipped folder mapping),
+  // transition to the dashboard and initialise controllers for the first time.
+  if (mainPanel.getScreenId() === 'selectFolder') {
+    if (config.selectedOrg !== undefined) {
+      mainPanel.showDashboard(config.selectedOrg, tab);
+      await loadDashboardData();
+    }
+    return;
+  }
+
   mainPanel.showTab(tab);
   if (tab === 'credentials' && config.selectedOrg !== undefined) {
     await credController?.loadSpaces(config.selectedOrg, currentRegionId);
