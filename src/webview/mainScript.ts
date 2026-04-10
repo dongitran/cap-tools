@@ -14,7 +14,19 @@ export function getMainScript(): string {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   function post(type, payload) {
-    vscode.postMessage(payload !== undefined ? { type, payload } : { type });
+    try {
+      vscode.postMessage(payload !== undefined ? { type, payload } : { type });
+    } catch (err) {
+      // Last-resort fallback to avoid silent failures in event handlers.
+      try {
+        vscode.postMessage({
+          type: 'clientError',
+          payload: { context: 'post', message: err instanceof Error ? err.message : String(err) },
+        });
+      } catch {
+        // swallow: no bridge available
+      }
+    }
   }
 
   function saveState(update) {
@@ -98,35 +110,44 @@ export function getMainScript(): string {
 
   // ── Region Screen ─────────────────────────────────────────────────────────
 
-  document.addEventListener('change', function(e) {
-    if (e.target instanceof HTMLInputElement && e.target.name === 'region') {
-      setSelectedRegion(e.target.value);
+  function submitLogin() {
+    const regionInput = document.querySelector('input[name="region"]:checked');
+    const region = state.region ?? regionInput?.value ?? 'ap11';
+    const customInput = $id('customEndpoint');
+    const customEndpoint = customInput?.value?.trim();
+    clientLog('login.click', 'region=' + region);
+    post('login', {
+      regionId: region,
+      customEndpoint: region === 'custom' && customEndpoint ? customEndpoint : undefined
+    });
+  }
+
+  function bindRegionScreen() {
+    const loginBtn = $id('btnLogin');
+    if (loginBtn instanceof HTMLButtonElement && loginBtn.dataset.bound !== '1') {
+      loginBtn.dataset.bound = '1';
+      loginBtn.addEventListener('click', submitLogin);
     }
-  });
 
-  document.addEventListener('click', function(e) {
-    const target = asElement(e.target);
-    if (!target) { return; }
-
-    const regionCard = target.closest('.radio-card[data-region]');
-    if (regionCard) {
-      const regionId = regionCard.getAttribute('data-region');
-      if (regionId) { setSelectedRegion(regionId); }
-      return;
-    }
-
-    if (target.closest('#btnLogin')) {
-      const regionInput = document.querySelector('input[name="region"]:checked');
-      const region = state.region ?? regionInput?.value ?? 'ap11';
-      const customInput = $id('customEndpoint');
-      const customEndpoint = customInput?.value?.trim();
-      clientLog('login.click', 'region=' + region);
-      post('login', {
-        regionId: region,
-        customEndpoint: region === 'custom' && customEndpoint ? customEndpoint : undefined
+    $all('input[name="region"]').forEach(function(input) {
+      if (!(input instanceof HTMLInputElement)) { return; }
+      if (input.dataset.bound === '1') { return; }
+      input.dataset.bound = '1';
+      input.addEventListener('change', function() {
+        setSelectedRegion(input.value);
       });
-    }
-  });
+    });
+
+    $all('.radio-card[data-region]').forEach(function(card) {
+      if (!(card instanceof HTMLElement)) { return; }
+      if (card.dataset.bound === '1') { return; }
+      card.dataset.bound = '1';
+      card.addEventListener('click', function() {
+        const regionId = card.getAttribute('data-region');
+        if (regionId) { setSelectedRegion(regionId); }
+      });
+    });
+  }
 
   // Enter key on region screen
   document.addEventListener('keydown', function(e) {
@@ -648,6 +669,8 @@ export function getMainScript(): string {
   });
 
   // ── Init ──────────────────────────────────────────────────────────────────
+
+  bindRegionScreen();
 
   // Sync org from server-rendered DOM if present
   readOrgCtx();

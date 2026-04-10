@@ -73,6 +73,7 @@ export class MainPanel implements vscode.WebviewViewProvider {
     _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ): void {
+    logger.info('Main panel webview resolved');
     this.view = webviewView;
 
     webviewView.webview.options = {

@@ -54,7 +54,8 @@ function saveConfig(state: vscode.Memento): void {
 
 export function activate(context: vscode.ExtensionContext): void {
   logger.init();
-  logger.info('SAP Tools activating');
+  const version = String(context.extension.packageJSON.version ?? 'unknown');
+  logger.info(`SAP Tools activating (v${version})`);
 
   extensionContext = context;
   cache = new CacheManager(context.globalState);
@@ -170,7 +171,7 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => logger.dispose() },
   );
 
-  logger.info('SAP Tools activated');
+  logger.info(`SAP Tools activated (v${version})`);
 }
 
 // ─── Status Bar ───────────────────────────────────────────────────────────────
@@ -222,7 +223,7 @@ async function openAppEnvDocument(appName: string, orgName: string, spaceName?: 
 // ─── Webview Message Handler ──────────────────────────────────────────────────
 
 async function handleWebviewMessage(msg: WebviewMessage, context: vscode.ExtensionContext): Promise<void> {
-  logger.debug(`Webview message received: ${msg.type}`);
+  logger.info(`Webview message: ${msg.type}`);
 
   switch (msg.type) {
     case 'ready':
@@ -246,6 +247,7 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
 
     case 'login':
       currentRegionId = msg.payload.regionId;
+      logger.info(`Login requested for region "${msg.payload.regionId}"`);
       await handleLogin(msg.payload.regionId, context, msg.payload.customEndpoint);
       break;
 
@@ -410,17 +412,24 @@ async function handleLogin(
   context: vscode.ExtensionContext,
   customEndpoint?: string,
 ): Promise<void> {
-  if (loginInProgress) {return;}
-  loginInProgress = true;
-  const region = getOrCustomRegion(regionId, customEndpoint);
-  mainPanel.showConnecting(regionId, customEndpoint);
-  const creds = readShellCredentials();
-  if (creds.email === undefined || creds.password === undefined) {
-    mainPanel.showRegion();
-    void vscode.window.showErrorMessage('SAP Tools: SAP_EMAIL or SAP_PASSWORD not found in shell environment.');
+  if (loginInProgress) {
+    logger.warn(`Login ignored for region "${regionId}" because a login is already in progress.`);
     return;
   }
+  loginInProgress = true;
   try {
+    const region = getOrCustomRegion(regionId, customEndpoint);
+    logger.info(`Starting login for region "${regionId}" (${region.apiEndpoint})`);
+    mainPanel.showConnecting(regionId, customEndpoint);
+
+    const creds = readShellCredentials();
+    if (creds.email === undefined || creds.password === undefined) {
+      logger.error('Login aborted: SAP_EMAIL or SAP_PASSWORD not found in shell environment.');
+      mainPanel.showRegion();
+      void vscode.window.showErrorMessage('SAP Tools: SAP_EMAIL or SAP_PASSWORD not found in shell environment.');
+      return;
+    }
+
     await cfSetApi(region.apiEndpoint);
     await cfAuth(creds.email, creds.password);
     const orgs = await cfOrgs();
@@ -437,6 +446,7 @@ async function handleLogin(
     mainPanel.showOrgSelect(orgs);
     cache.setOrgs(regionId, orgs);
     treeProvider.setRegion(regionId);
+    logger.info(`Login successful for region "${regionId}" (${orgs.length} orgs).`);
   } catch (err) {
     logger.error('Login failed', err);
     mainPanel.showRegion();
