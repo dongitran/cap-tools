@@ -1,4 +1,4 @@
-import type { CfOrg, SyncProgress } from '../types/index.js';
+import type { CfApp, CfOrg, LogEntry, LogSessionStatus, SyncProgress } from '../types/index.js';
 import { CF_REGIONS } from '../core/regionList.js';
 
 // ─── XSS Helpers ─────────────────────────────────────────────────────────────
@@ -172,15 +172,16 @@ export function renderFolderScreen(orgName: string, mappedPath?: string): string
 // ─── Dashboard (tabbed) ───────────────────────────────────────────────────────
 
 export function renderDashboardShell(opts: {
-  activeTab: 'debug' | 'credentials' | 'settings';
+  activeTab: 'debug' | 'credentials' | 'logs' | 'settings';
   orgName: string;
   activeSessionCount: number;
   regionId?: string;
   lastSyncedAt?: number;
 }): string {
-  const tabs: Array<{ id: 'debug' | 'credentials' | 'settings'; label: string }> = [
+  const tabs: Array<{ id: 'debug' | 'credentials' | 'logs' | 'settings'; label: string }> = [
     { id: 'debug', label: '🐛 Debug' },
     { id: 'credentials', label: '🔑 Creds' },
+    { id: 'logs', label: '📋 Logs' },
     { id: 'settings', label: '⚙ Settings' },
   ];
 
@@ -428,6 +429,167 @@ export function renderCredentialsTab(opts: {
         <div>${resultRows}</div>
       ` : ''}
     </div>`;
+}
+
+// ─── Logs Tab ─────────────────────────────────────────────────────────────────
+
+/** Embed arbitrary data as JSON in HTML safely (escapes </> to prevent XSS). */
+function safeJson(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
+function formatLogTime(ts: string): string {
+  const m = /T(\d{2}:\d{2}:\d{2})/.exec(ts);
+  return m ? m[1] : ts.slice(0, 8);
+}
+
+function renderLogEntryHtml(entry: LogEntry): string {
+  const ts = formatLogTime(entry.timestamp);
+  const levelCls = entry.level !== undefined ? `lvl-${entry.level}` : '';
+  const srcCls = `src-${entry.sourceType.toLowerCase()}`;
+  const streamCls = entry.stream === 'ERR' ? 'log-err' : '';
+  const msg = entry.message.trim();
+  const hasJson = entry.jsonData !== undefined;
+
+  let jsonHtml = '';
+  if (entry.jsonData !== undefined) {
+    const rows = Object.entries(entry.jsonData)
+      .slice(0, 40)
+      .map(([k, v]) => {
+        const val = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
+        return `<tr><td class="json-k">${esc(k)}</td><td class="json-v">${esc(val)}</td></tr>`;
+      })
+      .join('');
+    jsonHtml = `<div class="log-json-body hidden"><table class="log-json-tbl">${rows}</table></div>`;
+  }
+
+  const expandBtn = hasJson
+    ? `<button class="log-expand" onclick="toggleLogJson(this)" title="Expand JSON">▶</button>`
+    : `<span class="log-no-expand"></span>`;
+
+  const displayMsg = msg.length > 400 ? `${esc(msg.slice(0, 400))}<span class="log-msg-truncated">…</span>` : esc(msg);
+  const searchText = esc(`${entry.sourceType} ${entry.level ?? ''} ${msg}`.toLowerCase());
+
+  return `<div class="log-entry ${levelCls} ${srcCls} ${streamCls}${hasJson ? ' has-json' : ''}" data-src="${entry.sourceType}" data-lvl="${entry.level ?? ''}" data-txt="${searchText}">
+    <div class="log-row">${expandBtn}<span class="log-ts">${esc(ts)}</span><span class="log-src-badge src-badge-${entry.sourceType.toLowerCase()}">${esc(entry.sourceType)}</span><span class="log-msg">${displayMsg}</span></div>
+    ${jsonHtml}
+  </div>`;
+}
+
+export function renderLogsTab(opts: {
+  apps: CfApp[];
+  selectedApp?: string;
+  logEntries: LogEntry[];
+  logStatus: LogSessionStatus;
+  logError?: string;
+}): string {
+  const appOptions = opts.apps
+    .filter(a => a.state === 'STARTED')
+    .map(a => `<option value="${esc(a.name)}"${a.name === opts.selectedApp ? ' selected' : ''}>${esc(a.name)}</option>`)
+    .join('');
+
+  const stoppedOptions = opts.apps
+    .filter(a => a.state === 'STOPPED')
+    .map(a => `<option value="${esc(a.name)}"${a.name === opts.selectedApp ? ' selected' : ''} class="log-app-stopped">${esc(a.name)} (stopped)</option>`)
+    .join('');
+
+  const isStreaming = opts.logStatus === 'STREAMING' || opts.logStatus === 'CONNECTING';
+  const statusMeta = (() => {
+    if (opts.logStatus === 'CONNECTING') {
+      return `<span class="log-status-pill pill-connecting"><span class="log-live-dot"></span>Connecting…</span>`;
+    }
+    if (opts.logStatus === 'STREAMING') {
+      return `<span class="log-status-pill pill-live"><span class="log-live-dot"></span>Live</span>`;
+    }
+    if (opts.logStatus === 'ERROR') {
+      return `<span class="log-status-pill pill-error">✕ Error</span>`;
+    }
+    if (opts.logStatus === 'STOPPED') {
+      return `<span class="log-status-pill pill-stopped">■ Stopped</span>`;
+    }
+    return `<span class="log-status-pill pill-idle">○ Idle</span>`;
+  })();
+
+  const errorBanner = (opts.logStatus === 'ERROR' && opts.logError !== undefined)
+    ? `<div class="banner banner-error" style="margin:6px 0;font-size:11px">⚠ ${esc(opts.logError)}</div>`
+    : '';
+
+  const emptyState = opts.apps.length === 0
+    ? `<div class="empty-state" style="padding:20px 0"><div class="empty-state-icon">📋</div><div>No apps loaded</div><div style="margin-top:4px;opacity:0.7;font-size:11px">Switch to Debug tab to load apps first.</div></div>`
+    : '';
+
+  const entriesHtml = opts.logEntries.map(renderLogEntryHtml).join('');
+
+  const initMeta = safeJson({
+    selectedApp: opts.selectedApp ?? '',
+    status: opts.logStatus,
+    ...(opts.logError !== undefined ? { error: opts.logError } : {}),
+  });
+
+  return `
+    <div class="screen active" id="logsScreen">
+      <!-- Toolbar: App selector + action buttons -->
+      <div class="logs-toolbar">
+        <select id="logAppSelect" ${isStreaming ? 'disabled' : ''}>
+          <option value="">— select app —</option>
+          ${appOptions}
+          ${stoppedOptions}
+        </select>
+        <div class="logs-btn-group">
+          <button id="btnLiveLogs" class="btn btn-primary logs-action-btn${isStreaming ? ' hidden' : ''}" title="Stream live logs">▶ Live</button>
+          <button id="btnRecentLogs" class="btn btn-secondary logs-action-btn${isStreaming ? ' hidden' : ''}" title="Load recent logs">📄 Recent</button>
+          <button id="btnStopLogs" class="btn btn-danger logs-action-btn${isStreaming ? '' : ' hidden'}" title="Stop streaming">■ Stop</button>
+        </div>
+      </div>
+
+      ${errorBanner}
+      ${emptyState}
+
+      <!-- Filter bar -->
+      <div class="logs-filter-bar">
+        <div class="logs-filter-row">
+          <div class="search-box logs-search" style="flex:1;margin-bottom:0">
+            <input type="text" id="logSearchInput" placeholder="Filter logs…" oninput="filterLogs()">
+          </div>
+          <select id="logSrcFilter" onchange="filterLogs()" title="Filter by source" class="logs-filter-select">
+            <option value="">All sources</option>
+            <option value="APP">APP</option>
+            <option value="RTR">RTR</option>
+            <option value="API">API</option>
+            <option value="CELL">CELL</option>
+            <option value="SSH">SSH</option>
+            <option value="STG">STG</option>
+          </select>
+          <select id="logLvlFilter" onchange="filterLogs()" title="Filter by level" class="logs-filter-select">
+            <option value="">All levels</option>
+            <option value="fatal">Fatal</option>
+            <option value="error">Error</option>
+            <option value="warn">Warn</option>
+            <option value="info">Info</option>
+            <option value="debug">Debug</option>
+          </select>
+        </div>
+        <div class="logs-meta-bar">
+          <label class="logs-autoscroll-label" title="Auto-scroll to newest entries">
+            <input type="checkbox" id="logAutoScroll" checked>
+            <span>Auto-scroll</span>
+          </label>
+          <span id="logStatusMeta">${statusMeta}</span>
+          <span id="logCountBadge" class="log-count-badge">0 entries</span>
+          <button class="btn-icon" id="btnClearLogs" title="Clear all logs">🗑</button>
+          <button class="btn-icon" id="btnExportLogs" title="Export logs as text">💾</button>
+        </div>
+      </div>
+
+      <!-- Log stream container -->
+      <div id="logContainer" class="log-container">
+        ${entriesHtml}
+      </div>
+    </div>
+    <script id="__logMeta" type="application/json">${initMeta}</script>`;
 }
 
 // ─── Settings Tab ─────────────────────────────────────────────────────────────

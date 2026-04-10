@@ -119,6 +119,23 @@ export interface ExtensionConfig {
   selectedOrg?: string;
 }
 
+// ─── Logs Types ───────────────────────────────────────────────────────────────
+
+export type LogSourceType = 'APP' | 'RTR' | 'API' | 'CELL' | 'SSH' | 'STG' | 'LGR' | 'OTHER';
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+export type LogSessionStatus = 'IDLE' | 'CONNECTING' | 'STREAMING' | 'STOPPED' | 'ERROR';
+
+export interface LogEntry {
+  id: number;
+  timestamp: string;
+  source: string;
+  sourceType: LogSourceType;
+  stream: 'OUT' | 'ERR';
+  message: string;
+  level?: LogLevel;
+  jsonData?: Record<string, unknown>;
+}
+
 // ─── Debug Session Types ───────────────────────────────────────────────────────
 
 export type DebugSessionStatus =
@@ -152,7 +169,9 @@ export type ExtensionMessage =
   | { type: 'syncProgress'; payload: SyncProgress }
   | { type: 'credentialResult'; payload: CredentialResult }
   | { type: 'appEnv'; payload: { appName: string; vcap: VcapServices; env: Record<string, string> } }
-  | { type: 'error'; payload: { message: string; context?: string } };
+  | { type: 'error'; payload: { message: string; context?: string } }
+  | { type: 'logEntry'; payload: LogEntry }
+  | { type: 'logStatus'; payload: { status: LogSessionStatus; error?: string } };
 
 // Webview → Extension
 export type WebviewMessage =
@@ -172,9 +191,14 @@ export type WebviewMessage =
   | { type: 'updateSettings'; payload: Partial<SettingsPayload> }
   | { type: 'resetConfig' }
   | { type: 'getAppEnv'; payload: { appName: string; orgName: string } }
-  | { type: 'changeTab'; payload: { tab: MainTab } };
+  | { type: 'changeTab'; payload: { tab: MainTab } }
+  | { type: 'startLogs'; payload: { appName: string } }
+  | { type: 'stopLogs' }
+  | { type: 'loadRecentLogs'; payload: { appName: string } }
+  | { type: 'clearLogs' }
+  | { type: 'exportLogs' };
 
-export type MainTab = 'debug' | 'credentials' | 'settings';
+export type MainTab = 'debug' | 'credentials' | 'logs' | 'settings';
 
 export type CredentialOutputMode = 'sqltools' | 'json' | 'clipboard';
 

@@ -8,6 +8,7 @@ import {
   renderDashboardShell,
   renderDebugTab,
   renderFolderScreen,
+  renderLogsTab,
   renderOrgScreen,
   renderRegionScreen,
   renderSettingsTab,
@@ -18,6 +19,8 @@ import type {
   CfSpace,
   CredentialResult,
   DebugSession,
+  LogEntry,
+  LogSessionStatus,
   MainTab,
   SyncProgress,
   VcapServices,
@@ -52,6 +55,13 @@ export class MainPanel implements vscode.WebviewViewProvider {
   private groupFolderPath = '';
   private cacheStats: { regions: number; orgs: number; apps: number } | undefined;
   private lastSyncedAt: number | undefined;
+
+  // ── Logs tab state ───────────────────────────────────────────────────────
+  private static readonly LOG_BUFFER_MAX = 2000;
+  private logBuffer: LogEntry[] = [];
+  private logStatus: LogSessionStatus = 'IDLE';
+  private logError: string | undefined;
+  private logSelectedApp: string | undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -134,13 +144,13 @@ export class MainPanel implements vscode.WebviewViewProvider {
 
   updateSpaces(spaces: CfSpace[]): void {
     this.spaces = spaces;
-    if (this.screen.id === 'dashboard') {this.render();}
+    if (this.screen.id === 'dashboard' && this.screen.tab === 'credentials') {this.render();}
   }
 
   updateSpaceApps(spaceName: string, apps: CfApp[]): void {
     this.selectedSpace = spaceName;
     this.spaceApps = apps;
-    if (this.screen.id === 'dashboard') {this.render();}
+    if (this.screen.id === 'dashboard' && this.screen.tab === 'credentials') {this.render();}
   }
 
   updateFolderPath(path: string): void {
@@ -160,7 +170,8 @@ export class MainPanel implements vscode.WebviewViewProvider {
     } else {
       this.activeSessions.push(session);
     }
-    if (this.screen.id === 'dashboard') {this.render();}
+    // Only re-render on debug tab — avoids disrupting the live logs stream
+    if (this.screen.id === 'dashboard' && this.screen.tab === 'debug') {this.render();}
   }
 
   updateSyncProgress(progress: SyncProgress, stats?: { regions: number; orgs: number; apps: number }): void {
@@ -174,7 +185,7 @@ export class MainPanel implements vscode.WebviewViewProvider {
     const idx = this.credResults.findIndex(r => r.appName === result.appName);
     if (idx >= 0) {this.credResults[idx] = result;}
     else {this.credResults.push(result);}
-    if (this.screen.id === 'dashboard') {this.render();}
+    if (this.screen.id === 'dashboard' && this.screen.tab === 'credentials') {this.render();}
   }
 
   clearCredResults(): void {
@@ -184,6 +195,49 @@ export class MainPanel implements vscode.WebviewViewProvider {
   updateAppEnv(appName: string, vcap: VcapServices, envVars: Record<string, string>): void {
     // Document opening is handled in extension.ts via vscode.workspace.openTextDocument
     logger.info(`App env received for ${appName}: ${Object.keys(vcap).length} VCAP services, ${Object.keys(envVars).length} user vars`);
+  }
+
+  // ── Logs Methods ──────────────────────────────────────────────────────────
+
+  /**
+   * Streams a single log entry to the webview via postMessage (no full re-render).
+   * Also buffers it so that a future full render restores all entries.
+   */
+  pushLogEntry(entry: LogEntry): void {
+    // Ring-buffer: evict oldest when at capacity
+    if (this.logBuffer.length >= MainPanel.LOG_BUFFER_MAX) {
+      this.logBuffer.shift();
+    }
+    this.logBuffer.push(entry);
+
+    // Send directly to webview without triggering a full re-render
+    this.view?.webview.postMessage({ type: 'logEntry', payload: entry });
+  }
+
+  updateLogStatus(status: LogSessionStatus, error?: string): void {
+    this.logStatus = status;
+    if (error !== undefined) {
+      this.logError = error;
+    } else {
+      // exactOptionalPropertyTypes — clear error only when explicitly absent
+      this.logError = undefined;
+    }
+
+    const payload: { status: LogSessionStatus; error?: string } = { status };
+    if (error !== undefined) { payload.error = error; }
+
+    // Push status update via postMessage so the logs tab UI stays reactive
+    this.view?.webview.postMessage({ type: 'logStatus', payload });
+  }
+
+  setLogSelectedApp(appName: string): void {
+    this.logSelectedApp = appName;
+  }
+
+  clearLogBuffer(): void {
+    this.logBuffer = [];
+    this.logStatus = 'IDLE';
+    this.logError = undefined;
   }
 
   showTab(tab: MainTab): void {
@@ -272,6 +326,15 @@ export class MainPanel implements vscode.WebviewViewProvider {
           results: this.credResults,
         });
 
+      case 'logs':
+        return renderLogsTab({
+          apps: this.apps,
+          logEntries: this.logBuffer,
+          logStatus: this.logStatus,
+          ...(this.logSelectedApp !== undefined ? { selectedApp: this.logSelectedApp } : {}),
+          ...(this.logError !== undefined ? { logError: this.logError } : {}),
+        });
+
       case 'settings': {
         const cfg = vscode.workspace.getConfiguration('sapTools');
         return renderSettingsTab({
@@ -289,6 +352,16 @@ export class MainPanel implements vscode.WebviewViewProvider {
 
   getGroupFolderPath(): string {
     return this.groupFolderPath;
+  }
+
+  /** Returns buffered log entries as plain text (CF log format). */
+  getLogExportText(): string {
+    if (this.logBuffer.length === 0) { return '# No log entries captured yet.\n'; }
+    const header = `# CF Logs — ${this.logSelectedApp ?? 'unknown'} — ${new Date().toISOString()}\n\n`;
+    const lines = this.logBuffer
+      .map(e => `${e.timestamp} [${e.source}] ${e.stream} ${e.message}`)
+      .join('\n');
+    return header + lines;
   }
 
   dispose(): void {

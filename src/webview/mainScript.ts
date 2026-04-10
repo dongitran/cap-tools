@@ -274,6 +274,254 @@ export function getMainScript(): string {
     }
   });
 
+  // ── Logs Tab ──────────────────────────────────────────────────────────────
+
+  // XSS-safe HTML escaping for dynamic content
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function escAttr(s) {
+    return escHtml(s).replace(/\n/g, '&#10;');
+  }
+
+  function formatLogTime(ts) {
+    const m = /T(\\d{2}:\\d{2}:\\d{2})/.exec(ts);
+    return m ? m[1] : (ts.slice(0, 8) || ts);
+  }
+
+  function buildLogEntryEl(entry) {
+    const div = document.createElement('div');
+    const levelCls = entry.level ? 'lvl-' + entry.level : '';
+    const srcCls = 'src-' + entry.sourceType.toLowerCase();
+    const streamCls = entry.stream === 'ERR' ? 'log-err' : '';
+    const hasJson = !!entry.jsonData;
+
+    div.className = 'log-entry ' + levelCls + ' ' + srcCls + ' ' + streamCls + (hasJson ? ' has-json' : '');
+    div.dataset.src  = entry.sourceType;
+    div.dataset.lvl  = entry.level || '';
+    div.dataset.txt  = (entry.sourceType + ' ' + (entry.level || '') + ' ' + entry.message).toLowerCase();
+
+    const ts  = escHtml(formatLogTime(entry.timestamp));
+    const src = escHtml(entry.sourceType);
+    const msg = entry.message.trim();
+    const displayMsg = msg.length > 400
+      ? escHtml(msg.slice(0, 400)) + '<span class="log-msg-truncated">…</span>'
+      : escHtml(msg);
+
+    const expandBtn = hasJson
+      ? '<button class="log-expand" onclick="toggleLogJson(this)" title="Expand JSON">▶</button>'
+      : '<span class="log-no-expand"></span>';
+
+    let jsonHtml = '';
+    if (entry.jsonData) {
+      const rows = Object.entries(entry.jsonData).slice(0, 40).map(function(kv) {
+        const k = kv[0], v = kv[1];
+        const val = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : String(v);
+        return '<tr><td class="json-k">' + escHtml(k) + '</td><td class="json-v">' + escHtml(val) + '</td></tr>';
+      }).join('');
+      jsonHtml = '<div class="log-json-body hidden"><table class="log-json-tbl">' + rows + '</table></div>';
+    }
+
+    div.innerHTML = '<div class="log-row">'
+      + expandBtn
+      + '<span class="log-ts">' + ts + '</span>'
+      + '<span class="log-src-badge src-badge-' + escHtml(entry.sourceType.toLowerCase()) + '">' + src + '</span>'
+      + '<span class="log-msg">' + displayMsg + '</span>'
+      + '</div>'
+      + jsonHtml;
+
+    return div;
+  }
+
+  // Entry counter tracked client-side
+  var logEntryCount = 0;
+
+  function updateLogCount() {
+    const badge = $id('logCountBadge');
+    if (badge) {
+      const visCount = $all('#logContainer .log-entry:not(.log-filtered)').length;
+      const total = $all('#logContainer .log-entry').length;
+      badge.textContent = visCount === total
+        ? total + ' entr' + (total === 1 ? 'y' : 'ies')
+        : visCount + '/' + total + ' entr' + (total === 1 ? 'y' : 'ies');
+    }
+  }
+
+  function appendLogEntry(entry) {
+    const container = $id('logContainer');
+    if (!container) { return; }
+
+    const el = buildLogEntryEl(entry);
+
+    // Apply current filter immediately
+    const search  = ($id('logSearchInput')?.value || '').toLowerCase().trim();
+    const srcFilter = $id('logSrcFilter')?.value  || '';
+    const lvlFilter = $id('logLvlFilter')?.value  || '';
+
+    if (
+      (srcFilter && el.dataset.src !== srcFilter) ||
+      (lvlFilter && el.dataset.lvl !== lvlFilter) ||
+      (search && !(el.dataset.txt || '').includes(search))
+    ) {
+      el.classList.add('log-filtered');
+    }
+
+    // Ring buffer: remove oldest entry if over limit
+    const MAX_ENTRIES = 2000;
+    const all = container.querySelectorAll('.log-entry');
+    if (all.length >= MAX_ENTRIES) {
+      all[0].remove();
+    }
+
+    container.appendChild(el);
+    logEntryCount++;
+
+    // Auto-scroll
+    const autoScroll = $id('logAutoScroll');
+    if (autoScroll && autoScroll.checked) {
+      container.scrollTop = container.scrollHeight;
+    }
+
+    updateLogCount();
+  }
+
+  window.filterLogs = function() {
+    const search    = ($id('logSearchInput')?.value || '').toLowerCase().trim();
+    const srcFilter = $id('logSrcFilter')?.value  || '';
+    const lvlFilter = $id('logLvlFilter')?.value  || '';
+
+    $all('#logContainer .log-entry').forEach(function(el) {
+      const src = el.dataset.src || '';
+      const lvl = el.dataset.lvl || '';
+      const txt = el.dataset.txt || '';
+
+      const hidden =
+        (srcFilter !== '' && src !== srcFilter) ||
+        (lvlFilter !== '' && lvl !== lvlFilter) ||
+        (search !== '' && !txt.includes(search));
+
+      el.classList.toggle('log-filtered', hidden);
+    });
+
+    updateLogCount();
+  };
+
+  window.toggleLogJson = function(btn) {
+    const body = btn.closest('.log-entry')?.querySelector('.log-json-body');
+    if (!body) { return; }
+    const isExpanded = !body.classList.contains('hidden');
+    body.classList.toggle('hidden', isExpanded);
+    btn.textContent = isExpanded ? '▶' : '▼';
+    btn.classList.toggle('expanded', !isExpanded);
+  };
+
+  function clearLogContainer() {
+    const container = $id('logContainer');
+    if (container) { container.innerHTML = ''; }
+    logEntryCount = 0;
+    updateLogCount();
+  }
+
+  function setLogStatus(status, error) {
+    const statusEl = $id('logStatusMeta');
+    if (!statusEl) { return; }
+
+    var html = '';
+    if (status === 'CONNECTING') {
+      html = '<span class="log-status-pill pill-connecting"><span class="log-live-dot"></span>Connecting…</span>';
+    } else if (status === 'STREAMING') {
+      html = '<span class="log-status-pill pill-live"><span class="log-live-dot"></span>Live</span>';
+    } else if (status === 'ERROR') {
+      html = '<span class="log-status-pill pill-error">✕ Error</span>';
+    } else if (status === 'STOPPED') {
+      html = '<span class="log-status-pill pill-stopped">■ Stopped</span>';
+    } else {
+      html = '<span class="log-status-pill pill-idle">○ Idle</span>';
+    }
+    statusEl.innerHTML = html;
+
+    var isStreaming = status === 'STREAMING' || status === 'CONNECTING';
+    var liveBtns  = $all('#btnLiveLogs, #btnRecentLogs');
+    var stopBtn   = $id('btnStopLogs');
+    var appSel    = $id('logAppSelect');
+
+    liveBtns.forEach(function(b) { b.classList.toggle('hidden', isStreaming); });
+    if (stopBtn) { stopBtn.classList.toggle('hidden', !isStreaming); }
+    if (appSel) { appSel.disabled = isStreaming; }
+
+    if (error) {
+      var existing = document.querySelector('#logsScreen .logs-error-banner');
+      if (!existing) {
+        var banner = document.createElement('div');
+        banner.className = 'banner banner-error logs-error-banner';
+        banner.style.cssText = 'margin:4px 0;font-size:11px';
+        banner.textContent = '⚠ ' + error;
+        var toolbar = document.querySelector('.logs-toolbar');
+        if (toolbar && toolbar.parentNode) {
+          toolbar.parentNode.insertBefore(banner, toolbar.nextSibling);
+        }
+      }
+    } else {
+      document.querySelector('#logsScreen .logs-error-banner')?.remove();
+    }
+  }
+
+  // Logs tab button handlers
+  document.addEventListener('click', function(e) {
+    if (e.target.id === 'btnLiveLogs') {
+      var appName = $id('logAppSelect')?.value;
+      if (!appName) { return; }
+      post('startLogs', { appName: appName });
+      setLogStatus('CONNECTING');
+    }
+    if (e.target.id === 'btnRecentLogs') {
+      var appName = $id('logAppSelect')?.value;
+      if (!appName) { return; }
+      clearLogContainer();
+      post('loadRecentLogs', { appName: appName });
+      setLogStatus('CONNECTING');
+    }
+    if (e.target.id === 'btnStopLogs') {
+      post('stopLogs');
+      setLogStatus('STOPPED');
+    }
+    if (e.target.id === 'btnClearLogs') {
+      clearLogContainer();
+      post('clearLogs');
+    }
+    if (e.target.id === 'btnExportLogs') {
+      post('exportLogs');
+    }
+  });
+
+  // ── Init logs tab from embedded server data ───────────────────────────────
+
+  (function initLogsTab() {
+    var metaEl = $id('__logMeta');
+    if (!metaEl) { return; }
+    try {
+      var meta = JSON.parse(metaEl.textContent || '{}');
+      if (meta.selectedApp) {
+        var sel = $id('logAppSelect');
+        if (sel) { sel.value = meta.selectedApp; }
+      }
+      setLogStatus(meta.status || 'IDLE', meta.error || '');
+      updateLogCount();
+
+      // Auto-scroll to bottom on initial load if we have entries
+      var container = $id('logContainer');
+      if (container && container.children.length > 0) {
+        container.scrollTop = container.scrollHeight;
+      }
+    } catch(err) { /* ignore parse errors */ }
+  }());
+
   // ── Message Dispatch ──────────────────────────────────────────────────────
 
   window.addEventListener('message', function(event) {
@@ -281,6 +529,14 @@ export function getMainScript(): string {
     switch (msg.type) {
       case 'init':
         saveState({ selectedOrg: msg.payload?.config?.selectedOrg });
+        break;
+
+      case 'logEntry':
+        appendLogEntry(msg.payload);
+        break;
+
+      case 'logStatus':
+        setLogStatus(msg.payload.status, msg.payload.error || '');
         break;
     }
   });

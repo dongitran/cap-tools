@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { logger } from './core/logger.js';
 import { CacheManager } from './core/cacheManager.js';
 import { ProcessManager } from './core/processManager.js';
+import { LogsManager } from './core/logsManager.js';
 import { readShellCredentials, clearCachedCredentials } from './core/shellEnv.js';
 import { cfSetApi, cfAuth, cfOrgs, cfApps, cfEnv, cfTarget, parseEnvVars, isAuthError } from './core/cfClient.js';
 import { getOrCustomRegion } from './core/regionList.js';
@@ -27,6 +28,7 @@ const CONFIG_KEY = 'sapTools.config';
 
 let cache: CacheManager;
 let processManager: ProcessManager;
+let logsManager: LogsManager;
 let mainPanel: MainPanel;
 let treeProvider: CfTreeProvider;
 let debugController: DebugPanelController | undefined;
@@ -56,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
   extensionContext = context;
   cache = new CacheManager(context.globalState);
   processManager = new ProcessManager();
+  logsManager = new LogsManager();
   loadConfig(context.globalState);
 
   // ── Status Bar ───────────────────────────────────────────────────────────
@@ -146,10 +149,22 @@ export function activate(context: vscode.ExtensionContext): void {
 
   scheduleSync();
 
+  // Wire LogsManager callbacks → mainPanel streaming
+  logsManager.setCallbacks(
+    entry => mainPanel.pushLogEntry(entry),
+    (status, error) => {
+      const payload: Parameters<typeof mainPanel.updateLogStatus> = error !== undefined
+        ? [status, error]
+        : [status];
+      mainPanel.updateLogStatus(...payload);
+    },
+  );
+
   context.subscriptions.push(
     webviewReg,
     treeReg,
     { dispose: () => processManager.dispose() },
+    { dispose: () => logsManager.dispose() },
     { dispose: () => syncTimer && clearInterval(syncTimer) },
     { dispose: () => logger.dispose() },
   );
@@ -316,6 +331,53 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
       await openAppEnvDocument(msg.payload.appName, msg.payload.orgName);
       break;
     }
+
+    case 'startLogs': {
+      const { appName } = msg.payload;
+      mainPanel.setLogSelectedApp(appName);
+      try {
+        if (config.selectedOrg !== undefined) {
+          await cfTarget(config.selectedOrg);
+        }
+        logsManager.startStreaming(appName);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        mainPanel.updateLogStatus('ERROR', errMsg);
+      }
+      break;
+    }
+
+    case 'stopLogs':
+      logsManager.stop();
+      mainPanel.updateLogStatus('STOPPED');
+      break;
+
+    case 'loadRecentLogs': {
+      const { appName } = msg.payload;
+      mainPanel.setLogSelectedApp(appName);
+      mainPanel.clearLogBuffer();
+      try {
+        if (config.selectedOrg !== undefined) {
+          await cfTarget(config.selectedOrg);
+        }
+        await logsManager.loadRecent(appName);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        mainPanel.updateLogStatus('ERROR', errMsg);
+      }
+      break;
+    }
+
+    case 'clearLogs':
+      logsManager.stop();
+      mainPanel.clearLogBuffer();
+      mainPanel.updateLogStatus('IDLE');
+      break;
+
+    case 'exportLogs': {
+      await exportLogsDocument();
+      break;
+    }
   }
 }
 
@@ -417,6 +479,22 @@ async function handleTabChange(tab: MainTab, _context: vscode.ExtensionContext):
   mainPanel.showTab(tab);
   if (tab === 'credentials' && config.selectedOrg !== undefined) {
     await credController?.loadSpaces(config.selectedOrg, currentRegionId);
+  }
+}
+
+// ─── Export Logs ──────────────────────────────────────────────────────────────
+
+async function exportLogsDocument(): Promise<void> {
+  try {
+    const content = mainPanel.getLogExportText();
+    const doc = await vscode.workspace.openTextDocument({ content, language: 'plaintext' });
+    await vscode.window.showTextDocument(doc, { preview: true });
+    logger.info('Exported logs to editor');
+  } catch (err) {
+    logger.error('Failed to export logs', err);
+    void vscode.window.showErrorMessage(
+      `SAP Tools: Failed to export logs — ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

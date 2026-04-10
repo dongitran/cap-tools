@@ -596,6 +596,242 @@ export function getSharedStyles(): string {
     .custom-endpoint { margin-top: 8px; }
     .hidden { display: none !important; }
 
+    /* ═══════════════════════════════════════════════════════════════
+       LOGS TAB
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* ── Logs toolbar ────────────────────────────────────────────── */
+    .logs-toolbar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .logs-toolbar select { flex: 1; min-width: 0; }
+    .logs-btn-group { display: flex; gap: 4px; flex-shrink: 0; }
+    .logs-action-btn { padding: 4px 10px !important; font-size: 11px !important; }
+
+    /* ── Filter bar ──────────────────────────────────────────────── */
+    .logs-filter-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 6px;
+    }
+    .logs-filter-row {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .logs-filter-select {
+      width: auto !important;
+      padding: 4px 6px !important;
+      font-size: 11px !important;
+      flex-shrink: 0;
+    }
+    .logs-meta-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      flex-wrap: wrap;
+    }
+    .logs-autoscroll-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      color: var(--vscode-descriptionForeground);
+      user-select: none;
+    }
+    .logs-autoscroll-label input { cursor: pointer; }
+    .log-count-badge {
+      margin-left: auto;
+      font-size: 10px;
+      opacity: 0.6;
+      white-space: nowrap;
+    }
+
+    /* ── Live status pills ───────────────────────────────────────── */
+    .log-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .pill-live    { background: rgba(63,185,80,0.18);  color: #3fb950; }
+    .pill-connecting { background: rgba(255,190,0,0.18); color: #fbbe00; }
+    .pill-stopped { background: rgba(120,120,120,0.18); color: var(--vscode-disabledForeground); }
+    .pill-error   { background: rgba(248,81,73,0.18);  color: #f85149; }
+    .pill-idle    { background: rgba(120,120,120,0.12); color: var(--vscode-disabledForeground); }
+
+    /* Pulsing live dot */
+    @keyframes logPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+    .log-live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: logPulse 1.4s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    /* ── Log container (terminal area) ──────────────────────────── */
+    .log-container {
+      font-family: var(--vscode-editor-font-family, 'Consolas', 'Courier New', monospace);
+      font-size: 11px;
+      line-height: 1.55;
+      background: var(--vscode-terminal-background, var(--vscode-editor-background, #1e1e1e));
+      border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.1));
+      border-radius: 4px;
+      overflow-y: auto;
+      /* Fill available height: subtract toolbar, filter bar, tab bar, context bar */
+      max-height: calc(100vh - 195px);
+      min-height: 120px;
+    }
+
+    /* ── Individual log entry ────────────────────────────────────── */
+    .log-entry {
+      border-left: 2px solid transparent;
+      padding: 0;
+      transition: background 0.08s;
+    }
+    .log-entry:hover { background: rgba(255,255,255,0.04); }
+
+    .log-row {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      padding: 2px 8px 2px 6px;
+      min-height: 20px;
+    }
+
+    /* Level-based left border colours */
+    .log-entry.lvl-fatal,
+    .log-entry.lvl-error   { border-left-color: #f85149; background: rgba(248,81,73,0.04); }
+    .log-entry.lvl-warn    { border-left-color: #fbbe00; background: rgba(255,190,0,0.04); }
+    .log-entry.lvl-info    { border-left-color: #58a6ff; }
+    .log-entry.lvl-debug,
+    .log-entry.lvl-trace   { opacity: 0.6; }
+
+    /* ERR stream (stderr) gets subtle red tint regardless of parsed level */
+    .log-entry.log-err:not(.lvl-warn):not(.lvl-info):not(.lvl-debug):not(.lvl-trace) {
+      border-left-color: rgba(248,81,73,0.6);
+    }
+
+    /* ── Timestamp ───────────────────────────────────────────────── */
+    .log-ts {
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.65;
+      flex-shrink: 0;
+      font-size: 10px;
+      min-width: 58px;
+    }
+
+    /* ── Source type badges ──────────────────────────────────────── */
+    .log-src-badge {
+      display: inline-block;
+      padding: 0px 5px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+      opacity: 0.9;
+    }
+    .src-badge-app  { background: rgba(88,166,255,0.20); color: #58a6ff; }
+    .src-badge-rtr  { background: rgba(57,211,83,0.20);  color: #39d353; }
+    .src-badge-api  { background: rgba(188,140,255,0.20); color: #bc8cff; }
+    .src-badge-cell { background: rgba(255,166,87,0.20);  color: #ffa657; }
+    .src-badge-ssh  { background: rgba(255,190,0,0.20);   color: #fbbe00; }
+    .src-badge-stg  { background: rgba(255,123,114,0.20); color: #ff7b72; }
+    .src-badge-lgr  { background: rgba(120,120,120,0.20); color: var(--vscode-disabledForeground); }
+    .src-badge-other{ background: rgba(120,120,120,0.15); color: var(--vscode-descriptionForeground); }
+
+    /* ── Log message text ────────────────────────────────────────── */
+    .log-msg {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      word-break: break-word;
+      white-space: pre-wrap;
+      color: var(--vscode-terminal-foreground, var(--vscode-foreground));
+    }
+    .log-msg-truncated { opacity: 0.45; }
+
+    /* ── JSON expand button ──────────────────────────────────────── */
+    .log-expand,
+    .log-no-expand {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .log-expand {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--vscode-descriptionForeground);
+      font-size: 9px;
+      padding: 0;
+      border-radius: 2px;
+      transition: color 0.1s, background 0.1s;
+    }
+    .log-expand:hover {
+      color: var(--vscode-foreground);
+      background: rgba(255,255,255,0.1);
+    }
+    .log-expand.expanded { color: var(--vscode-focusBorder); }
+
+    /* ── JSON key-value table ────────────────────────────────────── */
+    .log-json-body {
+      padding: 3px 8px 5px 27px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .log-json-tbl {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 10.5px;
+    }
+    .log-json-tbl tr { border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .log-json-tbl tr:last-child { border-bottom: none; }
+    .json-k {
+      color: var(--vscode-debugTokenExpression-name, #9cdcfe);
+      padding: 1px 10px 1px 0;
+      white-space: nowrap;
+      vertical-align: top;
+      width: 35%;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .json-v {
+      color: var(--vscode-debugTokenExpression-string, #ce9178);
+      word-break: break-word;
+      white-space: pre-wrap;
+      vertical-align: top;
+    }
+
+    /* Level-specific JSON value colouring */
+    .lvl-error .json-v, .lvl-fatal .json-v { color: #f85149; }
+    .lvl-warn  .json-v { color: #fbbe00; }
+    .lvl-info  .json-v { color: var(--vscode-debugTokenExpression-string, #ce9178); }
+
+    /* ── Filtered-out entries (hidden via JS) ────────────────────── */
+    .log-entry.log-filtered { display: none !important; }
+
     /* ── Empty state ─────────────────────────────────────────────── */
     .empty-state {
       text-align: center;
