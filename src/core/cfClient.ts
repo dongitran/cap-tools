@@ -71,8 +71,8 @@ export async function cfAuth(email: string, password: string, opts?: ExecOptions
 export async function cfLogout(opts?: ExecOptions): Promise<void> {
   try {
     await cf(['logout'], opts);
-  } catch {
-    // ignore logout errors
+  } catch (err) {
+    logger.warn('CF logout failed (ignored)', err);
   }
 }
 

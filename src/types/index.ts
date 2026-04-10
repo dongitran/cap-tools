@@ -196,7 +196,9 @@ export type WebviewMessage =
   | { type: 'stopLogs' }
   | { type: 'loadRecentLogs'; payload: { appName: string } }
   | { type: 'clearLogs' }
-  | { type: 'exportLogs' };
+  | { type: 'exportLogs' }
+  | { type: 'clientError'; payload: { context: string; message: string; stack?: string } }
+  | { type: 'clientLog'; payload: { context: string; message: string } };
 
 export type MainTab = 'debug' | 'credentials' | 'logs' | 'settings';
 

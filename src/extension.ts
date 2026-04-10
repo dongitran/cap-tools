@@ -222,6 +222,8 @@ async function openAppEnvDocument(appName: string, orgName: string, spaceName?: 
 // ─── Webview Message Handler ──────────────────────────────────────────────────
 
 async function handleWebviewMessage(msg: WebviewMessage, context: vscode.ExtensionContext): Promise<void> {
+  logger.debug(`Webview message received: ${msg.type}`);
+
   switch (msg.type) {
     case 'ready':
       // Webview posts "ready" on every full render. Keep this idempotent to avoid render loops.
@@ -350,6 +352,7 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
         logsManager.startStreaming(appName);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
+        logger.error(`Failed to start live logs for "${appName}"`, err);
         mainPanel.updateLogStatus('ERROR', errMsg);
       }
       break;
@@ -371,10 +374,21 @@ async function handleWebviewMessage(msg: WebviewMessage, context: vscode.Extensi
         await logsManager.loadRecent(appName);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
+        logger.error(`Failed to load recent logs for "${appName}"`, err);
         mainPanel.updateLogStatus('ERROR', errMsg);
       }
       break;
     }
+
+    case 'clientError': {
+      const stack = msg.payload.stack !== undefined ? ` | stack=${msg.payload.stack}` : '';
+      logger.error(`Webview error [${msg.payload.context}] ${msg.payload.message}${stack}`);
+      break;
+    }
+
+    case 'clientLog':
+      logger.info(`[Webview:${msg.payload.context}] ${msg.payload.message}`);
+      break;
 
     case 'clearLogs':
       logsManager.stop();

@@ -24,7 +24,42 @@ export function getMainScript(): string {
 
   function $id(id) { return document.getElementById(id); }
   function $all(sel) { return document.querySelectorAll(sel); }
-  function asElement(target) { return target instanceof Element ? target : null; }
+  function asElement(target) {
+    if (target instanceof Element) { return target; }
+    if (target instanceof Node) { return target.parentElement; }
+    return null;
+  }
+
+  function reportClientError(context, errLike) {
+    var message = 'Unknown webview error';
+    var stack;
+
+    if (errLike instanceof Error) {
+      message = errLike.message;
+      stack = errLike.stack;
+    } else if (typeof errLike === 'string') {
+      message = errLike;
+    } else if (errLike && typeof errLike === 'object' && typeof errLike.message === 'string') {
+      message = errLike.message;
+      if (typeof errLike.stack === 'string') { stack = errLike.stack; }
+    } else if (errLike !== undefined && errLike !== null) {
+      message = String(errLike);
+    }
+
+    post('clientError', stack ? { context: context, message: message, stack: stack } : { context: context, message: message });
+  }
+
+  function clientLog(context, message) {
+    post('clientLog', { context: context, message: message });
+  }
+
+  window.addEventListener('error', function(e) {
+    reportClientError('window.error', e.error ?? e.message ?? 'Unknown error event');
+  });
+
+  window.addEventListener('unhandledrejection', function(e) {
+    reportClientError('window.unhandledrejection', e.reason ?? 'Unhandled promise rejection');
+  });
 
   function setSelectedRegion(regionId) {
     $all('.radio-card').forEach(c => c.classList.remove('selected'));
@@ -35,6 +70,7 @@ export function getMainScript(): string {
     const wrap = $id('customEndpointWrap');
     if (wrap) { wrap.classList.toggle('hidden', regionId !== 'custom'); }
     saveState({ region: regionId });
+    clientLog('region.select', 'selected=' + regionId);
   }
 
   // Read org context embedded by server-side render
@@ -84,6 +120,7 @@ export function getMainScript(): string {
       const region = state.region ?? regionInput?.value ?? 'ap11';
       const customInput = $id('customEndpoint');
       const customEndpoint = customInput?.value?.trim();
+      clientLog('login.click', 'region=' + region);
       post('login', {
         regionId: region,
         customEndpoint: region === 'custom' && customEndpoint ? customEndpoint : undefined
@@ -588,7 +625,7 @@ export function getMainScript(): string {
       if (container && container.children.length > 0) {
         container.scrollTop = container.scrollHeight;
       }
-    } catch(err) { /* ignore parse errors */ }
+    } catch(err) { reportClientError('logs.initMetaParse', err); }
   }());
 
   // ── Message Dispatch ──────────────────────────────────────────────────────
@@ -615,6 +652,7 @@ export function getMainScript(): string {
   // Sync org from server-rendered DOM if present
   readOrgCtx();
 
+  clientLog('webview.ready', 'posting ready message');
   post('ready');
 })();
   `;
