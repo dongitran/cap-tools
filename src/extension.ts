@@ -37,6 +37,7 @@ let syncTimer: ReturnType<typeof setInterval> | undefined;
 
 let config: ExtensionConfig = { orgMappings: [] };
 let currentRegionId = 'ap11';
+let loginInProgress = false;
 let statusBar: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 
@@ -223,14 +224,21 @@ async function openAppEnvDocument(appName: string, orgName: string, spaceName?: 
 async function handleWebviewMessage(msg: WebviewMessage, context: vscode.ExtensionContext): Promise<void> {
   switch (msg.type) {
     case 'ready':
-      // Send initial state to webview
-      if (config.login !== undefined && config.selectedOrg !== undefined) {
-        mainPanel.showDashboard(config.selectedOrg, 'debug');
+      // Webview posts "ready" on every full render. Keep this idempotent to avoid render loops.
+      if (loginInProgress) {break;}
+      if (config.login === undefined) {
+        if (mainPanel.getScreenId() !== 'region') {mainPanel.showRegion();}
+        break;
+      }
+      if (config.selectedOrg === undefined) {
+        if (mainPanel.getScreenId() === 'region') {
+          await handleLogin(config.login.regionId, context);
+        }
+        break;
+      }
+      if (mainPanel.getScreenId() !== 'dashboard') {
+        mainPanel.showDashboard(config.selectedOrg, 'debug', config.login.regionId);
         await loadDashboardData();
-      } else if (config.login !== undefined) {
-        await handleLogin(config.login.regionId, context);
-      } else {
-        mainPanel.showRegion();
       }
       break;
 
@@ -388,37 +396,30 @@ async function handleLogin(
   context: vscode.ExtensionContext,
   customEndpoint?: string,
 ): Promise<void> {
+  if (loginInProgress) {return;}
+  loginInProgress = true;
   const region = getOrCustomRegion(regionId, customEndpoint);
   mainPanel.showConnecting(regionId, customEndpoint);
-
   const creds = readShellCredentials();
   if (creds.email === undefined || creds.password === undefined) {
     mainPanel.showRegion();
-    void vscode.window.showErrorMessage(
-      'SAP Tools: SAP_EMAIL or SAP_PASSWORD not found in shell environment.',
-    );
+    void vscode.window.showErrorMessage('SAP Tools: SAP_EMAIL or SAP_PASSWORD not found in shell environment.');
     return;
   }
-
   try {
     await cfSetApi(region.apiEndpoint);
     await cfAuth(creds.email, creds.password);
-
     const orgs = await cfOrgs();
-
     config.login = { apiEndpoint: region.apiEndpoint, regionId, email: creds.email };
     currentRegionId = regionId;
     saveConfig(context.globalState);
     mainPanel.setRegionId(regionId);
     refreshStatusBar();
-
-    // Check if org already mapped
     if (config.selectedOrg !== undefined) {
       mainPanel.showDashboard(config.selectedOrg, 'debug', regionId);
       await loadDashboardData();
       return;
     }
-
     mainPanel.showOrgSelect(orgs);
     cache.setOrgs(regionId, orgs);
     treeProvider.setRegion(regionId);
@@ -428,6 +429,8 @@ async function handleLogin(
     void vscode.window.showErrorMessage(
       `SAP Tools: Login failed — ${err instanceof Error ? err.message : String(err)}`,
     );
+  } finally {
+    loginInProgress = false;
   }
 }
 
@@ -619,6 +622,7 @@ async function resetConfig(context: vscode.ExtensionContext): Promise<void> {
   cache.clear();
   clearCachedCredentials();
   currentRegionId = 'ap11';
+  loginInProgress = false;
   await vscode.commands.executeCommand('setContext', 'sapTools.loggedIn', false);
   mainPanel.showRegion();
   treeProvider.refresh();
