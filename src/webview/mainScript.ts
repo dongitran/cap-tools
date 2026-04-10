@@ -24,6 +24,18 @@ export function getMainScript(): string {
 
   function $id(id) { return document.getElementById(id); }
   function $all(sel) { return document.querySelectorAll(sel); }
+  function asElement(target) { return target instanceof Element ? target : null; }
+
+  function setSelectedRegion(regionId) {
+    $all('.radio-card').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector('.radio-card[data-region="' + regionId + '"]');
+    if (card) { card.classList.add('selected'); }
+    const input = document.querySelector('input[name="region"][value="' + regionId + '"]');
+    if (input instanceof HTMLInputElement) { input.checked = true; }
+    const wrap = $id('customEndpointWrap');
+    if (wrap) { wrap.classList.toggle('hidden', regionId !== 'custom'); }
+    saveState({ region: regionId });
+  }
 
   // Read org context embedded by server-side render
   function readOrgCtx() {
@@ -37,7 +49,9 @@ export function getMainScript(): string {
   // ── Tab switching ─────────────────────────────────────────────────────────
 
   document.addEventListener('click', function(e) {
-    const tabBtn = e.target.closest('[data-tab]');
+    const target = asElement(e.target);
+    if (!target) { return; }
+    const tabBtn = target.closest('[data-tab]');
     if (tabBtn && tabBtn.classList.contains('tab-btn')) {
       const tab = tabBtn.dataset.tab;
       $all('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -49,18 +63,23 @@ export function getMainScript(): string {
   // ── Region Screen ─────────────────────────────────────────────────────────
 
   document.addEventListener('change', function(e) {
-    if (e.target.name === 'region') {
-      $all('.radio-card').forEach(c => c.classList.remove('selected'));
-      e.target.closest('.radio-card')?.classList.add('selected');
-      const isCustom = e.target.value === 'custom';
-      const wrap = $id('customEndpointWrap');
-      if (wrap) { wrap.classList.toggle('hidden', !isCustom); }
-      saveState({ region: e.target.value });
+    if (e.target instanceof HTMLInputElement && e.target.name === 'region') {
+      setSelectedRegion(e.target.value);
     }
   });
 
   document.addEventListener('click', function(e) {
-    if (e.target.id === 'btnLogin') {
+    const target = asElement(e.target);
+    if (!target) { return; }
+
+    const regionCard = target.closest('.radio-card[data-region]');
+    if (regionCard) {
+      const regionId = regionCard.getAttribute('data-region');
+      if (regionId) { setSelectedRegion(regionId); }
+      return;
+    }
+
+    if (target.closest('#btnLogin')) {
       const regionInput = document.querySelector('input[name="region"]:checked');
       const region = state.region ?? regionInput?.value ?? 'ap11';
       const customInput = $id('customEndpoint');
@@ -172,7 +191,9 @@ export function getMainScript(): string {
 
   // Stop debug via data attribute (avoids XSS from inline onclick)
   document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.stop-debug-btn');
+    const target = asElement(e.target);
+    if (!target) { return; }
+    const btn = target.closest('.stop-debug-btn');
     if (btn) {
       const appName = btn.dataset.app;
       if (appName) { post('stopDebug', { appName }); }
@@ -181,7 +202,9 @@ export function getMainScript(): string {
 
   // Settings tab — stepper buttons (replaces onclick="stepInterval(±30)" attributes)
   document.addEventListener('click', function(e) {
-    const stepperBtn = e.target.closest('.stepper-btn');
+    const target = asElement(e.target);
+    if (!target) { return; }
+    const stepperBtn = target.closest('.stepper-btn');
     if (stepperBtn) {
       var delta = parseInt(stepperBtn.dataset.delta || '0', 10);
       stepInterval(delta);
@@ -190,13 +213,17 @@ export function getMainScript(): string {
 
   // Logs tab — JSON expand toggle (replaces onclick="toggleLogJson(this)" attribute)
   document.addEventListener('click', function(e) {
-    const expandBtn = e.target.closest('.log-expand');
+    const target = asElement(e.target);
+    if (!target) { return; }
+    const expandBtn = target.closest('.log-expand');
     if (expandBtn) { toggleLogJson(expandBtn); }
   });
 
   // View app environment (VCAP_SERVICES + user-provided vars)
   document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.view-env-btn');
+    const target = asElement(e.target);
+    if (!target) { return; }
+    const btn = target.closest('.view-env-btn');
     if (btn) {
       const appName = btn.dataset.app;
       if (appName) { post('getAppEnv', { appName, orgName: state.selectedOrg ?? '' }); }
@@ -281,7 +308,9 @@ export function getMainScript(): string {
     }
 
     // Copy credential result by app name
-    const copyBtn = e.target.closest('.copy-cred-btn');
+    const target = asElement(e.target);
+    if (!target) { return; }
+    const copyBtn = target.closest('.copy-cred-btn');
     if (copyBtn) {
       const appName = copyBtn.dataset.app;
       if (appName) { post('getAppEnv', { appName, orgName: state.selectedOrg ?? '' }); }
