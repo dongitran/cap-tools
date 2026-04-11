@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   release:
@@ -41,7 +42,19 @@ jobs:
       - name: Validate E2E project
         run: npm --prefix e2e run validate
 
+      - name: Install VS Code for E2E
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gpg
+          wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+          sudo install -D -o root -g root -m 644 microsoft.gpg /etc/apt/keyrings/microsoft.gpg
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y code
+
       - name: Run E2E tests
+        env:
+          VSCODE_EXECUTABLE_PATH: /usr/share/code/code
         run: npm --prefix e2e test
 
       - name: Build extension
