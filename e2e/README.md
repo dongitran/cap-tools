@@ -5,8 +5,8 @@ This folder is an isolated Playwright project for testing the SAP Tools VS Code 
 ## Covered flow
 - Open VS Code Extension Development Host
 - Open `SAP Tools` activity bar container
-- Select a SAP BTP region from the left sidebar menu
-- Verify selection log text is shown in VS Code notifications/output context
+- Select area and region from the sidebar webview UI
+- Verify selection log text is shown in VS Code output context
 
 ## Run
 ```bash

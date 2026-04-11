@@ -82,6 +82,8 @@ const LOG_SEED = [
 ];
 
 const appElement = document.getElementById('app');
+const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
+const vscodeApi = resolveVscodeApi();
 
 if (!(appElement instanceof HTMLElement)) {
   throw new Error('Prototype root element not found.');
@@ -223,8 +225,9 @@ function handleGroupSelection(nextGroupId) {
 function handleRegionSelection(nextRegionId) {
   const nextRegion = regionLookup.get(nextRegionId);
   const nextGroupId = regionGroupLookup.get(nextRegionId) ?? '';
+  const nextGroup = groupLookup.get(nextGroupId);
 
-  if (nextRegion === undefined || nextGroupId.length === 0) {
+  if (nextRegion === undefined || nextGroupId.length === 0 || nextGroup === undefined) {
     return;
   }
 
@@ -232,6 +235,7 @@ function handleRegionSelection(nextRegionId) {
   selectedRegionId = nextRegionId;
   selectedOrgId = '';
   selectedSpaceId = '';
+  postRegionSelection(nextRegion, nextGroup.label);
 }
 
 function handleOrgSelection(nextOrgId) {
@@ -580,6 +584,30 @@ function buildDataSelector(attribute, value) {
 
 function buildStageSelector(stageId) {
   return `[data-stage-id="${stageId}"]`;
+}
+
+function resolveVscodeApi() {
+  if (typeof acquireVsCodeApi !== 'function') {
+    return null;
+  }
+
+  return acquireVsCodeApi();
+}
+
+function postRegionSelection(region, areaLabel) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: REGION_SELECTED_MESSAGE_TYPE,
+    region: {
+      id: region.id,
+      name: region.name,
+      code: region.code,
+      area: areaLabel,
+    },
+  });
 }
 
 function renderSelectionScreen() {

@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "publisher": "dongtran",
   "license": "MIT",
   "repository": {
@@ -42,13 +42,15 @@
       "sapTools": [
         {
           "id": "sapTools.regionView",
-          "name": "Select SAP BTP Region"
+          "name": "Select SAP BTP Region",
+          "type": "webview"
         }
       ]
     }
   },
   "files": [
     "dist",
+    "docs/designs/prototypes/assets",
     "resources",
     "README.md",
     "CHANGELOG.md",

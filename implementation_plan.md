@@ -447,3 +447,50 @@
 - clicking already-selected region/org/space does nothing
 - only `Change` triggers reset
 - region options render with rounded right edge (no clip cut)
+
+---
+
+# Follow-up Plan: Rebuild Extension UI to Match Prototype
+
+## Goal
+1. Replace current tree-based sidebar UI with a webview UI that matches `docs/designs/prototypes` design and interactions.
+2. Keep current scope as UI-only (no CF login/API integration yet).
+3. Preserve extension output logging for selected region via webview-to-extension messaging.
+
+## Planned Changes
+1. Migrate sidebar provider architecture in `src/sidebarProvider.ts`.
+- Replace `TreeDataProvider` implementation with `WebviewViewProvider`.
+- Serve webview HTML that loads existing prototype assets (`prototype.css`, `design-34.css`, `prototype.js`) from `docs/designs/prototypes/assets`.
+- Add strict CSP + nonce and local resource roots for webview security.
+- Add typed message handler for region selection messages from webview and write logs to extension output channel.
+
+2. Update extension activation wiring in `src/extension.ts`.
+- Register webview view provider instead of creating `TreeView`.
+- Keep command `sapTools.selectSapBtpRegion` to focus the sidebar view.
+- Keep output channel lifecycle management.
+
+3. Enable webview view contribution in `package.json`.
+- Set view entry `sapTools.regionView` to `"type": "webview"`.
+- Keep activity bar container and command metadata intact.
+
+4. Add webview bridge message from prototype script.
+- Update `docs/designs/prototypes/assets/prototype.js` to post selected region metadata when region selection changes.
+- Keep behavior unchanged for browser prototype (graceful no-op if `acquireVsCodeApi` is unavailable).
+
+5. Update E2E to test new webview UI flow.
+- Replace tree-item click assertions with webview button interactions.
+- Verify selecting region in webview emits output log visible in VS Code UI.
+
+6. Refresh docs that describe current feature behavior.
+- Update `README.md` and `e2e/README.md` to describe interactive webview selection flow.
+
+7. Release hygiene.
+- Increase `package.json` version after successful completion.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. `npm run test:unit`
+5. `npm run validate`
+6. `npm --prefix e2e test`
