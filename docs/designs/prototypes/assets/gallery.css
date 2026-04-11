@@ -1,0 +1,133 @@
+:root {
+  --workspace-bg: #1f1f1f;
+  --editor-bg: #252526;
+  --editor-grid: #2d2d30;
+  --sidebar-shell: #232327;
+  --button-bg: #31343b;
+  --button-border: #4a4e57;
+  --button-text: #f4f7fb;
+  --button-hover: #3a3f49;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body.gallery-page {
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  background: var(--workspace-bg);
+  color: var(--button-text);
+}
+
+.workspace-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: clamp(300px, 30vw, 430px) minmax(0, 1fr);
+}
+
+.sidebar-host {
+  position: relative;
+  background: var(--sidebar-shell);
+  border-right: 1px solid #3a3c42;
+  min-height: 100vh;
+}
+
+.sidebar-host iframe {
+  width: 100%;
+  height: 100vh;
+  border: 0;
+  display: block;
+  background: #ffffff;
+}
+
+.floating-nav {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  transform: translateX(-50%);
+  z-index: 9;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.floating-nav button {
+  border: 1px solid var(--button-border);
+  background: color-mix(in oklab, var(--button-bg) 84%, black);
+  color: var(--button-text);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  padding: 7px 12px;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.35);
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.floating-nav button:hover {
+  background: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+.floating-nav button:focus-visible {
+  outline: 2px solid #75a7ff;
+  outline-offset: 1px;
+}
+
+.editor-surface {
+  position: relative;
+  min-height: 100vh;
+  background:
+    linear-gradient(to right, transparent 0, transparent 24px, var(--editor-grid) 24px, var(--editor-grid) 25px)
+      0 0 / 100% 100%,
+    linear-gradient(to bottom, transparent 0, transparent 34px, var(--editor-grid) 34px, var(--editor-grid) 35px)
+      0 0 / 100% 100%,
+    var(--editor-bg);
+}
+
+.editor-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, #3d414a 30%, transparent) 0%,
+    transparent 38%,
+    color-mix(in oklab, #3d414a 22%, transparent) 100%
+  );
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-host {
+    min-height: 100dvh;
+    border-right: 0;
+  }
+
+  .sidebar-host iframe {
+    height: 100dvh;
+  }
+
+  .editor-surface {
+    display: none;
+  }
+
+  .floating-nav {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  }
+
+  .floating-nav button {
+    font-size: 0.74rem;
+    padding: 6px 11px;
+  }
+}

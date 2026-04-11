@@ -1,0 +1,398 @@
+:root {
+  --page-bg: #eef4ff;
+  --frame-bg: #ffffff;
+  --surface-bg: #f6f9ff;
+  --border-color: #d4dfef;
+  --text-color: #1a2a3b;
+  --muted-color: #5e7389;
+  --accent-color: #1d7dd8;
+  --accent-soft: #dcedff;
+  --chip-text: #1b4e80;
+  --panel-shadow: 0 16px 44px rgba(22, 58, 96, 0.2);
+  --title-font: "Trebuchet MS", "Segoe UI", sans-serif;
+  --body-font: "Verdana", "Tahoma", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body.prototype-page {
+  background: var(--page-bg);
+  color: var(--text-color);
+  font-family: var(--body-font);
+  line-height: 1.4;
+  overflow-x: hidden;
+}
+
+body.prototype-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.65;
+  z-index: 0;
+}
+
+body.pattern-grid::before {
+  background-image:
+    linear-gradient(transparent 95%, color-mix(in oklab, var(--accent-color) 18%, white) 95%),
+    linear-gradient(90deg, transparent 95%, color-mix(in oklab, var(--accent-color) 18%, white) 95%);
+  background-size: 34px 34px;
+}
+
+body.pattern-diagonal::before {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 22px,
+    color-mix(in oklab, var(--accent-color) 18%, white) 22px,
+    color-mix(in oklab, var(--accent-color) 18%, white) 26px
+  );
+}
+
+body.pattern-rings::before {
+  background-image: radial-gradient(
+      circle at 12% 20%,
+      color-mix(in oklab, var(--accent-color) 22%, white) 0,
+      transparent 42%
+    ),
+    radial-gradient(circle at 88% 12%, color-mix(in oklab, var(--accent-color) 20%, white) 0, transparent 48%),
+    radial-gradient(circle at 50% 85%, color-mix(in oklab, var(--accent-color) 16%, white) 0, transparent 50%);
+}
+
+body.pattern-gradient::before {
+  background: linear-gradient(
+    130deg,
+    color-mix(in oklab, var(--accent-color) 20%, white) 0%,
+    transparent 34%,
+    color-mix(in oklab, var(--accent-color) 8%, white) 100%
+  );
+}
+
+body.pattern-paper::before {
+  background-image:
+    radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--accent-color) 8%, white), transparent 33%),
+    radial-gradient(circle at 80% 0%, color-mix(in oklab, var(--accent-color) 10%, white), transparent 30%);
+}
+
+body.pattern-bars::before {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 38px,
+    color-mix(in oklab, var(--accent-color) 14%, white) 38px,
+    color-mix(in oklab, var(--accent-color) 14%, white) 46px
+  );
+}
+
+body.pattern-wave::before {
+  background-image: repeating-radial-gradient(
+    circle at 0 100%,
+    transparent 0,
+    transparent 14px,
+    color-mix(in oklab, var(--accent-color) 15%, white) 14px,
+    color-mix(in oklab, var(--accent-color) 15%, white) 17px
+  );
+}
+
+body.pattern-mesh::before {
+  background-image:
+    linear-gradient(30deg, color-mix(in oklab, var(--accent-color) 15%, white) 0, transparent 38%),
+    linear-gradient(150deg, color-mix(in oklab, var(--accent-color) 12%, white) 0, transparent 40%);
+}
+
+body.pattern-canvas::before {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 12px,
+      color-mix(in oklab, var(--accent-color) 10%, white) 12px,
+      color-mix(in oklab, var(--accent-color) 10%, white) 13px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 12px,
+      color-mix(in oklab, var(--accent-color) 8%, white) 12px,
+      color-mix(in oklab, var(--accent-color) 8%, white) 13px
+    );
+}
+
+body.pattern-dots::before {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--accent-color) 20%, white) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 18px 18px;
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+  padding: 14px;
+}
+
+.prototype-shell {
+  margin-inline: auto;
+  width: min(100%, 430px);
+  min-height: calc(100vh - 28px);
+  background: var(--frame-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 22px;
+  box-shadow: var(--panel-shadow);
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  overflow: hidden;
+}
+
+.shell-header {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--surface-bg) 90%, var(--frame-bg));
+}
+
+.shell-header h1 {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 1.08rem;
+  letter-spacing: 0.01em;
+}
+
+.shell-subline {
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: var(--muted-color);
+}
+
+.design-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--accent-color) 32%, white);
+  background: var(--accent-soft);
+  color: var(--chip-text);
+  padding: 6px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.meta-strip {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-bg);
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.meta-strip p {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted-color);
+}
+
+.groups {
+  padding: 10px 10px 4px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.group-card {
+  border: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
+  border-radius: 14px;
+  padding: 10px;
+  animation: float-in 320ms ease;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.group-head h2 {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 0.85rem;
+}
+
+.group-count {
+  border: 1px solid color-mix(in oklab, var(--accent-color) 35%, white);
+  color: var(--chip-text);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: var(--accentSoft, var(--accent-soft));
+}
+
+.region-layout {
+  display: grid;
+  gap: 7px;
+}
+
+.region-layout.grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.region-layout.chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.region-layout.cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.region-layout.rows {
+  grid-template-columns: 1fr;
+}
+
+.region-option {
+  border: 1px solid var(--border-color);
+  background: var(--frame-bg);
+  border-radius: 11px;
+  color: var(--text-color);
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font-family: var(--body-font);
+  font-size: 0.77rem;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.region-layout.chips .region-option {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+}
+
+.region-layout.cards .region-option {
+  min-height: 62px;
+}
+
+.region-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent-color) 44%, white);
+}
+
+.region-name {
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.region-code {
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 0.62rem;
+  color: var(--muted-color);
+}
+
+.prototype-shell.select-style-solid .region-option.is-selected {
+  background: var(--accent-color);
+  color: #ffffff;
+  border-color: color-mix(in oklab, var(--accent-color) 78%, black);
+}
+
+.prototype-shell.select-style-solid .region-option.is-selected .region-code {
+  color: #f2f7ff;
+}
+
+.prototype-shell.select-style-outline .region-option.is-selected {
+  border: 2px solid var(--accent-color);
+  background: var(--accent-soft);
+  color: var(--chip-text);
+}
+
+.prototype-shell.select-style-glow .region-option.is-selected {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent-color) 55%, white);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 28%, transparent),
+    0 8px 18px color-mix(in oklab, var(--accent-color) 38%, transparent);
+  color: var(--chip-text);
+}
+
+.prototype-shell.select-style-underline .region-option.is-selected {
+  border-color: var(--border-color);
+  background: linear-gradient(to bottom, transparent calc(100% - 4px), var(--accent-color) calc(100% - 4px));
+}
+
+.prototype-shell.select-style-slice .region-option.is-selected {
+  background:
+    linear-gradient(to right, var(--accent-color) 6px, transparent 6px),
+    var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent-color) 50%, white);
+}
+
+.output-box {
+  border-top: 1px solid var(--border-color);
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--surface-bg) 92%, var(--frame-bg));
+}
+
+.output-title {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-color);
+}
+
+.output-stream {
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--frame-bg);
+  min-height: 68px;
+  display: grid;
+  gap: 4px;
+}
+
+.output-line {
+  margin: 0;
+  font-size: 0.71rem;
+  color: var(--chip-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.output-line:last-child {
+  font-weight: 700;
+  color: var(--text-color);
+}
