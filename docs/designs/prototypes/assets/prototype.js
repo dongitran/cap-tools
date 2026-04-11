@@ -6,7 +6,7 @@ if (!(appElement instanceof HTMLElement)) {
   throw new Error('Prototype root element not found.');
 }
 
-const designIdRaw = Number.parseInt(document.body.dataset.designId ?? '1', 10);
+const designIdRaw = Number.parseInt(document.body.dataset.designId ?? '34', 10);
 const activeDesign =
   DESIGN_CATALOG.find((design) => design.id === designIdRaw) ?? DESIGN_CATALOG[0];
 
@@ -97,12 +97,10 @@ function renderPrototype() {
         <h1>Select SAP BTP Region</h1>
         <div class="shell-subline">
           <span>${TOTAL_REGION_COUNT} regions in this prototype</span>
-          <span class="design-pill">Design ${activeDesign.id}</span>
         </div>
       </header>
 
       <div class="meta-strip">
-        <p>${activeDesign.subtitle}</p>
         <strong>${activeDesign.name}</strong>
       </div>
 

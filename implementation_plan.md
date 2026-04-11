@@ -127,3 +127,38 @@
 3. `npm run cspell`
 4. Visual check:
 - No log panel appears under the region selection UI in any design variant.
+
+---
+
+# Follow-up Plan: Keep Only Design 34
+
+## Goal
+1. Keep only Design 34 and remove all other prototype designs.
+2. Remove `Design 34` badge text from the UI.
+3. Remove the subtitle line (`Warm modern orange with premium spacing rhythm...`) from the UI.
+
+## Planned Changes
+1. Reduce catalog to one design
+- Edit `docs/designs/prototypes/assets/design-catalog.js`.
+- Keep `REGION_GROUPS` as-is.
+- Keep only design object with `id: 34` in `DESIGN_CATALOG`.
+
+2. Update shared prototype renderer
+- Edit `docs/designs/prototypes/assets/prototype.js`.
+- Remove design-pill rendering from header.
+- Remove subtitle paragraph rendering from meta strip.
+- Default fallback design id to `34`.
+
+3. Delete unused assets/pages
+- Delete all `docs/designs/prototypes/assets/themes/design-XX.css` except `design-34.css`.
+- Delete all `docs/designs/prototypes/variants/design-XX.html` except `design-34.html`.
+- Update `docs/designs/prototypes/index.html` iframe source to `./variants/design-34.html`.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Sanity checks:
+- Theme count is `1`, variant count is `1`.
+- No `Design 34` text in rendered header.
+- No subtitle text line shown in UI.
