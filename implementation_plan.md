@@ -66,3 +66,25 @@
 3. `npm run cspell`
 4. Visual check:
 - Any `design-XX.html` no longer shows the heading text above output messages.
+
+---
+
+# Follow-up Plan: Region Name Abbreviation Format
+
+## Goal
+1. Replace location names in parentheses with short region abbreviations across all region entries.
+2. Keep naming consistent between displayed region name and region code.
+
+## Planned Changes
+1. Update region records in `docs/designs/prototypes/assets/design-catalog.js`.
+- Convert each `name` from format like `US East (Virginia)` to format like `US East (us-10)`.
+- Update corresponding `code` to the same short abbreviation token.
+- Apply this to all groups: Americas, Europe, Asia Pacific, Middle East & Africa.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Sanity check:
+- No remaining `(<city>)` region names in `REGION_GROUPS`.
+- UI labels and code chips now both use abbreviation-style region codes.
