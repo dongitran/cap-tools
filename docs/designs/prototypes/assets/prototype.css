@@ -1,13 +1,25 @@
 :root {
-  --page-bg: #eef4ff;
-  --frame-bg: #ffffff;
-  --surface-bg: #f6f9ff;
-  --border-color: #d4dfef;
-  --text-color: #1a2a3b;
-  --muted-color: #5e7389;
-  --accent-color: #1d7dd8;
-  --accent-soft: #dcedff;
-  --chip-text: #1b4e80;
+  --design-page-bg: #fff7eb;
+  --design-frame-bg: #fffdfa;
+  --design-surface-bg: #fff5e6;
+  --design-border-color: #efd1a8;
+  --design-text-color: #4d2f12;
+  --design-muted-color: #845f34;
+  --design-accent-color: #dd7a12;
+  --design-accent-soft: #ffe3c0;
+  --design-chip-text: #6f3f09;
+  --design-panel-shadow: none;
+  --design-title-font: "Gill Sans", "Trebuchet MS", sans-serif;
+  --design-body-font: "Verdana", "Tahoma", sans-serif;
+  --page-bg: var(--design-page-bg);
+  --frame-bg: var(--design-frame-bg);
+  --surface-bg: var(--design-surface-bg);
+  --border-color: var(--design-border-color);
+  --text-color: var(--design-text-color);
+  --muted-color: var(--design-muted-color);
+  --accent-color: var(--design-accent-color);
+  --accent-soft: var(--design-accent-soft);
+  --chip-text: var(--design-chip-text);
   --mix-base: #ffffff;
   --mix-ink: #000000;
   --focus-ring-color: #0078d4;
@@ -18,9 +30,9 @@
   --state-danger-bg: #ffebe6;
   --state-danger-border: #efb2a7;
   --pattern-opacity: 0.38;
-  --panel-shadow: none;
-  --title-font: "Trebuchet MS", "Segoe UI", sans-serif;
-  --body-font: "Verdana", "Tahoma", sans-serif;
+  --panel-shadow: var(--design-panel-shadow);
+  --title-font: var(--design-title-font);
+  --body-font: var(--design-body-font);
 }
 
 * {
@@ -51,23 +63,35 @@ body.prototype-page::before {
 }
 
 body.vscode-light.prototype-page {
-  --page-bg: var(--vscode-sideBar-background, #f3f4f9);
+  --page-bg: color-mix(
+    in oklab,
+    var(--design-page-bg) 72%,
+    var(--vscode-sideBar-background, #f3f4f9)
+  );
   --frame-bg: color-mix(
     in oklab,
-    var(--vscode-editorWidget-background, #ffffff) 80%,
-    var(--page-bg)
+    var(--design-frame-bg) 72%,
+    var(--vscode-editorWidget-background, #ffffff)
   );
-  --surface-bg: color-mix(in oklab, var(--frame-bg) 88%, #f8fbff);
+  --surface-bg: color-mix(in oklab, var(--design-surface-bg) 76%, var(--frame-bg));
   --border-color: color-mix(
     in oklab,
-    var(--vscode-sideBar-border, #d8dee9) 65%,
-    #ccd6e4
+    var(--design-border-color) 70%,
+    var(--vscode-sideBar-border, #d8dee9)
   );
-  --text-color: var(--vscode-foreground, #1f2937);
-  --muted-color: color-mix(in oklab, var(--text-color) 58%, var(--frame-bg));
-  --accent-color: var(--vscode-button-background, #0e639c);
-  --accent-soft: color-mix(in oklab, var(--accent-color) 18%, var(--frame-bg));
-  --chip-text: color-mix(in oklab, var(--accent-color) 42%, var(--text-color));
+  --text-color: color-mix(
+    in oklab,
+    var(--design-text-color) 82%,
+    var(--vscode-foreground, #1f2937)
+  );
+  --muted-color: color-mix(in oklab, var(--design-muted-color) 78%, var(--text-color));
+  --accent-color: color-mix(
+    in oklab,
+    var(--design-accent-color) 68%,
+    var(--vscode-button-background, #0e639c)
+  );
+  --accent-soft: color-mix(in oklab, var(--design-accent-soft) 72%, var(--frame-bg));
+  --chip-text: color-mix(in oklab, var(--design-chip-text) 82%, var(--text-color));
   --focus-ring-color: var(--vscode-focusBorder, #005fb8);
   --state-success-fg: #0f6b3d;
   --state-success-bg: #e2f6e9;
@@ -79,24 +103,32 @@ body.vscode-light.prototype-page {
 }
 
 body.vscode-dark.prototype-page {
-  --page-bg: var(--vscode-sideBar-background, #1f1f1f);
+  --page-bg: color-mix(
+    in oklab,
+    var(--vscode-sideBar-background, #1f1f1f) 90%,
+    #06080d
+  );
   --frame-bg: color-mix(
     in oklab,
-    var(--vscode-editor-background, #1e1e1e) 88%,
-    #111723
+    var(--page-bg) 82%,
+    #0a1019
   );
-  --surface-bg: color-mix(in oklab, var(--frame-bg) 83%, #172235);
+  --surface-bg: color-mix(in oklab, var(--frame-bg) 88%, #121a29);
   --border-color: color-mix(
     in oklab,
-    var(--vscode-sideBar-border, #3f4a5a) 72%,
-    #56647b
+    var(--vscode-sideBar-border, #3f4a5a) 75%,
+    #596783
   );
-  --text-color: var(--vscode-foreground, #d4d4d4);
+  --text-color: color-mix(in oklab, var(--vscode-foreground, #d4d4d4) 92%, #e7ecf2);
   --muted-color: color-mix(in oklab, var(--text-color) 60%, var(--frame-bg));
-  --accent-color: var(--vscode-button-background, #0e639c);
-  --accent-soft: color-mix(in oklab, var(--accent-color) 24%, var(--frame-bg));
+  --accent-color: color-mix(
+    in oklab,
+    var(--design-accent-color) 46%,
+    var(--vscode-button-background, #0e639c)
+  );
+  --accent-soft: color-mix(in oklab, var(--accent-color) 18%, var(--frame-bg));
   --chip-text: color-mix(in oklab, var(--accent-color) 36%, var(--text-color));
-  --mix-base: #0d141f;
+  --mix-base: #090f18;
   --mix-ink: #f4f9ff;
   --focus-ring-color: var(--vscode-focusBorder, #3794ff);
   --state-success-fg: #81dfb2;
@@ -105,7 +137,7 @@ body.vscode-dark.prototype-page {
   --state-danger-fg: #ffad9f;
   --state-danger-bg: color-mix(in oklab, #973d32 28%, var(--frame-bg));
   --state-danger-border: color-mix(in oklab, #ffad9f 46%, var(--frame-bg));
-  --pattern-opacity: 0.14;
+  --pattern-opacity: 0.08;
 }
 
 body.vscode-high-contrast.prototype-page,

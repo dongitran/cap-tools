@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   test,
@@ -21,12 +22,63 @@ const AREA_TO_SELECT = /Americas 7 regions/i;
 const REGION_TO_SELECT = /US East us-10/i;
 const ORG_TO_SELECT = /finance-services-prod/i;
 const SPACE_TO_SELECT = /^uat$/i;
+const DEFAULT_THEME_NAME = 'Default Dark Modern';
+
+interface ThemeScenario {
+  readonly id: string;
+  readonly colorTheme: string;
+  readonly expectedBodyThemeClass: string;
+  readonly maxShellBrightness?: number;
+  readonly minShellBrightness?: number;
+}
+
+const THEME_SCENARIOS: readonly ThemeScenario[] = [
+  {
+    id: 'dark',
+    colorTheme: 'Default Dark Modern',
+    expectedBodyThemeClass: 'vscode-dark',
+    maxShellBrightness: 0.2,
+  },
+  {
+    id: 'light',
+    colorTheme: 'Default Light Modern',
+    expectedBodyThemeClass: 'vscode-light',
+    minShellBrightness: 0.45,
+  },
+  {
+    id: 'high-contrast',
+    colorTheme: 'Default High Contrast',
+    expectedBodyThemeClass: 'vscode-high-contrast',
+    maxShellBrightness: 0.15,
+  },
+];
 
 interface ExtensionHostSession {
   readonly electronApp: ElectronApplication;
   readonly window: Page;
   readonly workspaceDir: string;
   readonly userDataDir: string;
+}
+
+interface PaletteSnapshot {
+  readonly bodyBackgroundColor: string;
+  readonly shellBackgroundColor: string;
+  readonly bodyBrightness: number;
+  readonly shellBrightness: number;
+}
+
+interface ExtensionHostLaunchOptions {
+  readonly colorTheme?: string;
+}
+
+function ensureThemeSettings(userDataDir: string, colorTheme: string): void {
+  const userConfigDir = path.join(userDataDir, 'User');
+  fs.mkdirSync(userConfigDir, { recursive: true });
+  const settingsPath = path.join(userConfigDir, 'settings.json');
+  const settings = {
+    'workbench.colorTheme': colorTheme,
+  };
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
 }
 
 async function dismissAiSignInModalIfNeeded(window: Page): Promise<void> {
@@ -56,10 +108,13 @@ async function dismissAiSignInModalIfNeeded(window: Page): Promise<void> {
   await expect(signInPrompt).toBeHidden({ timeout: 10000 });
 }
 
-async function launchExtensionHost(): Promise<ExtensionHostSession> {
+async function launchExtensionHost(
+  options: ExtensionHostLaunchOptions = {}
+): Promise<ExtensionHostSession> {
   const extensionPath = getExtensionRootDir();
   const workspaceDir = getTemporaryWorkspaceDir();
   const userDataDir = getTemporaryUserDataDir();
+  ensureThemeSettings(userDataDir, options.colorTheme ?? DEFAULT_THEME_NAME);
 
   const electronApp = await electron.launch({
     executablePath: resolveVscodeExecutablePath(),
@@ -154,7 +209,85 @@ async function readWebviewBodyClasses(webviewFrame: Frame): Promise<string[]> {
   });
 }
 
+async function readPaletteSnapshot(webviewFrame: Frame): Promise<PaletteSnapshot> {
+  return webviewFrame.evaluate(() => {
+    const shellElement = document.querySelector('.prototype-shell');
+    if (!(shellElement instanceof HTMLElement)) {
+      throw new Error('Prototype shell not found.');
+    }
+
+    const convertColorToBrightness = (color: string): number => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+
+      const context = canvas.getContext('2d');
+      if (context === null) {
+        throw new Error('Canvas context not available for color conversion.');
+      }
+
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+
+      const pixel = context.getImageData(0, 0, 1, 1).data;
+      const red = pixel[0] ?? 0;
+      const green = pixel[1] ?? 0;
+      const blue = pixel[2] ?? 0;
+
+      return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+    };
+
+    const bodyBackgroundColor = getComputedStyle(document.body).backgroundColor;
+    const shellBackgroundColor = getComputedStyle(shellElement).backgroundColor;
+
+    return {
+      bodyBackgroundColor,
+      shellBackgroundColor,
+      bodyBrightness: convertColorToBrightness(bodyBackgroundColor),
+      shellBrightness: convertColorToBrightness(shellBackgroundColor),
+    };
+  });
+}
+
 test.describe('SAP Tools region selector', () => {
+  for (const scenario of THEME_SCENARIOS) {
+    test(`User can open selector and pick region in ${scenario.id} theme`, async () => {
+      const session = await launchExtensionHost({ colorTheme: scenario.colorTheme });
+
+      try {
+        const webviewFrame = await openSapToolsSidebar(session.window);
+        const bodyClasses = await readWebviewBodyClasses(webviewFrame);
+        expect(bodyClasses).toEqual(
+          expect.arrayContaining([
+            scenario.expectedBodyThemeClass,
+            'prototype-page',
+            'pattern-bars',
+            'theme-34',
+          ])
+        );
+
+        const palette = await readPaletteSnapshot(webviewFrame);
+        if (scenario.maxShellBrightness !== undefined) {
+          expect(palette.shellBrightness).toBeLessThan(scenario.maxShellBrightness);
+        }
+        if (scenario.minShellBrightness !== undefined) {
+          expect(palette.shellBrightness).toBeGreaterThan(scenario.minShellBrightness);
+        }
+
+        await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
+        await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+        await expect(
+          session.window
+            .getByText(/Selected SAP BTP region: US East \(us-10\)/i)
+            .first()
+        ).toBeVisible({ timeout: 20000 });
+      } finally {
+        await cleanupExtensionHost(session);
+      }
+    });
+  }
+
   test('User keeps VS Code webview theme classes during interactions', async () => {
     const session = await launchExtensionHost();
 
@@ -166,9 +299,14 @@ test.describe('SAP Tools region selector', () => {
       );
 
       expect(initialThemeClasses.length).toBeGreaterThan(0);
+      expect(initialThemeClasses).toContain('vscode-dark');
       expect(initialClasses).toEqual(
         expect.arrayContaining(['prototype-page', 'pattern-bars', 'theme-34'])
       );
+
+      const initialPalette = await readPaletteSnapshot(webviewFrame);
+      expect(initialPalette.bodyBrightness).toBeLessThan(0.2);
+      expect(initialPalette.shellBrightness).toBeLessThan(0.2);
 
       await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
       await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();

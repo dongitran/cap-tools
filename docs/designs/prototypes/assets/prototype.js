@@ -415,18 +415,18 @@ function applyDesignTokens(design) {
   const themeClass = `theme-${String(design.id).padStart(2, '0')}`;
   const patternClass = `pattern-${design.pattern}`;
   applyDesignClasses(root, patternClass, themeClass);
-  root.style.setProperty('--page-bg', design.colors.page);
-  root.style.setProperty('--frame-bg', design.colors.frame);
-  root.style.setProperty('--surface-bg', design.colors.surface);
-  root.style.setProperty('--border-color', design.colors.border);
-  root.style.setProperty('--text-color', design.colors.text);
-  root.style.setProperty('--muted-color', design.colors.muted);
-  root.style.setProperty('--accent-color', design.colors.accent);
-  root.style.setProperty('--accent-soft', design.colors.accentSoft);
-  root.style.setProperty('--chip-text', design.colors.chipText);
-  root.style.setProperty('--panel-shadow', design.shadow);
-  root.style.setProperty('--title-font', design.typography.title);
-  root.style.setProperty('--body-font', design.typography.body);
+  root.style.setProperty('--design-page-bg', design.colors.page);
+  root.style.setProperty('--design-frame-bg', design.colors.frame);
+  root.style.setProperty('--design-surface-bg', design.colors.surface);
+  root.style.setProperty('--design-border-color', design.colors.border);
+  root.style.setProperty('--design-text-color', design.colors.text);
+  root.style.setProperty('--design-muted-color', design.colors.muted);
+  root.style.setProperty('--design-accent-color', design.colors.accent);
+  root.style.setProperty('--design-accent-soft', design.colors.accentSoft);
+  root.style.setProperty('--design-chip-text', design.colors.chipText);
+  root.style.setProperty('--design-panel-shadow', design.shadow);
+  root.style.setProperty('--design-title-font', design.typography.title);
+  root.style.setProperty('--design-body-font', design.typography.body);
 }
 
 function applyDesignClasses(root, patternClass, themeClass) {
