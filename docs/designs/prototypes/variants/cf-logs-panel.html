@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CFLogs Panel Prototype</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="../assets/cf-logs-panel.css" />
+  </head>
+  <body class="cf-logs-panel-page vscode-dark">
+    <main class="panel-prototype-shell">
+      <section class="editor-area" aria-hidden="true"></section>
+
+      <section class="panel-area" aria-label="Bottom panel">
+        <nav class="panel-tabs" aria-label="Panel tabs">
+          <button type="button" class="panel-tab">Problems</button>
+          <button type="button" class="panel-tab">Output</button>
+          <button type="button" class="panel-tab">Terminal</button>
+          <button type="button" class="panel-tab is-active" aria-current="true">CFLogs</button>
+        </nav>
+
+        <section class="cf-logs-panel" aria-label="CFLogs panel content">
+          <header class="cf-logs-head">
+            <h1>CFLogs</h1>
+            <div class="stream-meta" role="status">
+              <span>billing-api</span>
+              <span>LIVE</span>
+              <span>Buffer 1283/5000</span>
+            </div>
+          </header>
+
+          <div class="cf-logs-toolbar" role="group" aria-label="CF log actions">
+            <button type="button">Start Live</button>
+            <button type="button">Pause</button>
+            <button type="button">Fetch Recent</button>
+            <button type="button">Clear</button>
+            <button type="button">Export</button>
+          </div>
+
+          <div class="cf-log-table" role="log" aria-live="polite">
+            <p><span>11:25:18</span><span>INFO</span><span>APP/0</span><span>GET /invoices/INV-123 200 in 38ms</span></p>
+            <p><span>11:25:22</span><span>WARN</span><span>APP/1</span><span>Retry 1/3 to S/4 ERP destination after timeout</span></p>
+            <p class="is-error"><span>11:25:30</span><span>ERR</span><span>APP/0</span><span>Failed to bind queue consumer</span></p>
+            <p><span>11:25:31</span><span>INFO</span><span>CELL/0</span><span>Container started</span></p>
+            <p><span>11:25:35</span><span>INFO</span><span>RTR/2</span><span>GET /invoices/INV-124 200</span></p>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

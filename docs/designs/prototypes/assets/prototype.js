@@ -83,6 +83,7 @@ const LOG_SEED = [
 
 const appElement = document.getElementById('app');
 const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
+const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const vscodeApi = resolveVscodeApi();
 
 if (!(appElement instanceof HTMLElement)) {
@@ -388,6 +389,12 @@ function handleLogsSelectionAction(action, actionElement) {
 }
 
 function handleLogsControlAction(action) {
+  if (action === 'open-cf-logs-panel') {
+    postOpenCfLogsPanel();
+    statusMessage = 'CFLogs panel opened.';
+    return true;
+  }
+
   if (action === 'connect-cf') {
     isConnected = true;
     selectedLogId = logsData[0]?.id ?? '';
@@ -655,6 +662,16 @@ function postRegionSelection(region, areaLabel) {
       code: region.code,
       area: areaLabel,
     },
+  });
+}
+
+function postOpenCfLogsPanel() {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: OPEN_CF_LOGS_PANEL_MESSAGE_TYPE,
   });
 }
 
@@ -1058,6 +1075,7 @@ function renderLogsTab() {
   return `
     <section class="group-card logs-panel">
       <h2>Cloud Foundry Logs</h2>
+      ${renderCfLogsPanelBridge(logsData)}
       ${renderLogsToolbar()}
       ${renderLogsFilters()}
       ${statusMessage.length > 0 ? `<p class="status-note">${escapeHtml(statusMessage)}</p>` : ''}
@@ -1065,6 +1083,35 @@ function renderLogsTab() {
       ${selectedLog === undefined ? renderEmptyLogDetails() : renderLogDetails(selectedLog)}
     </section>
   `;
+}
+
+function renderCfLogsPanelBridge(logs) {
+  const previewLines = getCfLogsPanelPreviewLines(logs);
+
+  return `
+    <section class="panel-logs-bridge" aria-label="CFLogs panel bridge">
+      <div class="panel-logs-head">
+        <h3>CFLogs Panel</h3>
+        <button type="button" class="small-action" data-action="open-cf-logs-panel">Open CFLogs Panel</button>
+      </div>
+      <p class="panel-logs-description">
+        Log stream is presented in a dedicated panel channel named <strong>CFLogs</strong> near Output and Terminal.
+      </p>
+      <div class="panel-logs-preview" role="log" aria-live="polite">
+        ${previewLines.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function getCfLogsPanelPreviewLines(logs) {
+  if (logs.length === 0) {
+    return ['No log lines available yet in CFLogs panel.'];
+  }
+
+  return logs.slice(-3).map((entry) => {
+    return `[${entry.time}] ${entry.level} ${entry.app}/${entry.instance} ${entry.message}`;
+  });
 }
 
 function renderLogsToolbar() {

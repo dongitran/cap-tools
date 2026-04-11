@@ -680,3 +680,89 @@
 ## Verification
 1. `npm --prefix e2e test`
 2. `npm run validate`
+
+---
+
+# Follow-up Plan: Implement Plan 00 Prototype (Credentials Gate + Pro Logs Mock)
+
+## Goal
+1. Update prototype to match `docs/plans/00-cf-logs-viewer.md` Step A architecture and UX.
+2. Keep extension runtime backward-compatible while host-side CF modules are not wired yet.
+3. Ensure prototype is testable in browser/gallery mode with mock state machine.
+
+## Scope
+1. Files in scope:
+- `docs/designs/prototypes/assets/prototype.js`
+- `docs/designs/prototypes/assets/prototype.css`
+- `docs/designs/prototypes/assets/themes/design-34.css` (only if required)
+
+2. Out of scope in this step:
+- Host-side TypeScript CF integration (`src/cf/*`, `src/messaging/*`)
+- SecretStorage wiring in extension host
+
+## Implementation Strategy
+1. Introduce dual runtime behavior.
+- `isMockRuntime = vscodeApi === null` enables full Step A mock flow.
+- VS Code runtime keeps existing selection/log behavior to avoid regressions before Step C wiring.
+
+2. Expand selection stage model.
+- Add `signin` slot to `SELECTION_STAGE_SLOT_IDS`.
+- Render sign-in stage only when region selected and credentials not valid in mock runtime.
+- Preserve partial stage rerender behavior.
+
+3. Add credential gate mock state machine.
+- Implement states: `unknown/checking/missing/submitting/valid/error`.
+- Implement sources: `env/secret-storage/none` with safe mock behavior.
+- Add actions: submit/use/edit/forget/toggle remember/show password.
+
+4. Add org-space-app mock flow.
+- Replace static org list rendering in mock path with staged data loading and selection.
+- Add apps tab rendering and app selection that drives logs tab context.
+
+5. Upgrade logs prototype UI.
+- Parse `LOG_SEED_RICH_RAW` via `parseCfLogLine`.
+- Add pro toolbar, filters, buffer state, row selection, JSON tree detail, copy actions.
+- Keep compatibility aliases for old actions to avoid breaking transition tests.
+
+6. Add styles for new components.
+- Sign-in card/form/skeleton/error states.
+- Apps list and app badges.
+- Pro logs toolbar/filter/table/detail/json tree.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Manual browser verification of flow in `docs/designs/prototypes/index.html`.
+5. MCP Playwright smoke verification for mock flow.
+
+---
+
+# Follow-up Plan: CFLogs Panel Channel in Extension Host
+
+## Goal
+1. Route extension log lines to a dedicated `CFLogs` output channel.
+2. Show `CFLogs` channel when log events arrive so users can monitor logs near VS Code panel (`Output`/`Terminal` area).
+3. Keep current extension behavior and E2E compatibility.
+
+## Planned Changes
+1. Update extension activation wiring.
+- File: `src/extension.ts`
+- Create dedicated output channel named `CFLogs` in addition to existing channel.
+- Inject channel into sidebar provider.
+
+2. Update sidebar provider logging target.
+- File: `src/sidebarProvider.ts`
+- Accept both channels in constructor.
+- On `sapTools.regionSelected`, append line to `CFLogs` and focus it (`show(true)`).
+- Keep existing SAP Tools channel append for backward traceability.
+
+3. Validation.
+- Run lint/typecheck/cspell/root validate + e2e.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. `npm run validate`
+5. `npm --prefix e2e test`

@@ -1,12 +1,26 @@
-import { DESIGN_CATALOG, formatDesignFilename } from './design-catalog.js';
-
 const frameElement = document.getElementById('prototype-frame');
 const previousButton = document.getElementById('previous-design');
 const nextButton = document.getElementById('next-design');
 const themeButton = document.getElementById('theme-cycle');
+const prototypeKind = document.getElementById('prototype-kind');
 
 const GALLERY_THEME_CLASS_PREFIX = 'gallery-theme-';
 const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
+
+const PROTOTYPE_VARIANTS = [
+  {
+    id: 'sidebar',
+    hash: 'sidebar',
+    label: 'Prototype: Sidebar',
+    framePath: './variants/design-34.html?v=20260411c',
+  },
+  {
+    id: 'cf-logs-panel',
+    hash: 'cf-logs-panel',
+    label: 'Prototype: CFLogs Panel',
+    framePath: './variants/cf-logs-panel.html?v=20260411a',
+  },
+];
 
 const THEME_VARIANTS = [
   {
@@ -33,25 +47,26 @@ if (
   !(frameElement instanceof HTMLIFrameElement) ||
   !(previousButton instanceof HTMLButtonElement) ||
   !(nextButton instanceof HTMLButtonElement) ||
-  !(themeButton instanceof HTMLButtonElement)
+  !(themeButton instanceof HTMLButtonElement) ||
+  !(prototypeKind instanceof HTMLElement)
 ) {
   throw new Error('Prototype gallery is missing required DOM nodes.');
 }
 
-let currentDesignIndex = resolveInitialDesignIndex();
+let currentVariantIndex = resolveInitialVariantIndex();
 let currentThemeIndex = resolveInitialThemeIndex();
 frameElement.addEventListener('load', () => {
   applyThemeToPrototypeFrame();
 });
 
 previousButton.addEventListener('click', () => {
-  currentDesignIndex = wrapIndex(currentDesignIndex - 1);
-  renderCurrentDesign();
+  currentVariantIndex = wrapVariantIndex(currentVariantIndex - 1);
+  renderCurrentVariant();
 });
 
 nextButton.addEventListener('click', () => {
-  currentDesignIndex = wrapIndex(currentDesignIndex + 1);
-  renderCurrentDesign();
+  currentVariantIndex = wrapVariantIndex(currentVariantIndex + 1);
+  renderCurrentVariant();
 });
 
 themeButton.addEventListener('click', () => {
@@ -63,36 +78,42 @@ themeButton.addEventListener('click', () => {
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowLeft') {
-    currentDesignIndex = wrapIndex(currentDesignIndex - 1);
-    renderCurrentDesign();
+    currentVariantIndex = wrapVariantIndex(currentVariantIndex - 1);
+    renderCurrentVariant();
   }
 
   if (event.key === 'ArrowRight') {
-    currentDesignIndex = wrapIndex(currentDesignIndex + 1);
-    renderCurrentDesign();
+    currentVariantIndex = wrapVariantIndex(currentVariantIndex + 1);
+    renderCurrentVariant();
   }
 });
 
 applyGalleryTheme();
-renderCurrentDesign();
+renderCurrentVariant();
 
-function resolveInitialDesignIndex() {
-  const hashValue = window.location.hash.replace('#design-', '');
-  const idFromHash = Number.parseInt(hashValue, 10);
-  const indexFromHash = DESIGN_CATALOG.findIndex((design) => design.id === idFromHash);
-  if (indexFromHash >= 0) {
-    return indexFromHash;
+function resolveInitialVariantIndex() {
+  const hashValue = window.location.hash.replace('#', '').toLowerCase();
+  if (hashValue === 'design-34') {
+    return 0;
+  }
+
+  const hashWithoutPrefix = hashValue.replace('prototype-', '');
+  const indexByHash = PROTOTYPE_VARIANTS.findIndex(
+    (variant) => variant.hash === hashWithoutPrefix
+  );
+  if (indexByHash >= 0) {
+    return indexByHash;
   }
 
   return 0;
 }
 
-function wrapIndex(index) {
+function wrapVariantIndex(index) {
   if (index < 0) {
-    return DESIGN_CATALOG.length - 1;
+    return PROTOTYPE_VARIANTS.length - 1;
   }
 
-  if (index >= DESIGN_CATALOG.length) {
+  if (index >= PROTOTYPE_VARIANTS.length) {
     return 0;
   }
 
@@ -111,11 +132,14 @@ function wrapThemeIndex(index) {
   return index;
 }
 
-function renderCurrentDesign() {
-  const design = DESIGN_CATALOG[currentDesignIndex];
-  const variantPath = `./variants/${formatDesignFilename(design.id)}`;
+function renderCurrentVariant() {
+  const variant = PROTOTYPE_VARIANTS[currentVariantIndex];
+  if (variant === undefined) {
+    return;
+  }
 
-  frameElement.src = variantPath;
+  frameElement.src = variant.framePath;
+  prototypeKind.textContent = variant.label;
   updateUrlState();
 }
 
@@ -175,19 +199,14 @@ function applyThemeToPrototypeFrame() {
 }
 
 function updateUrlState() {
-  const design = DESIGN_CATALOG[currentDesignIndex];
-  if (design === undefined) {
-    return;
-  }
-
-  const hashValue = `design-${String(design.id).padStart(2, '0')}`;
+  const activeVariant = PROTOTYPE_VARIANTS[currentVariantIndex];
   const activeTheme = THEME_VARIANTS[currentThemeIndex];
-  if (activeTheme === undefined) {
+  if (activeVariant === undefined || activeTheme === undefined) {
     return;
   }
 
   const url = new URL(window.location.href);
   url.searchParams.set('theme', activeTheme.id);
-  url.hash = hashValue;
+  url.hash = `prototype-${activeVariant.hash}`;
   window.history.replaceState(null, '', url.toString());
 }

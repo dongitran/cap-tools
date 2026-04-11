@@ -95,6 +95,19 @@ body.gallery-page {
   backdrop-filter: blur(3px);
 }
 
+.prototype-kind {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--button-border);
+  border-radius: 999px;
+  padding: 0 10px;
+  min-height: 32px;
+  font-size: 0.72rem;
+  color: var(--button-text);
+  background: color-mix(in oklab, var(--button-bg) 86%, transparent);
+  white-space: nowrap;
+}
+
 .floating-nav button {
   border: 1px solid var(--button-border);
   background: color-mix(in oklab, var(--button-bg) 90%, #000000);
@@ -172,5 +185,11 @@ body.gallery-page {
   .floating-nav button {
     font-size: 0.74rem;
     padding: 6px 11px;
+  }
+
+  .prototype-kind {
+    min-height: 30px;
+    font-size: 0.68rem;
+    padding: 0 9px;
   }
 }
