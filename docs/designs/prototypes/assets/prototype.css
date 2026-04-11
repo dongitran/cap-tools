@@ -408,7 +408,7 @@ body.pattern-dots::before {
   border-color: color-mix(in oklab, var(--accent-color) 44%, white);
 }
 
-.region-option.is-hidden {
+.region-layout .region-option.is-hidden {
   display: none;
 }
 

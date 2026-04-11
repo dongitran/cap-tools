@@ -362,3 +362,23 @@
 3. `npm run cspell`
 4. Manual check:
 - Picking a region shows a full highlighted card, not a bottom orange line.
+
+---
+
+# Follow-up Plan: Region Collapse Specificity Fix
+
+## Goal
+1. Ensure non-selected regions are hidden immediately after selecting a region.
+2. Keep selected-region move animation visible (FLIP) by forcing layout collapse.
+
+## Planned Changes
+1. Update hidden selector specificity in `prototype.css` for region items used in `chips` layout.
+- Replace low-specificity `.region-option.is-hidden` behavior with a selector that overrides `.region-layout.chips .region-option`.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Playwright local check on `docs/designs/prototypes/index.html`:
+- after selecting a region, only one region option remains visible
+- selected region has active move animation behavior when collapsing
