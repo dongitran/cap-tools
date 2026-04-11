@@ -75,6 +75,15 @@ interface ShellNodeStabilitySnapshot {
   readonly sameRegionSlotNode: boolean;
 }
 
+interface ViewportGutterSnapshot {
+  readonly viewportWidth: number;
+  readonly appLeft: number;
+  readonly appRight: number;
+  readonly appWidth: number;
+  readonly bodyPaddingLeft: number;
+  readonly bodyPaddingRight: number;
+}
+
 interface ExtensionHostLaunchOptions {
   readonly colorTheme?: string;
 }
@@ -258,6 +267,39 @@ async function readPaletteSnapshot(webviewFrame: Frame): Promise<PaletteSnapshot
   });
 }
 
+async function readViewportGutterSnapshot(
+  webviewFrame: Frame
+): Promise<ViewportGutterSnapshot> {
+  return webviewFrame.evaluate(() => {
+    const appElement = document.querySelector('#app');
+    if (!(appElement instanceof HTMLElement)) {
+      throw new Error('App element (#app) was not found.');
+    }
+
+    const appRect = appElement.getBoundingClientRect();
+    const bodyStyles = getComputedStyle(document.body);
+
+    return {
+      viewportWidth: document.documentElement.clientWidth,
+      appLeft: appRect.left,
+      appRight: appRect.right,
+      appWidth: appRect.width,
+      bodyPaddingLeft: Number.parseFloat(bodyStyles.paddingLeft),
+      bodyPaddingRight: Number.parseFloat(bodyStyles.paddingRight),
+    };
+  });
+}
+
+function expectNoOuterGutter(
+  snapshot: ViewportGutterSnapshot
+): void {
+  expect(snapshot.bodyPaddingLeft).toBe(0);
+  expect(snapshot.bodyPaddingRight).toBe(0);
+  expect(snapshot.appLeft).toBeLessThanOrEqual(0.5);
+  expect(snapshot.viewportWidth - snapshot.appRight).toBeLessThanOrEqual(0.5);
+  expect(snapshot.appWidth).toBeGreaterThan(0);
+}
+
 test.describe('SAP Tools region selector', () => {
   for (const scenario of THEME_SCENARIOS) {
     test(`User can open selector and pick region in ${scenario.id} theme`, async () => {
@@ -274,6 +316,9 @@ test.describe('SAP Tools region selector', () => {
             'theme-34',
           ])
         );
+
+        const gutterSnapshot = await readViewportGutterSnapshot(webviewFrame);
+        expectNoOuterGutter(gutterSnapshot);
 
         const palette = await readPaletteSnapshot(webviewFrame);
         if (scenario.maxShellBrightness !== undefined) {

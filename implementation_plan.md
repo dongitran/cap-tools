@@ -616,3 +616,67 @@
 5. `npm --prefix e2e run validate`
 6. Run E2E tests individually (`--grep`) and full suite.
 7. `npm run validate`
+
+---
+
+# Follow-up Plan: Edge-to-Edge Sidebar Width in Extension
+
+## Goal
+1. Remove horizontal chrome padding/margin in the extension webview so content uses full sidebar width.
+2. Keep prototype gallery styling unaffected unless explicitly needed.
+3. Add regression coverage for horizontal layout constraints in extension E2E.
+
+## Root Cause
+- Shared stylesheet applies horizontal container paddings at shell/content layers (`.shell-header`, `.groups`, `.meta-strip`, `.workspace-*`, `.output-box`).
+- Extension webview currently uses the same classes as prototype, so this creates visible left/right gutters in narrow sidebar widths.
+
+## Planned Changes
+1. Mark extension runtime with a dedicated body class.
+- File: `src/sidebarProvider.ts`
+- Add a stable class (e.g. `saptools-extension`) to webview body for extension-only overrides.
+
+2. Add extension-only edge-to-edge CSS overrides.
+- File: `docs/designs/prototypes/assets/prototype.css`
+- Override horizontal paddings to `0` for key shell containers when `body.saptools-extension` is present.
+- Keep vertical rhythm and internal element paddings where possible for readability.
+
+3. Add E2E assertion for shell horizontal paddings.
+- File: `e2e/tests/region-selector.e2e.spec.ts`
+- Validate computed `padding-left` and `padding-right` are `0px` on primary shell containers in extension webview.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. `npm --prefix e2e run validate`
+5. `npm --prefix e2e test -- --grep "open selector and pick region"`
+6. `npm --prefix e2e test -- --grep "without recreating selection shell nodes"`
+
+---
+
+# Follow-up Plan: Remove Confirm Summary and Eliminate Remaining Horizontal Gutter
+
+## Goal
+1. Remove confirm summary text line above `Confirm Scope`.
+2. Remove remaining left/right whitespace in extension selection stages.
+3. Re-run E2E to validate selection flow remains stable.
+
+## Root Cause
+- Confirm panel still renders a summary `<p>` block even though selected scope is already visible in prior stages.
+- Stage cards retain internal horizontal padding (`.group-card`, `.area-stage`) which still appears as side gutter in narrow sidebar mode.
+
+## Planned Changes
+1. Update confirm stage markup.
+- File: `docs/designs/prototypes/assets/prototype.js`
+- Remove summary string generation and `<p class="confirm-summary">...` node from `renderConfirmPanel()`.
+
+2. Tighten extension-only edge-to-edge overrides.
+- File: `docs/designs/prototypes/assets/prototype.css`
+- Under `body.saptools-extension`, set `padding-inline: 0` for `.group-card` and `.area-stage`.
+
+3. Validate regression scope.
+- Run full E2E suite after changes.
+
+## Verification
+1. `npm --prefix e2e test`
+2. `npm run validate`

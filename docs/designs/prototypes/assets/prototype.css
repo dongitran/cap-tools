@@ -42,6 +42,7 @@
 html,
 body {
   margin: 0;
+  padding: 0;
   min-height: 100%;
 }
 
@@ -633,12 +634,6 @@ body.pattern-dots::before {
 .stage-reset:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.confirm-summary {
-  margin: 0;
-  font-size: 0.74rem;
-  color: var(--muted-color);
 }
 
 .confirm-button {

@@ -954,23 +954,8 @@ function renderConfirmPanel() {
   const selectedOrg = resolveSelectedOrg();
   const isReady = selectedRegion !== undefined && selectedOrg !== undefined && selectedSpaceId.length > 0;
 
-  let summary = 'Select an area to start.';
-  if (selectedGroupId.length > 0) {
-    summary = 'Select one region to continue.';
-  }
-  if (selectedRegion !== undefined) {
-    summary = 'Select one organization to complete scope.';
-  }
-  if (selectedOrg !== undefined) {
-    summary = 'Select one space to complete scope.';
-  }
-  if (isReady) {
-    summary = `${selectedRegion.name} • ${selectedOrg.name} • ${selectedSpaceId} ready for confirmation.`;
-  }
-
   return `
     <section class="group-card confirm-stage" aria-label="Region confirmation">
-      <p class="confirm-summary">${summary}</p>
       <button
         type="button"
         class="confirm-button"
