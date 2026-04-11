@@ -8,6 +8,16 @@
   --accent-color: #1d7dd8;
   --accent-soft: #dcedff;
   --chip-text: #1b4e80;
+  --mix-base: #ffffff;
+  --mix-ink: #000000;
+  --focus-ring-color: #0078d4;
+  --state-success-fg: #0b5f31;
+  --state-success-bg: #dff6e7;
+  --state-success-border: #9ad5ad;
+  --state-danger-fg: #7a2a1e;
+  --state-danger-bg: #ffebe6;
+  --state-danger-border: #efb2a7;
+  --pattern-opacity: 0.38;
   --panel-shadow: none;
   --title-font: "Trebuchet MS", "Segoe UI", sans-serif;
   --body-font: "Verdana", "Tahoma", sans-serif;
@@ -36,14 +46,101 @@ body.prototype-page::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.58;
+  opacity: var(--pattern-opacity);
   z-index: 0;
+}
+
+body.vscode-light.prototype-page {
+  --page-bg: var(--vscode-sideBar-background, #f3f4f9);
+  --frame-bg: color-mix(
+    in oklab,
+    var(--vscode-editorWidget-background, #ffffff) 80%,
+    var(--page-bg)
+  );
+  --surface-bg: color-mix(in oklab, var(--frame-bg) 88%, #f8fbff);
+  --border-color: color-mix(
+    in oklab,
+    var(--vscode-sideBar-border, #d8dee9) 65%,
+    #ccd6e4
+  );
+  --text-color: var(--vscode-foreground, #1f2937);
+  --muted-color: color-mix(in oklab, var(--text-color) 58%, var(--frame-bg));
+  --accent-color: var(--vscode-button-background, #0e639c);
+  --accent-soft: color-mix(in oklab, var(--accent-color) 18%, var(--frame-bg));
+  --chip-text: color-mix(in oklab, var(--accent-color) 42%, var(--text-color));
+  --focus-ring-color: var(--vscode-focusBorder, #005fb8);
+  --state-success-fg: #0f6b3d;
+  --state-success-bg: #e2f6e9;
+  --state-success-border: #a8dbba;
+  --state-danger-fg: #8a3022;
+  --state-danger-bg: #ffebe5;
+  --state-danger-border: #f2b9ae;
+  --pattern-opacity: 0.24;
+}
+
+body.vscode-dark.prototype-page {
+  --page-bg: var(--vscode-sideBar-background, #1f1f1f);
+  --frame-bg: color-mix(
+    in oklab,
+    var(--vscode-editor-background, #1e1e1e) 88%,
+    #111723
+  );
+  --surface-bg: color-mix(in oklab, var(--frame-bg) 83%, #172235);
+  --border-color: color-mix(
+    in oklab,
+    var(--vscode-sideBar-border, #3f4a5a) 72%,
+    #56647b
+  );
+  --text-color: var(--vscode-foreground, #d4d4d4);
+  --muted-color: color-mix(in oklab, var(--text-color) 60%, var(--frame-bg));
+  --accent-color: var(--vscode-button-background, #0e639c);
+  --accent-soft: color-mix(in oklab, var(--accent-color) 24%, var(--frame-bg));
+  --chip-text: color-mix(in oklab, var(--accent-color) 36%, var(--text-color));
+  --mix-base: #0d141f;
+  --mix-ink: #f4f9ff;
+  --focus-ring-color: var(--vscode-focusBorder, #3794ff);
+  --state-success-fg: #81dfb2;
+  --state-success-bg: color-mix(in oklab, #11895e 28%, var(--frame-bg));
+  --state-success-border: color-mix(in oklab, #81dfb2 48%, var(--frame-bg));
+  --state-danger-fg: #ffad9f;
+  --state-danger-bg: color-mix(in oklab, #973d32 28%, var(--frame-bg));
+  --state-danger-border: color-mix(in oklab, #ffad9f 46%, var(--frame-bg));
+  --pattern-opacity: 0.14;
+}
+
+body.vscode-high-contrast.prototype-page,
+body.vscode-high-contrast-light.prototype-page {
+  --page-bg: var(--vscode-editor-background, #000000);
+  --frame-bg: var(--vscode-editor-background, #000000);
+  --surface-bg: var(--vscode-editor-background, #000000);
+  --border-color: var(--vscode-contrastBorder, #ffffff);
+  --text-color: var(--vscode-foreground, #ffffff);
+  --muted-color: var(--vscode-descriptionForeground, #ffffff);
+  --accent-color: var(--vscode-focusBorder, #f8d66d);
+  --accent-soft: color-mix(in oklab, var(--accent-color) 18%, var(--frame-bg));
+  --chip-text: var(--text-color);
+  --mix-base: #000000;
+  --mix-ink: #ffffff;
+  --focus-ring-color: var(--vscode-focusBorder, #f8d66d);
+  --state-success-fg: #ffffff;
+  --state-success-bg: #1e3a1e;
+  --state-success-border: #7ee081;
+  --state-danger-fg: #ffffff;
+  --state-danger-bg: #4a1f1f;
+  --state-danger-border: #ff9f9f;
+  --pattern-opacity: 0.08;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
 }
 
 body.pattern-grid::before {
   background-image:
-    linear-gradient(transparent 95%, color-mix(in oklab, var(--accent-color) 18%, white) 95%),
-    linear-gradient(90deg, transparent 95%, color-mix(in oklab, var(--accent-color) 18%, white) 95%);
+    linear-gradient(transparent 95%, color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 95%),
+    linear-gradient(90deg, transparent 95%, color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 95%);
   background-size: 34px 34px;
 }
 
@@ -52,34 +149,34 @@ body.pattern-diagonal::before {
     135deg,
     transparent 0,
     transparent 22px,
-    color-mix(in oklab, var(--accent-color) 18%, white) 22px,
-    color-mix(in oklab, var(--accent-color) 18%, white) 26px
+    color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 22px,
+    color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 26px
   );
 }
 
 body.pattern-rings::before {
   background-image: radial-gradient(
       circle at 12% 20%,
-      color-mix(in oklab, var(--accent-color) 22%, white) 0,
+      color-mix(in oklab, var(--accent-color) 22%, var(--mix-base)) 0,
       transparent 42%
     ),
-    radial-gradient(circle at 88% 12%, color-mix(in oklab, var(--accent-color) 20%, white) 0, transparent 48%),
-    radial-gradient(circle at 50% 85%, color-mix(in oklab, var(--accent-color) 16%, white) 0, transparent 50%);
+    radial-gradient(circle at 88% 12%, color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)) 0, transparent 48%),
+    radial-gradient(circle at 50% 85%, color-mix(in oklab, var(--accent-color) 16%, var(--mix-base)) 0, transparent 50%);
 }
 
 body.pattern-gradient::before {
   background: linear-gradient(
     130deg,
-    color-mix(in oklab, var(--accent-color) 20%, white) 0%,
+    color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)) 0%,
     transparent 34%,
-    color-mix(in oklab, var(--accent-color) 8%, white) 100%
+    color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)) 100%
   );
 }
 
 body.pattern-paper::before {
   background-image:
-    radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--accent-color) 8%, white), transparent 33%),
-    radial-gradient(circle at 80% 0%, color-mix(in oklab, var(--accent-color) 10%, white), transparent 30%);
+    radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)), transparent 33%),
+    radial-gradient(circle at 80% 0%, color-mix(in oklab, var(--accent-color) 10%, var(--mix-base)), transparent 30%);
 }
 
 body.pattern-bars::before {
@@ -87,8 +184,8 @@ body.pattern-bars::before {
     90deg,
     transparent 0,
     transparent 38px,
-    color-mix(in oklab, var(--accent-color) 14%, white) 38px,
-    color-mix(in oklab, var(--accent-color) 14%, white) 46px
+    color-mix(in oklab, var(--accent-color) 14%, var(--mix-base)) 38px,
+    color-mix(in oklab, var(--accent-color) 14%, var(--mix-base)) 46px
   );
 }
 
@@ -97,15 +194,15 @@ body.pattern-wave::before {
     circle at 0 100%,
     transparent 0,
     transparent 14px,
-    color-mix(in oklab, var(--accent-color) 15%, white) 14px,
-    color-mix(in oklab, var(--accent-color) 15%, white) 17px
+    color-mix(in oklab, var(--accent-color) 15%, var(--mix-base)) 14px,
+    color-mix(in oklab, var(--accent-color) 15%, var(--mix-base)) 17px
   );
 }
 
 body.pattern-mesh::before {
   background-image:
-    linear-gradient(30deg, color-mix(in oklab, var(--accent-color) 15%, white) 0, transparent 38%),
-    linear-gradient(150deg, color-mix(in oklab, var(--accent-color) 12%, white) 0, transparent 40%);
+    linear-gradient(30deg, color-mix(in oklab, var(--accent-color) 15%, var(--mix-base)) 0, transparent 38%),
+    linear-gradient(150deg, color-mix(in oklab, var(--accent-color) 12%, var(--mix-base)) 0, transparent 40%);
 }
 
 body.pattern-canvas::before {
@@ -114,21 +211,21 @@ body.pattern-canvas::before {
       0deg,
       transparent 0,
       transparent 12px,
-      color-mix(in oklab, var(--accent-color) 10%, white) 12px,
-      color-mix(in oklab, var(--accent-color) 10%, white) 13px
+      color-mix(in oklab, var(--accent-color) 10%, var(--mix-base)) 12px,
+      color-mix(in oklab, var(--accent-color) 10%, var(--mix-base)) 13px
     ),
     repeating-linear-gradient(
       90deg,
       transparent 0,
       transparent 12px,
-      color-mix(in oklab, var(--accent-color) 8%, white) 12px,
-      color-mix(in oklab, var(--accent-color) 8%, white) 13px
+      color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)) 12px,
+      color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)) 13px
     );
 }
 
 body.pattern-dots::before {
   background-image: radial-gradient(
-    color-mix(in oklab, var(--accent-color) 20%, white) 1.2px,
+    color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)) 1.2px,
     transparent 1.2px
   );
   background-size: 18px 18px;
@@ -179,7 +276,7 @@ body.pattern-dots::before {
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  border: 1px solid color-mix(in oklab, var(--accent-color) 32%, white);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 32%, var(--mix-base));
   background: var(--accent-soft);
   color: var(--chip-text);
   padding: 5px 9px;
@@ -223,11 +320,11 @@ body.pattern-dots::before {
 }
 
 .groups::-webkit-scrollbar-track {
-  background: color-mix(in oklab, var(--surface-bg) 75%, white);
+  background: color-mix(in oklab, var(--surface-bg) 75%, var(--mix-base));
 }
 
 .groups::-webkit-scrollbar-thumb {
-  background: color-mix(in oklab, var(--accent-color) 35%, white);
+  background: color-mix(in oklab, var(--accent-color) 35%, var(--mix-base));
   border-radius: 999px;
 }
 
@@ -280,7 +377,7 @@ body.pattern-dots::before {
 }
 
 .area-option {
-  border: 1px solid color-mix(in oklab, var(--border-color) 88%, white);
+  border: 1px solid color-mix(in oklab, var(--border-color) 88%, var(--mix-base));
   border-radius: 10px;
   background: color-mix(in oklab, var(--frame-bg) 86%, var(--surface-bg));
   color: var(--text-color);
@@ -294,11 +391,11 @@ body.pattern-dots::before {
 
 .area-option:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--accent-color) 42%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 42%, var(--mix-base));
 }
 
 .area-option.is-active {
-  border-color: color-mix(in oklab, var(--accent-color) 58%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 58%, var(--mix-base));
   background: var(--accent-soft);
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 22%, transparent);
 }
@@ -321,7 +418,7 @@ body.pattern-dots::before {
 }
 
 .group-count {
-  border: 1px solid color-mix(in oklab, var(--accent-color) 35%, white);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 35%, var(--mix-base));
   color: var(--chip-text);
   border-radius: 999px;
   padding: 1px 8px;
@@ -405,7 +502,7 @@ body.pattern-dots::before {
 
 .region-option:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--accent-color) 44%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
 }
 
 .region-layout .region-option.is-hidden {
@@ -427,7 +524,7 @@ body.pattern-dots::before {
 .prototype-shell.select-style-solid .region-option.is-selected {
   background: var(--accent-color);
   color: #ffffff;
-  border-color: color-mix(in oklab, var(--accent-color) 78%, black);
+  border-color: color-mix(in oklab, var(--accent-color) 78%, var(--mix-ink));
 }
 
 .prototype-shell.select-style-solid .region-option.is-selected .region-code {
@@ -442,7 +539,7 @@ body.pattern-dots::before {
 
 .prototype-shell.select-style-glow .region-option.is-selected {
   background: var(--accent-soft);
-  border-color: color-mix(in oklab, var(--accent-color) 55%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 55%, var(--mix-base));
   box-shadow:
     0 0 0 2px color-mix(in oklab, var(--accent-color) 28%, transparent),
     0 8px 18px color-mix(in oklab, var(--accent-color) 38%, transparent);
@@ -451,19 +548,19 @@ body.pattern-dots::before {
 
 .prototype-shell.select-style-underline .region-option.is-selected {
   background: var(--accent-soft);
-  border-color: color-mix(in oklab, var(--accent-color) 60%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 60%, var(--mix-base));
   color: var(--chip-text);
 }
 
 .prototype-shell.select-style-underline .region-option.is-selected .region-code {
-  color: color-mix(in oklab, var(--chip-text) 70%, white);
+  color: color-mix(in oklab, var(--chip-text) 70%, var(--mix-base));
 }
 
 .prototype-shell.select-style-slice .region-option.is-selected {
   background:
     linear-gradient(to right, var(--accent-color) 6px, transparent 6px),
     var(--accent-soft);
-  border-color: color-mix(in oklab, var(--accent-color) 50%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 50%, var(--mix-base));
 }
 
 .prototype-shell.mode-selection {
@@ -486,7 +583,7 @@ body.pattern-dots::before {
 }
 
 .stage-reset {
-  border: 1px solid color-mix(in oklab, var(--accent-color) 40%, white);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 40%, var(--mix-base));
   background: color-mix(in oklab, var(--frame-bg) 85%, var(--accent-soft));
   color: var(--chip-text);
   border-radius: 8px;
@@ -509,7 +606,7 @@ body.pattern-dots::before {
 }
 
 .confirm-button {
-  border: 1px solid color-mix(in oklab, var(--accent-color) 55%, white);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 55%, var(--mix-base));
   background: var(--accent-color);
   color: #ffffff;
   border-radius: 10px;
@@ -563,13 +660,13 @@ body.pattern-dots::before {
 .org-option:hover,
 .space-option:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--accent-color) 44%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
 }
 
 .org-option.is-selected,
 .space-option.is-selected {
   background: var(--accent-soft);
-  border-color: color-mix(in oklab, var(--accent-color) 60%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 60%, var(--mix-base));
   color: var(--chip-text);
 }
 
@@ -592,8 +689,8 @@ body.pattern-dots::before {
 .context-pill {
   display: inline-flex;
   align-items: center;
-  border: 1px solid color-mix(in oklab, var(--border-color) 82%, white);
-  background: color-mix(in oklab, var(--surface-bg) 88%, white);
+  border: 1px solid color-mix(in oklab, var(--border-color) 82%, var(--mix-base));
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
   color: var(--chip-text);
   border-radius: 999px;
   padding: 3px 8px;
@@ -611,21 +708,21 @@ body.pattern-dots::before {
 }
 
 .connection-state.is-connected {
-  color: #0b5f31;
-  background: #dff6e7;
-  border-color: #9ad5ad;
+  color: var(--state-success-fg);
+  background: var(--state-success-bg);
+  border-color: var(--state-success-border);
 }
 
 .connection-state.is-disconnected {
-  color: #7a2a1e;
-  background: #ffebe6;
-  border-color: #efb2a7;
+  color: var(--state-danger-fg);
+  background: var(--state-danger-bg);
+  border-color: var(--state-danger-border);
 }
 
 .secondary-action,
 .primary-action,
 .small-action {
-  border: 1px solid color-mix(in oklab, var(--accent-color) 45%, white);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 45%, var(--mix-base));
   background: color-mix(in oklab, var(--frame-bg) 86%, var(--accent-soft));
   color: var(--chip-text);
   border-radius: 8px;
@@ -645,14 +742,14 @@ body.pattern-dots::before {
   padding: 8px 10px;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
-  background: color-mix(in oklab, var(--surface-bg) 90%, white);
+  background: color-mix(in oklab, var(--surface-bg) 90%, var(--mix-base));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
 .tab-button {
-  border: 1px solid color-mix(in oklab, var(--border-color) 88%, white);
+  border: 1px solid color-mix(in oklab, var(--border-color) 88%, var(--mix-base));
   background: var(--frame-bg);
   color: var(--muted-color);
   border-radius: 8px;
@@ -665,7 +762,7 @@ body.pattern-dots::before {
 .tab-button.is-active {
   color: #ffffff;
   background: var(--accent-color);
-  border-color: color-mix(in oklab, var(--accent-color) 70%, black);
+  border-color: color-mix(in oklab, var(--accent-color) 70%, var(--mix-ink));
 }
 
 .workspace-body {
@@ -678,7 +775,7 @@ body.pattern-dots::before {
 
 .workspace-footer {
   border-top: 1px solid var(--border-color);
-  background: color-mix(in oklab, var(--surface-bg) 92%, white);
+  background: color-mix(in oklab, var(--surface-bg) 92%, var(--mix-base));
   padding: 8px 10px;
   display: flex;
   justify-content: space-between;
@@ -692,7 +789,7 @@ body.pattern-dots::before {
 }
 
 .live-indicator.is-live {
-  color: #0b5f31;
+  color: var(--state-success-fg);
 }
 
 .logs-panel {
@@ -718,8 +815,8 @@ body.pattern-dots::before {
 }
 
 .scope-chip {
-  border: 1px solid color-mix(in oklab, var(--border-color) 84%, white);
-  background: color-mix(in oklab, var(--surface-bg) 88%, white);
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
   border-radius: 999px;
   padding: 3px 8px;
   font-size: 0.64rem;
@@ -733,7 +830,7 @@ body.pattern-dots::before {
 }
 
 .level-chip {
-  border: 1px solid color-mix(in oklab, var(--border-color) 84%, white);
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
   background: var(--frame-bg);
   border-radius: 999px;
   min-height: 28px;
@@ -746,14 +843,14 @@ body.pattern-dots::before {
 
 .level-chip.is-active {
   background: var(--accent-soft);
-  border-color: color-mix(in oklab, var(--accent-color) 52%, white);
+  border-color: color-mix(in oklab, var(--accent-color) 52%, var(--mix-base));
   color: var(--chip-text);
 }
 
 .log-search {
   flex: 1;
   min-width: 120px;
-  border: 1px solid color-mix(in oklab, var(--border-color) 86%, white);
+  border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));
   border-radius: 8px;
   min-height: 30px;
   padding: 0 9px;
@@ -779,7 +876,7 @@ body.pattern-dots::before {
 
 .log-row {
   border: 0;
-  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 75%, white);
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 75%, var(--mix-base));
   background: transparent;
   color: var(--text-color);
   display: grid;
@@ -797,7 +894,7 @@ body.pattern-dots::before {
 }
 
 .log-row.is-active {
-  background: color-mix(in oklab, var(--accent-soft) 72%, white);
+  background: color-mix(in oklab, var(--accent-soft) 72%, var(--mix-base));
 }
 
 .cell.level {

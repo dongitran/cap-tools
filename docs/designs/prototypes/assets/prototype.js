@@ -118,6 +118,8 @@ let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
 let pendingSelectionMotion = null;
 const pendingStageHeightMotions = new Map();
+const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
+const DESIGN_THEME_CLASS_PREFIX = 'theme-';
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -411,8 +413,8 @@ function handleLogsControlAction(action) {
 function applyDesignTokens(design) {
   const root = document.body;
   const themeClass = `theme-${String(design.id).padStart(2, '0')}`;
-
-  root.className = `prototype-page pattern-${design.pattern} ${themeClass}`;
+  const patternClass = `pattern-${design.pattern}`;
+  applyDesignClasses(root, patternClass, themeClass);
   root.style.setProperty('--page-bg', design.colors.page);
   root.style.setProperty('--frame-bg', design.colors.frame);
   root.style.setProperty('--surface-bg', design.colors.surface);
@@ -425,6 +427,20 @@ function applyDesignTokens(design) {
   root.style.setProperty('--panel-shadow', design.shadow);
   root.style.setProperty('--title-font', design.typography.title);
   root.style.setProperty('--body-font', design.typography.body);
+}
+
+function applyDesignClasses(root, patternClass, themeClass) {
+  const classNames = Array.from(root.classList);
+  for (const className of classNames) {
+    if (
+      className.startsWith(DESIGN_PATTERN_CLASS_PREFIX) ||
+      className.startsWith(DESIGN_THEME_CLASS_PREFIX)
+    ) {
+      root.classList.remove(className);
+    }
+  }
+
+  root.classList.add('prototype-page', patternClass, themeClass);
 }
 
 function renderPrototype() {

@@ -148,7 +148,43 @@ async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
   await webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }).click();
 }
 
+async function readWebviewBodyClasses(webviewFrame: Frame): Promise<string[]> {
+  return webviewFrame.evaluate(() => {
+    return Array.from(document.body.classList);
+  });
+}
+
 test.describe('SAP Tools region selector', () => {
+  test('User keeps VS Code webview theme classes during interactions', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      const initialClasses = await readWebviewBodyClasses(webviewFrame);
+      const initialThemeClasses = initialClasses.filter((className) =>
+        className.startsWith('vscode-')
+      );
+
+      expect(initialThemeClasses.length).toBeGreaterThan(0);
+      expect(initialClasses).toEqual(
+        expect.arrayContaining(['prototype-page', 'pattern-bars', 'theme-34'])
+      );
+
+      await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
+      await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+
+      const classesAfterSelection = await readWebviewBodyClasses(webviewFrame);
+      expect(classesAfterSelection).toEqual(
+        expect.arrayContaining(['prototype-page', 'pattern-bars', 'theme-34'])
+      );
+      expect(classesAfterSelection).toEqual(
+        expect.arrayContaining(initialThemeClasses)
+      );
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can select one SAP BTP region in webview and output log is emitted', async () => {
     const session = await launchExtensionHost();
 

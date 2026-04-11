@@ -494,3 +494,45 @@
 4. `npm run test:unit`
 5. `npm run validate`
 6. `npm --prefix e2e test`
+
+---
+
+# Follow-up Plan: Dark Theme Alignment for VS Code Webview
+
+## Goal
+1. Fix dark-theme mismatch in the extension sidebar UI.
+2. Ensure the webview respects VS Code host theme classes (`vscode-dark`, `vscode-light`, `vscode-high-contrast`).
+3. Improve visual consistency and accessibility in dark/high-contrast without changing selection flow behavior.
+
+## Root Cause Findings
+1. `docs/designs/prototypes/assets/prototype.js` currently sets `document.body.className = ...` in `applyDesignTokens()`, which removes VS Code host theme classes.
+2. `docs/designs/prototypes/assets/prototype.css` uses light-leaning palette assumptions and strong background pattern opacity, which looks noisy in dark mode.
+
+## Planned Changes
+1. Preserve VS Code theme classes in runtime class handling.
+- File: `docs/designs/prototypes/assets/prototype.js`
+- Replace destructive `className` assignment with class-list based updates that only swap design-specific classes (`pattern-*`, `theme-*`) and keep existing host classes.
+
+2. Add theme-aware token overrides for host themes.
+- File: `docs/designs/prototypes/assets/prototype.css`
+- Introduce `body.vscode-light.prototype-page`, `body.vscode-dark.prototype-page`, and `body.vscode-high-contrast.prototype-page` token overrides.
+- Map core tokens to VS Code webview variables (`--vscode-editor-background`, `--vscode-foreground`, `--vscode-button-background`, etc.) with safe fallbacks.
+
+3. Improve dark/high-contrast readability and focus behavior.
+- File: `docs/designs/prototypes/assets/prototype.css`
+- Reduce decorative pattern opacity for dark/high-contrast modes.
+- Add clear `:focus-visible` ring based on `--vscode-focusBorder`.
+- Switch hard-coded connection state colors to semantic CSS variables so they adapt per theme.
+
+4. Keep existing structure and test selectors stable.
+- Do not rename existing role labels or data attributes used by E2E tests.
+- Limit scope to presentation/theming changes.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. `npm run test:unit`
+5. `npm --prefix e2e test -- --grep "User can select one SAP BTP region in webview and output log is emitted"`
+6. `npm --prefix e2e test -- --grep "User can complete selection flow and reset via Change buttons only"`
+7. `npm --prefix e2e test -- --grep "User can confirm scope, view monitoring workspace, and switch back to selection"`

@@ -1,15 +1,19 @@
 body.theme-34 .shell-header {
   border-bottom-width: 2px;
   background:
-    linear-gradient(98deg, color-mix(in oklab, var(--accent-color) 20%, white), transparent 38%),
+    linear-gradient(
+      98deg,
+      color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)),
+      transparent 38%
+    ),
     var(--surface-bg);
 }
 
 body.theme-34 .meta-strip {
   background: linear-gradient(
     to right,
-    color-mix(in oklab, var(--accent-soft) 75%, white),
-    color-mix(in oklab, var(--surface-bg) 88%, white)
+    color-mix(in oklab, var(--accent-soft) 75%, var(--mix-base)),
+    color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base))
   );
 }
 
