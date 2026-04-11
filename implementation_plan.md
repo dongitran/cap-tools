@@ -88,3 +88,42 @@
 4. Sanity check:
 - No remaining `(<city>)` region names in `REGION_GROUPS`.
 - UI labels and code chips now both use abbreviation-style region codes.
+
+---
+
+# Follow-up Plan: Remove Inline Code Duplication in Region Names
+
+## Goal
+1. Remove the abbreviation text in parentheses from each region `name`.
+2. Keep the `code` field unchanged so code chips still show values like `EU-10`.
+
+## Planned Changes
+1. Edit `docs/designs/prototypes/assets/design-catalog.js`.
+- Convert `name` values from `West Europe (eu-10)` to `West Europe`.
+- Apply the same transformation to all regions in all groups.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Confirm there is no `(<abbr>)` in `REGION_GROUPS` names and UI still shows `region-code` chip.
+
+---
+
+# Follow-up Plan: Remove Prototype Log Panel
+
+## Goal
+1. Stop showing any selection logs in the prototype UI footer area.
+
+## Planned Changes
+1. Update `docs/designs/prototypes/assets/prototype.js`.
+- Remove `outputMessages` state and all append/trim/timestamp log logic.
+- Remove footer log markup (`output-box` / `output-stream`) from `renderPrototype`.
+- Keep area selection + single region selection behavior unchanged.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Visual check:
+- No log panel appears under the region selection UI in any design variant.

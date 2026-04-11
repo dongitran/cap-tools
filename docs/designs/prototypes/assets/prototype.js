@@ -20,7 +20,6 @@ const regionGroupLookup = new Map(
 
 let selectedGroupId = '';
 let selectedRegionId = '';
-const outputMessages = ['Select an area to reveal available regions.'];
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -39,13 +38,9 @@ appElement.addEventListener('click', (event) => {
       return;
     }
 
-    const didChangeGroup = selectedGroupId !== nextGroupId;
     selectedGroupId = nextGroupId;
-
-    if (didChangeGroup) {
+    if (selectedRegionId.length > 0 && regionGroupLookup.get(selectedRegionId) !== nextGroupId) {
       selectedRegionId = '';
-      outputMessages.push(`[${timestampNow()}] Area selected: ${nextGroup.label}`);
-      trimOutputMessages();
     }
 
     renderPrototype();
@@ -67,8 +62,6 @@ appElement.addEventListener('click', (event) => {
 
   selectedGroupId = nextGroupId;
   selectedRegionId = nextRegionId;
-  outputMessages.push(`[${timestampNow()}] Selected ${selectedRegion.name} (${selectedRegion.code})`);
-  trimOutputMessages();
 
   renderPrototype();
 });
@@ -97,9 +90,6 @@ function renderPrototype() {
   const areaPickerMarkup = renderAreaPicker();
   const regionPanelMarkup =
     selectedGroup === undefined ? renderEmptyRegionPanel() : renderSelectedGroupPanel(selectedGroup);
-  const outputMarkup = outputMessages
-    .map((line) => `<p class="output-line">${line}</p>`)
-    .join('');
 
   appElement.innerHTML = `
     <section class="prototype-shell select-style-${activeDesign.selectStyle}">
@@ -129,12 +119,6 @@ function renderPrototype() {
 
         ${regionPanelMarkup}
       </div>
-
-      <footer class="output-box">
-        <div class="output-stream">
-          ${outputMarkup}
-        </div>
-      </footer>
     </section>
   `;
 }
@@ -194,19 +178,4 @@ function renderEmptyRegionPanel() {
       <p class="empty-description">Pick an area above to reveal region options.</p>
     </section>
   `;
-}
-
-function trimOutputMessages() {
-  if (outputMessages.length > 4) {
-    outputMessages.shift();
-  }
-}
-
-function timestampNow() {
-  return new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date());
 }
