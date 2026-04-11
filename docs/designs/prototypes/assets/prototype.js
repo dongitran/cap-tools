@@ -266,6 +266,24 @@ function handleSelectionFlowAction(action) {
     return true;
   }
 
+  if (action === 'reset-region-selection') {
+    selectedRegionId = '';
+    selectedOrgId = '';
+    selectedSpaceId = '';
+    return true;
+  }
+
+  if (action === 'reset-org-selection') {
+    selectedOrgId = '';
+    selectedSpaceId = '';
+    return true;
+  }
+
+  if (action === 'reset-space-selection') {
+    selectedSpaceId = '';
+    return true;
+  }
+
   if (action === 'confirm-region') {
     if (selectedRegionId.length === 0 || selectedOrgId.length === 0 || selectedSpaceId.length === 0) {
       return false;
@@ -410,7 +428,7 @@ function renderSelectionScreen() {
     <div class="groups" role="list">
       ${renderAreaStage(selectedGroup)}
       ${selectedGroup === undefined ? renderEmptyRegionPanel() : renderSelectedGroupPanel(selectedGroup)}
-      ${selectedRegion === undefined ? '' : renderOrgStage(selectedRegion)}
+      ${selectedRegion === undefined ? '' : renderOrgStage()}
       ${selectedOrg === undefined ? '' : renderSpaceStage(selectedOrg)}
       ${renderConfirmPanel()}
     </div>
@@ -459,15 +477,7 @@ function renderAreaPicker(selectedGroup) {
 }
 
 function renderSelectedGroupPanel(group) {
-  const isRegionCollapsed = selectedRegionId.length > 0;
-  const selectedRegion = resolveSelectedRegion();
-  const visibleRegions = isRegionCollapsed ? group.regions.filter((region) => region.id === selectedRegionId) : group.regions;
-  const helperText =
-    selectedRegion === undefined
-      ? 'Select one region to continue to organization scope.'
-      : 'Click selected region again to reveal full region list.';
-
-  const regionOptionsMarkup = visibleRegions
+  const regionOptionsMarkup = group.regions
     .map((region) => {
       const isSelected = region.id === selectedRegionId;
       return `
@@ -488,17 +498,23 @@ function renderSelectedGroupPanel(group) {
     <section class="group-card" aria-label="Region list">
       <div class="group-head">
         <h2>Choose Region</h2>
-        <span class="group-count">${visibleRegions.length}</span>
+        <button
+          type="button"
+          class="stage-reset"
+          data-action="reset-region-selection"
+          ${selectedRegionId.length === 0 ? 'disabled' : ''}
+        >
+          Change
+        </button>
       </div>
-      <p class="stage-helper">${helperText}</p>
-      <div class="region-layout ${activeDesign.layout}${isRegionCollapsed ? ' is-collapsed' : ''}">
+      <div class="region-layout ${activeDesign.layout}">
         ${regionOptionsMarkup}
       </div>
     </section>
   `;
 }
 
-function renderOrgStage(selectedRegion) {
+function renderOrgStage() {
   const orgButtons = ORG_OPTIONS.map((org) => {
     const isSelected = org.id === selectedOrgId;
     return `
@@ -517,9 +533,15 @@ function renderOrgStage(selectedRegion) {
     <section class="group-card org-stage" aria-label="Organization list">
       <div class="group-head">
         <h2>Choose Organization</h2>
-        <span class="group-count">${ORG_OPTIONS.length}</span>
+        <button
+          type="button"
+          class="stage-reset"
+          data-action="reset-org-selection"
+          ${selectedOrgId.length === 0 ? 'disabled' : ''}
+        >
+          Change
+        </button>
       </div>
-      <p class="stage-helper">Scope for ${selectedRegion.name} (${selectedRegion.code.toUpperCase()})</p>
       <div class="org-picker">
         ${orgButtons}
       </div>
@@ -548,9 +570,15 @@ function renderSpaceStage(selectedOrg) {
     <section class="group-card space-stage" aria-label="Space list">
       <div class="group-head">
         <h2>Choose Space</h2>
-        <span class="group-count">${selectedOrg.spaces.length}</span>
+        <button
+          type="button"
+          class="stage-reset"
+          data-action="reset-space-selection"
+          ${selectedSpaceId.length === 0 ? 'disabled' : ''}
+        >
+          Change
+        </button>
       </div>
-      <p class="stage-helper">Spaces in ${selectedOrg.name}</p>
       <div class="space-picker">
         ${spaceButtons}
       </div>

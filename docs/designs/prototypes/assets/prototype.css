@@ -484,6 +484,11 @@ body.pattern-dots::before {
   cursor: pointer;
 }
 
+.stage-reset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .confirm-summary {
   margin: 0;
   font-size: 0.74rem;

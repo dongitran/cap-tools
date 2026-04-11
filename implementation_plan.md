@@ -267,3 +267,47 @@
 - Org list appears only after region is selected.
 - Space list appears only after org is selected.
 - Confirm button remains disabled until space is selected.
+
+---
+
+# Follow-up Plan: Refine Progressive Selection UI Controls
+
+## Goal
+1. Make Region selection interaction match Organization selection behavior.
+2. Remove redundant helper text lines in Region/Org/Space stages.
+3. Replace count badges with `Change` controls in:
+- `Choose Region`
+- `Choose Organization`
+- `Choose Space`
+4. Ensure selecting organization does not collapse/hide other org options.
+
+## Planned Changes
+1. Update selection behavior in `prototype.js`.
+- Keep all region options visible after selection (no region list collapse).
+- Keep org options fully visible (selected state only).
+- Add stage reset actions:
+  - `reset-region-selection`
+  - `reset-org-selection`
+  - `reset-space-selection`
+
+2. Update selection stage headers in `prototype.js`.
+- Remove count pills for Region/Org/Space stages.
+- Render `Change` button in each stage header (disabled when that stage has no selection).
+
+3. Remove lines requested in `prototype.js`.
+- Remove `Click selected region again to reveal full region list.`
+- Remove org helper line starting with `Scope for`.
+- Remove space helper line starting with `Spaces in`.
+
+4. Keep CSS aligned in `prototype.css`.
+- Reuse existing `stage-reset` button style.
+- Ensure no collapse-only CSS assumptions for region stage.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Manual checks:
+- Region options stay visible after region selection.
+- Org options stay visible after org selection.
+- `Change` buttons exist in Region/Org/Space headers and reset their step state.
