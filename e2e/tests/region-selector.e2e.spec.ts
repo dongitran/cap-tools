@@ -141,6 +141,13 @@ async function openSapToolsSidebar(window: Page): Promise<Frame> {
   return resolveSapToolsWebviewFrame(window);
 }
 
+async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
+  await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
+  await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+  await webviewFrame.getByRole('button', { name: ORG_TO_SELECT }).click();
+  await webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }).click();
+}
+
 test.describe('SAP Tools region selector', () => {
   test('User can select one SAP BTP region in webview and output log is emitted', async () => {
     const session = await launchExtensionHost();
@@ -235,6 +242,44 @@ test.describe('SAP Tools region selector', () => {
       expect(stateAfterRegionReset.spaceStageVisible).toBe(false);
       expect(stateAfterRegionReset.visibleRegionCount).toBeGreaterThan(1);
       await expect(confirmButton).toBeDisabled();
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can confirm scope, view monitoring workspace, and switch back to selection', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await confirmButton.click();
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Connect Cloud Foundry' })
+      ).toBeVisible();
+      await expect(webviewFrame.getByRole('tab', { name: 'Logs' })).toBeVisible();
+      await expect(webviewFrame.getByRole('tab', { name: 'Apps' })).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('tab', { name: 'Targets' })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('tab', { name: 'Settings' })
+      ).toBeVisible();
+
+      await webviewFrame.getByRole('button', { name: 'Change Region' }).click();
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
+      ).toBeVisible();
+      await expect(confirmButton).toBeEnabled();
     } finally {
       await cleanupExtensionHost(session);
     }
