@@ -417,3 +417,33 @@
 - selecting an option collapses same stage container with smooth height change
 - selected option still moves toward its new position
 - reset (`Change`) re-expands stage with smooth container height animation
+
+---
+
+# Follow-up Plan: Region Shape + Selected Click Guard
+
+## Goal
+1. Remove clipped right-edge look in `Choose Region` items and use rounded shape.
+2. Disable re-handle behavior when clicking already-selected options:
+- `Region`
+- `Organization`
+- `Space`
+3. Keep reset behavior only on `Change` button.
+
+## Planned Changes
+1. Update interaction guards in `prototype.js`.
+- Short-circuit click handlers when clicked option id equals current selected id.
+- Remove toggle-off logic in selection handlers for region/org/space.
+
+2. Update `design-34.css` for region option visual shape.
+- Remove the clipped polygon shape on region items.
+- Keep rounded corners and regular right padding.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Playwright local checks:
+- clicking already-selected region/org/space does nothing
+- only `Change` triggers reset
+- region options render with rounded right edge (no clip cut)

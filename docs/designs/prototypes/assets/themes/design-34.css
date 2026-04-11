@@ -30,9 +30,13 @@ body.theme-34 .area-option {
 }
 
 body.theme-34 .region-option {
-  border-radius: 8px;
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%);
-  padding-right: 14px;
+  border-radius: 10px;
+  clip-path: none;
+  padding-right: 10px;
+}
+
+body.theme-34 .region-layout.chips .region-option {
+  border-radius: 999px;
 }
 
 body.theme-34 .output-stream {

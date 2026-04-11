@@ -141,6 +141,9 @@ appElement.addEventListener('click', (event) => {
   const regionButton = target.closest('[data-region-id]');
   if (regionButton instanceof HTMLButtonElement) {
     const nextRegionId = regionButton.dataset.regionId ?? '';
+    if (selectedRegionId === nextRegionId) {
+      return;
+    }
     queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
     queueStageHeightMotion('region');
     handleRegionSelection(nextRegionId);
@@ -151,6 +154,9 @@ appElement.addEventListener('click', (event) => {
   const orgButton = target.closest('[data-org-id]');
   if (orgButton instanceof HTMLButtonElement) {
     const nextOrgId = orgButton.dataset.orgId ?? '';
+    if (selectedOrgId === nextOrgId) {
+      return;
+    }
     queueSelectionMotion(orgButton, buildDataSelector('data-org-id', nextOrgId));
     queueStageHeightMotion('org');
     handleOrgSelection(nextOrgId);
@@ -161,6 +167,9 @@ appElement.addEventListener('click', (event) => {
   const spaceButton = target.closest('[data-space-id]');
   if (spaceButton instanceof HTMLButtonElement) {
     const nextSpaceId = spaceButton.dataset.spaceId ?? '';
+    if (selectedSpaceId === nextSpaceId) {
+      return;
+    }
     queueSelectionMotion(spaceButton, buildDataSelector('data-space-id', nextSpaceId));
     queueStageHeightMotion('space');
     handleSpaceSelection(nextSpaceId);
@@ -219,13 +228,6 @@ function handleRegionSelection(nextRegionId) {
     return;
   }
 
-  if (selectedRegionId === nextRegionId) {
-    selectedRegionId = '';
-    selectedOrgId = '';
-    selectedSpaceId = '';
-    return;
-  }
-
   selectedGroupId = nextGroupId;
   selectedRegionId = nextRegionId;
   selectedOrgId = '';
@@ -241,8 +243,7 @@ function handleOrgSelection(nextOrgId) {
     return;
   }
 
-  const isTogglingOff = selectedOrgId === nextOrgId;
-  selectedOrgId = isTogglingOff ? '' : nextOrgId;
+  selectedOrgId = nextOrgId;
   selectedSpaceId = '';
 }
 
@@ -252,7 +253,7 @@ function handleSpaceSelection(nextSpaceId) {
     return;
   }
 
-  selectedSpaceId = selectedSpaceId === nextSpaceId ? '' : nextSpaceId;
+  selectedSpaceId = nextSpaceId;
 }
 
 function handleAction(action, actionElement) {
