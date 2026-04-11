@@ -275,6 +275,10 @@ body.pattern-dots::before {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.area-picker.is-collapsed {
+  grid-template-columns: 1fr;
+}
+
 .area-option {
   border: 1px solid color-mix(in oklab, var(--border-color) 88%, white);
   border-radius: 10px;
@@ -345,6 +349,10 @@ body.pattern-dots::before {
 .region-layout {
   display: grid;
   gap: 7px;
+}
+
+.region-layout.is-collapsed {
+  grid-template-columns: 1fr;
 }
 
 .region-layout.grid {
@@ -458,6 +466,24 @@ body.pattern-dots::before {
   gap: 10px;
 }
 
+.stage-helper {
+  margin: 0 0 8px;
+  font-size: 0.68rem;
+  color: var(--muted-color);
+}
+
+.stage-reset {
+  border: 1px solid color-mix(in oklab, var(--accent-color) 40%, white);
+  background: color-mix(in oklab, var(--frame-bg) 85%, var(--accent-soft));
+  color: var(--chip-text);
+  border-radius: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .confirm-summary {
   margin: 0;
   font-size: 0.74rem;
@@ -486,6 +512,47 @@ body.pattern-dots::before {
 .confirm-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.org-stage,
+.space-stage {
+  display: grid;
+  gap: 6px;
+}
+
+.org-picker,
+.space-picker {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.org-option,
+.space-option {
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--frame-bg) 87%, var(--surface-bg));
+  color: var(--text-color);
+  text-align: left;
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.71rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.org-option:hover,
+.space-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent-color) 44%, white);
+}
+
+.org-option.is-selected,
+.space-option.is-selected {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent-color) 60%, white);
+  color: var(--chip-text);
 }
 
 .workspace-header {

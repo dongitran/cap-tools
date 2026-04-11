@@ -220,3 +220,50 @@
 3. `npm run cspell`
 4. Visual check:
 - No `regions in this prototype` text appears in header.
+
+---
+
+# Follow-up Plan: Progressive Selection UX (Area -> Region -> Org -> Space -> Confirm)
+
+## Goal
+1. Improve selection flow into clear progressive steps:
+- Step 1: Select area and collapse to the chosen area only.
+- Step 2: Show regions for selected area.
+- Step 3: Select region and collapse region list to the chosen region only.
+- Step 4: Show org list and require org selection.
+- Step 5: Show space list and require space selection before confirm.
+2. Add special behavior:
+- When a selected region is clicked again, re-expand full region list for that area.
+
+## Planned Changes
+1. Update interaction state and actions in `docs/designs/prototypes/assets/prototype.js`.
+- Add org selection state and org dataset.
+- Add space selection state and space dataset (scoped by selected org).
+- Add action to reset area selection.
+- Make confirm require selected region + selected org + selected space.
+- Keep workspace screen after confirm and display selected org/space context.
+
+2. Update selection rendering in `prototype.js`.
+- Area stage renders all areas initially, then only selected area after selection.
+- Region stage renders full list initially, then selected item only when chosen.
+- Add org stage that appears only after region is selected.
+- Add space stage that appears only after org is selected.
+- Update confirm panel messaging to reflect progressive completion.
+
+3. Extend styles in `docs/designs/prototypes/assets/prototype.css`.
+- Add UI styles for collapsed stages and helper text.
+- Add org picker styles and selected state.
+- Add space picker styles and selected state.
+- Keep sidebar-friendly compact spacing and mobile behavior.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Manual behavior checks:
+- Selecting area collapses area list to selected item.
+- Selecting region collapses region list to selected item.
+- Clicking selected region again expands full region list.
+- Org list appears only after region is selected.
+- Space list appears only after org is selected.
+- Confirm button remains disabled until space is selected.

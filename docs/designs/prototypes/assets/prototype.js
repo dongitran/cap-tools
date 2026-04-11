@@ -7,6 +7,29 @@ const TAB_ITEMS = [
   { id: 'settings', label: 'Settings' },
 ];
 
+const ORG_OPTIONS = [
+  {
+    id: 'org-core-prod',
+    name: 'core-platform-prod',
+    spaces: ['prod', 'staging', 'integration'],
+  },
+  {
+    id: 'org-finance-prod',
+    name: 'finance-services-prod',
+    spaces: ['prod', 'uat', 'sandbox'],
+  },
+  {
+    id: 'org-retail-prod',
+    name: 'retail-experience-prod',
+    spaces: ['prod', 'campaigns', 'performance'],
+  },
+  {
+    id: 'org-data-prod',
+    name: 'data-foundation-prod',
+    spaces: ['prod', 'etl', 'observability'],
+  },
+];
+
 const LOG_SEED = [
   {
     id: 'log-001',
@@ -75,10 +98,13 @@ const regionLookup = new Map(
 const regionGroupLookup = new Map(
   REGION_GROUPS.flatMap((group) => group.regions.map((region) => [region.id, group.id]))
 );
+const orgLookup = new Map(ORG_OPTIONS.map((org) => [org.id, org]));
 
 let mode = 'selection';
 let selectedGroupId = '';
 let selectedRegionId = '';
+let selectedOrgId = '';
+let selectedSpaceId = '';
 let activeTabId = 'logs';
 let isConnected = false;
 let isLiveMode = false;
@@ -108,6 +134,20 @@ appElement.addEventListener('click', (event) => {
   const regionButton = target.closest('[data-region-id]');
   if (regionButton instanceof HTMLButtonElement) {
     handleRegionSelection(regionButton.dataset.regionId ?? '');
+    renderPrototype();
+    return;
+  }
+
+  const orgButton = target.closest('[data-org-id]');
+  if (orgButton instanceof HTMLButtonElement) {
+    handleOrgSelection(orgButton.dataset.orgId ?? '');
+    renderPrototype();
+    return;
+  }
+
+  const spaceButton = target.closest('[data-space-id]');
+  if (spaceButton instanceof HTMLButtonElement) {
+    handleSpaceSelection(spaceButton.dataset.spaceId ?? '');
     renderPrototype();
     return;
   }
@@ -142,14 +182,16 @@ function handleGroupSelection(nextGroupId) {
     return;
   }
 
+  const didChangeGroup = selectedGroupId !== nextGroupId;
   selectedGroupId = nextGroupId;
-  if (selectedRegionId.length === 0) {
+
+  if (!didChangeGroup) {
     return;
   }
 
-  if (regionGroupLookup.get(selectedRegionId) !== nextGroupId) {
-    selectedRegionId = '';
-  }
+  selectedRegionId = '';
+  selectedOrgId = '';
+  selectedSpaceId = '';
 }
 
 function handleRegionSelection(nextRegionId) {
@@ -160,14 +202,46 @@ function handleRegionSelection(nextRegionId) {
     return;
   }
 
+  if (selectedRegionId === nextRegionId) {
+    selectedRegionId = '';
+    selectedOrgId = '';
+    selectedSpaceId = '';
+    return;
+  }
+
   selectedGroupId = nextGroupId;
   selectedRegionId = nextRegionId;
+  selectedOrgId = '';
+  selectedSpaceId = '';
+}
+
+function handleOrgSelection(nextOrgId) {
+  if (selectedRegionId.length === 0) {
+    return;
+  }
+
+  if (!orgLookup.has(nextOrgId)) {
+    return;
+  }
+
+  const isTogglingOff = selectedOrgId === nextOrgId;
+  selectedOrgId = isTogglingOff ? '' : nextOrgId;
+  selectedSpaceId = '';
+}
+
+function handleSpaceSelection(nextSpaceId) {
+  const selectableSpaces = resolveSelectableSpaces();
+  if (selectableSpaces.every((space) => space !== nextSpaceId)) {
+    return;
+  }
+
+  selectedSpaceId = selectedSpaceId === nextSpaceId ? '' : nextSpaceId;
 }
 
 function handleAction(action, actionElement) {
-  const regionActionHandled = handleRegionModeAction(action);
-  if (regionActionHandled !== null) {
-    return regionActionHandled;
+  const selectionActionHandled = handleSelectionFlowAction(action);
+  if (selectionActionHandled !== null) {
+    return selectionActionHandled;
   }
 
   const tabActionHandled = handleTabAction(action, actionElement.dataset.tabId ?? '');
@@ -183,15 +257,23 @@ function handleAction(action, actionElement) {
   return false;
 }
 
-function handleRegionModeAction(action) {
+function handleSelectionFlowAction(action) {
+  if (action === 'reset-area-selection') {
+    selectedGroupId = '';
+    selectedRegionId = '';
+    selectedOrgId = '';
+    selectedSpaceId = '';
+    return true;
+  }
+
   if (action === 'confirm-region') {
-    if (selectedRegionId.length === 0) {
+    if (selectedRegionId.length === 0 || selectedOrgId.length === 0 || selectedSpaceId.length === 0) {
       return false;
     }
 
     mode = 'workspace';
     activeTabId = 'logs';
-    statusMessage = 'Region confirmed. Connect Cloud Foundry to load logs.';
+    statusMessage = 'Scope confirmed. Connect Cloud Foundry to load logs.';
     return true;
   }
 
@@ -317,8 +399,8 @@ function renderPrototype() {
 
 function renderSelectionScreen() {
   const selectedGroup = groupLookup.get(selectedGroupId);
-  const regionPanelMarkup =
-    selectedGroup === undefined ? renderEmptyRegionPanel() : renderSelectedGroupPanel(selectedGroup);
+  const selectedRegion = resolveSelectedRegion();
+  const selectedOrg = resolveSelectedOrg();
 
   return `
     <header class="shell-header">
@@ -326,64 +408,66 @@ function renderSelectionScreen() {
     </header>
 
     <div class="groups" role="list">
-      <section class="group-card area-stage" aria-label="Area selector">
-        <div class="group-head">
-          <h2>Choose Area</h2>
-          <span class="group-count">${REGION_GROUPS.length}</span>
-        </div>
-        <div class="area-picker" role="listbox" aria-label="SAP area groups">
-          ${renderAreaPicker()}
-        </div>
-      </section>
-
-      ${regionPanelMarkup}
-
+      ${renderAreaStage(selectedGroup)}
+      ${selectedGroup === undefined ? renderEmptyRegionPanel() : renderSelectedGroupPanel(selectedGroup)}
+      ${selectedRegion === undefined ? '' : renderOrgStage(selectedRegion)}
+      ${selectedOrg === undefined ? '' : renderSpaceStage(selectedOrg)}
       ${renderConfirmPanel()}
     </div>
   `;
 }
 
-function renderConfirmPanel() {
-  const selectedRegion = resolveSelectedRegion();
-  const summary =
-    selectedRegion === undefined
-      ? 'Choose one region before continuing.'
-      : `${selectedRegion.name} (${selectedRegion.code.toUpperCase()}) is ready.`;
+function renderAreaStage(selectedGroup) {
+  const isCollapsed = selectedGroup !== undefined;
 
   return `
-    <section class="group-card confirm-stage" aria-label="Region confirmation">
-      <p class="confirm-summary">${summary}</p>
-      <button
-        type="button"
-        class="confirm-button"
-        data-action="confirm-region"
-        ${selectedRegion === undefined ? 'disabled' : ''}
-      >
-        Confirm Region
-      </button>
+    <section class="group-card area-stage" aria-label="Area selector">
+      <div class="group-head">
+        <h2>Choose Area</h2>
+        ${
+          isCollapsed
+            ? '<button type="button" class="stage-reset" data-action="reset-area-selection">Change</button>'
+            : `<span class="group-count">${REGION_GROUPS.length}</span>`
+        }
+      </div>
+      <div class="area-picker${isCollapsed ? ' is-collapsed' : ''}" role="listbox" aria-label="SAP area groups">
+        ${renderAreaPicker(selectedGroup)}
+      </div>
     </section>
   `;
 }
 
-function renderAreaPicker() {
-  return REGION_GROUPS.map((group) => {
-    const isActive = group.id === selectedGroupId;
-    return `
-      <button
-        type="button"
-        class="area-option${isActive ? ' is-active' : ''}"
-        data-group-id="${group.id}"
-        aria-pressed="${isActive}"
-      >
-        <span class="area-label">${group.label}</span>
-        <span class="area-meta">${group.regions.length} regions</span>
-      </button>
-    `;
-  }).join('');
+function renderAreaPicker(selectedGroup) {
+  const groupsToRender = selectedGroup === undefined ? REGION_GROUPS : [selectedGroup];
+
+  return groupsToRender
+    .map((group) => {
+      const isActive = group.id === selectedGroupId;
+      return `
+        <button
+          type="button"
+          class="area-option${isActive ? ' is-active' : ''}"
+          data-group-id="${group.id}"
+          aria-pressed="${isActive}"
+        >
+          <span class="area-label">${group.label}</span>
+          <span class="area-meta">${group.regions.length} regions</span>
+        </button>
+      `;
+    })
+    .join('');
 }
 
 function renderSelectedGroupPanel(group) {
-  const regionOptionsMarkup = group.regions
+  const isRegionCollapsed = selectedRegionId.length > 0;
+  const selectedRegion = resolveSelectedRegion();
+  const visibleRegions = isRegionCollapsed ? group.regions.filter((region) => region.id === selectedRegionId) : group.regions;
+  const helperText =
+    selectedRegion === undefined
+      ? 'Select one region to continue to organization scope.'
+      : 'Click selected region again to reveal full region list.';
+
+  const regionOptionsMarkup = visibleRegions
     .map((region) => {
       const isSelected = region.id === selectedRegionId;
       return `
@@ -403,12 +487,107 @@ function renderSelectedGroupPanel(group) {
   return `
     <section class="group-card" aria-label="Region list">
       <div class="group-head">
-        <h2>${group.label} Regions</h2>
-        <span class="group-count">${group.regions.length}</span>
+        <h2>Choose Region</h2>
+        <span class="group-count">${visibleRegions.length}</span>
       </div>
-      <div class="region-layout ${activeDesign.layout}">
+      <p class="stage-helper">${helperText}</p>
+      <div class="region-layout ${activeDesign.layout}${isRegionCollapsed ? ' is-collapsed' : ''}">
         ${regionOptionsMarkup}
       </div>
+    </section>
+  `;
+}
+
+function renderOrgStage(selectedRegion) {
+  const orgButtons = ORG_OPTIONS.map((org) => {
+    const isSelected = org.id === selectedOrgId;
+    return `
+      <button
+        type="button"
+        class="org-option${isSelected ? ' is-selected' : ''}"
+        data-org-id="${org.id}"
+        aria-pressed="${isSelected}"
+      >
+        ${org.name}
+      </button>
+    `;
+  }).join('');
+
+  return `
+    <section class="group-card org-stage" aria-label="Organization list">
+      <div class="group-head">
+        <h2>Choose Organization</h2>
+        <span class="group-count">${ORG_OPTIONS.length}</span>
+      </div>
+      <p class="stage-helper">Scope for ${selectedRegion.name} (${selectedRegion.code.toUpperCase()})</p>
+      <div class="org-picker">
+        ${orgButtons}
+      </div>
+    </section>
+  `;
+}
+
+function renderSpaceStage(selectedOrg) {
+  const spaceButtons = selectedOrg.spaces
+    .map((space) => {
+      const isSelected = space === selectedSpaceId;
+      return `
+        <button
+          type="button"
+          class="space-option${isSelected ? ' is-selected' : ''}"
+          data-space-id="${space}"
+          aria-pressed="${isSelected}"
+        >
+          ${space}
+        </button>
+      `;
+    })
+    .join('');
+
+  return `
+    <section class="group-card space-stage" aria-label="Space list">
+      <div class="group-head">
+        <h2>Choose Space</h2>
+        <span class="group-count">${selectedOrg.spaces.length}</span>
+      </div>
+      <p class="stage-helper">Spaces in ${selectedOrg.name}</p>
+      <div class="space-picker">
+        ${spaceButtons}
+      </div>
+    </section>
+  `;
+}
+
+function renderConfirmPanel() {
+  const selectedRegion = resolveSelectedRegion();
+  const selectedOrg = resolveSelectedOrg();
+  const isReady = selectedRegion !== undefined && selectedOrg !== undefined && selectedSpaceId.length > 0;
+
+  let summary = 'Select an area to start.';
+  if (selectedGroupId.length > 0) {
+    summary = 'Select one region to continue.';
+  }
+  if (selectedRegion !== undefined) {
+    summary = 'Select one organization to complete scope.';
+  }
+  if (selectedOrg !== undefined) {
+    summary = 'Select one space to complete scope.';
+  }
+  if (isReady) {
+    summary = `${selectedRegion.name} • ${selectedOrg.name} • ${selectedSpaceId} ready for confirmation.`;
+  }
+
+  return `
+    <section class="group-card confirm-stage" aria-label="Region confirmation">
+      <p class="confirm-summary">${summary}</p>
+      <button
+        type="button"
+        class="confirm-button"
+        data-action="confirm-region"
+        ${isReady ? '' : 'disabled'}
+      >
+        Confirm Scope
+      </button>
     </section>
   `;
 }
@@ -424,10 +603,13 @@ function renderEmptyRegionPanel() {
 
 function renderWorkspaceScreen() {
   const selectedRegion = resolveSelectedRegion();
+  const selectedOrg = resolveSelectedOrg();
+  const selectedSpace = selectedSpaceId.length > 0 ? selectedSpaceId : 'No space selected';
   const regionLabel =
     selectedRegion === undefined
       ? 'No region selected'
       : `${selectedRegion.name} (${selectedRegion.code.toUpperCase()})`;
+  const orgLabel = selectedOrg?.name ?? 'No org selected';
   const statusClass = isConnected ? 'is-connected' : 'is-disconnected';
 
   return `
@@ -435,8 +617,8 @@ function renderWorkspaceScreen() {
       <h1>Monitoring Workspace</h1>
       <div class="workspace-context">
         <span class="context-pill">Region: ${regionLabel}</span>
-        <span class="context-pill">Org: demo-org</span>
-        <span class="context-pill">Space: prod</span>
+        <span class="context-pill">Org: ${orgLabel}</span>
+        <span class="context-pill">Space: ${selectedSpace}</span>
         <span class="connection-state ${statusClass}">${isConnected ? 'Connected' : 'Disconnected'}</span>
       </div>
       <button type="button" class="secondary-action" data-action="change-region">Change Region</button>
@@ -488,7 +670,7 @@ function renderLogsTab() {
     return `
       <section class="group-card logs-empty-state">
         <h2>Logs</h2>
-        <p>Cloud Foundry target is not connected for this region yet.</p>
+        <p>Cloud Foundry target is not connected for this scope yet.</p>
         <button type="button" class="primary-action" data-action="connect-cf">Connect Cloud Foundry</button>
       </section>
     `;
@@ -496,7 +678,6 @@ function renderLogsTab() {
 
   const filteredLogs = getFilteredLogs();
   const selectedLog = resolveSelectedLog(filteredLogs);
-  const detailMarkup = selectedLog === undefined ? renderEmptyLogDetails() : renderLogDetails(selectedLog);
 
   return `
     <section class="group-card logs-panel">
@@ -505,7 +686,7 @@ function renderLogsTab() {
       ${renderLogsFilters()}
       ${statusMessage.length > 0 ? `<p class="status-note">${escapeHtml(statusMessage)}</p>` : ''}
       ${renderLogsTable(filteredLogs, selectedLog?.id ?? '')}
-      ${detailMarkup}
+      ${selectedLog === undefined ? renderEmptyLogDetails() : renderLogDetails(selectedLog)}
     </section>
   `;
 }
@@ -543,8 +724,8 @@ function renderLogsFilters() {
 
   return `
     <div class="scope-row">
-      <span class="scope-chip">Org: demo-org</span>
-      <span class="scope-chip">Space: prod</span>
+      <span class="scope-chip">Org: ${resolveSelectedOrg()?.name ?? 'n/a'}</span>
+      <span class="scope-chip">Space: ${selectedSpaceId.length > 0 ? selectedSpaceId : 'n/a'}</span>
       <span class="scope-chip">App: all</span>
       <span class="scope-chip">Range: 15m</span>
     </div>
@@ -638,6 +819,14 @@ function getFilteredLogs() {
 
 function resolveSelectedRegion() {
   return regionLookup.get(selectedRegionId);
+}
+
+function resolveSelectedOrg() {
+  return orgLookup.get(selectedOrgId);
+}
+
+function resolveSelectableSpaces() {
+  return resolveSelectedOrg()?.spaces ?? [];
 }
 
 function resolveSelectedLog(logs) {
