@@ -115,6 +115,7 @@ let statusMessage = '';
 let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
 let pendingSelectionMotion = null;
+const pendingStageHeightMotions = new Map();
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -130,6 +131,7 @@ appElement.addEventListener('click', (event) => {
     const nextGroupId = areaButton.dataset.groupId ?? '';
     if (selectedGroupId !== nextGroupId) {
       queueSelectionMotion(areaButton, buildDataSelector('data-group-id', nextGroupId));
+      queueStageHeightMotion('area');
     }
     handleGroupSelection(nextGroupId);
     rerenderWithSelectionMotion();
@@ -139,9 +141,8 @@ appElement.addEventListener('click', (event) => {
   const regionButton = target.closest('[data-region-id]');
   if (regionButton instanceof HTMLButtonElement) {
     const nextRegionId = regionButton.dataset.regionId ?? '';
-    if (selectedRegionId !== nextRegionId) {
-      queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
-    }
+    queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
+    queueStageHeightMotion('region');
     handleRegionSelection(nextRegionId);
     rerenderWithSelectionMotion();
     return;
@@ -150,9 +151,8 @@ appElement.addEventListener('click', (event) => {
   const orgButton = target.closest('[data-org-id]');
   if (orgButton instanceof HTMLButtonElement) {
     const nextOrgId = orgButton.dataset.orgId ?? '';
-    if (selectedOrgId !== nextOrgId) {
-      queueSelectionMotion(orgButton, buildDataSelector('data-org-id', nextOrgId));
-    }
+    queueSelectionMotion(orgButton, buildDataSelector('data-org-id', nextOrgId));
+    queueStageHeightMotion('org');
     handleOrgSelection(nextOrgId);
     rerenderWithSelectionMotion();
     return;
@@ -161,9 +161,8 @@ appElement.addEventListener('click', (event) => {
   const spaceButton = target.closest('[data-space-id]');
   if (spaceButton instanceof HTMLButtonElement) {
     const nextSpaceId = spaceButton.dataset.spaceId ?? '';
-    if (selectedSpaceId !== nextSpaceId) {
-      queueSelectionMotion(spaceButton, buildDataSelector('data-space-id', nextSpaceId));
-    }
+    queueSelectionMotion(spaceButton, buildDataSelector('data-space-id', nextSpaceId));
+    queueStageHeightMotion('space');
     handleSpaceSelection(nextSpaceId);
     rerenderWithSelectionMotion();
     return;
@@ -174,6 +173,7 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  queueStageHeightMotionByAction(actionElement.dataset.action ?? '');
   if (handleAction(actionElement.dataset.action ?? '', actionElement)) {
     rerenderWithSelectionMotion();
   }
@@ -434,6 +434,7 @@ function renderPrototype() {
 
 function rerenderWithSelectionMotion() {
   renderPrototype();
+  playStageHeightMotions();
   playSelectionMotion();
 }
 
@@ -448,6 +449,11 @@ function queueSelectionMotion(optionElement, selector) {
 
 function playSelectionMotion() {
   if (pendingSelectionMotion === null) {
+    return;
+  }
+
+  if (prefersReducedMotion()) {
+    pendingSelectionMotion = null;
     return;
   }
 
@@ -481,6 +487,87 @@ function playSelectionMotion() {
   pendingSelectionMotion = null;
 }
 
+function queueStageHeightMotion(stageId) {
+  if (mode !== 'selection') {
+    return;
+  }
+
+  const stage = appElement.querySelector(buildStageSelector(stageId));
+  if (!(stage instanceof HTMLElement)) {
+    return;
+  }
+
+  pendingStageHeightMotions.set(stageId, stage.getBoundingClientRect().height);
+}
+
+function queueStageHeightMotionByAction(action) {
+  if (action === 'reset-area-selection') {
+    queueStageHeightMotion('area');
+    return;
+  }
+
+  if (action === 'reset-region-selection') {
+    queueStageHeightMotion('region');
+    return;
+  }
+
+  if (action === 'reset-org-selection') {
+    queueStageHeightMotion('org');
+    return;
+  }
+
+  if (action === 'reset-space-selection') {
+    queueStageHeightMotion('space');
+  }
+}
+
+function playStageHeightMotions() {
+  if (pendingStageHeightMotions.size === 0) {
+    return;
+  }
+
+  const shouldReduceMotion = prefersReducedMotion();
+
+  for (const [stageId, startHeight] of pendingStageHeightMotions.entries()) {
+    const stage = appElement.querySelector(buildStageSelector(stageId));
+    if (!(stage instanceof HTMLElement)) {
+      continue;
+    }
+
+    const endHeight = stage.getBoundingClientRect().height;
+    if (shouldReduceMotion || Math.abs(startHeight - endHeight) < 1) {
+      continue;
+    }
+
+    stage.style.overflow = 'hidden';
+    const animation = stage.animate(
+      [{ height: `${startHeight}px` }, { height: `${endHeight}px` }],
+      {
+        duration: 220,
+        easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)',
+        fill: 'both',
+      }
+    );
+
+    animation.addEventListener('finish', () => {
+      stage.style.overflow = '';
+    });
+    animation.addEventListener('cancel', () => {
+      stage.style.overflow = '';
+    });
+  }
+
+  pendingStageHeightMotions.clear();
+}
+
+function prefersReducedMotion() {
+  if (typeof window.matchMedia !== 'function') {
+    return false;
+  }
+
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 function buildDataSelector(attribute, value) {
   const escapedValue =
     typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
@@ -488,6 +575,10 @@ function buildDataSelector(attribute, value) {
       : value.replaceAll('"', '\\"');
 
   return `[${attribute}="${escapedValue}"]`;
+}
+
+function buildStageSelector(stageId) {
+  return `[data-stage-id="${stageId}"]`;
 }
 
 function renderSelectionScreen() {
@@ -514,7 +605,7 @@ function renderAreaStage(selectedGroup) {
   const isCollapsed = selectedGroup !== undefined;
 
   return `
-    <section class="group-card area-stage" aria-label="Area selector">
+    <section class="group-card area-stage" aria-label="Area selector" data-stage-id="area">
       <div class="group-head">
         <h2>Choose Area</h2>
         ${
@@ -575,7 +666,7 @@ function renderSelectedGroupPanel(group) {
     .join('');
 
   return `
-    <section class="group-card" aria-label="Region list">
+    <section class="group-card" aria-label="Region list" data-stage-id="region">
       <div class="group-head">
         <h2>Choose Region</h2>
         <button
@@ -613,7 +704,7 @@ function renderOrgStage() {
   }).join('');
 
   return `
-    <section class="group-card org-stage" aria-label="Organization list">
+    <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
       <div class="group-head">
         <h2>Choose Organization</h2>
         <button
@@ -653,7 +744,7 @@ function renderSpaceStage(selectedOrg) {
     .join('');
 
   return `
-    <section class="group-card space-stage" aria-label="Space list">
+    <section class="group-card space-stage" aria-label="Space list" data-stage-id="space">
       <div class="group-head">
         <h2>Choose Space</h2>
         <button

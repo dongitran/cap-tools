@@ -382,3 +382,38 @@
 4. Playwright local check on `docs/designs/prototypes/index.html`:
 - after selecting a region, only one region option remains visible
 - selected region has active move animation behavior when collapsing
+
+---
+
+# Follow-up Plan: Stage Container Height Animation
+
+## Goal
+1. Keep selected-item FLIP movement as-is.
+2. Add smooth container collapse/expand for each selection stage:
+- `Choose Area`
+- `Choose Region`
+- `Choose Organization`
+- `Choose Space`
+3. Keep hidden items instant-hide while the selected item and stage container animate.
+
+## Planned Changes
+1. Update `prototype.js` motion pipeline.
+- Add stage-height motion queue with pre-render measurements.
+- Trigger stage measurement before state transitions on selection actions and reset actions.
+- Play stage height animation after re-render, alongside existing selected-item FLIP motion.
+
+2. Update stage markup in `prototype.js`.
+- Add stable stage identifiers to each stage container for reliable pre/post render targeting.
+
+3. Update `prototype.css`.
+- Add safe overflow behavior for animated stage containers.
+- Add reduced-motion fallback to disable heavy motion when user prefers reduced motion.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Playwright local check:
+- selecting an option collapses same stage container with smooth height change
+- selected option still moves toward its new position
+- reset (`Change`) re-expands stage with smooth container height animation

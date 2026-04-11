@@ -896,6 +896,20 @@ body.pattern-dots::before {
   color: var(--text-color);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .group-card {
+    animation: none;
+  }
+
+  .area-option,
+  .region-option,
+  .org-option,
+  .space-option,
+  .confirm-button {
+    transition: none;
+  }
+}
+
 @media (max-width: 560px) {
   .shell-header {
     padding: 12px 10px 9px;
