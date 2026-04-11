@@ -10,12 +10,17 @@ const designIdRaw = Number.parseInt(document.body.dataset.designId ?? '1', 10);
 const activeDesign =
   DESIGN_CATALOG.find((design) => design.id === designIdRaw) ?? DESIGN_CATALOG[0];
 
+const groupLookup = new Map(REGION_GROUPS.map((group) => [group.id, group]));
 const regionLookup = new Map(
   REGION_GROUPS.flatMap((group) => group.regions.map((region) => [region.id, region]))
 );
+const regionGroupLookup = new Map(
+  REGION_GROUPS.flatMap((group) => group.regions.map((region) => [region.id, group.id]))
+);
 
-let selectedRegionId = REGION_GROUPS[0]?.regions[0]?.id ?? '';
-const outputMessages = ['Waiting for selection...'];
+let selectedGroupId = '';
+let selectedRegionId = '';
+const outputMessages = ['Select an area to reveal available regions.'];
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -26,6 +31,27 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  const areaButton = target.closest('[data-group-id]');
+  if (areaButton instanceof HTMLButtonElement) {
+    const nextGroupId = areaButton.dataset.groupId ?? '';
+    const nextGroup = groupLookup.get(nextGroupId);
+    if (nextGroup === undefined) {
+      return;
+    }
+
+    const didChangeGroup = selectedGroupId !== nextGroupId;
+    selectedGroupId = nextGroupId;
+
+    if (didChangeGroup) {
+      selectedRegionId = '';
+      outputMessages.push(`[${timestampNow()}] Area selected: ${nextGroup.label}`);
+      trimOutputMessages();
+    }
+
+    renderPrototype();
+    return;
+  }
+
   const regionButton = target.closest('[data-region-id]');
   if (!(regionButton instanceof HTMLButtonElement)) {
     return;
@@ -33,15 +59,16 @@ appElement.addEventListener('click', (event) => {
 
   const nextRegionId = regionButton.dataset.regionId ?? '';
   const selectedRegion = regionLookup.get(nextRegionId);
-  if (selectedRegion === undefined) {
+  const nextGroupId = regionGroupLookup.get(nextRegionId) ?? '';
+
+  if (selectedRegion === undefined || nextGroupId.length === 0) {
     return;
   }
 
+  selectedGroupId = nextGroupId;
   selectedRegionId = nextRegionId;
   outputMessages.push(`[${timestampNow()}] Selected ${selectedRegion.name} (${selectedRegion.code})`);
-  if (outputMessages.length > 4) {
-    outputMessages.shift();
-  }
+  trimOutputMessages();
 
   renderPrototype();
 });
@@ -66,37 +93,10 @@ function applyDesignTokens(design) {
 }
 
 function renderPrototype() {
-  const groupedRegionMarkup = REGION_GROUPS.map((group, groupIndex) => {
-    const optionsMarkup = group.regions
-      .map((region) => {
-        const isSelected = region.id === selectedRegionId;
-        return `
-          <button
-            type="button"
-            class="region-option${isSelected ? ' is-selected' : ''}"
-            data-region-id="${region.id}"
-            aria-pressed="${isSelected}"
-          >
-            <span class="region-name">${region.name}</span>
-            <span class="region-code">${region.code}</span>
-          </button>
-        `;
-      })
-      .join('');
-
-    return `
-      <section class="group-card" style="animation-delay: ${groupIndex * 30}ms;">
-        <div class="group-head">
-          <h2>${group.label}</h2>
-          <span class="group-count">${group.regions.length}</span>
-        </div>
-        <div class="region-layout ${activeDesign.layout}">
-          ${optionsMarkup}
-        </div>
-      </section>
-    `;
-  }).join('');
-
+  const selectedGroup = groupLookup.get(selectedGroupId);
+  const areaPickerMarkup = renderAreaPicker();
+  const regionPanelMarkup =
+    selectedGroup === undefined ? renderEmptyRegionPanel() : renderSelectedGroupPanel(selectedGroup);
   const outputMarkup = outputMessages
     .map((line) => `<p class="output-line">${line}</p>`)
     .join('');
@@ -117,7 +117,17 @@ function renderPrototype() {
       </div>
 
       <div class="groups" role="list">
-        ${groupedRegionMarkup}
+        <section class="group-card area-stage" aria-label="Area selector">
+          <div class="group-head">
+            <h2>Choose Area</h2>
+            <span class="group-count">${REGION_GROUPS.length}</span>
+          </div>
+          <div class="area-picker" role="listbox" aria-label="SAP area groups">
+            ${areaPickerMarkup}
+          </div>
+        </section>
+
+        ${regionPanelMarkup}
       </div>
 
       <footer class="output-box">
@@ -128,6 +138,69 @@ function renderPrototype() {
       </footer>
     </section>
   `;
+}
+
+function renderAreaPicker() {
+  return REGION_GROUPS.map((group) => {
+    const isActive = group.id === selectedGroupId;
+    return `
+      <button
+        type="button"
+        class="area-option${isActive ? ' is-active' : ''}"
+        data-group-id="${group.id}"
+        aria-pressed="${isActive}"
+      >
+        <span class="area-label">${group.label}</span>
+        <span class="area-meta">${group.regions.length} regions</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderSelectedGroupPanel(group) {
+  const regionOptionsMarkup = group.regions
+    .map((region) => {
+      const isSelected = region.id === selectedRegionId;
+      return `
+        <button
+          type="button"
+          class="region-option${isSelected ? ' is-selected' : ''}"
+          data-region-id="${region.id}"
+          aria-pressed="${isSelected}"
+        >
+          <span class="region-name">${region.name}</span>
+          <span class="region-code">${region.code}</span>
+        </button>
+      `;
+    })
+    .join('');
+
+  return `
+    <section class="group-card" aria-label="Region list">
+      <div class="group-head">
+        <h2>${group.label} Regions</h2>
+        <span class="group-count">${group.regions.length}</span>
+      </div>
+      <div class="region-layout ${activeDesign.layout}">
+        ${regionOptionsMarkup}
+      </div>
+    </section>
+  `;
+}
+
+function renderEmptyRegionPanel() {
+  return `
+    <section class="group-card empty-panel" aria-live="polite">
+      <p class="empty-title">No area selected yet</p>
+      <p class="empty-description">Pick an area above to reveal region options.</p>
+    </section>
+  `;
+}
+
+function trimOutputMessages() {
+  if (outputMessages.length > 4) {
+    outputMessages.shift();
+  }
 }
 
 function timestampNow() {

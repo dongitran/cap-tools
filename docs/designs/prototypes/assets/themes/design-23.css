@@ -1,0 +1,43 @@
+body.theme-23 {
+  --title-font: "Georgia", "Times New Roman", serif;
+  --body-font: "Georgia", "Times New Roman", serif;
+}
+
+body.theme-23 .shell-header {
+  border-bottom-style: double;
+  border-bottom-width: 4px;
+}
+
+body.theme-23 .shell-subline {
+  font-style: italic;
+}
+
+body.theme-23 .meta-strip {
+  grid-template-columns: 1fr;
+}
+
+body.theme-23 .area-picker {
+  grid-template-columns: 1fr;
+}
+
+body.theme-23 .area-option {
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+
+body.theme-23 .group-card {
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
+}
+
+body.theme-23 .region-option {
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--border-color);
+  background: transparent;
+}

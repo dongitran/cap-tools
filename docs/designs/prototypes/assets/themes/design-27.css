@@ -1,0 +1,32 @@
+body.theme-27 .shell-header,
+body.theme-27 .meta-strip {
+  background: transparent;
+}
+
+body.theme-27 .area-picker {
+  grid-template-columns: 1fr;
+}
+
+body.theme-27 .area-option {
+  border-radius: 10px;
+  border-width: 2px;
+  border-style: solid;
+}
+
+body.theme-27 .group-card {
+  border-radius: 10px;
+  border-width: 2px;
+  border-style: solid;
+  background: color-mix(in oklab, var(--surface-bg) 94%, white);
+}
+
+body.theme-27 .region-option {
+  border-radius: 10px;
+  border-width: 2px;
+  font-weight: 700;
+}
+
+body.theme-27 .output-stream {
+  border-width: 2px;
+  border-radius: 10px;
+}

@@ -1,0 +1,29 @@
+body.theme-28 .shell-header {
+  border-bottom-width: 0;
+}
+
+body.theme-28 .meta-strip {
+  border-top: 1px solid var(--border-color);
+}
+
+body.theme-28 .area-option {
+  border-radius: 999px;
+  border-style: dashed;
+  background: color-mix(in oklab, var(--frame-bg) 88%, white);
+}
+
+body.theme-28 .group-card {
+  border-radius: 24px;
+  border-color: color-mix(in oklab, var(--accent-color) 36%, white);
+  background: color-mix(in oklab, var(--surface-bg) 84%, white);
+}
+
+body.theme-28 .region-option {
+  border-radius: 999px;
+  border-style: solid;
+  border-width: 1px;
+}
+
+body.theme-28 .output-stream {
+  border-radius: 14px;
+}

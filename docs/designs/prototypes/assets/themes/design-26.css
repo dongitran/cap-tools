@@ -1,0 +1,33 @@
+body.theme-26 .shell-header h1 {
+  letter-spacing: 0.06em;
+}
+
+body.theme-26 .area-picker {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.theme-26 .area-option {
+  border-radius: 3px;
+  border-style: solid;
+  border-width: 1px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--accent-color) 10%, white), transparent);
+}
+
+body.theme-26 .group-card {
+  border-radius: 3px;
+  border-style: solid;
+  border-width: 1px;
+}
+
+body.theme-26 .region-layout.rows,
+body.theme-26 .region-layout.grid,
+body.theme-26 .region-layout.cards {
+  grid-template-columns: 1fr;
+}
+
+body.theme-26 .region-option {
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

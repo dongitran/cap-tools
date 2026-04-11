@@ -239,6 +239,10 @@ body.pattern-dots::before {
   animation: float-in 280ms ease;
 }
 
+.area-stage {
+  padding: 10px;
+}
+
 @keyframes float-in {
   from {
     opacity: 0;
@@ -265,6 +269,49 @@ body.pattern-dots::before {
   font-size: 0.82rem;
 }
 
+.area-picker {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.area-option {
+  border: 1px solid color-mix(in oklab, var(--border-color) 88%, white);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--frame-bg) 86%, var(--surface-bg));
+  color: var(--text-color);
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  padding: 10px 10px;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.area-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent-color) 42%, white);
+}
+
+.area-option.is-active {
+  border-color: color-mix(in oklab, var(--accent-color) 58%, white);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 22%, transparent);
+}
+
+.area-label {
+  font-family: var(--title-font);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.area-meta {
+  font-size: 0.64rem;
+  color: var(--muted-color);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .group-count {
   border: 1px solid color-mix(in oklab, var(--accent-color) 35%, white);
   color: var(--chip-text);
@@ -273,6 +320,26 @@ body.pattern-dots::before {
   font-size: 0.67rem;
   font-weight: 700;
   background: var(--accent-soft);
+}
+
+.empty-panel {
+  border-style: dashed;
+  min-height: 116px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.empty-title {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 0.8rem;
+}
+
+.empty-description {
+  margin: 0;
+  font-size: 0.73rem;
+  color: var(--muted-color);
 }
 
 .region-layout {
@@ -436,6 +503,11 @@ body.pattern-dots::before {
   .groups {
     padding: 8px;
     gap: 8px;
+  }
+
+  .area-picker {
+    grid-template-columns: 1fr;
+    gap: 7px;
   }
 
   .region-layout.grid,
