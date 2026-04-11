@@ -100,10 +100,6 @@ function renderPrototype() {
         </div>
       </header>
 
-      <div class="meta-strip">
-        <strong>${activeDesign.name}</strong>
-      </div>
-
       <div class="groups" role="list">
         <section class="group-card area-stage" aria-label="Area selector">
           <div class="group-head">

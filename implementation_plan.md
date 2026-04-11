@@ -162,3 +162,42 @@
 - Theme count is `1`, variant count is `1`.
 - No `Design 34` text in rendered header.
 - No subtitle text line shown in UI.
+
+---
+
+# Follow-up Plan: Remove Previous/Next Buttons
+
+## Goal
+1. Remove `Previous` and `Next` buttons from prototype page UI.
+2. Keep single-design page functional without navigation controls.
+
+## Planned Changes
+1. Edit `docs/designs/prototypes/index.html`.
+- Remove floating navigation `<nav>` block.
+- Remove `gallery.js` script include because navigation logic is no longer needed.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Visual check:
+- No `Previous` / `Next` buttons rendered in prototype page.
+
+---
+
+# Follow-up Plan: Remove "Solar Frame" Label
+
+## Goal
+1. Remove the `Solar Frame` text from prototype UI.
+
+## Planned Changes
+1. Edit `docs/designs/prototypes/assets/prototype.js`.
+- Remove the `meta-strip` block that renders `${activeDesign.name}`.
+- Keep header + area/region selection UI unchanged.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Visual check:
+- No `Solar Frame` text appears in the prototype interface.
