@@ -1,0 +1,34 @@
+body.theme-06 {
+  --title-font: "Arial Black", "Impact", sans-serif;
+}
+
+body.theme-06 .prototype-shell {
+  border-top: 4px solid #111111;
+  border-bottom: 4px solid #111111;
+}
+
+body.theme-06 .shell-header,
+body.theme-06 .meta-strip,
+body.theme-06 .group-card,
+body.theme-06 .region-option,
+body.theme-06 .output-stream {
+  border-width: 2px;
+  border-color: #111111;
+  border-radius: 0;
+}
+
+body.theme-06 .group-head h2,
+body.theme-06 .output-title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+body.theme-06 .region-option {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+body.theme-06 .region-option:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #111111;
+}

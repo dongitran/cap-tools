@@ -1,0 +1,35 @@
+body.theme-19 {
+  --title-font: "Rockwell", "Georgia", serif;
+  --body-font: "Georgia", "Times New Roman", serif;
+}
+
+body.theme-19 .shell-header {
+  border-bottom-style: double;
+  border-bottom-width: 4px;
+}
+
+body.theme-19 .meta-strip {
+  background: transparent;
+}
+
+body.theme-19 .groups {
+  padding-inline: 14px;
+  gap: 14px;
+}
+
+body.theme-19 .group-card {
+  border-radius: 4px;
+  border-style: solid;
+  border-width: 1px;
+  box-shadow: 0 4px 0 color-mix(in oklab, var(--accent-color) 16%, transparent);
+}
+
+body.theme-19 .region-option {
+  border-radius: 3px;
+  border-style: solid;
+  padding-block: 10px;
+}
+
+body.theme-19 .output-stream {
+  border-radius: 3px;
+}

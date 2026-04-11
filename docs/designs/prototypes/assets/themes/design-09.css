@@ -1,0 +1,33 @@
+body.theme-09 {
+  --page-bg: #08130f;
+  --frame-bg: #0f1f17;
+  --surface-bg: #0d251b;
+  --border-color: #1e4a36;
+  --text-color: #b8f5d4;
+  --muted-color: #72c39d;
+  --accent-color: #2ed18f;
+  --accent-soft: #163c2d;
+  --chip-text: #aff2d0;
+  --title-font: "Consolas", "Courier New", monospace;
+  --body-font: "Consolas", "Courier New", monospace;
+}
+
+body.theme-09 .shell-header,
+body.theme-09 .meta-strip,
+body.theme-09 .output-box {
+  border-color: #1b5d44;
+}
+
+body.theme-09 .group-card {
+  border-radius: 2px;
+  background: #0d2118;
+}
+
+body.theme-09 .region-option {
+  border-radius: 2px;
+  background: #0b1c14;
+}
+
+body.theme-09 .region-option:hover {
+  box-shadow: 0 0 0 1px #2ed18f;
+}

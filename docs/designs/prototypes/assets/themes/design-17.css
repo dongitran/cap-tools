@@ -1,0 +1,33 @@
+body.theme-17 {
+  --page-bg: #080d1e;
+  --frame-bg: #0f1730;
+  --surface-bg: #121f3d;
+  --border-color: #223564;
+  --text-color: #d9e6ff;
+  --muted-color: #89a5dc;
+  --accent-color: #53a5ff;
+  --accent-soft: #1d3160;
+  --chip-text: #d9ebff;
+}
+
+body.theme-17 .shell-header,
+body.theme-17 .meta-strip,
+body.theme-17 .output-box {
+  background: color-mix(in oklab, var(--surface-bg) 86%, black);
+}
+
+body.theme-17 .group-card {
+  border-radius: 10px;
+  border-color: color-mix(in oklab, var(--accent-color) 50%, black);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent-color) 32%, transparent),
+    0 10px 26px color-mix(in oklab, var(--accent-color) 22%, transparent);
+}
+
+body.theme-17 .region-option {
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--frame-bg) 72%, black);
+}
+
+body.theme-17 .region-option.is-selected {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 40%, transparent);
+}

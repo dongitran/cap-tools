@@ -1,0 +1,30 @@
+body.theme-14 .shell-header {
+  border-bottom-width: 0;
+}
+
+body.theme-14 .meta-strip {
+  border-top: 1px solid var(--border-color);
+}
+
+body.theme-14 .group-card {
+  border-radius: 0;
+  border: 0;
+  border-left: 6px solid var(--accent-color);
+  padding-left: 12px;
+  background: color-mix(in oklab, var(--surface-bg) 92%, white);
+}
+
+body.theme-14 .group-head h2 {
+  font-family: "Georgia", "Times New Roman", serif;
+}
+
+body.theme-14 .region-option {
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  border-bottom: 1px solid color-mix(in oklab, var(--accent-color) 22%, transparent);
+}
+
+body.theme-14 .region-option.is-selected {
+  background: color-mix(in oklab, var(--accent-soft) 80%, white);
+}

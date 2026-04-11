@@ -1,0 +1,27 @@
+body.theme-15 .prototype-shell {
+  background: color-mix(in oklab, var(--frame-bg) 58%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+body.theme-15 .shell-header,
+body.theme-15 .meta-strip,
+body.theme-15 .group-card,
+body.theme-15 .output-box,
+body.theme-15 .output-stream {
+  background: color-mix(in oklab, var(--frame-bg) 62%, white);
+  backdrop-filter: blur(6px);
+}
+
+body.theme-15 .group-card {
+  border-radius: 18px;
+  border-color: color-mix(in oklab, var(--accent-color) 26%, white);
+}
+
+body.theme-15 .region-option {
+  border-radius: 14px;
+  border-color: color-mix(in oklab, var(--accent-color) 30%, white);
+}
+
+body.theme-15 .region-option.is-selected {
+  box-shadow: 0 10px 22px color-mix(in oklab, var(--accent-color) 34%, transparent);
+}

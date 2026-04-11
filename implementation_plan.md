@@ -1,55 +1,37 @@
-# Implementation Plan - Rework Prototype Gallery UX
+# Implementation Plan: Full-Bleed UI + 20 Distinct CSS Files
 
-## Objective
-Refactor `docs/designs/prototypes/index.html` to mimic a VSCode-like left sidebar preview, remove all non-essential title/description text, keep only floating `Previous` and `Next` controls, ensure strong mobile behavior, and make 20 designs visually distinct (not just color swaps).
+## Goal
+1. Region selector prototype must render edge-to-edge (no outer rounded frame, no outer margin/padding).
+2. 20 designs must be genuinely different.
+3. Each design must use its own dedicated CSS file (20 CSS files total).
 
-## Requirements From User
-1. Sidebar simulation must sit flush on the left like VSCode.
-2. No page title/description text, no `Sidebar Simulation` label.
-3. Keep only 2 floating controls above sidebar preview: `Previous`, `Next`.
-4. Mobile rendering must remain usable.
-5. 20 design variants need stronger visual differences.
+## Problems in Current State
+- A shared `prototype-themes.css` drives all designs, causing repetitive visual patterns.
+- Base shell uses card-like framing, creating non-fullscreen sidebar feel.
 
-## Design & Technical Approach
-1. Replace gallery page structure with a two-pane workspace:
-   - left: sidebar iframe preview (fixed ~30% viewport width)
-   - right: editor-area mock panel for spatial context
-2. Remove old control panel and metadata UI.
-3. Rebuild gallery controller script for simple navigation:
-   - hash-based design state
-   - button + keyboard arrow navigation
-4. Add dedicated theme layer file (`prototype-themes.css`) containing per-design overrides (`theme-01` ... `theme-20`) affecting:
-   - panel geometry (radius, border style, shadows)
-   - typography mood
-   - group card treatment
-   - region button shape/interaction style
-   - output panel style
-5. Keep existing data catalog and variant files to preserve extensibility.
+## Change Strategy
+1. Refactor base stylesheet (`prototype.css`)
+- Convert to full-bleed shell (`width: 100%`, `min-height: 100dvh`).
+- Remove outer frame radius/border/shadow from the shell container.
+- Keep reusable, neutral component primitives only.
 
-## Step Plan
-1. Update `index.html`, `gallery.css`, `gallery.js` for the new minimal layout and controls.
-2. Run checks: `typecheck`, `lint`, `cspell`.
-3. Add and wire `prototype-themes.css` + update `prototype.js`/variant template loading for theme classes.
-4. Run checks: `typecheck`, `lint`, `cspell`.
-5. Validate via MCP Playwright on local HTTP server:
-   - load page
-   - switch with `Previous/Next`
-   - verify iframe updates and mobile layout behavior
-6. If new words appear, update `cspell.json`.
+2. Introduce per-design theme files
+- Create `docs/designs/prototypes/assets/themes/design-01.css` ... `design-20.css`.
+- Each file will define a distinct visual language (typography, spacing rhythm, card geometry, region option behavior, output style, interaction mood).
+- No theme file reintroduces outer shell rounding/padding to maintain edge-to-edge layout.
 
-## Files To Change
-- `implementation_plan.md`
-- `docs/designs/prototypes/index.html`
-- `docs/designs/prototypes/assets/gallery.css`
-- `docs/designs/prototypes/assets/gallery.js`
-- `docs/designs/prototypes/assets/prototype.js`
-- `docs/designs/prototypes/assets/prototype-themes.css` (new)
-- `docs/designs/prototypes/variants/design-01.html` ... `design-20.html` (link new theme CSS)
+3. Wire each variant to its own CSS
+- Update `docs/designs/prototypes/variants/design-01.html` ... `design-20.html`.
+- Replace shared `prototype-themes.css` with the corresponding theme file.
 
-## Risks
-- Overly heavy style overrides can reduce readability in some themes.
-- Mobile viewport might clip floating controls if top spacing is too small.
+4. Cleanup
+- Remove unused `prototype-themes.css` once all variants are migrated.
 
-## Mitigation
-- Keep contrast-safe typography defaults in base CSS and only override selectively.
-- Use explicit mobile breakpoints for sidebar width, height, and control placement.
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Visual spot checks:
+- no outer frame around shell,
+- each design visibly different,
+- mobile viewport still readable.

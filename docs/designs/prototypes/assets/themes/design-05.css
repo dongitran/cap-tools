@@ -1,0 +1,45 @@
+body.theme-05 .shell-header {
+  background: var(--frame-bg);
+}
+
+body.theme-05 .design-pill,
+body.theme-05 .group-count {
+  border-radius: 3px;
+}
+
+body.theme-05 .meta-strip {
+  background: transparent;
+  border-bottom-style: dotted;
+}
+
+body.theme-05 .group-card {
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  padding: 10px 0;
+  background: transparent;
+}
+
+body.theme-05 .groups {
+  padding: 6px 12px;
+  gap: 0;
+}
+
+body.theme-05 .region-option {
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 65%, transparent);
+  border-radius: 0;
+  padding-inline: 2px;
+  background: transparent;
+}
+
+body.theme-05 .output-box {
+  background: transparent;
+}
+
+body.theme-05 .output-stream {
+  border: 0;
+  border-left: 3px solid var(--accent-color);
+  border-radius: 0;
+  padding-left: 10px;
+}

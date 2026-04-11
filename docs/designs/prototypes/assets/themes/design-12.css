@@ -1,0 +1,29 @@
+body.theme-12 .shell-header {
+  border-bottom: 0;
+  padding-bottom: 6px;
+}
+
+body.theme-12 .meta-strip {
+  border-top: 1px solid color-mix(in oklab, var(--accent-color) 24%, white);
+}
+
+body.theme-12 .group-card {
+  border-radius: 26px;
+  border-color: color-mix(in oklab, var(--accent-color) 44%, white);
+  background:
+    radial-gradient(circle at 8% 10%, color-mix(in oklab, var(--accent-color) 20%, white), transparent 35%),
+    color-mix(in oklab, var(--surface-bg) 82%, white);
+}
+
+body.theme-12 .group-count {
+  border-radius: 6px;
+}
+
+body.theme-12 .region-option {
+  border-radius: 16px;
+  box-shadow: 0 4px 14px color-mix(in oklab, var(--accent-color) 20%, transparent);
+}
+
+body.theme-12 .output-stream {
+  border-radius: 18px;
+}
