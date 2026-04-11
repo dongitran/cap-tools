@@ -1,0 +1,84 @@
+{
+  "name": "sap-tools",
+  "displayName": "SAP Tools",
+  "description": "All-in-one toolbox for SAP BTP development workflows",
+  "version": "0.1.10",
+  "publisher": "dongtran",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dongtran/sap-tools"
+  },
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:sapTools.regionView",
+    "onCommand:sapTools.selectSapBtpRegion"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sapTools.selectSapBtpRegion",
+        "title": "SAP Tools: Open Region Menu",
+        "category": "SAP Tools"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sapTools",
+          "title": "SAP Tools",
+          "icon": "resources/sap-tools.svg"
+        }
+      ]
+    },
+    "views": {
+      "sapTools": [
+        {
+          "id": "sapTools.regionView",
+          "name": "Select SAP BTP Region"
+        }
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "resources",
+    "README.md",
+    "CHANGELOG.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -watch -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "cspell": "cspell \"**/*\" --no-progress --no-must-find-files --gitignore",
+    "test:unit": "vitest run",
+    "package": "npx @vscode/vsce package --no-dependencies",
+    "publish": "npx @vscode/vsce publish --no-dependencies",
+    "validate:root": "npm run typecheck && npm run lint && npm run cspell && npm run test:unit",
+    "validate:e2e": "npm --prefix e2e run validate",
+    "validate": "npm run validate:root && npm run validate:e2e",
+    "prepare": "husky",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^22.14.1",
+    "@types/vscode": "^1.90.0",
+    "cspell": "^8.17.1",
+    "eslint": "^9.24.0",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.29.1",
+    "vitest": "^3.1.1"
+  }
+}

@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate root project
+        run: npm run validate:root
+
+      - name: Install E2E dependencies
+        run: npm --prefix e2e ci
+
+      - name: Validate E2E project
+        run: npm --prefix e2e run validate
+
+      - name: Run E2E tests
+        run: npm --prefix e2e test
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Extract version from tag
+        id: version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package VSIX
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run package -- --out sap-tools-${{ steps.version.outputs.VERSION }}.vsix
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SAP Tools v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## SAP Tools ${{ github.ref_name }}
+
+            ### Installation
+            Download the `.vsix` file below and install via:
+            ```
+            code --install-extension sap-tools-${{ steps.version.outputs.VERSION }}.vsix
+            ```
+
+            ### Changes
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          files: sap-tools-${{ steps.version.outputs.VERSION }}.vsix
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+
+      - name: Publish to VS Marketplace
+        if: "startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-') || github.ref_type == 'branch'"
+        run: |
+          npm run publish
+          echo "Published to VS Marketplace successfully"
+        env:
+          VSCE_PAT: ${{ secrets.AZURE_PAT }}
+
+  notify:
+    name: Notify on Failure
+    needs: release
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Release failed for ${context.ref}`,
+              body: `Release workflow failed. [View run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              labels: ['bug', 'release']
+            })

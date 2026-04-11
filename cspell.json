@@ -1,0 +1,43 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "allowCompoundWords": true,
+  "ignorePaths": [
+    ".git",
+    "node_modules",
+    "dist",
+    "coverage",
+    "e2e/node_modules",
+    "e2e/playwright-report",
+    "e2e/test-results"
+  ],
+  "words": [
+    "BTP",
+    "apj",
+    "australiaeast",
+    "australiasoutheast",
+    "brazilsouth",
+    "canadacentral",
+    "centraleurope",
+    "eastasia",
+    "eastus",
+    "eastus2",
+    "germanywestcentral",
+    "japaneast",
+    "japanwest",
+    "koreacentral",
+    "northeurope",
+    "qatarcentral",
+    "saptools",
+    "southeastasia",
+    "southafricanorth",
+    "southcentralus",
+    "swedencentral",
+    "switzerlandnorth",
+    "uaenorth",
+    "uksouth",
+    "westeurope",
+    "westus",
+    "westus2"
+  ]
+}
