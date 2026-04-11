@@ -536,3 +536,39 @@
 5. `npm --prefix e2e test -- --grep "User can select one SAP BTP region in webview and output log is emitted"`
 6. `npm --prefix e2e test -- --grep "User can complete selection flow and reset via Change buttons only"`
 7. `npm --prefix e2e test -- --grep "User can confirm scope, view monitoring workspace, and switch back to selection"`
+
+---
+
+# Follow-up Plan: Prototype Gallery Theme Picker
+
+## Goal
+1. Add bottom navigation controls in `docs/designs/prototypes/index.html` with:
+- `Previous`
+- `Theme` switch button
+- `Next`
+2. Keep the prototype gallery synchronized with theme behavior equivalent to the extension webview (`vscode-light`, `vscode-dark`, `vscode-high-contrast`).
+
+## Planned Changes
+1. Update gallery template structure.
+- File: `docs/designs/prototypes/index.html`
+- Add floating nav controls and include `assets/gallery.js` as module script.
+
+2. Add theme-switch runtime logic.
+- File: `docs/designs/prototypes/assets/gallery.js`
+- Add theme scenarios and cycle logic for the new theme button.
+- Apply selected theme class to iframe document body after each load and after design navigation.
+- Keep previous/next behavior intact.
+
+3. Style nav and page chrome by selected theme.
+- File: `docs/designs/prototypes/assets/gallery.css`
+- Add theme-aware variables for gallery host (dark/light/high-contrast).
+- Ensure mobile layout remains usable.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Manual check:
+- `Previous`/`Next` still switch designs.
+- Theme button cycles dark/light/high-contrast.
+- Iframe prototype updates theme class and visual palette immediately.
