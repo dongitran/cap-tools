@@ -120,6 +120,7 @@ let pendingSelectionMotion = null;
 const pendingStageHeightMotions = new Map();
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
 const DESIGN_THEME_CLASS_PREFIX = 'theme-';
+const SELECTION_STAGE_SLOT_IDS = ['area', 'region', 'org', 'space', 'confirm'];
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -138,7 +139,7 @@ appElement.addEventListener('click', (event) => {
       queueStageHeightMotion('area');
     }
     handleGroupSelection(nextGroupId);
-    rerenderWithSelectionMotion();
+    rerenderSelectionStageSlotsWithMotion(SELECTION_STAGE_SLOT_IDS);
     return;
   }
 
@@ -151,7 +152,7 @@ appElement.addEventListener('click', (event) => {
     queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
     queueStageHeightMotion('region');
     handleRegionSelection(nextRegionId);
-    rerenderWithSelectionMotion();
+    rerenderSelectionStageSlotsWithMotion(['region', 'org', 'space', 'confirm']);
     return;
   }
 
@@ -164,7 +165,7 @@ appElement.addEventListener('click', (event) => {
     queueSelectionMotion(orgButton, buildDataSelector('data-org-id', nextOrgId));
     queueStageHeightMotion('org');
     handleOrgSelection(nextOrgId);
-    rerenderWithSelectionMotion();
+    rerenderSelectionStageSlotsWithMotion(['org', 'space', 'confirm']);
     return;
   }
 
@@ -177,7 +178,7 @@ appElement.addEventListener('click', (event) => {
     queueSelectionMotion(spaceButton, buildDataSelector('data-space-id', nextSpaceId));
     queueStageHeightMotion('space');
     handleSpaceSelection(nextSpaceId);
-    rerenderWithSelectionMotion();
+    rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
     return;
   }
 
@@ -186,10 +187,25 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
-  queueStageHeightMotionByAction(actionElement.dataset.action ?? '');
-  if (handleAction(actionElement.dataset.action ?? '', actionElement)) {
-    rerenderWithSelectionMotion();
+  const action = actionElement.dataset.action ?? '';
+  queueStageHeightMotionByAction(action);
+  const modeBeforeAction = mode;
+  if (!handleAction(action, actionElement)) {
+    return;
   }
+
+  if (mode !== modeBeforeAction || mode !== 'selection') {
+    renderPrototype();
+    return;
+  }
+
+  const affectedSlots = resolveSelectionStageSlotsForAction(action);
+  if (affectedSlots.length === 0) {
+    rerenderSelectionStageSlotsWithMotion(SELECTION_STAGE_SLOT_IDS);
+    return;
+  }
+
+  rerenderSelectionStageSlotsWithMotion(affectedSlots);
 });
 
 appElement.addEventListener('input', (event) => {
@@ -451,10 +467,26 @@ function renderPrototype() {
       ${shellMarkup}
     </section>
   `;
+
+  if (mode === 'selection') {
+    updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
+  }
 }
 
-function rerenderWithSelectionMotion() {
-  renderPrototype();
+function rerenderSelectionStageSlotsWithMotion(stageSlotIds) {
+  if (mode !== 'selection') {
+    renderPrototype();
+    return;
+  }
+
+  if (!isSelectionShellMounted()) {
+    renderPrototype();
+    playStageHeightMotions();
+    playSelectionMotion();
+    return;
+  }
+
+  updateSelectionStageSlots(stageSlotIds);
   playStageHeightMotions();
   playSelectionMotion();
 }
@@ -627,23 +659,132 @@ function postRegionSelection(region, areaLabel) {
 }
 
 function renderSelectionScreen() {
-  const selectedGroup = groupLookup.get(selectedGroupId);
-  const selectedRegion = resolveSelectedRegion();
-  const selectedOrg = resolveSelectedOrg();
-
   return `
     <header class="shell-header">
       <h1>Select SAP BTP Region</h1>
     </header>
 
     <div class="groups" role="list">
-      ${renderAreaStage(selectedGroup)}
-      ${selectedGroup === undefined ? renderEmptyRegionPanel() : renderSelectedGroupPanel(selectedGroup)}
-      ${selectedRegion === undefined ? '' : renderOrgStage()}
-      ${selectedOrg === undefined ? '' : renderSpaceStage(selectedOrg)}
-      ${renderConfirmPanel()}
+      ${renderSelectionStageSlots()}
     </div>
   `;
+}
+
+function renderSelectionStageSlots() {
+  return SELECTION_STAGE_SLOT_IDS.map((stageSlotId) => {
+    return `<div class="stage-slot" data-stage-slot="${stageSlotId}"></div>`;
+  }).join('');
+}
+
+function resolveSelectionStageSlotsForAction(action) {
+  if (action === 'reset-area-selection') {
+    return ['area', 'region', 'org', 'space', 'confirm'];
+  }
+
+  if (action === 'reset-region-selection') {
+    return ['region', 'org', 'space', 'confirm'];
+  }
+
+  if (action === 'reset-org-selection') {
+    return ['org', 'space', 'confirm'];
+  }
+
+  if (action === 'reset-space-selection') {
+    return ['space', 'confirm'];
+  }
+
+  return [];
+}
+
+function updateSelectionStageSlots(stageSlotIds) {
+  const selectedGroup = groupLookup.get(selectedGroupId);
+  const selectedRegion = resolveSelectedRegion();
+  const selectedOrg = resolveSelectedOrg();
+  const normalizedSlotIds = normalizeSelectionStageSlots(stageSlotIds);
+
+  for (const stageSlotId of normalizedSlotIds) {
+    const markup = renderSelectionStageMarkup(
+      stageSlotId,
+      selectedGroup,
+      selectedRegion,
+      selectedOrg
+    );
+    setSelectionStageSlotMarkup(stageSlotId, markup);
+  }
+}
+
+function normalizeSelectionStageSlots(stageSlotIds) {
+  const seenStageSlots = new Set();
+  const normalizedStageSlots = [];
+
+  for (const stageSlotId of stageSlotIds) {
+    if (
+      !SELECTION_STAGE_SLOT_IDS.includes(stageSlotId) ||
+      seenStageSlots.has(stageSlotId)
+    ) {
+      continue;
+    }
+
+    normalizedStageSlots.push(stageSlotId);
+    seenStageSlots.add(stageSlotId);
+  }
+
+  return normalizedStageSlots;
+}
+
+function renderSelectionStageMarkup(
+  stageSlotId,
+  selectedGroup,
+  selectedRegion,
+  selectedOrg
+) {
+  if (stageSlotId === 'area') {
+    return renderAreaStage(selectedGroup);
+  }
+
+  if (stageSlotId === 'region') {
+    return selectedGroup === undefined
+      ? renderEmptyRegionPanel()
+      : renderSelectedGroupPanel(selectedGroup);
+  }
+
+  if (stageSlotId === 'org') {
+    return selectedRegion === undefined ? '' : renderOrgStage();
+  }
+
+  if (stageSlotId === 'space') {
+    return selectedOrg === undefined ? '' : renderSpaceStage(selectedOrg);
+  }
+
+  if (stageSlotId === 'confirm') {
+    return renderConfirmPanel();
+  }
+
+  return '';
+}
+
+function setSelectionStageSlotMarkup(stageSlotId, markup) {
+  const slotElement = appElement.querySelector(
+    `[data-stage-slot="${stageSlotId}"]`
+  );
+  if (!(slotElement instanceof HTMLElement)) {
+    return;
+  }
+
+  slotElement.innerHTML = markup;
+}
+
+function isSelectionShellMounted() {
+  const groupsElement = appElement.querySelector('.groups');
+  if (!(groupsElement instanceof HTMLElement)) {
+    return false;
+  }
+
+  return SELECTION_STAGE_SLOT_IDS.every((stageSlotId) => {
+    return (
+      appElement.querySelector(`[data-stage-slot="${stageSlotId}"]`) !== null
+    );
+  });
 }
 
 function renderAreaStage(selectedGroup) {

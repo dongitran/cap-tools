@@ -67,6 +67,14 @@ interface PaletteSnapshot {
   readonly shellBrightness: number;
 }
 
+interface ShellNodeStabilitySnapshot {
+  readonly sameShellNode: boolean;
+  readonly sameHeaderNode: boolean;
+  readonly sameGroupsNode: boolean;
+  readonly sameAreaSlotNode: boolean;
+  readonly sameRegionSlotNode: boolean;
+}
+
 interface ExtensionHostLaunchOptions {
   readonly colorTheme?: string;
 }
@@ -318,6 +326,101 @@ test.describe('SAP Tools region selector', () => {
       expect(classesAfterSelection).toEqual(
         expect.arrayContaining(initialThemeClasses)
       );
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can select area and region without recreating selection shell nodes', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      const hasInitialStageSlots = await webviewFrame.evaluate(() => {
+        const shellElement = document.querySelector('.prototype-shell');
+        const headerElement = document.querySelector('.shell-header');
+        const groupsElement = document.querySelector('.groups');
+        const areaSlotElement = document.querySelector('[data-stage-slot="area"]');
+        const regionSlotElement = document.querySelector(
+          '[data-stage-slot="region"]'
+        );
+
+        if (
+          !(shellElement instanceof HTMLElement) ||
+          !(headerElement instanceof HTMLElement) ||
+          !(groupsElement instanceof HTMLElement) ||
+          !(areaSlotElement instanceof HTMLElement) ||
+          !(regionSlotElement instanceof HTMLElement)
+        ) {
+          return false;
+        }
+
+        const runtimeWindow = window as Window & {
+          __sapToolsSelectionRefs?: {
+            shell: HTMLElement;
+            header: HTMLElement;
+            groups: HTMLElement;
+            areaSlot: HTMLElement;
+            regionSlot: HTMLElement;
+          };
+        };
+
+        runtimeWindow.__sapToolsSelectionRefs = {
+          shell: shellElement,
+          header: headerElement,
+          groups: groupsElement,
+          areaSlot: areaSlotElement,
+          regionSlot: regionSlotElement,
+        };
+
+        return true;
+      });
+      expect(hasInitialStageSlots).toBe(true);
+
+      await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
+      await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+
+      const shellNodeStability = await webviewFrame.evaluate(() => {
+        const runtimeWindow = window as Window & {
+          __sapToolsSelectionRefs?: {
+            shell: HTMLElement;
+            header: HTMLElement;
+            groups: HTMLElement;
+            areaSlot: HTMLElement;
+            regionSlot: HTMLElement;
+          };
+        };
+
+        const refs = runtimeWindow.__sapToolsSelectionRefs;
+        if (refs === undefined) {
+          throw new Error('Selection shell references are missing.');
+        }
+
+        const shellElement = document.querySelector('.prototype-shell');
+        const headerElement = document.querySelector('.shell-header');
+        const groupsElement = document.querySelector('.groups');
+        const areaSlotElement = document.querySelector('[data-stage-slot="area"]');
+        const regionSlotElement = document.querySelector(
+          '[data-stage-slot="region"]'
+        );
+
+        return {
+          sameShellNode: shellElement === refs.shell,
+          sameHeaderNode: headerElement === refs.header,
+          sameGroupsNode: groupsElement === refs.groups,
+          sameAreaSlotNode: areaSlotElement === refs.areaSlot,
+          sameRegionSlotNode: regionSlotElement === refs.regionSlot,
+        };
+      });
+
+      const expectedStabilitySnapshot: ShellNodeStabilitySnapshot = {
+        sameShellNode: true,
+        sameHeaderNode: true,
+        sameGroupsNode: true,
+        sameAreaSlotNode: true,
+        sameRegionSlotNode: true,
+      };
+      expect(shellNodeStability).toEqual(expectedStabilitySnapshot);
     } finally {
       await cleanupExtensionHost(session);
     }

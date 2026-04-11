@@ -572,3 +572,47 @@
 - `Previous`/`Next` still switch designs.
 - Theme button cycles dark/light/high-contrast.
 - Iframe prototype updates theme class and visual palette immediately.
+
+---
+
+# Follow-up Plan: Partial Stage Rendering for Selection UX
+
+## Goal
+1. Eliminate full-page webview rerender on each selection click.
+2. Update only affected parent stage components (`Choose Area`, `Choose Region`, `Choose Organization`, `Choose Space`, `Confirm`) during selection flow.
+3. Preserve existing interaction behavior, animations, and VS Code message logging.
+
+## Root Cause
+- `docs/designs/prototypes/assets/prototype.js` currently calls `renderPrototype()` (full `appElement.innerHTML` replacement) for every selection action and many workspace actions.
+- Full replacement recreates all DOM nodes, causing visible flicker and unnecessary layout churn.
+
+## Planned Changes
+1. Introduce stable selection shell with stage slots.
+- Keep top-level shell/header and `.groups` container persistent while in selection mode.
+- Add dedicated slot hosts for each stage and render stage content into slots.
+
+2. Add targeted stage rerender pipeline.
+- Create stage-id constants and rerender helpers that update only requested slots.
+- Map each selection action to an explicit impacted stage list.
+- Keep existing FLIP/height animation pipeline, but execute after targeted stage updates.
+
+3. Keep full-shell render only for mode transitions.
+- Use full render when switching between `selection` and `workspace` modes.
+- Keep workspace rendering behavior unchanged for now.
+
+4. Expand E2E coverage for partial rendering behavior.
+- Add a regression test that verifies shell/header/group container nodes are preserved across selection interactions.
+- Keep existing flow and theme tests.
+
+5. Validate and release hygiene.
+- Run strict checks and E2E suite.
+- Bump extension version if extension-facing behavior changed.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. `npm run test:unit`
+5. `npm --prefix e2e run validate`
+6. Run E2E tests individually (`--grep`) and full suite.
+7. `npm run validate`

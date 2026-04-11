@@ -360,6 +360,10 @@ body.pattern-dots::before {
   border-radius: 999px;
 }
 
+.stage-slot {
+  display: contents;
+}
+
 .group-card {
   border: 1px solid var(--border-color);
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
