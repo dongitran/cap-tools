@@ -201,3 +201,22 @@
 3. `npm run cspell`
 4. Visual check:
 - No `Solar Frame` text appears in the prototype interface.
+
+---
+
+# Follow-up Plan: Remove Region Count Line
+
+## Goal
+1. Remove the header line showing `${TOTAL_REGION_COUNT} regions in this prototype`.
+
+## Planned Changes
+1. Edit `docs/designs/prototypes/assets/prototype.js`.
+- Remove the `shell-subline` block from header markup.
+- Remove unused `TOTAL_REGION_COUNT` import.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Visual check:
+- No `regions in this prototype` text appears in header.
