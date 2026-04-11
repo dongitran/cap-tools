@@ -311,3 +311,33 @@
 - Region options stay visible after region selection.
 - Org options stay visible after org selection.
 - `Change` buttons exist in Region/Org/Space headers and reset their step state.
+
+---
+
+# Follow-up Plan: Smooth Area Collapse Animation
+
+## Goal
+1. Keep current UX intent where only `Choose Area` collapses selected choice.
+2. Hide non-selected area options immediately.
+3. Animate only the selected area option moving to its new position after selection.
+
+## Planned Changes
+1. Update `renderAreaPicker` in `prototype.js`.
+- Always render all area options.
+- Mark non-selected options with an immediate hidden-state class when area is collapsed.
+- Add FLIP-style animation for selected area button:
+  - capture pre-render position
+  - render new layout
+  - animate selected item from old position to new position
+
+2. Update area option styles in `prototype.css`.
+- Hidden state uses immediate hide (`display: none`).
+- Keep normal hover/active transitions for visible item.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Manual check:
+- Selecting area hides other options immediately.
+- Selected area visibly moves to new position with smooth animation.

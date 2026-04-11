@@ -289,7 +289,7 @@ body.pattern-dots::before {
   display: grid;
   gap: 2px;
   padding: 10px 10px;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .area-option:hover {
@@ -301,6 +301,10 @@ body.pattern-dots::before {
   border-color: color-mix(in oklab, var(--accent-color) 58%, white);
   background: var(--accent-soft);
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 22%, transparent);
+}
+
+.area-option.is-hidden {
+  display: none;
 }
 
 .area-label {

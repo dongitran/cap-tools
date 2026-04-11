@@ -114,6 +114,7 @@ let selectedLogId = '';
 let statusMessage = '';
 let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
+let pendingAreaMotion = null;
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -126,8 +127,10 @@ appElement.addEventListener('click', (event) => {
 
   const areaButton = target.closest('[data-group-id]');
   if (areaButton instanceof HTMLButtonElement) {
+    queueAreaMotion(areaButton);
     handleGroupSelection(areaButton.dataset.groupId ?? '');
     renderPrototype();
+    playAreaMotion();
     return;
   }
 
@@ -415,6 +418,56 @@ function renderPrototype() {
   `;
 }
 
+function queueAreaMotion(areaButton) {
+  const groupId = areaButton.dataset.groupId ?? '';
+  if (groupId.length === 0) {
+    pendingAreaMotion = null;
+    return;
+  }
+
+  const sourceRect = areaButton.getBoundingClientRect();
+  pendingAreaMotion = {
+    groupId,
+    left: sourceRect.left,
+    top: sourceRect.top,
+  };
+}
+
+function playAreaMotion() {
+  if (pendingAreaMotion === null) {
+    return;
+  }
+
+  const target = appElement.querySelector(`[data-group-id="${pendingAreaMotion.groupId}"]`);
+  if (!(target instanceof HTMLElement)) {
+    pendingAreaMotion = null;
+    return;
+  }
+
+  const targetRect = target.getBoundingClientRect();
+  const dx = pendingAreaMotion.left - targetRect.left;
+  const dy = pendingAreaMotion.top - targetRect.top;
+
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+    pendingAreaMotion = null;
+    return;
+  }
+
+  target.animate(
+    [
+      { transform: `translate(${dx}px, ${dy}px)` },
+      { transform: 'translate(0, 0)' },
+    ],
+    {
+      duration: 280,
+      easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)',
+      fill: 'both',
+    }
+  );
+
+  pendingAreaMotion = null;
+}
+
 function renderSelectionScreen() {
   const selectedGroup = groupLookup.get(selectedGroupId);
   const selectedRegion = resolveSelectedRegion();
@@ -456,17 +509,19 @@ function renderAreaStage(selectedGroup) {
 }
 
 function renderAreaPicker(selectedGroup) {
-  const groupsToRender = selectedGroup === undefined ? REGION_GROUPS : [selectedGroup];
+  const isCollapsed = selectedGroup !== undefined;
 
-  return groupsToRender
+  return REGION_GROUPS
     .map((group) => {
       const isActive = group.id === selectedGroupId;
+      const isHidden = isCollapsed && !isActive;
       return `
         <button
           type="button"
-          class="area-option${isActive ? ' is-active' : ''}"
+          class="area-option${isActive ? ' is-active' : ''}${isHidden ? ' is-hidden' : ''}"
           data-group-id="${group.id}"
           aria-pressed="${isActive}"
+          aria-hidden="${isHidden}"
         >
           <span class="area-label">${group.label}</span>
           <span class="area-meta">${group.regions.length} regions</span>
