@@ -341,3 +341,24 @@
 4. Manual check:
 - Selecting area hides other options immediately.
 - Selected area visibly moves to new position with smooth animation.
+
+---
+
+# Follow-up Plan: Region Selected Visual Consistency
+
+## Goal
+1. Replace the current orange underline effect in `Choose Region` selected state.
+2. Make selected region card highlight style consistent with `Choose Organization`.
+
+## Planned Changes
+1. Update `prototype.css` selected rule for `.prototype-shell.select-style-underline .region-option.is-selected`.
+- Remove underline-gradient background.
+- Apply full-card highlight (`accentSoft`) and selected border tone used by organization options.
+- Ensure text remains readable with selected chip text color.
+
+## Verification
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Manual check:
+- Picking a region shows a full highlighted card, not a bottom orange line.

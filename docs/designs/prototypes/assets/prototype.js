@@ -114,7 +114,7 @@ let selectedLogId = '';
 let statusMessage = '';
 let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
-let pendingAreaMotion = null;
+let pendingSelectionMotion = null;
 
 applyDesignTokens(activeDesign);
 renderPrototype();
@@ -127,31 +127,45 @@ appElement.addEventListener('click', (event) => {
 
   const areaButton = target.closest('[data-group-id]');
   if (areaButton instanceof HTMLButtonElement) {
-    queueAreaMotion(areaButton);
-    handleGroupSelection(areaButton.dataset.groupId ?? '');
-    renderPrototype();
-    playAreaMotion();
+    const nextGroupId = areaButton.dataset.groupId ?? '';
+    if (selectedGroupId !== nextGroupId) {
+      queueSelectionMotion(areaButton, buildDataSelector('data-group-id', nextGroupId));
+    }
+    handleGroupSelection(nextGroupId);
+    rerenderWithSelectionMotion();
     return;
   }
 
   const regionButton = target.closest('[data-region-id]');
   if (regionButton instanceof HTMLButtonElement) {
-    handleRegionSelection(regionButton.dataset.regionId ?? '');
-    renderPrototype();
+    const nextRegionId = regionButton.dataset.regionId ?? '';
+    if (selectedRegionId !== nextRegionId) {
+      queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
+    }
+    handleRegionSelection(nextRegionId);
+    rerenderWithSelectionMotion();
     return;
   }
 
   const orgButton = target.closest('[data-org-id]');
   if (orgButton instanceof HTMLButtonElement) {
-    handleOrgSelection(orgButton.dataset.orgId ?? '');
-    renderPrototype();
+    const nextOrgId = orgButton.dataset.orgId ?? '';
+    if (selectedOrgId !== nextOrgId) {
+      queueSelectionMotion(orgButton, buildDataSelector('data-org-id', nextOrgId));
+    }
+    handleOrgSelection(nextOrgId);
+    rerenderWithSelectionMotion();
     return;
   }
 
   const spaceButton = target.closest('[data-space-id]');
   if (spaceButton instanceof HTMLButtonElement) {
-    handleSpaceSelection(spaceButton.dataset.spaceId ?? '');
-    renderPrototype();
+    const nextSpaceId = spaceButton.dataset.spaceId ?? '';
+    if (selectedSpaceId !== nextSpaceId) {
+      queueSelectionMotion(spaceButton, buildDataSelector('data-space-id', nextSpaceId));
+    }
+    handleSpaceSelection(nextSpaceId);
+    rerenderWithSelectionMotion();
     return;
   }
 
@@ -161,7 +175,7 @@ appElement.addEventListener('click', (event) => {
   }
 
   if (handleAction(actionElement.dataset.action ?? '', actionElement)) {
-    renderPrototype();
+    rerenderWithSelectionMotion();
   }
 });
 
@@ -418,38 +432,37 @@ function renderPrototype() {
   `;
 }
 
-function queueAreaMotion(areaButton) {
-  const groupId = areaButton.dataset.groupId ?? '';
-  if (groupId.length === 0) {
-    pendingAreaMotion = null;
-    return;
-  }
+function rerenderWithSelectionMotion() {
+  renderPrototype();
+  playSelectionMotion();
+}
 
-  const sourceRect = areaButton.getBoundingClientRect();
-  pendingAreaMotion = {
-    groupId,
+function queueSelectionMotion(optionElement, selector) {
+  const sourceRect = optionElement.getBoundingClientRect();
+  pendingSelectionMotion = {
+    selector,
     left: sourceRect.left,
     top: sourceRect.top,
   };
 }
 
-function playAreaMotion() {
-  if (pendingAreaMotion === null) {
+function playSelectionMotion() {
+  if (pendingSelectionMotion === null) {
     return;
   }
 
-  const target = appElement.querySelector(`[data-group-id="${pendingAreaMotion.groupId}"]`);
+  const target = appElement.querySelector(pendingSelectionMotion.selector);
   if (!(target instanceof HTMLElement)) {
-    pendingAreaMotion = null;
+    pendingSelectionMotion = null;
     return;
   }
 
   const targetRect = target.getBoundingClientRect();
-  const dx = pendingAreaMotion.left - targetRect.left;
-  const dy = pendingAreaMotion.top - targetRect.top;
+  const dx = pendingSelectionMotion.left - targetRect.left;
+  const dy = pendingSelectionMotion.top - targetRect.top;
 
   if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
-    pendingAreaMotion = null;
+    pendingSelectionMotion = null;
     return;
   }
 
@@ -465,7 +478,16 @@ function playAreaMotion() {
     }
   );
 
-  pendingAreaMotion = null;
+  pendingSelectionMotion = null;
+}
+
+function buildDataSelector(attribute, value) {
+  const escapedValue =
+    typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+      ? CSS.escape(value)
+      : value.replaceAll('"', '\\"');
+
+  return `[${attribute}="${escapedValue}"]`;
 }
 
 function renderSelectionScreen() {
@@ -532,15 +554,18 @@ function renderAreaPicker(selectedGroup) {
 }
 
 function renderSelectedGroupPanel(group) {
+  const isCollapsed = selectedRegionId.length > 0;
   const regionOptionsMarkup = group.regions
     .map((region) => {
       const isSelected = region.id === selectedRegionId;
+      const isHidden = isCollapsed && !isSelected;
       return `
         <button
           type="button"
-          class="region-option${isSelected ? ' is-selected' : ''}"
+          class="region-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
           data-region-id="${region.id}"
           aria-pressed="${isSelected}"
+          aria-hidden="${isHidden}"
         >
           <span class="region-name">${region.name}</span>
           <span class="region-code">${region.code}</span>
@@ -570,14 +595,17 @@ function renderSelectedGroupPanel(group) {
 }
 
 function renderOrgStage() {
+  const isCollapsed = selectedOrgId.length > 0;
   const orgButtons = ORG_OPTIONS.map((org) => {
     const isSelected = org.id === selectedOrgId;
+    const isHidden = isCollapsed && !isSelected;
     return `
       <button
         type="button"
-        class="org-option${isSelected ? ' is-selected' : ''}"
+        class="org-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
         data-org-id="${org.id}"
         aria-pressed="${isSelected}"
+        aria-hidden="${isHidden}"
       >
         ${org.name}
       </button>
@@ -605,15 +633,18 @@ function renderOrgStage() {
 }
 
 function renderSpaceStage(selectedOrg) {
+  const isCollapsed = selectedSpaceId.length > 0;
   const spaceButtons = selectedOrg.spaces
     .map((space) => {
       const isSelected = space === selectedSpaceId;
+      const isHidden = isCollapsed && !isSelected;
       return `
         <button
           type="button"
-          class="space-option${isSelected ? ' is-selected' : ''}"
+          class="space-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
           data-space-id="${space}"
           aria-pressed="${isSelected}"
+          aria-hidden="${isHidden}"
         >
           ${space}
         </button>

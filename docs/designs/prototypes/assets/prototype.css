@@ -408,6 +408,10 @@ body.pattern-dots::before {
   border-color: color-mix(in oklab, var(--accent-color) 44%, white);
 }
 
+.region-option.is-hidden {
+  display: none;
+}
+
 .region-name {
   font-weight: 700;
   font-size: 0.74rem;
@@ -446,8 +450,13 @@ body.pattern-dots::before {
 }
 
 .prototype-shell.select-style-underline .region-option.is-selected {
-  border-color: var(--border-color);
-  background: linear-gradient(to bottom, transparent calc(100% - 4px), var(--accent-color) calc(100% - 4px));
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent-color) 60%, white);
+  color: var(--chip-text);
+}
+
+.prototype-shell.select-style-underline .region-option.is-selected .region-code {
+  color: color-mix(in oklab, var(--chip-text) 70%, white);
 }
 
 .prototype-shell.select-style-slice .region-option.is-selected {
@@ -562,6 +571,11 @@ body.pattern-dots::before {
   background: var(--accent-soft);
   border-color: color-mix(in oklab, var(--accent-color) 60%, white);
   color: var(--chip-text);
+}
+
+.org-option.is-hidden,
+.space-option.is-hidden {
+  display: none;
 }
 
 .workspace-header {
