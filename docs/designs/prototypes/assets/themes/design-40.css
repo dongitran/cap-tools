@@ -1,0 +1,46 @@
+body.theme-40 .prototype-shell {
+  background:
+    radial-gradient(circle at 110% -10%, color-mix(in oklab, var(--accent-color) 22%, black), transparent 42%),
+    color-mix(in oklab, var(--frame-bg) 86%, black);
+}
+
+body.theme-40 .shell-header {
+  border-bottom-width: 2px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--accent-color) 14%, black), transparent),
+    color-mix(in oklab, var(--surface-bg) 92%, black);
+}
+
+body.theme-40 .group-card {
+  border-radius: 16px;
+  border-width: 2px;
+  background:
+    linear-gradient(160deg, color-mix(in oklab, var(--accent-color) 16%, transparent), transparent 42%),
+    color-mix(in oklab, var(--surface-bg) 80%, black);
+}
+
+body.theme-40 .area-option {
+  border-radius: 12px;
+  border-width: 2px;
+  background:
+    linear-gradient(135deg, color-mix(in oklab, var(--accent-color) 24%, transparent), transparent 48%),
+    color-mix(in oklab, var(--frame-bg) 82%, black);
+}
+
+body.theme-40 .area-option.is-active,
+body.theme-40 .region-option.is-selected {
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--accent-color) 34%, transparent),
+    0 12px 24px color-mix(in oklab, var(--accent-color) 24%, transparent);
+}
+
+body.theme-40 .region-option {
+  border-radius: 12px;
+  border-width: 2px;
+  background: color-mix(in oklab, var(--frame-bg) 84%, black);
+}
+
+body.theme-40 .output-stream {
+  border-radius: 12px;
+  border-width: 2px;
+}

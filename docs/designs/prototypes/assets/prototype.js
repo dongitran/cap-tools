@@ -131,7 +131,6 @@ function renderPrototype() {
       </div>
 
       <footer class="output-box">
-        <p class="output-title">Extension Output Preview</p>
         <div class="output-stream">
           ${outputMarkup}
         </div>

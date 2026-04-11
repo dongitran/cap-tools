@@ -1,0 +1,45 @@
+body.theme-31 .shell-header {
+  background:
+    linear-gradient(125deg, color-mix(in oklab, var(--accent-color) 24%, white), transparent 50%),
+    color-mix(in oklab, var(--surface-bg) 86%, white);
+  border-bottom-width: 2px;
+  backdrop-filter: blur(5px);
+}
+
+body.theme-31 .meta-strip {
+  border-bottom-width: 2px;
+  background: color-mix(in oklab, var(--surface-bg) 82%, white);
+}
+
+body.theme-31 .group-card {
+  border-radius: 16px;
+  border-color: color-mix(in oklab, var(--accent-color) 35%, var(--border-color));
+  background: color-mix(in oklab, var(--frame-bg) 74%, var(--accent-soft));
+  box-shadow: 0 14px 36px color-mix(in oklab, var(--accent-color) 24%, transparent);
+}
+
+body.theme-31 .area-picker {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+body.theme-31 .area-option {
+  border-radius: 14px;
+  border-width: 2px;
+  min-height: 62px;
+  backdrop-filter: blur(4px);
+}
+
+body.theme-31 .region-option {
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--surface-bg) 70%, white);
+}
+
+body.theme-31 .region-option.is-selected {
+  transform: translateY(-1px) scale(1.01);
+}
+
+body.theme-31 .output-stream {
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--frame-bg) 82%, var(--surface-bg));
+}

@@ -1,44 +1,68 @@
-# Implementation Plan: 30 Distinct Designs + Cleaner Area-First Region Flow
+# Implementation Plan: Add 10 More Modern Designs (31-40)
 
 ## Goals
-1. Expand prototype gallery from 20 to 30 designs.
-2. Keep full-bleed edge-to-edge layout.
-3. Improve clarity: show regions only after selecting a high-level area/group.
-4. Maintain strong visual differentiation with dedicated CSS per design.
+1. Expand prototype gallery from 30 to 40 designs.
+2. Keep the current area-first interaction flow intact.
+3. Make the 10 new designs visually more modern and clearly different from previous ones.
+4. Preserve full-bleed edge-to-edge sidebar presentation and mobile compatibility.
 
 ## Current Findings
-- Design count is driven by `DESIGN_CATALOG` in `design-catalog.js`.
-- `prototype.js` currently renders all groups and regions at once.
-- Variant HTML files are one-file-per-design and can map directly to per-design CSS.
+- Design count is controlled by `DESIGN_CATALOG` in `docs/designs/prototypes/assets/design-catalog.js`.
+- Gallery navigation (`docs/designs/prototypes/assets/gallery.js`) automatically follows `DESIGN_CATALOG.length`.
+- Each variant page is mapped one-to-one to `assets/themes/design-XX.css`.
+- Area-first logic already exists in `docs/designs/prototypes/assets/prototype.js`; no behavior regression should be introduced.
 
 ## Planned Changes
-1. Refactor interaction flow (`prototype.js`)
-- Add explicit area selection state.
-- Render area selector first.
-- Render region list only for selected area.
-- Keep output log behavior for selected area and selected region.
+1. Extend design catalog to 40 entries
+- Update `docs/designs/prototypes/assets/design-catalog.js`.
+- Add 10 records with ids `31..40`.
+- Provide modern naming, subtitles, typography, color tokens, layout/pattern/selectStyle combinations.
 
-2. Extend base UI styles (`prototype.css`)
-- Add area selector styles (`area-picker`, `area-option`).
-- Add clean empty-state panel when no area is selected.
-- Preserve full-bleed shell without outer frame.
+2. Add 10 dedicated modern theme files
+- Create `docs/designs/prototypes/assets/themes/design-31.css` ... `design-40.css`.
+- Each file will contain distinct structural/stylistic rules:
+  - varied header treatments
+  - different area selector geometry
+  - distinct region card/chip behavior
+  - custom output panel accents
 
-3. Expand catalog to 30 entries (`design-catalog.js`)
-- Add 10 new design definitions (id 21..30) with distinct naming, typography, and token profiles.
+3. Add 10 variant pages
+- Create `docs/designs/prototypes/variants/design-31.html` ... `design-40.html`.
+- Link each page to `../assets/prototype.css`, its theme css, and `../assets/prototype.js`.
 
-4. Add 10 dedicated design CSS files
-- Create `assets/themes/design-21.css` ... `design-30.css`.
-- Each file defines a distinct visual style (layout rhythm, geometry, interaction accents, hierarchy treatment).
+4. Validate after each implementation phase
+- After catalog update: run `npm run lint`, `npm run typecheck`, `npm run cspell`.
+- After theme files + variants: run `npm run lint`, `npm run typecheck`, `npm run cspell`.
+- Final quick functional check: verify hash navigation supports `#design-40` and area-first rendering still works.
 
-5. Add 10 new variant HTML files
-- Create `variants/design-21.html` ... `design-30.html`.
-- Each variant links to `prototype.css` and corresponding per-design CSS.
+## Verification Checklist
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. Spot checks:
+- `index.html#design-31` and `index.html#design-40` load correct variants.
+- Regions stay hidden until area selection.
+- Next/previous cycles through all 40 designs.
+
+---
+
+# Follow-up Plan: Remove "Extension Output Preview" Heading
+
+## Goal
+1. Remove the "Extension Output Preview" text from all prototype designs while keeping output log lines intact.
+
+## Planned Changes
+1. Update shared renderer
+- Edit `docs/designs/prototypes/assets/prototype.js`.
+- Remove the `<p class="output-title">Extension Output Preview</p>` node from footer markup.
+
+2. Optional style cleanup
+- Keep existing styles for now to avoid unnecessary scope expansion.
+- If required later, remove `.output-title` rule from `prototype.css` in a dedicated cleanup pass.
 
 ## Verification
 1. `npm run lint`
 2. `npm run typecheck`
 3. `npm run cspell`
-4. Spot-check behavior:
-- Initial state shows only area choices and no region list.
-- Regions appear only after area selection.
-- 30 designs are navigable via next/previous.
+4. Visual check:
+- Any `design-XX.html` no longer shows the heading text above output messages.

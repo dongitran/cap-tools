@@ -1,0 +1,40 @@
+body.theme-34 .shell-header {
+  border-bottom-width: 2px;
+  background:
+    linear-gradient(98deg, color-mix(in oklab, var(--accent-color) 20%, white), transparent 38%),
+    var(--surface-bg);
+}
+
+body.theme-34 .meta-strip {
+  background: linear-gradient(
+    to right,
+    color-mix(in oklab, var(--accent-soft) 75%, white),
+    color-mix(in oklab, var(--surface-bg) 88%, white)
+  );
+}
+
+body.theme-34 .group-card {
+  border-radius: 10px;
+  border-width: 2px;
+}
+
+body.theme-34 .area-picker {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.theme-34 .area-option {
+  border-radius: 8px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  padding-right: 16px;
+}
+
+body.theme-34 .region-option {
+  border-radius: 8px;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%);
+  padding-right: 14px;
+}
+
+body.theme-34 .output-stream {
+  border-radius: 8px;
+}
