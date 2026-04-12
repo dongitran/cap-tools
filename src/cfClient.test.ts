@@ -16,6 +16,7 @@ vi.mock('node:child_process', () => ({
 
 import {
   fetchOrgs,
+  fetchRecentAppLogs,
   fetchSpaces,
   fetchStartedAppsViaCfCli,
   getCfApiEndpoint,
@@ -168,6 +169,60 @@ describe('fetchStartedAppsViaCfCli', () => {
     expect(errorMessage).toContain('Failed to authenticate Cloud Foundry CLI.');
     expect(errorMessage).toContain('Credentials were rejected by UAA');
     expect(errorMessage).not.toContain('super-secret-password');
+  });
+});
+
+describe('fetchRecentAppLogs', () => {
+  beforeEach(() => {
+    execFileAsyncMock.mockReset();
+  });
+
+  it('runs cf commands in sequence and returns the raw log output', async () => {
+    const sampleLog = 'Retrieving logs for app finance-uat-api...\n2026-01-01T10:00:00Z [APP/0] OUT hello world';
+
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '' }) // cf api
+      .mockResolvedValueOnce({ stdout: '' }) // cf auth
+      .mockResolvedValueOnce({ stdout: '' }) // cf target
+      .mockResolvedValueOnce({ stdout: sampleLog }); // cf logs --recent
+
+    const result = await fetchRecentAppLogs({
+      apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+      email: 'test@example.com',
+      password: 'super-secret-password',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    expect(result).toBe(sampleLog);
+    expect(execFileAsyncMock).toHaveBeenCalledTimes(4);
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      4,
+      'cf',
+      ['logs', 'finance-uat-api', '--recent'],
+      expect.objectContaining({ env: expect.objectContaining({ CF_HOME: '/tmp/sap-tools-cf-home' }) })
+    );
+  });
+
+  it('returns safe error message when log fetch fails', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockRejectedValueOnce({ stderr: 'App not found', message: 'Command failed' });
+
+    await expect(
+      fetchRecentAppLogs({
+        apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+        email: 'test@example.com',
+        password: 'secret',
+        orgName: 'org',
+        spaceName: 'space',
+        appName: 'unknown-app',
+      })
+    ).rejects.toThrow('Failed to fetch recent logs for app "unknown-app".');
   });
 });
 

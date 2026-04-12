@@ -1010,7 +1010,7 @@ test.describe('SAP Tools login gate', () => {
 });
 
 test.describe('SAP Tools CF logs panel', () => {
-  test('CF logs panel renders with monitoring workspace and log table', async () => {
+  test('CF logs panel renders with monitoring workspace and filter controls', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1025,13 +1025,133 @@ test.describe('SAP Tools CF logs panel', () => {
       // Log table should be rendered.
       await expect(frame.locator('.cf-log-table')).toBeVisible({ timeout: 10000 });
 
-      // Filter controls should be visible.
+      // All three filter controls should be visible.
       await expect(frame.getByLabel('Search logs')).toBeVisible();
       await expect(frame.getByLabel('Filter by level')).toBeVisible();
+      await expect(frame.getByLabel('Select app')).toBeVisible();
 
-      // Table should have data rows from sample logs.
-      const rowCount = await frame.locator('#log-table-body tr').count();
-      expect(rowCount).toBeGreaterThan(0);
+      // Initially no scope selected: empty-state row should be shown.
+      await expect(
+        frame.locator('#log-table-body td.empty-row')
+      ).toBeVisible({ timeout: 5000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel loads logs and populates app selector after space selection', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      // Select a scope so the extension sends appsUpdate + logsLoaded.
+      await selectDefaultScope(sidebarFrame);
+
+      // App selector should be enabled and populated (finance-services-prod/uat has 3 mock apps).
+      const appSelect = logsFrame.getByLabel('Select app');
+      await expect(appSelect).toBeEnabled({ timeout: 10000 });
+      const optionCount = await appSelect.locator('option').count();
+      expect(optionCount).toBeGreaterThan(0);
+
+      // Logs should be loaded from test-mode sample data.
+      await expect
+        .poll(
+          async () => logsFrame.locator('#log-table-body tr').count(),
+          { timeout: 15000 }
+        )
+        .toBeGreaterThan(0);
+
+      // Rows should NOT be the empty-state placeholder.
+      await expect(
+        logsFrame.locator('#log-table-body td.empty-row')
+      ).toBeHidden({ timeout: 10000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel shows empty state when selected space has no running apps', async () => {
+    const session = await launchExtensionHost();
+    const DATA_FOUNDATION_ORG = /data-foundation-prod/i;
+    const NOAPPS_SPACE = /^noapps$/i;
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      // Navigate: area → region → data-foundation-prod → noapps (space with zero apps).
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await expect(
+        sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG }));
+      await expect(
+        sidebarFrame.getByRole('button', { name: NOAPPS_SPACE })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: NOAPPS_SPACE }));
+
+      // App selector should be disabled with no-apps placeholder text.
+      const appSelect = logsFrame.getByLabel('Select app');
+      await expect(appSelect).toBeDisabled({ timeout: 10000 });
+
+      // Log table should show exactly one empty-state row — no data rows.
+      await expect
+        .poll(
+          async () => logsFrame.locator('#log-table-body td.empty-row').isVisible(),
+          { timeout: 15000 }
+        )
+        .toBe(true);
+
+      const dataRowCount = await logsFrame
+        .locator('#log-table-body tr td:not(.empty-row)')
+        .count();
+      expect(dataRowCount).toBe(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel resets to empty state when apps fetch fails for selected space', async () => {
+    const session = await launchExtensionHost();
+    const DATA_FOUNDATION_ORG = /data-foundation-prod/i;
+    const FAILSPACE = /^failspace$/i;
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      // Navigate: area → region → data-foundation-prod → failspace (simulated CF CLI error).
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await expect(
+        sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG }));
+      await expect(
+        sidebarFrame.getByRole('button', { name: FAILSPACE })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(sidebarFrame.getByRole('button', { name: FAILSPACE }));
+
+      // The extension posts an apps-error to the sidebar and resets the logs panel.
+      // App selector should be disabled (panel was reset via updateApps([], null)).
+      const appSelect = logsFrame.getByLabel('Select app');
+      await expect(appSelect).toBeDisabled({ timeout: 10000 });
+
+      // Log table should show the empty-state row — no data rows left over.
+      await expect
+        .poll(
+          async () => logsFrame.locator('#log-table-body td.empty-row').isVisible(),
+          { timeout: 15000 }
+        )
+        .toBe(true);
+
+      const dataRowCount = await logsFrame
+        .locator('#log-table-body tr td:not(.empty-row)')
+        .count();
+      expect(dataRowCount).toBe(0);
     } finally {
       await cleanupExtensionHost(session);
     }

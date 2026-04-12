@@ -242,6 +242,42 @@ export async function fetchStartedAppsViaCfCli(params: {
     .map((row) => ({ name: row.name, runningInstances: row.runningInstances }));
 }
 
+/**
+ * Fetch recent logs for a Cloud Foundry application using the CF CLI.
+ * Returns the raw log text from `cf logs APP_NAME --recent`.
+ */
+export async function fetchRecentAppLogs(params: {
+  readonly apiEndpoint: string;
+  readonly email: string;
+  readonly password: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<string> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+
+  await runCfCommand(['api', params.apiEndpoint], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to set CF API endpoint.',
+  });
+
+  await runCfCommand(['auth', params.email, params.password], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to authenticate Cloud Foundry CLI.',
+  });
+
+  await runCfCommand(['target', '-o', params.orgName, '-s', params.spaceName], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to target CF org/space.',
+  });
+
+  return runCfCommand(['logs', params.appName, '--recent'], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to fetch recent logs for app "${params.appName}".`,
+  });
+}
+
 async function runCfCommand(
   args: string[],
   options: CfCliExecutionOptions

@@ -53,6 +53,8 @@
     "describedby",
     "cfapps",
     "hana",
-    "ondemand"
+    "ondemand",
+    "noapps",
+    "failspace"
   ]
 }

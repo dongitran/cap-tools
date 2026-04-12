@@ -1,8 +1,11 @@
+// cspell:words appname logsloaded logserror fetchlogs appsupdate guid
+const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-const WORKSPACE_SCOPE = 'za-10 -> data-foundation-prod -> observability';
 
-const SAMPLE_CF_RECENT_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
+/* cspell:disable */
+const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
 
 2026-04-12T09:14:31.73+0700 [CELL/0] OUT Cell 91130a14 stopping instance 13af001e
 2026-04-12T09:14:32.19+0700 [API/2] OUT Restarted app with guid 8a45de1d
@@ -20,25 +23,38 @@ const SAMPLE_CF_RECENT_LOG = String.raw`Retrieving logs for app finance-config-a
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT Server is listening at http://localhost:8080
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"server listening on { url: 'http://localhost:8080' }","type":"log"}
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}`;
+/* cspell:enable */
 
 const elements = getRequiredElements();
-const allRows = parseCfRecentLog(SAMPLE_CF_RECENT_LOG);
+
+// Module-level mutable state.
+let allRows = [];
 let filteredRows = [];
 let selectedRowId = null;
+let pendingRequestId = 0;
+let emptyStateMessage = 'Select a CF space in the SAP Tools sidebar to load logs.';
+
+if (vscodeApi === null) {
+  // Browser prototype mode: render sample data and populate app selector.
+  allRows = parseCfRecentLog(PROTOTYPE_SAMPLE_LOG);
+  elements.workspaceScope.textContent = 'za-10 \u2192 data-foundation-prod \u2192 observability';
+  rebuildAppSelect([{ name: 'finance-config-admin', runningInstances: 1 }], 'finance-config-admin');
+}
 
 hydrateDynamicFilterOptions(allRows);
-setWorkspaceScope();
 applyFiltersAndRender();
 bindFilterEvents();
 bindExtensionMessages();
+
+// ── DOM helpers ──────────────────────────────────────────────────────────────
 
 function getRequiredElements() {
   const tableBody = document.getElementById('log-table-body');
   const tableSummary = document.getElementById('table-summary');
   const workspaceScope = document.getElementById('workspace-scope');
-
   const filterSearch = document.getElementById('filter-search');
   const filterLevel = document.getElementById('filter-level');
+  const filterApp = document.getElementById('filter-app');
 
   if (!(tableBody instanceof HTMLTableSectionElement)) {
     throw new Error('Missing #log-table-body.');
@@ -60,6 +76,10 @@ function getRequiredElements() {
     throw new Error('Missing #filter-level.');
   }
 
+  if (!(filterApp instanceof HTMLSelectElement)) {
+    throw new Error('Missing #filter-app.');
+  }
+
   return {
     tableBody,
     tableSummary,
@@ -67,9 +87,12 @@ function getRequiredElements() {
     filters: {
       search: filterSearch,
       level: filterLevel,
+      app: filterApp,
     },
   };
 }
+
+// ── Log parsing ──────────────────────────────────────────────────────────────
 
 function parseCfRecentLog(rawText) {
   const rows = [];
@@ -268,6 +291,8 @@ function isObjectRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// ── Filter controls ──────────────────────────────────────────────────────────
+
 function hydrateDynamicFilterOptions(rows) {
   const levels = collectDistinctValues(rows, (row) => row.level, (value) => {
     const order = LOG_LEVEL_ORDER.indexOf(value);
@@ -334,8 +359,32 @@ function rebuildSelect(select, values) {
   select.value = 'all';
 }
 
-function setWorkspaceScope() {
-  elements.workspaceScope.textContent = WORKSPACE_SCOPE;
+function rebuildAppSelect(apps, selectedApp) {
+  elements.filters.app.replaceChildren();
+
+  if (apps.length === 0) {
+    const noAppsOption = document.createElement('option');
+    noAppsOption.value = '';
+    noAppsOption.textContent = '— no apps available —';
+    elements.filters.app.append(noAppsOption);
+    elements.filters.app.disabled = true;
+    return;
+  }
+
+  elements.filters.app.disabled = false;
+
+  for (const app of apps) {
+    const name = typeof app.name === 'string' ? app.name : '';
+    const instances = typeof app.runningInstances === 'number' ? app.runningInstances : 0;
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = `${name} (${String(instances)})`;
+    elements.filters.app.append(option);
+  }
+
+  const targetApp = typeof selectedApp === 'string' && selectedApp.length > 0 ? selectedApp : '';
+  const hasTarget = targetApp.length > 0 && apps.some((a) => a.name === targetApp);
+  elements.filters.app.value = hasTarget ? targetApp : (apps[0]?.name ?? '');
 }
 
 function bindFilterEvents() {
@@ -346,7 +395,122 @@ function bindFilterEvents() {
   elements.filters.level.addEventListener('change', () => {
     applyFiltersAndRender();
   });
+
+  elements.filters.app.addEventListener('change', () => {
+    const selectedApp = elements.filters.app.value;
+    if (selectedApp.length > 0) {
+      allRows = [];
+      filteredRows = [];
+      selectedRowId = null;
+      emptyStateMessage = `Loading logs for ${selectedApp}\u2026`;
+      applyFiltersAndRender();
+      requestLogsForApp(selectedApp);
+    }
+  });
 }
+
+// ── Extension messaging ──────────────────────────────────────────────────────
+
+function requestLogsForApp(appName) {
+  if (vscodeApi !== null) {
+    pendingRequestId += 1;
+    vscodeApi.postMessage({ type: 'sapTools.fetchLogs', appName, requestId: pendingRequestId });
+  }
+}
+
+function handleAppsUpdate(apps, selectedApp) {
+  rebuildAppSelect(apps, selectedApp);
+
+  if (apps.length === 0) {
+    allRows = [];
+    filteredRows = [];
+    selectedRowId = null;
+    pendingRequestId += 1;
+    emptyStateMessage = 'No running apps found in the selected space.';
+    hydrateDynamicFilterOptions([]);
+    applyFiltersAndRender();
+    return;
+  }
+
+  const appToFetch =
+    typeof selectedApp === 'string' && selectedApp.length > 0
+      ? selectedApp
+      : (apps[0]?.name ?? '');
+
+  if (appToFetch.length > 0) {
+    emptyStateMessage = `Loading logs for ${appToFetch}\u2026`;
+    allRows = [];
+    filteredRows = [];
+    selectedRowId = null;
+    applyFiltersAndRender();
+    requestLogsForApp(appToFetch);
+  }
+}
+
+function handleLogsLoaded(appName, logText, requestId) {
+  // Discard stale responses (cross-scope same-app-name or quick app switching).
+  if (requestId !== pendingRequestId) {
+    return;
+  }
+  allRows = parseCfRecentLog(logText);
+  filteredRows = [];
+  selectedRowId = null;
+  emptyStateMessage = `No log entries found for ${appName}.`;
+  hydrateDynamicFilterOptions(allRows);
+  applyFiltersAndRender();
+}
+
+function handleLogsError(appName, message, requestId) {
+  // Discard stale responses (cross-scope same-app-name or quick app switching).
+  if (requestId !== pendingRequestId) {
+    return;
+  }
+  allRows = [];
+  filteredRows = [];
+  selectedRowId = null;
+  emptyStateMessage = `Failed to load logs for ${appName}: ${message}`;
+  // Reset level filter so stale options from a previous successful load are cleared.
+  hydrateDynamicFilterOptions([]);
+  applyFiltersAndRender();
+}
+
+/**
+ * Listen for messages from the VS Code extension host.
+ */
+function bindExtensionMessages() {
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (typeof msg !== 'object' || msg === null) {
+      return;
+    }
+
+    if (msg.type === 'sapTools.scopeUpdate' && typeof msg.scope === 'string') {
+      elements.workspaceScope.textContent = msg.scope;
+    }
+
+    if (msg.type === 'sapTools.appsUpdate' && Array.isArray(msg.apps)) {
+      const selectedApp = typeof msg.selectedApp === 'string' ? msg.selectedApp : '';
+      handleAppsUpdate(msg.apps, selectedApp);
+    }
+
+    if (
+      msg.type === 'sapTools.logsLoaded' &&
+      typeof msg.appName === 'string' &&
+      typeof msg.logText === 'string'
+    ) {
+      const requestId = typeof msg.requestId === 'number' ? msg.requestId : -1;
+      handleLogsLoaded(msg.appName, msg.logText, requestId);
+    }
+
+    if (msg.type === 'sapTools.logsError' && typeof msg.appName === 'string') {
+      const errorMsg = typeof msg.message === 'string' ? msg.message : 'Unknown error.';
+      const requestId = typeof msg.requestId === 'number' ? msg.requestId : -1;
+      handleLogsError(msg.appName, errorMsg, requestId);
+    }
+  });
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 function applyFiltersAndRender() {
   const searchTerm = elements.filters.search.value.trim().toLowerCase();
@@ -380,7 +544,8 @@ function renderTable(rows) {
     const emptyCell = document.createElement('td');
     emptyCell.colSpan = 6;
     emptyCell.className = 'empty-row';
-    emptyCell.textContent = 'No rows match the current filters.';
+    emptyCell.textContent =
+      allRows.length > 0 ? 'No rows match the current filters.' : emptyStateMessage;
     emptyRow.append(emptyCell);
     elements.tableBody.append(emptyRow);
     return;
@@ -439,21 +604,4 @@ function renderSummary(rows, all) {
 
   const activeFilterText = activeBits.length > 0 ? ` (${activeBits.join(', ')})` : '';
   elements.tableSummary.textContent = `${rows.length} of ${all.length} rows visible${activeFilterText}.`;
-}
-
-/**
- * Listen for messages from the VS Code extension host.
- * Currently handles scope label updates; future messages can feed real log data.
- */
-function bindExtensionMessages() {
-  window.addEventListener('message', (event) => {
-    const msg = event.data;
-    if (typeof msg !== 'object' || msg === null) {
-      return;
-    }
-
-    if (msg.type === 'sapTools.scopeUpdate' && typeof msg.scope === 'string') {
-      elements.workspaceScope.textContent = msg.scope;
-    }
-  });
 }

@@ -205,6 +205,7 @@ export class RegionSidebarProvider
         type: MSG_ORGS_ERROR,
         message: 'No credentials found. Please re-open SAP Tools and log in.',
       });
+      this.cfLogsPanel.updateApps([], null);
       return;
     }
 
@@ -225,6 +226,7 @@ export class RegionSidebarProvider
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to connect to Cloud Foundry.';
       this.postMessage({ type: MSG_ORGS_ERROR, message: errorMessage });
+      this.cfLogsPanel.updateApps([], null);
     }
   }
 
@@ -236,6 +238,7 @@ export class RegionSidebarProvider
       this.cfLogsPanel.updateScope(
         buildScopeLabel(this.selectedRegionCode, org.name, 'select-space')
       );
+      this.cfLogsPanel.updateApps([], null);
       this.postMessage({ type: MSG_SPACES_LOADED, spaces });
       return;
     }
@@ -245,6 +248,7 @@ export class RegionSidebarProvider
         type: MSG_SPACES_ERROR,
         message: 'CF session expired. Please select a region again.',
       });
+      this.cfLogsPanel.updateApps([], null);
       return;
     }
 
@@ -252,11 +256,13 @@ export class RegionSidebarProvider
       const spaces = await fetchSpaces(this.cfSession, org.guid);
       const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
       this.cfLogsPanel.updateScope(scopeLabel);
+      this.cfLogsPanel.updateApps([], null);
       this.postMessage({ type: MSG_SPACES_LOADED, spaces });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch spaces.';
       this.postMessage({ type: MSG_SPACES_ERROR, message: errorMessage });
+      this.cfLogsPanel.updateApps([], null);
     }
   }
 
@@ -264,6 +270,15 @@ export class RegionSidebarProvider
 
   private async handleSpaceSelected(payload: SpaceSelectionPayload): Promise<void> {
     if (isTestMode()) {
+      if (payload.spaceName === 'failspace') {
+        this.postMessage({
+          type: MSG_APPS_ERROR,
+          message: 'Simulated CF CLI failure: could not reach API endpoint for failspace.',
+        });
+        this.cfLogsPanel.updateApps([], null);
+        return;
+      }
+
       const apps = resolveMockApps(payload.spaceName).map((name) => ({
         id: name,
         name,
@@ -273,6 +288,7 @@ export class RegionSidebarProvider
       this.cfLogsPanel.updateScope(
         buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
       );
+      this.cfLogsPanel.updateApps(apps, null);
       return;
     }
 
@@ -281,6 +297,7 @@ export class RegionSidebarProvider
         type: MSG_APPS_ERROR,
         message: 'CF session expired. Please select a region again.',
       });
+      this.cfLogsPanel.updateApps([], null);
       return;
     }
 
@@ -290,6 +307,7 @@ export class RegionSidebarProvider
         type: MSG_APPS_ERROR,
         message: 'No credentials found. Please re-open SAP Tools and log in.',
       });
+      this.cfLogsPanel.updateApps([], null);
       return;
     }
 
@@ -314,10 +332,19 @@ export class RegionSidebarProvider
       this.cfLogsPanel.updateScope(
         buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
       );
+      this.cfLogsPanel.updateApps(apps, {
+        apiEndpoint: this.cfSession.apiEndpoint,
+        email: credentials.email,
+        password: credentials.password,
+        orgName: payload.orgName,
+        spaceName: payload.spaceName,
+        cfHomeDir,
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch apps from CF CLI.';
       this.postMessage({ type: MSG_APPS_ERROR, message: errorMessage });
+      this.cfLogsPanel.updateApps([], null);
     }
   }
 
@@ -493,7 +520,13 @@ const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
   'core-platform-prod': [{ name: 'prod' }, { name: 'staging' }, { name: 'integration' }],
   'finance-services-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'sandbox' }],
   'retail-experience-prod': [{ name: 'prod' }, { name: 'campaigns' }, { name: 'performance' }],
-  'data-foundation-prod': [{ name: 'prod' }, { name: 'etl' }, { name: 'observability' }],
+  'data-foundation-prod': [
+    { name: 'prod' },
+    { name: 'etl' },
+    { name: 'observability' },
+    { name: 'noapps' },
+    { name: 'failspace' },
+  ],
   'apps-proof-prod': [{ name: 'proofspace' }],
   'tax-engineering-prod': [{ name: 'prod' }, { name: 'uat' }],
   'payments-ledger-prod': [{ name: 'prod' }, { name: 'staging' }],
@@ -508,6 +541,7 @@ const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
 };
 
 const MOCK_APPS_BY_SPACE: Record<string, readonly string[]> = {
+  noapps: [],
   prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
   staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
   integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
