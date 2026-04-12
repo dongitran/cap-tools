@@ -1006,13 +1006,16 @@ function renderWorkspaceScreen() {
     <header class="shell-header workspace-header">
       <h1>Monitoring Workspace</h1>
       <p class="workspace-context">${workspaceSummary}</p>
-      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
     </header>
 
     ${renderWorkspaceTabs()}
 
     <section class="workspace-body">
       ${renderWorkspaceTabContent()}
+    </section>
+
+    <section class="workspace-actions" aria-label="Workspace actions">
+      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
     </section>
 
     <footer class="workspace-footer">

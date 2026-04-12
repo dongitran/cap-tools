@@ -751,10 +751,6 @@ body.pattern-dots::before {
   border-color: var(--state-danger-border);
 }
 
-.workspace-logout {
-  justify-self: start;
-}
-
 .secondary-action,
 .primary-action,
 .small-action {
@@ -807,6 +803,17 @@ body.pattern-dots::before {
   display: grid;
   align-content: start;
   gap: 10px;
+}
+
+.workspace-actions {
+  padding: 0 10px 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.workspace-logout {
+  min-width: 160px;
+  padding-inline: 18px;
 }
 
 .workspace-footer {
