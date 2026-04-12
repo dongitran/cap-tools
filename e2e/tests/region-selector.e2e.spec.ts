@@ -23,6 +23,7 @@ const AREA_TO_SELECT = /Americas\s+br - ca - us/i;
 const REGION_TO_SELECT = /US East \(VA\) - AWS us-10/i;
 const BR10_REGION_TO_SELECT = /Brazil \(Sao Paulo\) - AWS br-10/i;
 const ORG_TO_SELECT = /finance-services-prod/i;
+const PROOF_ORG_TO_SELECT = /apps-proof-prod/i;
 const SPACE_TO_SELECT = /^uat$/i;
 const DEFAULT_THEME_NAME = 'Default Dark Modern';
 
@@ -725,6 +726,46 @@ test.describe('SAP Tools region selector', () => {
           { timeout: 10000 }
         )
         .toBe(14);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees app catalog from extension host data for selected space', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await expect(
+        webviewFrame.getByRole('button', { name: PROOF_ORG_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(
+        webviewFrame.getByRole('button', { name: PROOF_ORG_TO_SELECT })
+      );
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible();
+      await expect(webviewFrame.getByText('proof-gateway')).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        webviewFrame.getByText('apps-proof-prod-proofspace-api')
+      ).toHaveCount(0);
+      await expect(
+        webviewFrame.getByText('apps-proof-prod-proofspace-worker')
+      ).toHaveCount(0);
+      await expect(
+        webviewFrame.getByText('apps-proof-prod-proofspace-jobs')
+      ).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }

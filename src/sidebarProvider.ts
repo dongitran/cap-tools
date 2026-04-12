@@ -466,6 +466,7 @@ const DEFAULT_MOCK_ORGS: readonly MockOrg[] = [
   { guid: 'org-finance-prod', name: 'finance-services-prod' },
   { guid: 'org-retail-prod', name: 'retail-experience-prod' },
   { guid: 'org-data-prod', name: 'data-foundation-prod' },
+  { guid: 'org-apps-proof', name: 'apps-proof-prod' },
 ] as const;
 
 const BR10_MOCK_ORGS: readonly MockOrg[] = [
@@ -493,6 +494,7 @@ const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
   'finance-services-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'sandbox' }],
   'retail-experience-prod': [{ name: 'prod' }, { name: 'campaigns' }, { name: 'performance' }],
   'data-foundation-prod': [{ name: 'prod' }, { name: 'etl' }, { name: 'observability' }],
+  'apps-proof-prod': [{ name: 'proofspace' }],
   'tax-engineering-prod': [{ name: 'prod' }, { name: 'uat' }],
   'payments-ledger-prod': [{ name: 'prod' }, { name: 'staging' }],
   'supply-chain-control-prod': [{ name: 'prod' }, { name: 'integration' }],
@@ -515,6 +517,7 @@ const MOCK_APPS_BY_SPACE: Record<string, readonly string[]> = {
   performance: ['perf-api', 'perf-worker', 'perf-load-probe'],
   etl: ['etl-scheduler', 'etl-transformer', 'etl-writer'],
   observability: ['metrics-collector', 'traces-forwarder', 'alerts-dispatcher'],
+  proofspace: ['proof-gateway', 'proof-worker'],
 };
 
 function isTestMode(): boolean {

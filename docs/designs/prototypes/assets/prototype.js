@@ -183,6 +183,7 @@ window.addEventListener('message', (event) => {
     // Auto-select when there is only one space.
     if (liveSpaceNames.length === 1) {
       selectedSpaceId = liveSpaceNames[0];
+      requestAppsForSelectedScope(selectedSpaceId);
     }
     rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
     return;
@@ -583,8 +584,7 @@ function handleSpaceSelection(nextSpaceId) {
   appsErrorMessage = '';
 
   if (vscodeApi !== null) {
-    appsLoadingState = 'loading';
-    postSpaceSelection(nextSpaceId, selectedOrgId, resolveSelectedOrg()?.name ?? selectedOrgId);
+    requestAppsForSelectedScope(nextSpaceId);
     return;
   }
 
@@ -1062,6 +1062,24 @@ function postSpaceSelection(spaceName, orgGuid, orgName) {
       orgName,
     },
   });
+}
+
+function requestAppsForSelectedScope(spaceName) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  const normalizedSpaceName = spaceName.trim();
+  if (normalizedSpaceName.length === 0 || selectedOrgId.length === 0) {
+    return;
+  }
+
+  liveAppOptions = null;
+  appsErrorMessage = '';
+  appsLoadingState = 'loading';
+
+  const orgName = resolveSelectedOrg()?.name ?? selectedOrgId;
+  postSpaceSelection(normalizedSpaceName, selectedOrgId, orgName);
 }
 
 function postOpenCfLogsPanel() {
@@ -1584,6 +1602,15 @@ function renderCatalogByState(availableApps, selectedApps, activeApps) {
     return '<p class="stage-loading" aria-live="polite">Loading apps&#8230;</p>';
   }
 
+  if (
+    vscodeApi !== null &&
+    appsLoadingState === 'idle' &&
+    selectedSpaceId.length > 0 &&
+    liveAppOptions === null
+  ) {
+    return '<p class="stage-loading" aria-live="polite">Loading apps&#8230;</p>';
+  }
+
   if (vscodeApi !== null && appsLoadingState === 'error') {
     return `<p class="stage-error" role="alert">${escapeHtml(appsErrorMessage)}</p>`;
   }
@@ -1826,7 +1853,10 @@ function cloneSeedLogs() {
 }
 
 function resolveCurrentSpaceApps() {
-  if (vscodeApi !== null && liveAppOptions !== null) {
+  if (vscodeApi !== null) {
+    if (liveAppOptions === null) {
+      return [];
+    }
     return liveAppOptions.map((app) => ({ id: app.id, name: app.name }));
   }
 
