@@ -1,26 +1,30 @@
 const frameElement = document.getElementById('prototype-frame');
-const regionMenuButton = document.getElementById('open-region-menu');
-const cfLogsPanelButton = document.getElementById('open-cf-logs-panel');
+const prototypePicker = document.getElementById('prototype-picker');
 const themeButton = document.getElementById('theme-cycle');
 
 const GALLERY_THEME_CLASS_PREFIX = 'gallery-theme-';
 const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
-const ACTIVE_MENU_CLASS = 'is-active';
 const REGION_LAYOUT_CLASS = 'mode-region-menu';
 const CF_LOGS_LAYOUT_CLASS = 'mode-cf-logs-panel';
 
 const PROTOTYPE_VARIANTS = [
   {
+    id: 'login-gate',
+    hash: 'login-gate',
+    label: 'Prototype: Login Gate',
+    framePath: './variants/login-gate.html?v=20260412f',
+  },
+  {
     id: 'design-34',
     hash: 'design-34',
     label: 'Prototype: Region Menu',
-    framePath: './variants/design-34.html?v=20260412e',
+    framePath: './variants/design-34.html?v=20260412f',
   },
   {
     id: 'cf-logs-panel',
     hash: 'cf-logs-panel',
     label: 'Prototype: CFLogs Panel',
-    framePath: './variants/cf-logs-panel.html?v=20260412e',
+    framePath: './variants/cf-logs-panel.html?v=20260412f',
   },
 ];
 
@@ -47,8 +51,7 @@ const THEME_VARIANTS = [
 
 if (
   !(frameElement instanceof HTMLIFrameElement) ||
-  !(regionMenuButton instanceof HTMLButtonElement) ||
-  !(cfLogsPanelButton instanceof HTMLButtonElement) ||
+  !(prototypePicker instanceof HTMLSelectElement) ||
   !(themeButton instanceof HTMLButtonElement)
 ) {
   throw new Error('Prototype gallery is missing required DOM nodes.');
@@ -60,12 +63,8 @@ frameElement.addEventListener('load', () => {
   applyThemeToPrototypeFrame();
 });
 
-regionMenuButton.addEventListener('click', () => {
-  switchVariantById('design-34');
-});
-
-cfLogsPanelButton.addEventListener('click', () => {
-  switchVariantById('cf-logs-panel');
+prototypePicker.addEventListener('change', () => {
+  switchVariantById(prototypePicker.value);
 });
 
 themeButton.addEventListener('click', () => {
@@ -85,6 +84,23 @@ window.addEventListener('keydown', (event) => {
     currentVariantIndex = wrapVariantIndex(currentVariantIndex + 1);
     renderCurrentVariant();
   }
+});
+
+window.addEventListener('message', (event) => {
+  if (!isRecord(event.data)) {
+    return;
+  }
+
+  if (event.data['type'] !== 'saptools.prototype.navigate') {
+    return;
+  }
+
+  const variantId = event.data['variantId'];
+  if (typeof variantId !== 'string') {
+    return;
+  }
+
+  switchVariantById(variantId);
 });
 
 applyGalleryTheme();
@@ -137,7 +153,7 @@ function renderCurrentVariant() {
 
   applyLayoutForVariant(variant.id);
   frameElement.src = variant.framePath;
-  updateMenuSwitchState(variant.id);
+  prototypePicker.value = variant.id;
   updateUrlState();
 }
 
@@ -151,16 +167,10 @@ function switchVariantById(variantId) {
   renderCurrentVariant();
 }
 
-function updateMenuSwitchState(activeVariantId) {
-  const isRegionMenu = activeVariantId === 'design-34';
-  regionMenuButton.classList.toggle(ACTIVE_MENU_CLASS, isRegionMenu);
-  cfLogsPanelButton.classList.toggle(ACTIVE_MENU_CLASS, !isRegionMenu);
-}
-
 function applyLayoutForVariant(variantId) {
-  const isRegionMenu = variantId === 'design-34';
-  document.body.classList.toggle(REGION_LAYOUT_CLASS, isRegionMenu);
-  document.body.classList.toggle(CF_LOGS_LAYOUT_CLASS, !isRegionMenu);
+  const isCfLogsPanel = variantId === 'cf-logs-panel';
+  document.body.classList.toggle(REGION_LAYOUT_CLASS, !isCfLogsPanel);
+  document.body.classList.toggle(CF_LOGS_LAYOUT_CLASS, isCfLogsPanel);
 }
 
 function resolveInitialThemeIndex() {
@@ -229,4 +239,8 @@ function updateUrlState() {
   url.searchParams.set('theme', activeTheme.id);
   url.hash = `prototype-${activeVariant.hash}`;
   window.history.replaceState(null, '', url.toString());
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null;
 }

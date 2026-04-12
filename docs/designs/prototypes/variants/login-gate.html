@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login Gate Prototype</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="../assets/login-gate.css?v=20260412f" />
+  </head>
+  <body class="login-gate-page vscode-dark">
+    <main class="login-shell">
+      <section class="login-card" aria-label="SAP credential setup">
+        <header class="login-head">
+          <h1>Set SAP Credentials</h1>
+          <p>
+            First launch flow when <code>SAP_EMAIL</code> and <code>SAP_PASSWORD</code>
+            are not configured yet.
+          </p>
+        </header>
+
+        <form id="login-gate-form" class="login-form" novalidate>
+          <div class="field-row">
+            <label for="sap-email">SAP Email</label>
+            <input
+              id="sap-email"
+              name="sap-email"
+              type="email"
+              autocomplete="email"
+              placeholder="developer@company.com"
+              required
+            />
+          </div>
+
+          <div class="field-row">
+            <label for="sap-password">SAP Password</label>
+            <input
+              id="sap-password"
+              name="sap-password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Enter SAP password"
+              required
+            />
+          </div>
+
+          <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+
+          <button id="submit-login-gate" type="submit">Save and Continue</button>
+        </form>
+      </section>
+    </main>
+
+    <script type="module" src="../assets/login-gate.js?v=20260412f"></script>
+  </body>
+</html>

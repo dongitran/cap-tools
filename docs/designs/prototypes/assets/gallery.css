@@ -96,7 +96,8 @@ body.gallery-page {
   backdrop-filter: blur(3px);
 }
 
-.floating-nav button {
+.floating-nav button,
+.floating-nav select {
   border: 1px solid var(--button-border);
   background: color-mix(in oklab, var(--button-bg) 90%, #000000);
   color: var(--button-text);
@@ -110,16 +111,18 @@ body.gallery-page {
   transition: background 150ms ease, transform 150ms ease;
 }
 
-.floating-nav .menu-switch.is-active {
-  background: color-mix(in oklab, var(--focus-ring) 30%, var(--button-bg));
-  border-color: color-mix(in oklab, var(--focus-ring) 65%, var(--button-border));
+.floating-nav select {
+  min-width: 186px;
+  padding-right: 26px;
+  cursor: pointer;
 }
 
 .floating-nav #theme-cycle {
   min-width: 138px;
 }
 
-.floating-nav button:hover {
+.floating-nav button:hover,
+.floating-nav select:hover {
   background: var(--button-hover);
   transform: translateY(-1px);
 }
@@ -132,6 +135,11 @@ body.gallery-page {
 }
 
 .floating-nav button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.floating-nav select:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -210,6 +218,11 @@ body.gallery-page.mode-region-menu .editor-surface::before {
   .floating-nav button {
     font-size: 0.74rem;
     padding: 6px 11px;
+  }
+
+  .floating-nav select {
+    font-size: 0.74rem;
+    min-width: 156px;
   }
 
 }

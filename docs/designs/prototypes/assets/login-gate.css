@@ -1,0 +1,157 @@
+:root {
+  --page-bg: #1e1e1e;
+  --surface-bg: #252526;
+  --border-color: #3f4147;
+  --text-color: #e6ebf5;
+  --muted-color: #a4acbf;
+  --accent-color: #0e639c;
+  --accent-soft: #17364b;
+  --error-color: #ff9f9f;
+  --success-color: #9fff9f;
+}
+
+body.vscode-light.login-gate-page {
+  --page-bg: #eef2fb;
+  --surface-bg: #ffffff;
+  --border-color: #cad4ea;
+  --text-color: #1f2d45;
+  --muted-color: #607089;
+  --accent-color: #0e639c;
+  --accent-soft: #e5f2ff;
+  --error-color: #a1260d;
+  --success-color: #1e7a32;
+}
+
+body.vscode-high-contrast.login-gate-page,
+body.vscode-high-contrast-light.login-gate-page {
+  --page-bg: #000000;
+  --surface-bg: #000000;
+  --border-color: #ffffff;
+  --text-color: #ffffff;
+  --muted-color: #ffffff;
+  --accent-color: #ffe761;
+  --accent-soft: #3b3a00;
+  --error-color: #ff9f9f;
+  --success-color: #9fff9f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body.login-gate-page {
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  background: var(--page-bg);
+  color: var(--text-color);
+}
+
+.login-shell {
+  min-height: 100dvh;
+  padding: 14px;
+  display: grid;
+  align-content: start;
+}
+
+.login-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-bg);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.login-head {
+  display: grid;
+  gap: 6px;
+}
+
+.login-head h1 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.login-head p {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted-color);
+  line-height: 1.35;
+}
+
+.login-head code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.7rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 10px;
+}
+
+.field-row {
+  display: grid;
+  gap: 5px;
+}
+
+.field-row label {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.field-row input {
+  min-height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--page-bg));
+  color: var(--text-color);
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0 10px;
+}
+
+.field-row input:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent-color) 65%, #ffffff);
+  outline-offset: 0;
+}
+
+.form-status {
+  min-height: 16px;
+  margin: 0;
+  font-size: 0.69rem;
+  color: var(--muted-color);
+}
+
+.form-status.is-error {
+  color: var(--error-color);
+}
+
+.form-status.is-success {
+  color: var(--success-color);
+}
+
+#submit-login-gate {
+  min-height: 34px;
+  border: 1px solid color-mix(in oklab, var(--accent-color) 65%, var(--border-color));
+  border-radius: 8px;
+  background: var(--accent-color);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#submit-login-gate:hover {
+  background: color-mix(in oklab, var(--accent-color) 86%, #ffffff);
+}
+
+#submit-login-gate:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent-color) 70%, #ffffff);
+  outline-offset: 1px;
+}
