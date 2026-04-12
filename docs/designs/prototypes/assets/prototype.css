@@ -809,7 +809,7 @@ body.pattern-dots::before {
   min-width: 84px;
   min-height: 26px;
   padding-inline: 10px;
-  font-size: 0.64rem;
+  font-size: 0.74rem;
 }
 
 .workspace-footer {
@@ -820,7 +820,7 @@ body.pattern-dots::before {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.67rem;
+  font-size: 0.77rem;
   color: var(--muted-color);
 }
 

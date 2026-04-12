@@ -1016,7 +1016,7 @@ function renderWorkspaceScreen() {
 
     <footer class="workspace-footer">
       <span>Last sync: ${lastSyncLabel}</span>
-      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
+      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Change Space</button>
     </footer>
   `;
 }

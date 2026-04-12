@@ -83,11 +83,13 @@ body.gallery-page {
 
 .floating-nav {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  top: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);
   right: 8px;
   z-index: 20;
-  display: grid;
-  justify-items: end;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
   gap: 8px;
 }
 
@@ -237,7 +239,8 @@ body.gallery-page.mode-region-menu .editor-surface::before {
   }
 
   .floating-nav {
-    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
     right: 6px;
   }
 }
