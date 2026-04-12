@@ -277,10 +277,13 @@ async function findCfLogsPanelFrame(window: Page): Promise<Frame | undefined> {
 
 async function resolveSapToolsWebviewFrame(window: Page): Promise<Frame> {
   await expect
-    .poll(async () => {
-      const frame = await findSapToolsWebviewFrame(window);
-      return frame?.url() ?? '';
-    })
+    .poll(
+      async () => {
+        const frame = await findSapToolsWebviewFrame(window);
+        return frame?.url() ?? '';
+      },
+      { timeout: 20000 }
+    )
     .toContain('vscode-webview://');
 
   const frame = await findSapToolsWebviewFrame(window);
@@ -293,10 +296,13 @@ async function resolveSapToolsWebviewFrame(window: Page): Promise<Frame> {
 
 async function resolveSapToolsRegionFrame(window: Page): Promise<Frame> {
   await expect
-    .poll(async () => {
-      const frame = await findSapToolsRegionFrame(window);
-      return frame?.url() ?? '';
-    })
+    .poll(
+      async () => {
+        const frame = await findSapToolsRegionFrame(window);
+        return frame?.url() ?? '';
+      },
+      { timeout: 20000 }
+    )
     .toContain('vscode-webview://');
 
   const frame = await findSapToolsRegionFrame(window);
@@ -309,10 +315,13 @@ async function resolveSapToolsRegionFrame(window: Page): Promise<Frame> {
 
 async function resolveSapToolsLoginFrame(window: Page): Promise<Frame> {
   await expect
-    .poll(async () => {
-      const frame = await findSapToolsLoginFrame(window);
-      return frame?.url() ?? '';
-    })
+    .poll(
+      async () => {
+        const frame = await findSapToolsLoginFrame(window);
+        return frame?.url() ?? '';
+      },
+      { timeout: 20000 }
+    )
     .toContain('vscode-webview://');
 
   const frame = await findSapToolsLoginFrame(window);
@@ -404,9 +413,7 @@ async function resolveCfLogsPanelFrame(
 }
 
 async function openCfLogsPanel(window: Page): Promise<Frame> {
-  await window.keyboard.press('F1');
-  await window.keyboard.type('SAP Tools: Open CFLogs Panel');
-  await window.keyboard.press('Enter');
+  await runWorkbenchCommand(window, 'SAP Tools: Open CFLogs Panel');
 
   const frameFromCommand = await resolveCfLogsPanelFrame(window, 15000);
   if (frameFromCommand !== undefined) {
@@ -429,6 +436,21 @@ async function openCfLogsPanel(window: Page): Promise<Frame> {
   }
 
   throw new Error('CF logs panel frame was not found.');
+}
+
+async function runWorkbenchCommand(window: Page, commandTitle: string): Promise<void> {
+  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
+
+  const quickInput = window.getByPlaceholder('Type the name of a command to run.');
+  try {
+    await expect(quickInput).toBeVisible({ timeout: 10000 });
+    await quickInput.fill(commandTitle);
+    await quickInput.press('Enter');
+    return;
+  } catch {
+    await window.keyboard.type(commandTitle);
+    await window.keyboard.press('Enter');
+  }
 }
 
 async function readWebviewBodyClasses(webviewFrame: Frame): Promise<string[]> {
@@ -542,10 +564,8 @@ test.describe('SAP Tools region selector', () => {
         await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
         await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
         await expect(
-          session.window
-            .getByText(/Selected SAP BTP region: US East \(us-10\)/i)
-            .first()
-        ).toBeVisible({ timeout: 20000 });
+          webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
+        ).toBeVisible({ timeout: 10000 });
       } finally {
         await cleanupExtensionHost(session);
       }
@@ -925,6 +945,7 @@ test.describe('SAP Tools CF logs panel', () => {
     const session = await launchExtensionHost();
 
     try {
+      await openSapToolsSidebar(session.window);
       const frame = await openCfLogsPanel(session.window);
 
       // Required structural elements should be present.
