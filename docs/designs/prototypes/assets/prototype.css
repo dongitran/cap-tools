@@ -636,6 +636,25 @@ body.pattern-dots::before {
   cursor: not-allowed;
 }
 
+.stage-loading,
+.stage-error {
+  margin: 0.75rem 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.stage-loading {
+  color: var(--muted-color);
+}
+
+.stage-error {
+  color: var(--vscode-inputValidation-errorForeground, #f48771);
+  background: color-mix(in oklab, var(--vscode-inputValidation-errorBackground, #5a1d1d) 80%, transparent);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
 .confirm-button {
   border: 1px solid color-mix(in oklab, var(--accent-color) 55%, var(--mix-base));
   background: var(--accent-color);

@@ -30,6 +30,7 @@ hydrateDynamicFilterOptions(allRows);
 setWorkspaceScope();
 applyFiltersAndRender();
 bindFilterEvents();
+bindExtensionMessages();
 
 function getRequiredElements() {
   const tableBody = document.getElementById('log-table-body');
@@ -438,4 +439,21 @@ function renderSummary(rows, all) {
 
   const activeFilterText = activeBits.length > 0 ? ` (${activeBits.join(', ')})` : '';
   elements.tableSummary.textContent = `${rows.length} of ${all.length} rows visible${activeFilterText}.`;
+}
+
+/**
+ * Listen for messages from the VS Code extension host.
+ * Currently handles scope label updates; future messages can feed real log data.
+ */
+function bindExtensionMessages() {
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (typeof msg !== 'object' || msg === null) {
+      return;
+    }
+
+    if (msg.type === 'sapTools.scopeUpdate' && typeof msg.scope === 'string') {
+      elements.workspaceScope.textContent = msg.scope;
+    }
+  });
 }

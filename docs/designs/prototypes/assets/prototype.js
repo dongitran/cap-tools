@@ -84,7 +84,78 @@ const LOG_SEED = [
 const appElement = document.getElementById('app');
 const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
 const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
+const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
 const vscodeApi = resolveVscodeApi();
+
+// Live data state — only used in VSCode mode (vscodeApi !== null).
+let liveOrgOptions = null;        // [{guid, name}] when loaded, null = use mock data
+let liveOrgLookup = new Map();    // guid → {guid, name}
+let liveSpaceNames = null;        // string[] when loaded, null = use mock data
+let orgsLoadingState = 'idle';    // 'idle' | 'loading' | 'loaded' | 'error'
+let spacesLoadingState = 'idle';  // 'idle' | 'loading' | 'loaded' | 'error'
+let orgsErrorMessage = '';
+let spacesErrorMessage = '';
+
+// Listen for messages from the extension host (org/space data, scope updates).
+window.addEventListener('message', (event) => {
+  const msg = event.data;
+  if (!isRecord(msg)) {
+    return;
+  }
+
+  // Ignore gallery navigation messages (prototype gallery only).
+  if (msg.type === 'saptools.prototype.navigate') {
+    return;
+  }
+
+  if (msg.type === 'sapTools.orgsLoaded') {
+    const rawOrgs = msg.orgs;
+    if (!Array.isArray(rawOrgs)) {
+      return;
+    }
+    liveOrgOptions = rawOrgs
+      .filter((o) => isRecord(o) && typeof o.guid === 'string' && typeof o.name === 'string')
+      .map((o) => ({ guid: o.guid, name: o.name }));
+    liveOrgLookup = new Map(liveOrgOptions.map((o) => [o.guid, o]));
+    orgsLoadingState = 'loaded';
+    rerenderSelectionStageSlotsWithMotion(['org', 'space', 'confirm']);
+    return;
+  }
+
+  if (msg.type === 'sapTools.orgsError') {
+    orgsLoadingState = 'error';
+    orgsErrorMessage =
+      typeof msg.message === 'string' ? msg.message : 'Failed to load organizations.';
+    rerenderSelectionStageSlotsWithMotion(['org', 'space', 'confirm']);
+    return;
+  }
+
+  if (msg.type === 'sapTools.spacesLoaded') {
+    const rawSpaces = msg.spaces;
+    if (!Array.isArray(rawSpaces)) {
+      return;
+    }
+    liveSpaceNames = rawSpaces
+      .filter((s) => isRecord(s) && typeof s.name === 'string' && s.name.length > 0)
+      .map((s) => s.name);
+    spacesLoadingState = 'loaded';
+    selectedSpaceId = '';
+    // Auto-select when there is only one space.
+    if (liveSpaceNames.length === 1) {
+      selectedSpaceId = liveSpaceNames[0];
+    }
+    rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
+    return;
+  }
+
+  if (msg.type === 'sapTools.spacesError') {
+    spacesLoadingState = 'error';
+    spacesErrorMessage =
+      typeof msg.message === 'string' ? msg.message : 'Failed to load spaces.';
+    rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
+    return;
+  }
+});
 
 if (!(appElement instanceof HTMLElement)) {
   throw new Error('Prototype root element not found.');
@@ -254,6 +325,21 @@ function handleRegionSelection(nextRegionId) {
   selectedRegionId = nextRegionId;
   selectedOrgId = '';
   selectedSpaceId = '';
+
+  // Reset live data state so the org stage starts fresh.
+  liveOrgOptions = null;
+  liveOrgLookup = new Map();
+  liveSpaceNames = null;
+  spacesLoadingState = 'idle';
+  spacesErrorMessage = '';
+
+  if (vscodeApi !== null) {
+    orgsLoadingState = 'loading';
+    orgsErrorMessage = '';
+  } else {
+    orgsLoadingState = 'idle';
+  }
+
   postRegionSelection(nextRegion, nextGroup.label);
 }
 
@@ -262,15 +348,34 @@ function handleOrgSelection(nextOrgId) {
     return;
   }
 
-  if (!orgLookup.has(nextOrgId)) {
+  const orgExists =
+    vscodeApi !== null && liveOrgOptions !== null
+      ? liveOrgLookup.has(nextOrgId)
+      : orgLookup.has(nextOrgId);
+
+  if (!orgExists) {
     return;
   }
 
   selectedOrgId = nextOrgId;
   selectedSpaceId = '';
+  liveSpaceNames = null;
+  spacesErrorMessage = '';
+
+  if (vscodeApi !== null) {
+    spacesLoadingState = 'loading';
+    const org = liveOrgLookup.get(nextOrgId);
+    postOrgSelection(nextOrgId, org?.name ?? nextOrgId);
+  } else {
+    spacesLoadingState = 'idle';
+  }
 }
 
 function handleSpaceSelection(nextSpaceId) {
+  if (nextSpaceId === selectedSpaceId) {
+    return;
+  }
+
   const selectableSpaces = resolveSelectableSpaces();
   if (selectableSpaces.every((space) => space !== nextSpaceId)) {
     return;
@@ -665,6 +770,17 @@ function postRegionSelection(region, areaLabel) {
   });
 }
 
+function postOrgSelection(orgGuid, orgName) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: ORG_SELECTED_MESSAGE_TYPE,
+    org: { guid: orgGuid, name: orgName },
+  });
+}
+
 function postOpenCfLogsPanel() {
   if (vscodeApi === null) {
     return;
@@ -716,16 +832,10 @@ function resolveSelectionStageSlotsForAction(action) {
 function updateSelectionStageSlots(stageSlotIds) {
   const selectedGroup = groupLookup.get(selectedGroupId);
   const selectedRegion = resolveSelectedRegion();
-  const selectedOrg = resolveSelectedOrg();
   const normalizedSlotIds = normalizeSelectionStageSlots(stageSlotIds);
 
   for (const stageSlotId of normalizedSlotIds) {
-    const markup = renderSelectionStageMarkup(
-      stageSlotId,
-      selectedGroup,
-      selectedRegion,
-      selectedOrg
-    );
+    const markup = renderSelectionStageMarkup(stageSlotId, selectedGroup, selectedRegion);
     setSelectionStageSlotMarkup(stageSlotId, markup);
   }
 }
@@ -749,12 +859,7 @@ function normalizeSelectionStageSlots(stageSlotIds) {
   return normalizedStageSlots;
 }
 
-function renderSelectionStageMarkup(
-  stageSlotId,
-  selectedGroup,
-  selectedRegion,
-  selectedOrg
-) {
+function renderSelectionStageMarkup(stageSlotId, selectedGroup, selectedRegion) {
   if (stageSlotId === 'area') {
     return renderAreaStage(selectedGroup);
   }
@@ -770,7 +875,7 @@ function renderSelectionStageMarkup(
   }
 
   if (stageSlotId === 'space') {
-    return selectedOrg === undefined ? '' : renderSpaceStage(selectedOrg);
+    return selectedOrgId.length === 0 ? '' : renderSpaceStage();
   }
 
   if (stageSlotId === 'confirm') {
@@ -889,22 +994,47 @@ function renderSelectedGroupPanel(group) {
 }
 
 function renderOrgStage() {
-  const isCollapsed = selectedOrgId.length > 0;
-  const orgButtons = ORG_OPTIONS.map((org) => {
-    const isSelected = org.id === selectedOrgId;
-    const isHidden = isCollapsed && !isSelected;
+  if (vscodeApi !== null && orgsLoadingState === 'loading') {
     return `
-      <button
-        type="button"
-        class="org-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
-        data-org-id="${org.id}"
-        aria-pressed="${isSelected}"
-        aria-hidden="${isHidden}"
-      >
-        ${org.name}
-      </button>
+      <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
+        <div class="group-head"><h2>Choose Organization</h2></div>
+        <p class="stage-loading" aria-live="polite">Loading organizations&#8230;</p>
+      </section>
     `;
-  }).join('');
+  }
+
+  if (vscodeApi !== null && orgsLoadingState === 'error') {
+    return `
+      <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
+        <div class="group-head"><h2>Choose Organization</h2></div>
+        <p class="stage-error" role="alert">${escapeHtml(orgsErrorMessage)}</p>
+      </section>
+    `;
+  }
+
+  const activeOrgs =
+    vscodeApi !== null && liveOrgOptions !== null
+      ? liveOrgOptions.map((o) => ({ id: o.guid, name: o.name }))
+      : ORG_OPTIONS.map((o) => ({ id: o.id, name: o.name }));
+
+  const isCollapsed = selectedOrgId.length > 0;
+  const orgButtons = activeOrgs
+    .map((org) => {
+      const isSelected = org.id === selectedOrgId;
+      const isHidden = isCollapsed && !isSelected;
+      return `
+        <button
+          type="button"
+          class="org-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
+          data-org-id="${escapeHtml(org.id)}"
+          aria-pressed="${isSelected}"
+          aria-hidden="${isHidden}"
+        >
+          ${escapeHtml(org.name)}
+        </button>
+      `;
+    })
+    .join('');
 
   return `
     <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
@@ -926,9 +1056,28 @@ function renderOrgStage() {
   `;
 }
 
-function renderSpaceStage(selectedOrg) {
+function renderSpaceStage() {
+  if (vscodeApi !== null && spacesLoadingState === 'loading') {
+    return `
+      <section class="group-card space-stage" aria-label="Space list" data-stage-id="space">
+        <div class="group-head"><h2>Choose Space</h2></div>
+        <p class="stage-loading" aria-live="polite">Loading spaces&#8230;</p>
+      </section>
+    `;
+  }
+
+  if (vscodeApi !== null && spacesLoadingState === 'error') {
+    return `
+      <section class="group-card space-stage" aria-label="Space list" data-stage-id="space">
+        <div class="group-head"><h2>Choose Space</h2></div>
+        <p class="stage-error" role="alert">${escapeHtml(spacesErrorMessage)}</p>
+      </section>
+    `;
+  }
+
+  const spaces = resolveSelectableSpaces();
   const isCollapsed = selectedSpaceId.length > 0;
-  const spaceButtons = selectedOrg.spaces
+  const spaceButtons = spaces
     .map((space) => {
       const isSelected = space === selectedSpaceId;
       const isHidden = isCollapsed && !isSelected;
@@ -936,11 +1085,11 @@ function renderSpaceStage(selectedOrg) {
         <button
           type="button"
           class="space-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
-          data-space-id="${space}"
+          data-space-id="${escapeHtml(space)}"
           aria-pressed="${isSelected}"
           aria-hidden="${isHidden}"
         >
-          ${space}
+          ${escapeHtml(space)}
         </button>
       `;
     })
@@ -1236,10 +1385,18 @@ function resolveSelectedRegion() {
 }
 
 function resolveSelectedOrg() {
+  if (vscodeApi !== null && liveOrgOptions !== null) {
+    return liveOrgLookup.get(selectedOrgId);
+  }
+
   return orgLookup.get(selectedOrgId);
 }
 
 function resolveSelectableSpaces() {
+  if (vscodeApi !== null && liveSpaceNames !== null) {
+    return liveSpaceNames;
+  }
+
   return resolveSelectedOrg()?.spaces ?? [];
 }
 
@@ -1272,4 +1429,8 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

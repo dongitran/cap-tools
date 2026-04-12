@@ -18,10 +18,10 @@ const PROTOTYPE_VARIANTS = [
     framePath: './variants/login-gate.html?v=20260412j',
   },
   {
-    id: 'design-34',
-    hash: 'design-34',
+    id: 'design',
+    hash: 'design',
     label: 'Prototype: Region Menu',
-    framePath: './variants/design-34.html?v=20260412g',
+    framePath: './variants/design.html?v=20260412k',
   },
   {
     id: 'cf-logs-panel',
@@ -139,7 +139,11 @@ setControlsPanelOpen(false);
 function resolveInitialVariantIndex() {
   const hash = window.location.hash.replace(/^#/, '');
   if (hash.startsWith('prototype-')) {
-    const variantHash = hash.replace('prototype-', '');
+    const legacyToCurrentHash = {
+      'design-34': 'design',
+    };
+    const rawVariantHash = hash.replace('prototype-', '');
+    const variantHash = legacyToCurrentHash[rawVariantHash] ?? rawVariantHash;
     const variantIndex = PROTOTYPE_VARIANTS.findIndex(
       (variant) => variant.hash === variantHash
     );
