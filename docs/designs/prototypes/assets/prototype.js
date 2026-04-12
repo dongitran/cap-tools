@@ -1584,14 +1584,7 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
       const isLogging = activeApps.has(app.id);
       const isChecked = isLogging || selectedApps.has(app.id);
       const actionMarkup = isLogging
-        ? `
-            <span class="app-log-meta">
-              <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
-                Stop
-              </button>
-              <span class="app-log-state is-logging">Logging</span>
-            </span>
-          `
+        ? '<span class="app-log-state is-logging">Logging</span>'
         : '<span class="app-log-state is-idle">Ready</span>';
 
       return `
@@ -1660,7 +1653,6 @@ function renderActiveAppsLogList(availableApps, activeAppIds) {
             <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
               Stop
             </button>
-            <span class="active-app-pill">Logging</span>
           </span>
         </div>
       `;

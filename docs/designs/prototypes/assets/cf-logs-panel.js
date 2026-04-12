@@ -795,7 +795,7 @@ function applyFiltersAndRender() {
   const searchTerm = elements.filters.search.value.trim().toLowerCase();
   const levelValue = elements.filters.level.value;
 
-  filteredRows = allRows.filter((row) => {
+  const matchingRows = allRows.filter((row) => {
     if (levelValue !== 'all' && row.level !== levelValue) {
       return false;
     }
@@ -806,6 +806,9 @@ function applyFiltersAndRender() {
 
     return true;
   });
+
+  // Newest log lines should appear first in the table.
+  filteredRows = matchingRows.slice().reverse();
 
   if (!filteredRows.some((row) => row.id === selectedRowId)) {
     selectedRowId = filteredRows.length > 0 ? filteredRows[0].id : null;
