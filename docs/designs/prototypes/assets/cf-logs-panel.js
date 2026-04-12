@@ -1,5 +1,6 @@
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+const WORKSPACE_SCOPE = 'za-10 -> data-foundation-prod -> observability';
 
 const SAMPLE_CF_RECENT_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
 
@@ -26,28 +27,17 @@ let filteredRows = [];
 let selectedRowId = null;
 
 hydrateDynamicFilterOptions(allRows);
-setDefaultMeta(allRows);
+setWorkspaceScope();
 applyFiltersAndRender();
 bindFilterEvents();
 
 function getRequiredElements() {
   const tableBody = document.getElementById('log-table-body');
   const tableSummary = document.getElementById('table-summary');
-  const logDetail = document.getElementById('log-detail');
-  const metaApp = document.getElementById('meta-app');
-  const metaStream = document.getElementById('meta-stream');
-  const metaBuffer = document.getElementById('meta-buffer');
-  const metaFormat = document.getElementById('meta-format');
+  const workspaceScope = document.getElementById('workspace-scope');
 
   const filterSearch = document.getElementById('filter-search');
-  const filterFormat = document.getElementById('filter-format');
-  const filterStream = document.getElementById('filter-stream');
   const filterLevel = document.getElementById('filter-level');
-  const filterSource = document.getElementById('filter-source');
-  const filterLogger = document.getElementById('filter-logger');
-  const filterComponent = document.getElementById('filter-component');
-  const filterOrg = document.getElementById('filter-org');
-  const filterSpace = document.getElementById('filter-space');
 
   if (!(tableBody instanceof HTMLTableSectionElement)) {
     throw new Error('Missing #log-table-body.');
@@ -57,80 +47,25 @@ function getRequiredElements() {
     throw new Error('Missing #table-summary.');
   }
 
-  if (!(logDetail instanceof HTMLElement)) {
-    throw new Error('Missing #log-detail.');
-  }
-
-  if (!(metaApp instanceof HTMLElement)) {
-    throw new Error('Missing #meta-app.');
-  }
-
-  if (!(metaStream instanceof HTMLElement)) {
-    throw new Error('Missing #meta-stream.');
-  }
-
-  if (!(metaBuffer instanceof HTMLElement)) {
-    throw new Error('Missing #meta-buffer.');
-  }
-
-  if (!(metaFormat instanceof HTMLElement)) {
-    throw new Error('Missing #meta-format.');
+  if (!(workspaceScope instanceof HTMLElement)) {
+    throw new Error('Missing #workspace-scope.');
   }
 
   if (!(filterSearch instanceof HTMLInputElement)) {
     throw new Error('Missing #filter-search.');
   }
 
-  if (!(filterFormat instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-format.');
-  }
-
-  if (!(filterStream instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-stream.');
-  }
-
   if (!(filterLevel instanceof HTMLSelectElement)) {
     throw new Error('Missing #filter-level.');
-  }
-
-  if (!(filterSource instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-source.');
-  }
-
-  if (!(filterLogger instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-logger.');
-  }
-
-  if (!(filterComponent instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-component.');
-  }
-
-  if (!(filterOrg instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-org.');
-  }
-
-  if (!(filterSpace instanceof HTMLSelectElement)) {
-    throw new Error('Missing #filter-space.');
   }
 
   return {
     tableBody,
     tableSummary,
-    logDetail,
-    metaApp,
-    metaStream,
-    metaBuffer,
-    metaFormat,
+    workspaceScope,
     filters: {
       search: filterSearch,
-      format: filterFormat,
-      stream: filterStream,
       level: filterLevel,
-      source: filterSource,
-      logger: filterLogger,
-      component: filterComponent,
-      org: filterOrg,
-      space: filterSpace,
     },
   };
 }
@@ -337,18 +272,8 @@ function hydrateDynamicFilterOptions(rows) {
     const order = LOG_LEVEL_ORDER.indexOf(value);
     return order < 0 ? LOG_LEVEL_ORDER.length : order;
   });
-  const sources = collectDistinctValues(rows, (row) => row.source);
-  const loggers = collectDistinctValues(rows, (row) => row.logger);
-  const components = collectDistinctValues(rows, (row) => row.component);
-  const orgs = collectDistinctValues(rows, (row) => row.org);
-  const spaces = collectDistinctValues(rows, (row) => row.space);
 
   rebuildSelect(elements.filters.level, levels);
-  rebuildSelect(elements.filters.source, sources);
-  rebuildSelect(elements.filters.logger, loggers);
-  rebuildSelect(elements.filters.component, components);
-  rebuildSelect(elements.filters.org, orgs);
-  rebuildSelect(elements.filters.space, spaces);
 }
 
 function collectDistinctValues(rows, selector, orderSelector) {
@@ -408,20 +333,8 @@ function rebuildSelect(select, values) {
   select.value = 'all';
 }
 
-function setDefaultMeta(rows) {
-  const appName = readFirstNonEmpty(rows, (row) => row.component) || 'cf-app';
-  elements.metaApp.textContent = appName;
-}
-
-function readFirstNonEmpty(rows, selector) {
-  for (const row of rows) {
-    const value = selector(row);
-    if (value.length > 0) {
-      return value;
-    }
-  }
-
-  return '';
+function setWorkspaceScope() {
+  elements.workspaceScope.textContent = WORKSPACE_SCOPE;
 }
 
 function bindFilterEvents() {
@@ -429,80 +342,17 @@ function bindFilterEvents() {
     applyFiltersAndRender();
   });
 
-  elements.filters.format.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
-  elements.filters.stream.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
   elements.filters.level.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
-  elements.filters.source.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
-  elements.filters.logger.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
-  elements.filters.component.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
-  elements.filters.org.addEventListener('change', () => {
-    applyFiltersAndRender();
-  });
-
-  elements.filters.space.addEventListener('change', () => {
     applyFiltersAndRender();
   });
 }
 
 function applyFiltersAndRender() {
   const searchTerm = elements.filters.search.value.trim().toLowerCase();
-  const formatValue = elements.filters.format.value;
-  const streamValue = elements.filters.stream.value;
   const levelValue = elements.filters.level.value;
-  const sourceValue = elements.filters.source.value;
-  const loggerValue = elements.filters.logger.value;
-  const componentValue = elements.filters.component.value;
-  const orgValue = elements.filters.org.value;
-  const spaceValue = elements.filters.space.value;
 
   filteredRows = allRows.filter((row) => {
-    if (formatValue !== 'all' && row.format !== formatValue) {
-      return false;
-    }
-
-    if (streamValue !== 'all' && row.stream !== streamValue) {
-      return false;
-    }
-
     if (levelValue !== 'all' && row.level !== levelValue) {
-      return false;
-    }
-
-    if (sourceValue !== 'all' && row.source !== sourceValue) {
-      return false;
-    }
-
-    if (loggerValue !== 'all' && row.logger !== loggerValue) {
-      return false;
-    }
-
-    if (componentValue !== 'all' && row.component !== componentValue) {
-      return false;
-    }
-
-    if (orgValue !== 'all' && row.org !== orgValue) {
-      return false;
-    }
-
-    if (spaceValue !== 'all' && row.space !== spaceValue) {
       return false;
     }
 
@@ -518,10 +368,7 @@ function applyFiltersAndRender() {
   }
 
   renderTable(filteredRows);
-  const selectedRow = filteredRows.find((row) => row.id === selectedRowId) || null;
-  renderDetail(selectedRow);
   renderSummary(filteredRows, allRows);
-  renderMeta(filteredRows, allRows);
 }
 
 function renderTable(rows) {
@@ -530,7 +377,7 @@ function renderTable(rows) {
   if (rows.length === 0) {
     const emptyRow = document.createElement('tr');
     const emptyCell = document.createElement('td');
-    emptyCell.colSpan = 10;
+    emptyCell.colSpan = 6;
     emptyCell.className = 'empty-row';
     emptyCell.textContent = 'No rows match the current filters.';
     emptyRow.append(emptyCell);
@@ -548,18 +395,13 @@ function renderTable(rows) {
     tr.addEventListener('click', () => {
       selectedRowId = row.id;
       renderTable(filteredRows);
-      renderDetail(row);
     });
 
     tr.append(createTextCell(row.timestamp));
     tr.append(createTextCell(row.source));
     tr.append(createTextCell(row.stream));
-    tr.append(createBadgeCell(row.format, `badge badge-format-${row.format}`));
     tr.append(createBadgeCell(row.level, `badge badge-level-${row.level}`));
     tr.append(createTextCell(row.logger, 'cell-logger'));
-    tr.append(createTextCell(row.component, 'cell-component'));
-    tr.append(createTextCell(row.org, 'cell-org'));
-    tr.append(createTextCell(row.space, 'cell-space'));
     tr.append(createTextCell(compactMessage(row.message), 'cell-message'));
 
     elements.tableBody.append(tr);
@@ -588,66 +430,12 @@ function compactMessage(message) {
   return message.replace(/\s+/g, ' ').trim();
 }
 
-function renderDetail(row) {
-  elements.logDetail.replaceChildren();
-
-  if (row === null) {
-    const emptyTitle = document.createElement('h2');
-    emptyTitle.textContent = 'Log detail';
-    const emptyText = document.createElement('p');
-    emptyText.textContent = 'Select a log row to inspect full payload.';
-    elements.logDetail.append(emptyTitle, emptyText);
-    return;
-  }
-
-  const title = document.createElement('h2');
-  title.textContent = `${row.stream} ${row.source}`;
-
-  const contextLine = document.createElement('p');
-  contextLine.textContent = `${row.timestamp} | ${row.format.toUpperCase()} | ${row.level.toUpperCase()}`;
-
-  const messageHeading = document.createElement('h3');
-  messageHeading.textContent = 'Message';
-
-  const messagePre = document.createElement('pre');
-  messagePre.textContent = row.message;
-
-  elements.logDetail.append(title, contextLine, messageHeading, messagePre);
-
-  if (row.jsonPayload !== null) {
-    const jsonHeading = document.createElement('h3');
-    jsonHeading.textContent = 'JSON payload';
-
-    const jsonPre = document.createElement('pre');
-    jsonPre.textContent = JSON.stringify(row.jsonPayload, null, 2);
-
-    elements.logDetail.append(jsonHeading, jsonPre);
-  }
-}
-
 function renderSummary(rows, all) {
-  const streamFilter = elements.filters.stream.value;
-  const formatFilter = elements.filters.format.value;
-
   const activeBits = [];
-  if (streamFilter !== 'all') {
-    activeBits.push(`stream=${streamFilter}`);
-  }
-  if (formatFilter !== 'all') {
-    activeBits.push(`format=${formatFilter}`);
+  if (elements.filters.level.value !== 'all') {
+    activeBits.push(`level=${elements.filters.level.value}`);
   }
 
   const activeFilterText = activeBits.length > 0 ? ` (${activeBits.join(', ')})` : '';
   elements.tableSummary.textContent = `${rows.length} of ${all.length} rows visible${activeFilterText}.`;
-}
-
-function renderMeta(rows, all) {
-  const jsonCount = rows.filter((row) => row.format === 'json').length;
-  const textCount = rows.length - jsonCount;
-
-  elements.metaBuffer.textContent = `Rows ${rows.length}/${all.length}`;
-  elements.metaFormat.textContent = `JSON ${jsonCount} • Text ${textCount}`;
-
-  const streamFilter = elements.filters.stream.value;
-  elements.metaStream.textContent = streamFilter === 'all' ? 'ALL' : streamFilter;
 }

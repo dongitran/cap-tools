@@ -1,18 +1,26 @@
 const frameElement = document.getElementById('prototype-frame');
-const previousButton = document.getElementById('previous-design');
-const nextButton = document.getElementById('next-design');
+const regionMenuButton = document.getElementById('open-region-menu');
+const cfLogsPanelButton = document.getElementById('open-cf-logs-panel');
 const themeButton = document.getElementById('theme-cycle');
-const prototypeKind = document.getElementById('prototype-kind');
 
 const GALLERY_THEME_CLASS_PREFIX = 'gallery-theme-';
 const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
+const ACTIVE_MENU_CLASS = 'is-active';
+const REGION_LAYOUT_CLASS = 'mode-region-menu';
+const CF_LOGS_LAYOUT_CLASS = 'mode-cf-logs-panel';
 
 const PROTOTYPE_VARIANTS = [
+  {
+    id: 'design-34',
+    hash: 'design-34',
+    label: 'Prototype: Region Menu',
+    framePath: './variants/design-34.html?v=20260412e',
+  },
   {
     id: 'cf-logs-panel',
     hash: 'cf-logs-panel',
     label: 'Prototype: CFLogs Panel',
-    framePath: './variants/cf-logs-panel.html?v=20260412c',
+    framePath: './variants/cf-logs-panel.html?v=20260412e',
   },
 ];
 
@@ -39,10 +47,9 @@ const THEME_VARIANTS = [
 
 if (
   !(frameElement instanceof HTMLIFrameElement) ||
-  !(previousButton instanceof HTMLButtonElement) ||
-  !(nextButton instanceof HTMLButtonElement) ||
-  !(themeButton instanceof HTMLButtonElement) ||
-  !(prototypeKind instanceof HTMLElement)
+  !(regionMenuButton instanceof HTMLButtonElement) ||
+  !(cfLogsPanelButton instanceof HTMLButtonElement) ||
+  !(themeButton instanceof HTMLButtonElement)
 ) {
   throw new Error('Prototype gallery is missing required DOM nodes.');
 }
@@ -53,14 +60,12 @@ frameElement.addEventListener('load', () => {
   applyThemeToPrototypeFrame();
 });
 
-previousButton.addEventListener('click', () => {
-  currentVariantIndex = wrapVariantIndex(currentVariantIndex - 1);
-  renderCurrentVariant();
+regionMenuButton.addEventListener('click', () => {
+  switchVariantById('design-34');
 });
 
-nextButton.addEventListener('click', () => {
-  currentVariantIndex = wrapVariantIndex(currentVariantIndex + 1);
-  renderCurrentVariant();
+cfLogsPanelButton.addEventListener('click', () => {
+  switchVariantById('cf-logs-panel');
 });
 
 themeButton.addEventListener('click', () => {
@@ -83,10 +88,20 @@ window.addEventListener('keydown', (event) => {
 });
 
 applyGalleryTheme();
-setVariantNavigationState();
 renderCurrentVariant();
 
 function resolveInitialVariantIndex() {
+  const hash = window.location.hash.replace(/^#/, '');
+  if (hash.startsWith('prototype-')) {
+    const variantHash = hash.replace('prototype-', '');
+    const variantIndex = PROTOTYPE_VARIANTS.findIndex(
+      (variant) => variant.hash === variantHash
+    );
+    if (variantIndex >= 0) {
+      return variantIndex;
+    }
+  }
+
   return 0;
 }
 
@@ -120,20 +135,32 @@ function renderCurrentVariant() {
     return;
   }
 
+  applyLayoutForVariant(variant.id);
   frameElement.src = variant.framePath;
-  prototypeKind.textContent = variant.label;
+  updateMenuSwitchState(variant.id);
   updateUrlState();
 }
 
-function setVariantNavigationState() {
-  if (PROTOTYPE_VARIANTS.length > 1) {
-    previousButton.disabled = false;
-    nextButton.disabled = false;
+function switchVariantById(variantId) {
+  const nextIndex = PROTOTYPE_VARIANTS.findIndex((variant) => variant.id === variantId);
+  if (nextIndex < 0 || nextIndex === currentVariantIndex) {
     return;
   }
 
-  previousButton.disabled = true;
-  nextButton.disabled = true;
+  currentVariantIndex = nextIndex;
+  renderCurrentVariant();
+}
+
+function updateMenuSwitchState(activeVariantId) {
+  const isRegionMenu = activeVariantId === 'design-34';
+  regionMenuButton.classList.toggle(ACTIVE_MENU_CLASS, isRegionMenu);
+  cfLogsPanelButton.classList.toggle(ACTIVE_MENU_CLASS, !isRegionMenu);
+}
+
+function applyLayoutForVariant(variantId) {
+  const isRegionMenu = variantId === 'design-34';
+  document.body.classList.toggle(REGION_LAYOUT_CLASS, isRegionMenu);
+  document.body.classList.toggle(CF_LOGS_LAYOUT_CLASS, !isRegionMenu);
 }
 
 function resolveInitialThemeIndex() {

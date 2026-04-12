@@ -20,78 +20,25 @@
         </nav>
 
         <section class="cf-logs-panel" aria-label="CFLogs panel content">
-          <header class="cf-logs-head">
-            <h1>CFLogs</h1>
-            <div class="stream-meta" role="status" aria-live="polite">
-              <span id="meta-app">config-admin</span>
-              <span id="meta-stream">RECENT</span>
-              <span id="meta-buffer">Rows 0</span>
-              <span id="meta-format">JSON 0 • Text 0</span>
+          <header class="workspace-head">
+            <div class="workspace-title-row">
+              <h1>Monitoring Workspace</h1>
+              <p id="workspace-scope" class="workspace-scope">za-10 -> data-foundation-prod -> observability</p>
+              <button type="button" class="workspace-change">Change</button>
             </div>
           </header>
 
-          <div class="cf-logs-toolbar" role="group" aria-label="CF log actions">
-            <button type="button">Start Live</button>
-            <button type="button">Pause</button>
-            <button type="button">Fetch Recent</button>
-            <button type="button">Clear</button>
-            <button type="button">Export</button>
-          </div>
-
-          <section class="filter-panel" aria-label="CF log filters">
-            <div class="filter-row">
-              <label for="filter-search">Search</label>
-              <input id="filter-search" type="search" placeholder="message, logger, org, space" />
+          <section class="filter-inline" aria-label="CF log filters">
+            <div class="filter-item filter-item-search">
+              <input
+                id="filter-search"
+                type="search"
+                placeholder="message, source, logger"
+                aria-label="Search logs"
+              />
             </div>
-            <div class="filter-row">
-              <label for="filter-format">Format</label>
-              <select id="filter-format">
-                <option value="all">All</option>
-                <option value="json">JSON</option>
-                <option value="text">Text</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-stream">Stream</label>
-              <select id="filter-stream">
-                <option value="all">All</option>
-                <option value="OUT" selected>OUT</option>
-                <option value="ERR">ERR</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-level">Level</label>
-              <select id="filter-level">
-                <option value="all">All</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-source">Source</label>
-              <select id="filter-source">
-                <option value="all">All</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-logger">Logger</label>
-              <select id="filter-logger">
-                <option value="all">All</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-component">Component</label>
-              <select id="filter-component">
-                <option value="all">All</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-org">Org</label>
-              <select id="filter-org">
-                <option value="all">All</option>
-              </select>
-            </div>
-            <div class="filter-row">
-              <label for="filter-space">Space</label>
-              <select id="filter-space">
+            <div class="filter-item filter-item-level">
+              <select id="filter-level" aria-label="Filter by level">
                 <option value="all">All</option>
               </select>
             </div>
@@ -104,12 +51,8 @@
                   <th scope="col">Time</th>
                   <th scope="col">Source</th>
                   <th scope="col">Stream</th>
-                  <th scope="col">Format</th>
                   <th scope="col">Level</th>
                   <th scope="col">Logger</th>
-                  <th scope="col">Component</th>
-                  <th scope="col">Org</th>
-                  <th scope="col">Space</th>
                   <th scope="col">Message</th>
                 </tr>
               </thead>
@@ -118,8 +61,6 @@
           </div>
 
           <p id="table-summary" class="table-summary" role="status" aria-live="polite"></p>
-
-          <section id="log-detail" class="log-detail" aria-label="Selected log detail"></section>
         </section>
       </section>
     </main>

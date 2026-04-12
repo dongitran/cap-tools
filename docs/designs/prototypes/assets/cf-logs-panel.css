@@ -120,71 +120,65 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   align-content: start;
 }
 
-.cf-logs-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.cf-logs-head h1 {
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.stream-meta {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 0.64rem;
-  color: var(--panel-muted);
-}
-
-.stream-meta span {
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  padding: 1px 7px;
-}
-
-.cf-logs-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.cf-logs-toolbar button {
-  border: 1px solid var(--panel-border);
-  background: color-mix(in oklab, var(--panel-surface) 80%, var(--panel-bg));
-  color: var(--panel-text);
-  border-radius: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  font: inherit;
-  font-size: 0.66rem;
-}
-
-.filter-panel {
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 8px;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  background: color-mix(in oklab, var(--panel-surface) 85%, var(--panel-bg));
-}
-
-.filter-row {
+.workspace-head {
   display: grid;
   gap: 4px;
 }
 
-.filter-row label {
-  font-size: 0.62rem;
+.workspace-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-title-row h1 {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.workspace-change {
+  margin-left: auto;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in oklab, var(--panel-surface) 80%, var(--panel-bg));
+  color: var(--panel-text);
+  border-radius: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.workspace-scope {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
   color: var(--panel-muted);
 }
 
-.filter-row input,
-.filter-row select {
+.filter-inline {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.filter-item {
+  display: grid;
+  gap: 0;
+}
+
+.filter-item-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-item-level {
+  width: 124px;
+  flex: 0 0 auto;
+}
+
+.filter-item input,
+.filter-item select {
   min-height: 28px;
   border: 1px solid var(--panel-border);
   border-radius: 6px;
@@ -195,8 +189,8 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   padding: 0 8px;
 }
 
-.filter-row input:focus-visible,
-.filter-row select:focus-visible {
+.filter-item input:focus-visible,
+.filter-item select:focus-visible {
   outline: 1px solid color-mix(in oklab, var(--panel-accent) 62%, #ffffff);
   outline-offset: 0;
 }
@@ -205,7 +199,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   overflow: auto;
-  max-height: min(286px, 28dvh);
+  max-height: min(420px, 56dvh);
   background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
 }
 
@@ -230,7 +224,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table th:nth-child(1) {
-  width: 172px;
+  width: 160px;
 }
 
 .cf-log-table th:nth-child(2) {
@@ -238,23 +232,16 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table th:nth-child(3),
-.cf-log-table th:nth-child(4),
-.cf-log-table th:nth-child(5) {
+.cf-log-table th:nth-child(4) {
   width: 64px;
 }
 
-.cf-log-table th:nth-child(6),
-.cf-log-table th:nth-child(7) {
-  width: 112px;
+.cf-log-table th:nth-child(5) {
+  width: 124px;
 }
 
-.cf-log-table th:nth-child(8),
-.cf-log-table th:nth-child(9) {
-  width: 108px;
-}
-
-.cf-log-table th:nth-child(10) {
-  min-width: 340px;
+.cf-log-table th:nth-child(6) {
+  min-width: 420px;
 }
 
 .cf-log-table tbody td {
@@ -280,10 +267,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table .cell-message,
-.cf-log-table .cell-logger,
-.cf-log-table .cell-component,
-.cf-log-table .cell-org,
-.cf-log-table .cell-space {
+.cf-log-table .cell-logger {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -319,60 +303,15 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   color: var(--panel-error);
 }
 
-.badge-format-json {
-  color: color-mix(in oklab, var(--panel-accent) 74%, var(--panel-text));
-}
-
 .table-summary {
   margin: 0;
   font-size: 0.65rem;
   color: var(--panel-muted);
 }
 
-.log-detail {
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 8px;
-  display: grid;
-  gap: 6px;
-  background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
-}
-
-.log-detail h2,
-.log-detail h3,
-.log-detail p,
-.log-detail pre {
-  margin: 0;
-}
-
-.log-detail h2 {
-  font-size: 0.72rem;
-}
-
-.log-detail h3 {
-  font-size: 0.65rem;
-  color: var(--panel-muted);
-}
-
-.log-detail p {
-  font-size: 0.64rem;
-}
-
-.log-detail pre {
-  font-size: 0.62rem;
-  padding: 6px;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  max-height: 128px;
-  overflow: auto;
-  background: color-mix(in oklab, var(--panel-surface) 80%, var(--panel-bg));
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 @media (max-width: 900px) {
-  .filter-panel {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .filter-inline {
+    flex-wrap: wrap;
   }
 }
 
@@ -381,8 +320,8 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
     grid-template-rows: minmax(0, 1fr) minmax(300px, 52dvh);
   }
 
-  .filter-panel {
-    grid-template-columns: 1fr;
+  .filter-item-level {
+    width: 100%;
   }
 
   .cf-log-table {
