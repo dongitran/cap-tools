@@ -1,4 +1,4 @@
-// cspell:words hana ondemand
+// cspell:words guids hana ondemand
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -6,6 +6,8 @@ const execFileAsync = promisify(execFile);
 
 const CF_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const CF_COMMAND_TIMEOUT_MS = 30_000;
+const CF_API_REQUEST_TIMEOUT_MS = 20_000;
+const CF_V3_PAGE_SIZE = 200;
 
 interface CfCliExecutionOptions {
   readonly cfHomeDir?: string;
@@ -62,7 +64,7 @@ export function getCfApiEndpoint(regionCode: string): string {
  * Fetch CF API /v2/info to discover the UAA authorization endpoint.
  */
 export async function fetchCfLoginInfo(apiEndpoint: string): Promise<CfLoginInfo> {
-  const response = await fetch(`${apiEndpoint}/v2/info`, {
+  const response = await fetchCfApi(`${apiEndpoint}/v2/info`, {
     headers: { Accept: 'application/json' },
   });
 
@@ -95,7 +97,7 @@ export async function cfLogin(
     scope: '',
   });
 
-  const response = await fetch(`${authorizationEndpoint}/oauth/token`, {
+  const response = await fetchCfApi(`${authorizationEndpoint}/oauth/token`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${clientCredentials}`,
@@ -134,94 +136,25 @@ export async function cfLogin(
  * Fetch all CF organizations visible to the authenticated user.
  */
 export async function fetchOrgs(session: CfSession): Promise<CfOrg[]> {
-  const response = await fetch(
-    `${session.apiEndpoint}/v2/organizations?results-per-page=100&order-by=name`,
-    {
-      headers: {
-        Authorization: `Bearer ${session.token.accessToken}`,
-        Accept: 'application/json',
-      },
-    }
+  const v3Resources = await fetchV3Resources(
+    session,
+    `/v3/organizations?order_by=name&per_page=${String(CF_V3_PAGE_SIZE)}`,
+    'Failed to fetch CF organizations'
   );
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch CF organizations (status ${String(response.status)}).`);
-  }
-
-  const data = await response.json();
-  if (!isRecord(data) || !Array.isArray(data['resources'])) {
-    throw new Error('Unexpected CF organizations response format.');
-  }
-
-  const orgs: CfOrg[] = [];
-  for (const resource of data['resources']) {
-    if (!isRecord(resource)) {
-      continue;
-    }
-
-    const metadata = resource['metadata'];
-    const entity = resource['entity'];
-    if (!isRecord(metadata) || !isRecord(entity)) {
-      continue;
-    }
-
-    const guid = metadata['guid'];
-    const name = entity['name'];
-    if (typeof guid !== 'string' || typeof name !== 'string') {
-      continue;
-    }
-
-    orgs.push({ guid, name });
-  }
-
-  return orgs;
+  return mapV3NamedResources(v3Resources);
 }
 
 /**
  * Fetch all CF spaces within the given organization.
  */
 export async function fetchSpaces(session: CfSession, orgGuid: string): Promise<CfSpace[]> {
-  const response = await fetch(
-    `${session.apiEndpoint}/v2/spaces?q=organization_guid:${encodeURIComponent(orgGuid)}&results-per-page=100&order-by=name`,
-    {
-      headers: {
-        Authorization: `Bearer ${session.token.accessToken}`,
-        Accept: 'application/json',
-      },
-    }
+  const encodedOrgGuid = encodeURIComponent(orgGuid);
+  const v3Resources = await fetchV3Resources(
+    session,
+    `/v3/spaces?organization_guids=${encodedOrgGuid}&order_by=name&per_page=${String(CF_V3_PAGE_SIZE)}`,
+    'Failed to fetch CF spaces'
   );
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch CF spaces (status ${String(response.status)}).`);
-  }
-
-  const data = await response.json();
-  if (!isRecord(data) || !Array.isArray(data['resources'])) {
-    throw new Error('Unexpected CF spaces response format.');
-  }
-
-  const spaces: CfSpace[] = [];
-  for (const resource of data['resources']) {
-    if (!isRecord(resource)) {
-      continue;
-    }
-
-    const metadata = resource['metadata'];
-    const entity = resource['entity'];
-    if (!isRecord(metadata) || !isRecord(entity)) {
-      continue;
-    }
-
-    const guid = metadata['guid'];
-    const name = entity['name'];
-    if (typeof guid !== 'string' || typeof name !== 'string') {
-      continue;
-    }
-
-    spaces.push({ guid, name });
-  }
-
-  return spaces;
+  return mapV3NamedResources(v3Resources);
 }
 
 /**
@@ -374,4 +307,107 @@ function buildCfHomeOptions(cfHomeDir: string | undefined): Pick<CfCliExecutionO
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function fetchV3Resources(
+  session: CfSession,
+  relativeUrl: string,
+  failureMessage: string
+): Promise<Record<string, unknown>[]> {
+  const visitedUrls = new Set<string>();
+  const resources: Record<string, unknown>[] = [];
+  let nextPageUrl = `${session.apiEndpoint}${relativeUrl}`;
+
+  while (nextPageUrl.length > 0) {
+    if (visitedUrls.has(nextPageUrl)) {
+      throw new Error(`${failureMessage} (v3 pagination loop detected).`);
+    }
+    visitedUrls.add(nextPageUrl);
+
+    const response = await fetchCfApi(nextPageUrl, {
+      headers: buildCfAuthHeaders(session.token.accessToken),
+    });
+
+    if (!response.ok) {
+      throw new Error(`${failureMessage} (status ${String(response.status)}).`);
+    }
+
+    const payload = await response.json();
+    if (!isRecord(payload) || !Array.isArray(payload['resources'])) {
+      throw new Error(`Unexpected v3 response format for ${failureMessage.toLowerCase()}.`);
+    }
+
+    for (const resource of payload['resources']) {
+      if (isRecord(resource)) {
+        resources.push(resource);
+      }
+    }
+
+    nextPageUrl = resolveV3NextPageUrl(payload['pagination'], session.apiEndpoint);
+  }
+
+  return resources;
+}
+
+function mapV3NamedResources(resources: readonly Record<string, unknown>[]): CfOrg[] {
+  const items: CfOrg[] = [];
+  for (const resource of resources) {
+    const guid = resource['guid'];
+    const name = resource['name'];
+    if (typeof guid === 'string' && typeof name === 'string') {
+      items.push({ guid, name });
+    }
+  }
+  return items;
+}
+
+function resolveV3NextPageUrl(pagination: unknown, apiEndpoint: string): string {
+  if (!isRecord(pagination)) {
+    return '';
+  }
+  const next = pagination['next'];
+  if (!isRecord(next) || typeof next['href'] !== 'string') {
+    return '';
+  }
+  const href = next['href'];
+  if (href.length === 0) {
+    return '';
+  }
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    return href;
+  }
+  return `${apiEndpoint}${href}`;
+}
+
+function buildCfAuthHeaders(accessToken: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/json',
+  };
+}
+
+async function fetchCfApi(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, CF_API_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`CF API request timed out after ${String(CF_API_REQUEST_TIMEOUT_MS)}ms.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    isRecord(error) &&
+    typeof error['name'] === 'string' &&
+    error['name'].toLowerCase() === 'aborterror'
+  );
 }

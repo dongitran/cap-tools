@@ -1,7 +1,9 @@
+// cspell:words guids
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { execFileAsyncMock } = vi.hoisted(() => ({
+const { execFileAsyncMock, fetchMock } = vi.hoisted(() => ({
   execFileAsyncMock: vi.fn(),
+  fetchMock: vi.fn(),
 }));
 
 vi.mock('node:util', () => ({
@@ -12,7 +14,26 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
 
-import { fetchStartedAppsViaCfCli, parseCfAppsOutput } from './cfClient';
+import {
+  fetchOrgs,
+  fetchSpaces,
+  fetchStartedAppsViaCfCli,
+  parseCfAppsOutput,
+} from './cfClient';
+
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'content-type': 'application/json',
+    },
+  });
+}
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', fetchMock);
+  fetchMock.mockReset();
+});
 
 describe('parseCfAppsOutput', () => {
   it('parses CF v8 processes output and extracts running instances', () => {
@@ -134,5 +155,178 @@ describe('fetchStartedAppsViaCfCli', () => {
     expect(errorMessage).toContain('Failed to authenticate Cloud Foundry CLI.');
     expect(errorMessage).toContain('Credentials were rejected by UAA');
     expect(errorMessage).not.toContain('super-secret-password');
+  });
+});
+
+describe('CF API v3 resources', () => {
+  it('fetches organizations from v3 endpoint when available', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        resources: [{ guid: 'org-alpha', name: 'alpha-org' }],
+        pagination: { next: null },
+      })
+    );
+
+    const orgs = await fetchOrgs({
+      apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+      token: {
+        accessToken: 'token-value',
+        refreshToken: '',
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+
+    expect(orgs).toEqual([{ guid: 'org-alpha', name: 'alpha-org' }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/v3/organizations?order_by=name&per_page=200'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-value',
+        }),
+      })
+    );
+  });
+
+  it('fetches all organization pages from v3 pagination', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          resources: [{ guid: 'org-a', name: 'a-org' }],
+          pagination: {
+            next: { href: '/v3/organizations?page=2&per_page=200' },
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          resources: [{ guid: 'org-b', name: 'b-org' }],
+          pagination: { next: null },
+        })
+      );
+
+    const orgs = await fetchOrgs({
+      apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+      token: {
+        accessToken: 'token-value',
+        refreshToken: '',
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+
+    expect(orgs).toEqual([
+      { guid: 'org-a', name: 'a-org' },
+      { guid: 'org-b', name: 'b-org' },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/v3/organizations?page=2&per_page=200');
+  });
+
+  it('fails fast when v3 organizations endpoint returns an error', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 404));
+
+    await expect(
+      fetchOrgs({
+        apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+        token: {
+          accessToken: 'token-value',
+          refreshToken: '',
+          expiresAt: Date.now() + 60_000,
+        },
+      })
+    ).rejects.toThrow('Failed to fetch CF organizations (status 404).');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/v3/organizations');
+  });
+
+  it('fetches spaces from v3 endpoint when available', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        resources: [{ guid: 'space-a', name: 'dev' }],
+        pagination: { next: null },
+      })
+    );
+
+    const spaces = await fetchSpaces(
+      {
+        apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+        token: {
+          accessToken: 'token-value',
+          refreshToken: '',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+      'org-guid-1'
+    );
+
+    expect(spaces).toEqual([{ guid: 'space-a', name: 'dev' }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/v3/spaces?organization_guids=org-guid-1'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-value',
+        }),
+      })
+    );
+  });
+
+  it('fetches all space pages from v3 pagination', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          resources: [{ guid: 'space-1', name: 'dev' }],
+          pagination: {
+            next: {
+              href: 'https://api.cf.br10.hana.ondemand.com/v3/spaces?page=2&per_page=200',
+            },
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          resources: [{ guid: 'space-2', name: 'prod' }],
+          pagination: { next: null },
+        })
+      );
+
+    const spaces = await fetchSpaces(
+      {
+        apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+        token: {
+          accessToken: 'token-value',
+          refreshToken: '',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+      'org-guid-2'
+    );
+
+    expect(spaces).toEqual([
+      { guid: 'space-1', name: 'dev' },
+      { guid: 'space-2', name: 'prod' },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/v3/spaces?page=2&per_page=200');
+  });
+
+  it('fails fast when v3 spaces endpoint returns an error', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+
+    await expect(
+      fetchSpaces(
+        {
+          apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+          token: {
+            accessToken: 'token-value',
+            refreshToken: '',
+            expiresAt: Date.now() + 60_000,
+          },
+        },
+        'org-guid-2'
+      )
+    ).rejects.toThrow('Failed to fetch CF spaces (status 500).');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/v3/spaces?organization_guids=org-guid-2');
   });
 });
