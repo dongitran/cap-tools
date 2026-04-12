@@ -95,6 +95,37 @@ interface ExtensionHostLaunchOptions {
   readonly withMockCredentials?: boolean;
 }
 
+function buildExtensionHostEnv(withMockCredentials: boolean): Record<string, string> {
+  const env = toLaunchEnv(process.env);
+  env['SAP_TOOLS_E2E'] = '1';
+
+  if (withMockCredentials) {
+    env['SAP_EMAIL'] = 'test@example.com';
+    env['SAP_PASSWORD'] = 'test-password';
+    env['SAP_TOOLS_TEST_MODE'] = '1';
+    delete env['SAP_TOOLS_FORCE_LOGIN_GATE'];
+    return env;
+  }
+
+  delete env['SAP_EMAIL'];
+  delete env['SAP_PASSWORD'];
+  delete env['SAP_TOOLS_TEST_MODE'];
+  env['SAP_TOOLS_FORCE_LOGIN_GATE'] = '1';
+  return env;
+}
+
+function toLaunchEnv(source: NodeJS.ProcessEnv): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === 'string') {
+      env[key] = value;
+    }
+  }
+
+  return env;
+}
+
 function ensureThemeSettings(userDataDir: string, colorTheme: string): void {
   const userConfigDir = path.join(userDataDir, 'User');
   fs.mkdirSync(userConfigDir, { recursive: true });
@@ -153,15 +184,7 @@ async function launchExtensionHost(
       '--disable-workspace-trust',
       '--new-window',
     ],
-    env: {
-      ...process.env,
-      SAP_TOOLS_E2E: '1',
-      ...(withMockCredentials && {
-        SAP_EMAIL: 'test@example.com',
-        SAP_PASSWORD: 'test-password',
-        SAP_TOOLS_TEST_MODE: '1',
-      }),
-    },
+    env: buildExtensionHostEnv(withMockCredentials),
     timeout: 180000,
   });
 
@@ -202,6 +225,38 @@ async function findSapToolsWebviewFrame(window: Page): Promise<Frame | undefined
   return undefined;
 }
 
+async function findSapToolsRegionFrame(window: Page): Promise<Frame | undefined> {
+  const candidateFrames = window
+    .frames()
+    .filter((frame) => frame.url().includes('vscode-webview://'));
+
+  for (const frame of candidateFrames) {
+    const regionTitle = frame.getByRole('heading', { name: 'Select SAP BTP Region' });
+    const isRegionVisible = await regionTitle.isVisible().catch(() => false);
+    if (isRegionVisible) {
+      return frame;
+    }
+  }
+
+  return undefined;
+}
+
+async function findSapToolsLoginFrame(window: Page): Promise<Frame | undefined> {
+  const candidateFrames = window
+    .frames()
+    .filter((frame) => frame.url().includes('vscode-webview://'));
+
+  for (const frame of candidateFrames) {
+    const loginTitle = frame.getByRole('heading', { name: 'SAP Tools Login' });
+    const isLoginVisible = await loginTitle.isVisible().catch(() => false);
+    if (isLoginVisible) {
+      return frame;
+    }
+  }
+
+  return undefined;
+}
+
 async function findCfLogsPanelFrame(window: Page): Promise<Frame | undefined> {
   const candidateFrames = window
     .frames()
@@ -229,6 +284,38 @@ async function resolveSapToolsWebviewFrame(window: Page): Promise<Frame> {
   const frame = await findSapToolsWebviewFrame(window);
   if (frame === undefined) {
     throw new Error('SAP Tools webview frame was not found.');
+  }
+
+  return frame;
+}
+
+async function resolveSapToolsRegionFrame(window: Page): Promise<Frame> {
+  await expect
+    .poll(async () => {
+      const frame = await findSapToolsRegionFrame(window);
+      return frame?.url() ?? '';
+    })
+    .toContain('vscode-webview://');
+
+  const frame = await findSapToolsRegionFrame(window);
+  if (frame === undefined) {
+    throw new Error('SAP Tools region frame was not found.');
+  }
+
+  return frame;
+}
+
+async function resolveSapToolsLoginFrame(window: Page): Promise<Frame> {
+  await expect
+    .poll(async () => {
+      const frame = await findSapToolsLoginFrame(window);
+      return frame?.url() ?? '';
+    })
+    .toContain('vscode-webview://');
+
+  const frame = await findSapToolsLoginFrame(window);
+  if (frame === undefined) {
+    throw new Error('SAP Tools login frame was not found.');
   }
 
   return frame;
@@ -631,8 +718,17 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
       ).toBeVisible();
       await expect(
-        webviewFrame.getByRole('button', { name: 'Connect Cloud Foundry' })
+        webviewFrame.getByRole('heading', { name: 'Active Apps Log' })
       ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Apps Log Control' })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Start App Logging' })
+      ).toBeVisible();
+      await expect(webviewFrame.getByText('finance-uat-api')).toBeVisible({
+        timeout: 10000,
+      });
       await expect(webviewFrame.getByRole('tab', { name: 'Logs' })).toBeVisible();
       await expect(webviewFrame.getByRole('tab', { name: 'Apps' })).toBeVisible();
       await expect(
@@ -664,19 +760,7 @@ test.describe('SAP Tools login gate', () => {
       });
       await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
       await sapToolsTab.click();
-
-      // Resolve the webview frame containing the login gate heading.
-      await expect
-        .poll(async () => {
-          const frame = await findSapToolsWebviewFrame(session.window);
-          return frame?.url() ?? '';
-        })
-        .toContain('vscode-webview://');
-
-      const frame = await findSapToolsWebviewFrame(session.window);
-      if (frame === undefined) {
-        throw new Error('SAP Tools webview frame was not found.');
-      }
+      const frame = await resolveSapToolsLoginFrame(session.window);
 
       // Login gate heading and form fields should be visible.
       await expect(frame.getByRole('heading', { name: 'SAP Tools Login' })).toBeVisible();
@@ -707,18 +791,7 @@ test.describe('SAP Tools login gate', () => {
       });
       await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
       await sapToolsTab.click();
-
-      await expect
-        .poll(async () => {
-          const frame = await findSapToolsWebviewFrame(session.window);
-          return frame?.url() ?? '';
-        })
-        .toContain('vscode-webview://');
-
-      const frame = await findSapToolsWebviewFrame(session.window);
-      if (frame === undefined) {
-        throw new Error('SAP Tools webview frame was not found.');
-      }
+      const frame = await resolveSapToolsLoginFrame(session.window);
 
       await expect(frame.getByRole('heading', { name: 'SAP Tools Login' })).toBeVisible();
 
@@ -728,8 +801,9 @@ test.describe('SAP Tools login gate', () => {
       await frame.getByRole('button', { name: 'Save and Continue' }).click();
 
       // After submit the extension reloads the webview; the region selector should appear.
+      const reloadedFrame = await resolveSapToolsRegionFrame(session.window);
       await expect(
-        frame.getByRole('heading', { name: 'Select SAP BTP Region' })
+        reloadedFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
       ).toBeVisible({ timeout: 20000 });
     } finally {
       await cleanupExtensionHost(session);
@@ -745,18 +819,7 @@ test.describe('SAP Tools login gate', () => {
       });
       await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
       await sapToolsTab.click();
-
-      await expect
-        .poll(async () => {
-          const frame = await findSapToolsWebviewFrame(session.window);
-          return frame?.url() ?? '';
-        })
-        .toContain('vscode-webview://');
-
-      const frame = await findSapToolsWebviewFrame(session.window);
-      if (frame === undefined) {
-        throw new Error('SAP Tools webview frame was not found.');
-      }
+      const frame = await resolveSapToolsLoginFrame(session.window);
 
       await frame.getByLabel('SAP Email').fill('not-an-email');
       await frame.getByLabel('SAP Password').fill('some-password');
@@ -773,15 +836,11 @@ test.describe('SAP Tools login gate', () => {
 
 test.describe('SAP Tools CF logs panel', () => {
   async function openCfLogsPanel(window: Page): Promise<Frame> {
-    // Focus the CFLogs panel by opening it from the command palette.
-    await window.keyboard.press(
-      process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P'
-    );
-    const commandInput = window.getByRole('combobox', { name: /command/i });
-    await expect(commandInput).toBeVisible({ timeout: 10000 });
-    await commandInput.fill('CFLogs');
-    // Dismiss the command palette (the panel is auto-registered as a tab).
-    await window.keyboard.press('Escape');
+    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+J' : 'Control+J');
+    const panelPart = window.locator('[id="workbench.parts.panel"]');
+    const sapToolsPanelTab = panelPart.getByRole('tab', { name: /SAP TOOLS/i });
+    await expect(sapToolsPanelTab).toBeVisible({ timeout: 15000 });
+    await sapToolsPanelTab.click();
 
     // The panel tab should appear in the bottom panel.
     await expect

@@ -1,4 +1,23 @@
 // cspell:words hana ondemand
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+
+const CF_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
+const CF_COMMAND_TIMEOUT_MS = 30_000;
+
+interface CfCliExecutionOptions {
+  readonly cfHomeDir?: string;
+  readonly timeoutMs?: number;
+  readonly failureMessage: string;
+}
+
+interface ParsedCfAppRow {
+  readonly name: string;
+  readonly requestedState: string;
+  readonly runningInstances: number;
+}
 
 export interface CfLoginInfo {
   readonly authorizationEndpoint: string;
@@ -23,6 +42,11 @@ export interface CfSpace {
 export interface CfSession {
   readonly token: CfToken;
   readonly apiEndpoint: string;
+}
+
+export interface CfRunningApp {
+  readonly name: string;
+  readonly runningInstances: number;
 }
 
 /**
@@ -131,13 +155,22 @@ export async function fetchOrgs(session: CfSession): Promise<CfOrg[]> {
 
   const orgs: CfOrg[] = [];
   for (const resource of data['resources']) {
-    if (!isRecord(resource)) continue;
+    if (!isRecord(resource)) {
+      continue;
+    }
+
     const metadata = resource['metadata'];
     const entity = resource['entity'];
-    if (!isRecord(metadata) || !isRecord(entity)) continue;
+    if (!isRecord(metadata) || !isRecord(entity)) {
+      continue;
+    }
+
     const guid = metadata['guid'];
     const name = entity['name'];
-    if (typeof guid !== 'string' || typeof name !== 'string') continue;
+    if (typeof guid !== 'string' || typeof name !== 'string') {
+      continue;
+    }
+
     orgs.push({ guid, name });
   }
 
@@ -169,17 +202,174 @@ export async function fetchSpaces(session: CfSession, orgGuid: string): Promise<
 
   const spaces: CfSpace[] = [];
   for (const resource of data['resources']) {
-    if (!isRecord(resource)) continue;
+    if (!isRecord(resource)) {
+      continue;
+    }
+
     const metadata = resource['metadata'];
     const entity = resource['entity'];
-    if (!isRecord(metadata) || !isRecord(entity)) continue;
+    if (!isRecord(metadata) || !isRecord(entity)) {
+      continue;
+    }
+
     const guid = metadata['guid'];
     const name = entity['name'];
-    if (typeof guid !== 'string' || typeof name !== 'string') continue;
+    if (typeof guid !== 'string' || typeof name !== 'string') {
+      continue;
+    }
+
     spaces.push({ guid, name });
   }
 
   return spaces;
+}
+
+/**
+ * Parse `cf apps` output and keep each app row with calculated running instances.
+ * Supports both:
+ * - CF v8 style `processes` column: `web:1/1, worker:0/1`
+ * - CF v7 style `instances` column: `1/1`
+ */
+export function parseCfAppsOutput(stdout: string): ParsedCfAppRow[] {
+  const lines = stdout.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) => line.includes('requested state'));
+  if (headerIndex < 0) {
+    return [];
+  }
+
+  const rows: ParsedCfAppRow[] = [];
+
+  for (const rawLine of lines.slice(headerIndex + 1)) {
+    const line = rawLine.trim();
+    if (line.length === 0) {
+      continue;
+    }
+
+    const parts = line.split(/\s{2,}/);
+    const name = parts[0]?.trim() ?? '';
+    const requestedState = (parts[1]?.trim() ?? '').toLowerCase();
+    const instancesToken = parts[2]?.trim() ?? '';
+
+    if (name.length === 0 || requestedState.length === 0) {
+      continue;
+    }
+
+    const runningInstances =
+      requestedState === 'started' ? parseRunningInstances(instancesToken) : 0;
+
+    rows.push({
+      name,
+      requestedState,
+      runningInstances,
+    });
+  }
+
+  return rows;
+}
+
+/**
+ * Fetch apps from Cloud Foundry CLI and return only effectively running apps:
+ * requested state is `started` and running instances > 0.
+ */
+export async function fetchStartedAppsViaCfCli(params: {
+  readonly apiEndpoint: string;
+  readonly email: string;
+  readonly password: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+  readonly cfHomeDir?: string;
+}): Promise<CfRunningApp[]> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+
+  await runCfCommand(['api', params.apiEndpoint], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to set CF API endpoint.',
+  });
+
+  await runCfCommand(['auth', params.email, params.password], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to authenticate Cloud Foundry CLI.',
+  });
+
+  await runCfCommand(['target', '-o', params.orgName, '-s', params.spaceName], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to target CF org/space.',
+  });
+
+  const appsStdout = await runCfCommand(['apps'], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to fetch apps from CF CLI.',
+  });
+
+  return parseCfAppsOutput(appsStdout)
+    .filter((row) => row.requestedState === 'started' && row.runningInstances > 0)
+    .map((row) => ({ name: row.name, runningInstances: row.runningInstances }));
+}
+
+async function runCfCommand(
+  args: string[],
+  options: CfCliExecutionOptions
+): Promise<string> {
+  const env = { ...process.env };
+  if (typeof options.cfHomeDir === 'string' && options.cfHomeDir.length > 0) {
+    env['CF_HOME'] = options.cfHomeDir;
+  }
+
+  try {
+    const { stdout } = await execFileAsync('cf', args, {
+      env,
+      maxBuffer: CF_MAX_BUFFER_BYTES,
+      timeout: options.timeoutMs ?? CF_COMMAND_TIMEOUT_MS,
+    });
+    return stdout;
+  } catch (error) {
+    const safeDetail = extractSafeCliDetail(error);
+    const detailSuffix = safeDetail.length > 0 ? ` ${safeDetail}` : '';
+    throw new Error(`${options.failureMessage}${detailSuffix}`);
+  }
+}
+
+function parseRunningInstances(instancesToken: string): number {
+  if (instancesToken.length === 0) {
+    return 0;
+  }
+
+  const regex = /(?:^|[, ])(?:[a-zA-Z0-9_-]+:)?(\d+)\/\d+/g;
+  let totalRunningInstances = 0;
+  let match = regex.exec(instancesToken);
+
+  while (match !== null) {
+    const parsedCount = Number.parseInt(match[1] ?? '0', 10);
+    if (!Number.isNaN(parsedCount) && parsedCount > 0) {
+      totalRunningInstances += parsedCount;
+    }
+    match = regex.exec(instancesToken);
+  }
+
+  return totalRunningInstances;
+}
+
+function extractSafeCliDetail(error: unknown): string {
+  if (!isRecord(error)) {
+    return '';
+  }
+
+  const stderr = typeof error['stderr'] === 'string' ? error['stderr'] : '';
+  const normalized = stderr.replaceAll(/\s+/g, ' ').trim();
+
+  if (normalized.length === 0) {
+    return '';
+  }
+
+  return `(cli: ${normalized.slice(0, 180)})`;
+}
+
+function buildCfHomeOptions(cfHomeDir: string | undefined): Pick<CfCliExecutionOptions, 'cfHomeDir'> {
+  if (typeof cfHomeDir === 'string' && cfHomeDir.length > 0) {
+    return { cfHomeDir };
+  }
+
+  return {};
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -74,10 +74,18 @@ export async function clearCredentials(context: vscode.ExtensionContext): Promis
 export async function getEffectiveCredentials(
   context: vscode.ExtensionContext
 ): Promise<CfCredentials | null> {
+  if (isLoginGateForced()) {
+    return null;
+  }
+
   const envCredentials = getEnvCredentials();
   if (envCredentials !== null) {
     return envCredentials;
   }
 
   return getStoredCredentials(context);
+}
+
+function isLoginGateForced(): boolean {
+  return process.env['SAP_TOOLS_FORCE_LOGIN_GATE'] === '1';
 }

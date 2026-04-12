@@ -1,6 +1,15 @@
 import * as vscode from 'vscode';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
-import { fetchCfLoginInfo, cfLogin, fetchOrgs, fetchSpaces, getCfApiEndpoint } from './cfClient';
+import {
+  fetchCfLoginInfo,
+  cfLogin,
+  fetchOrgs,
+  fetchSpaces,
+  getCfApiEndpoint,
+  fetchStartedAppsViaCfCli,
+} from './cfClient';
 import type { CfSession } from './cfClient';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
 import { getEffectiveCredentials, storeCredentials } from './credentialStore';
@@ -14,6 +23,7 @@ const PROTOTYPE_DESIGN_ID = '34';
 const MSG_LOGIN_SUBMIT = 'sapTools.loginSubmit';
 const MSG_REGION_SELECTED = 'sapTools.regionSelected';
 const MSG_ORG_SELECTED = 'sapTools.orgSelected';
+const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
 
 // ── Outbound message types (extension → webview) ───────────────────────────
@@ -23,6 +33,8 @@ const MSG_ORGS_LOADED = 'sapTools.orgsLoaded';
 const MSG_ORGS_ERROR = 'sapTools.orgsError';
 const MSG_SPACES_LOADED = 'sapTools.spacesLoaded';
 const MSG_SPACES_ERROR = 'sapTools.spacesError';
+const MSG_APPS_LOADED = 'sapTools.appsLoaded';
+const MSG_APPS_ERROR = 'sapTools.appsError';
 
 // ── Payload interfaces ─────────────────────────────────────────────────────
 
@@ -33,6 +45,17 @@ interface RegionSelectionPayload {
   readonly area: string;
 }
 
+interface OrgSelectionPayload {
+  readonly guid: string;
+  readonly name: string;
+}
+
+interface SpaceSelectionPayload {
+  readonly spaceName: string;
+  readonly orgGuid: string;
+  readonly orgName: string;
+}
+
 // ── Provider ───────────────────────────────────────────────────────────────
 
 export class RegionSidebarProvider
@@ -40,6 +63,7 @@ export class RegionSidebarProvider
 {
   private webviewView: vscode.WebviewView | undefined;
   private cfSession: CfSession | null = null;
+  private selectedRegionCode = '';
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -113,8 +137,14 @@ export class RegionSidebarProvider
     }
 
     if (type === MSG_ORG_SELECTED && isOrgSelectedMessage(message)) {
-      const org = message['org'] as { guid: string; name: string };
+      const org = message['org'] as OrgSelectionPayload;
       await this.handleOrgSelected(org);
+      return;
+    }
+
+    if (type === MSG_SPACE_SELECTED && isSpaceSelectedMessage(message)) {
+      const spacePayload = message['scope'] as SpaceSelectionPayload;
+      await this.handleSpaceSelected(spacePayload);
       return;
     }
 
@@ -159,6 +189,8 @@ export class RegionSidebarProvider
   // ── Region selected → fetch orgs ────────────────────────────────────────
 
   private async handleRegionSelected(region: RegionSelectionPayload): Promise<void> {
+    this.selectedRegionCode = region.code;
+
     if (isTestMode()) {
       this.postMessage({ type: MSG_ORGS_LOADED, orgs: MOCK_ORGS });
       return;
@@ -199,7 +231,9 @@ export class RegionSidebarProvider
     if (isTestMode()) {
       const mockOrg = MOCK_ORGS.find((o) => o.guid === org.guid);
       const spaces = MOCK_SPACES[mockOrg?.name ?? ''] ?? MOCK_SPACES['core-platform-prod'] ?? [];
-      this.cfLogsPanel.updateScope(`test → ${org.name} → ${spaces.map((s) => s.name).join(', ')}`);
+      this.cfLogsPanel.updateScope(
+        buildScopeLabel(this.selectedRegionCode, org.name, 'select-space')
+      );
       this.postMessage({ type: MSG_SPACES_LOADED, spaces });
       return;
     }
@@ -214,13 +248,74 @@ export class RegionSidebarProvider
 
     try {
       const spaces = await fetchSpaces(this.cfSession, org.guid);
-      const scopeLabel = buildScopeLabel(this.cfSession.apiEndpoint, org.name, spaces);
+      const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
       this.cfLogsPanel.updateScope(scopeLabel);
       this.postMessage({ type: MSG_SPACES_LOADED, spaces });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch spaces.';
       this.postMessage({ type: MSG_SPACES_ERROR, message: errorMessage });
+    }
+  }
+
+  // ── Space selected → fetch apps ────────────────────────────────────────
+
+  private async handleSpaceSelected(payload: SpaceSelectionPayload): Promise<void> {
+    if (isTestMode()) {
+      const apps = resolveMockApps(payload.spaceName).map((name) => ({
+        id: name,
+        name,
+        runningInstances: 1,
+      }));
+      this.postMessage({ type: MSG_APPS_LOADED, apps });
+      this.cfLogsPanel.updateScope(
+        buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
+      );
+      return;
+    }
+
+    if (this.cfSession === null) {
+      this.postMessage({
+        type: MSG_APPS_ERROR,
+        message: 'CF session expired. Please select a region again.',
+      });
+      return;
+    }
+
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      this.postMessage({
+        type: MSG_APPS_ERROR,
+        message: 'No credentials found. Please re-open SAP Tools and log in.',
+      });
+      return;
+    }
+
+    try {
+      const cfHomeDir = await ensureCfHomeDir(this.context);
+      const runningApps = await fetchStartedAppsViaCfCli({
+        apiEndpoint: this.cfSession.apiEndpoint,
+        email: credentials.email,
+        password: credentials.password,
+        orgName: payload.orgName,
+        spaceName: payload.spaceName,
+        cfHomeDir,
+      });
+
+      const apps = runningApps.map((app) => ({
+        id: app.name,
+        name: app.name,
+        runningInstances: app.runningInstances,
+      }));
+
+      this.postMessage({ type: MSG_APPS_LOADED, apps });
+      this.cfLogsPanel.updateScope(
+        buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to fetch apps from CF CLI.';
+      this.postMessage({ type: MSG_APPS_ERROR, message: errorMessage });
     }
   }
 
@@ -373,6 +468,18 @@ const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
   'data-foundation-prod': [{ name: 'prod' }, { name: 'etl' }, { name: 'observability' }],
 };
 
+const MOCK_APPS_BY_SPACE: Record<string, readonly string[]> = {
+  prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
+  staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
+  integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
+  uat: ['finance-uat-api', 'finance-uat-worker', 'finance-uat-audit'],
+  sandbox: ['sandbox-api', 'sandbox-worker', 'sandbox-observer'],
+  campaigns: ['campaign-engine', 'campaign-events', 'campaign-content'],
+  performance: ['perf-api', 'perf-worker', 'perf-load-probe'],
+  etl: ['etl-scheduler', 'etl-transformer', 'etl-writer'],
+  observability: ['metrics-collector', 'traces-forwarder', 'alerts-dispatcher'],
+};
+
 function isTestMode(): boolean {
   return process.env['SAP_TOOLS_TEST_MODE'] === '1';
 }
@@ -389,11 +496,11 @@ function buildCsp(webview: vscode.Webview, nonce: string): string {
   ].join('; ');
 }
 
-function buildScopeLabel(apiEndpoint: string, orgName: string, spaces: { name: string }[]): string {
-  const regionCode = apiEndpoint.replace('https://api.cf.', '').replace('.hana.ondemand.com', '');
-  const spacePart =
-    spaces.length === 1 ? spaces[0]?.name ?? '' : `${String(spaces.length)} spaces`;
-  return `${regionCode} \u2192 ${orgName} \u2192 ${spacePart}`;
+function buildScopeLabel(regionCode: string, orgName: string, spaceName: string): string {
+  const normalizedRegionCode = regionCode.trim().length > 0 ? regionCode.trim() : 'no-region';
+  const normalizedOrgName = orgName.trim().length > 0 ? orgName.trim() : 'no-org';
+  const normalizedSpaceName = spaceName.trim().length > 0 ? spaceName.trim() : 'no-space';
+  return `${normalizedRegionCode} \u2192 ${normalizedOrgName} \u2192 ${normalizedSpaceName}`;
 }
 
 function createNonce(): string {
@@ -449,4 +556,38 @@ function isOrgSelectedMessage(value: Record<string, unknown>): boolean {
     return false;
   }
   return isNonEmptyString(org['guid'], 128) && isNonEmptyString(org['name'], 128);
+}
+
+function isSpaceSelectedMessage(value: Record<string, unknown>): boolean {
+  const scope = value['scope'];
+  if (!isRecord(scope)) {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(scope['spaceName'], 128) &&
+    isNonEmptyString(scope['orgGuid'], 128) &&
+    isNonEmptyString(scope['orgName'], 128)
+  );
+}
+
+async function ensureCfHomeDir(context: vscode.ExtensionContext): Promise<string> {
+  const cfHomeDir = join(context.globalStorageUri.fsPath, 'cf-home');
+  await mkdir(cfHomeDir, { recursive: true });
+  return cfHomeDir;
+}
+
+function resolveMockApps(spaceName: string): string[] {
+  const key = spaceName.trim().toLowerCase();
+  const apps = MOCK_APPS_BY_SPACE[key];
+  if (apps !== undefined) {
+    return [...apps];
+  }
+
+  const fallbackPrefix = key.length > 0 ? key : 'space';
+  return [
+    `${fallbackPrefix}-api`,
+    `${fallbackPrefix}-worker`,
+    `${fallbackPrefix}-jobs`,
+  ];
 }

@@ -97,16 +97,20 @@ const appElement = document.getElementById('app');
 const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
 const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
+const SPACE_SELECTED_MESSAGE_TYPE = 'sapTools.spaceSelected';
 const vscodeApi = resolveVscodeApi();
 
 // Live data state — only used in VSCode mode (vscodeApi !== null).
 let liveOrgOptions = null;        // [{guid, name}] when loaded, null = use mock data
 let liveOrgLookup = new Map();    // guid → {guid, name}
 let liveSpaceNames = null;        // string[] when loaded, null = use mock data
+let liveAppOptions = null;        // [{id, name, runningInstances}] when loaded, null = use mock data
 let orgsLoadingState = 'idle';    // 'idle' | 'loading' | 'loaded' | 'error'
 let spacesLoadingState = 'idle';  // 'idle' | 'loading' | 'loaded' | 'error'
+let appsLoadingState = 'idle';    // 'idle' | 'loading' | 'loaded' | 'error'
 let orgsErrorMessage = '';
 let spacesErrorMessage = '';
+let appsErrorMessage = '';
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -151,7 +155,10 @@ window.addEventListener('message', (event) => {
       .filter((s) => isRecord(s) && typeof s.name === 'string' && s.name.length > 0)
       .map((s) => s.name);
     spacesLoadingState = 'loaded';
+    appsLoadingState = 'idle';
     selectedSpaceId = '';
+    liveAppOptions = null;
+    appsErrorMessage = '';
     // Auto-select when there is only one space.
     if (liveSpaceNames.length === 1) {
       selectedSpaceId = liveSpaceNames[0];
@@ -164,8 +171,53 @@ window.addEventListener('message', (event) => {
     spacesLoadingState = 'error';
     spacesErrorMessage =
       typeof msg.message === 'string' ? msg.message : 'Failed to load spaces.';
+    liveAppOptions = null;
+    appsLoadingState = 'idle';
+    appsErrorMessage = '';
     rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
     return;
+  }
+
+  if (msg.type === 'sapTools.appsLoaded') {
+    const rawApps = msg.apps;
+    if (!Array.isArray(rawApps)) {
+      return;
+    }
+
+    liveAppOptions = rawApps
+      .filter((app) => isRecord(app) && typeof app.name === 'string')
+      .map((app) => ({
+        id: typeof app.id === 'string' && app.id.length > 0 ? app.id : app.name,
+        name: app.name,
+        runningInstances:
+          typeof app.runningInstances === 'number' && Number.isFinite(app.runningInstances)
+            ? app.runningInstances
+            : 0,
+      }));
+
+    appsLoadingState = 'loaded';
+    appsErrorMessage = '';
+    pruneSelectedAppIds();
+
+    if (isWorkspaceLogsMounted()) {
+      refreshWorkspaceLogsView();
+      return;
+    }
+    renderPrototype();
+    return;
+  }
+
+  if (msg.type === 'sapTools.appsError') {
+    liveAppOptions = [];
+    appsLoadingState = 'error';
+    appsErrorMessage = typeof msg.message === 'string' ? msg.message : 'Failed to load apps.';
+    pruneSelectedAppIds();
+
+    if (isWorkspaceLogsMounted()) {
+      refreshWorkspaceLogsView();
+      return;
+    }
+    renderPrototype();
   }
 });
 
@@ -376,14 +428,15 @@ function refreshWorkspaceLogsView() {
   const availableApps = resolveCurrentSpaceApps();
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
-  const startableSelectionCount = selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
+  const startableSelectionCount = getStartableSelectionCount(activeApps);
+  const catalogMarkup = renderCatalogByState(availableApps, selectedApps, activeApps);
 
   const catalogElement = logsPanel.querySelector('[data-role="app-log-catalog"]');
   if (!(catalogElement instanceof HTMLElement)) {
     renderPrototype();
     return;
   }
-  catalogElement.innerHTML = renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
+  catalogElement.innerHTML = catalogMarkup;
 
   const activeAppsElement = logsPanel.querySelector('[data-role="active-app-log-list"]');
   if (!(activeAppsElement instanceof HTMLElement)) {
@@ -394,7 +447,7 @@ function refreshWorkspaceLogsView() {
 
   const startButton = logsPanel.querySelector('[data-action="start-app-logging"]');
   if (startButton instanceof HTMLButtonElement) {
-    startButton.disabled = startableSelectionCount === 0;
+    startButton.disabled = startableSelectionCount === 0 || !isAppsCatalogReady();
   }
 
   const statusElement = logsPanel.querySelector('[data-role="app-log-status"]');
@@ -447,8 +500,11 @@ function handleRegionSelection(nextRegionId) {
   liveOrgOptions = null;
   liveOrgLookup = new Map();
   liveSpaceNames = null;
+  liveAppOptions = null;
   spacesLoadingState = 'idle';
   spacesErrorMessage = '';
+  appsLoadingState = 'idle';
+  appsErrorMessage = '';
 
   if (vscodeApi !== null) {
     orgsLoadingState = 'loading';
@@ -478,7 +534,10 @@ function handleOrgSelection(nextOrgId) {
   selectedSpaceId = '';
   resetWorkspaceLoggingState();
   liveSpaceNames = null;
+  liveAppOptions = null;
   spacesErrorMessage = '';
+  appsErrorMessage = '';
+  appsLoadingState = 'idle';
 
   if (vscodeApi !== null) {
     spacesLoadingState = 'loading';
@@ -501,6 +560,16 @@ function handleSpaceSelection(nextSpaceId) {
 
   selectedSpaceId = nextSpaceId;
   resetWorkspaceLoggingState();
+  liveAppOptions = null;
+  appsErrorMessage = '';
+
+  if (vscodeApi !== null) {
+    appsLoadingState = 'loading';
+    postSpaceSelection(nextSpaceId, selectedOrgId, resolveSelectedOrg()?.name ?? selectedOrgId);
+    return;
+  }
+
+  appsLoadingState = 'idle';
 }
 
 function handleAction(action, actionElement) {
@@ -618,6 +687,14 @@ function handleLogsSelectionAction(action, actionElement) {
 
 function handleLogsControlAction(action, actionElement) {
   if (action === 'start-app-logging') {
+    if (!isAppsCatalogReady()) {
+      statusMessage =
+        appsLoadingState === 'error'
+          ? 'Cannot start logging because app list is unavailable.'
+          : 'Apps are still loading. Please wait.';
+      return true;
+    }
+
     const availableApps = resolveCurrentSpaceApps();
     const validAppIds = new Set(availableApps.map((app) => app.id));
     const selectedValidIds = selectedAppLogIds.filter((appId) => validAppIds.has(appId));
@@ -950,6 +1027,21 @@ function postOrgSelection(orgGuid, orgName) {
   vscodeApi.postMessage({
     type: ORG_SELECTED_MESSAGE_TYPE,
     org: { guid: orgGuid, name: orgName },
+  });
+}
+
+function postSpaceSelection(spaceName, orgGuid, orgName) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: SPACE_SELECTED_MESSAGE_TYPE,
+    scope: {
+      spaceName,
+      orgGuid,
+      orgName,
+    },
   });
 }
 
@@ -1374,9 +1466,9 @@ function renderLogsTab() {
   const availableApps = resolveCurrentSpaceApps();
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
-  const startableSelectionCount = selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
+  const startableSelectionCount = getStartableSelectionCount(activeApps);
   const spaceLabel = selectedSpaceId.length > 0 ? selectedSpaceId : 'current-space';
-  const catalogMarkup = renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
+  const catalogMarkup = renderCatalogByState(availableApps, selectedApps, activeApps);
   const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps);
   const statusMarkup =
     statusMessage.length === 0
@@ -1399,7 +1491,7 @@ function renderLogsTab() {
           type="button"
           class="primary-action app-log-start"
           data-action="start-app-logging"
-          ${startableSelectionCount === 0 ? 'disabled' : ''}
+          ${startableSelectionCount === 0 || !isAppsCatalogReady() ? 'disabled' : ''}
         >
           Start App Logging
         </button>
@@ -1445,6 +1537,30 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
       `;
     })
     .join('');
+}
+
+function renderCatalogByState(availableApps, selectedApps, activeApps) {
+  if (vscodeApi !== null && appsLoadingState === 'loading') {
+    return '<p class="stage-loading" aria-live="polite">Loading apps&#8230;</p>';
+  }
+
+  if (vscodeApi !== null && appsLoadingState === 'error') {
+    return `<p class="stage-error" role="alert">${escapeHtml(appsErrorMessage)}</p>`;
+  }
+
+  return renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
+}
+
+function isAppsCatalogReady() {
+  if (vscodeApi === null) {
+    return true;
+  }
+
+  return appsLoadingState === 'idle' || appsLoadingState === 'loaded';
+}
+
+function getStartableSelectionCount(activeApps) {
+  return selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
 }
 
 function renderActiveAppsLogList(availableApps, activeAppIds) {
@@ -1661,6 +1777,10 @@ function cloneSeedLogs() {
 }
 
 function resolveCurrentSpaceApps() {
+  if (vscodeApi !== null && liveAppOptions !== null) {
+    return liveAppOptions.map((app) => ({ id: app.id, name: app.name }));
+  }
+
   const spaceKey = selectedSpaceId.trim().toLowerCase();
   const curatedAppNames = SPACE_APP_OPTIONS[spaceKey];
   const appNames = Array.isArray(curatedAppNames) ? curatedAppNames : buildFallbackAppNames(spaceKey);
@@ -1685,6 +1805,12 @@ function resetWorkspaceLoggingState() {
   selectedAppLogIds = [];
   activeAppLogIds = [];
   statusMessage = '';
+}
+
+function pruneSelectedAppIds() {
+  const allowedAppIds = new Set(resolveCurrentSpaceApps().map((app) => app.id));
+  selectedAppLogIds = selectedAppLogIds.filter((appId) => allowedAppIds.has(appId));
+  activeAppLogIds = activeAppLogIds.filter((appId) => allowedAppIds.has(appId));
 }
 
 function formatNow() {
