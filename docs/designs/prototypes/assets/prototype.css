@@ -712,9 +712,10 @@ body.pattern-dots::before {
 }
 
 .workspace-context {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  margin: 0;
+  font-size: 0.71rem;
+  color: var(--muted-color);
+  line-height: 1.3;
 }
 
 .context-pill {
@@ -748,6 +749,10 @@ body.pattern-dots::before {
   color: var(--state-danger-fg);
   background: var(--state-danger-bg);
   border-color: var(--state-danger-border);
+}
+
+.workspace-logout {
+  justify-self: start;
 }
 
 .secondary-action,

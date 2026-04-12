@@ -998,23 +998,15 @@ function renderWorkspaceScreen() {
   const selectedRegion = resolveSelectedRegion();
   const selectedOrg = resolveSelectedOrg();
   const selectedSpace = selectedSpaceId.length > 0 ? selectedSpaceId : 'No space selected';
-  const regionLabel =
-    selectedRegion === undefined
-      ? 'No region selected'
-      : `${selectedRegion.name} (${selectedRegion.code.toUpperCase()})`;
+  const regionCode = selectedRegion?.code ?? 'no-region';
   const orgLabel = selectedOrg?.name ?? 'No org selected';
-  const statusClass = isConnected ? 'is-connected' : 'is-disconnected';
+  const workspaceSummary = `Region: ${regionCode}. Org: ${orgLabel}. Space: ${selectedSpace}`;
 
   return `
     <header class="shell-header workspace-header">
       <h1>Monitoring Workspace</h1>
-      <div class="workspace-context">
-        <span class="context-pill">Region: ${regionLabel}</span>
-        <span class="context-pill">Org: ${orgLabel}</span>
-        <span class="context-pill">Space: ${selectedSpace}</span>
-        <span class="connection-state ${statusClass}">${isConnected ? 'Connected' : 'Disconnected'}</span>
-      </div>
-      <button type="button" class="secondary-action" data-action="change-region">Change Region</button>
+      <p class="workspace-context">${workspaceSummary}</p>
+      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
     </header>
 
     ${renderWorkspaceTabs()}
