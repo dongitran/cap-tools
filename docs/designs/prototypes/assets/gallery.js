@@ -15,7 +15,7 @@ const PROTOTYPE_VARIANTS = [
     id: 'login-gate',
     hash: 'login-gate',
     label: 'Prototype: Login Gate',
-    framePath: './variants/login-gate.html?v=20260412i',
+    framePath: './variants/login-gate.html?v=20260412j',
   },
   {
     id: 'design-34',

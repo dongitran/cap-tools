@@ -5,20 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Login Gate Prototype</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="../assets/login-gate.css?v=20260412i" />
+    <link rel="stylesheet" href="../assets/login-gate.css?v=20260412j" />
   </head>
   <body class="login-gate-page vscode-dark">
     <main class="login-shell">
       <header class="layout-head">
-        <h1>SAP Tools Login</h1>
+        <div class="layout-title-row">
+          <h1>SAP Tools Login</h1>
+          <span class="layout-chip">Secure</span>
+        </div>
+        <p class="layout-subline">Connect your SAP account to open region workspace.</p>
       </header>
 
       <section class="login-card" aria-label="SAP credential setup">
-        <header class="login-head">
-          <h2>Set SAP Credentials</h2>
-          <p>Configure <code>SAP_EMAIL</code> and <code>SAP_PASSWORD</code> to continue.</p>
-        </header>
-
         <form id="login-gate-form" class="login-form" novalidate>
           <div class="field-row">
             <label for="sap-email">SAP Email</label>
@@ -51,6 +50,6 @@
       </section>
     </main>
 
-    <script type="module" src="../assets/login-gate.js?v=20260412i"></script>
+    <script type="module" src="../assets/login-gate.js?v=20260412j"></script>
   </body>
 </html>

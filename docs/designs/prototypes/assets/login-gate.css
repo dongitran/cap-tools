@@ -1,24 +1,30 @@
 :root {
-  --page-bg: #1e1e1e;
-  --surface-bg: #252526;
-  --border-color: #3f4147;
-  --text-color: #e6ebf5;
-  --muted-color: #a4acbf;
-  --accent-color: #0e639c;
-  --accent-soft: #17364b;
-  --error-color: #ff9f9f;
-  --success-color: #9fff9f;
+  --page-bg: #1a1d24;
+  --surface-bg: #242935;
+  --surface-strong: #2c3141;
+  --border-color: #3b4254;
+  --text-color: #edf2ff;
+  --muted-color: #9da8c5;
+  --accent-color: #2f7bdc;
+  --accent-soft: #203f66;
+  --chip-bg: #1e3556;
+  --chip-border: #4f7cb9;
+  --error-color: #ffb4b4;
+  --success-color: #9ef0b3;
 }
 
 body.vscode-light.login-gate-page {
   --page-bg: #eef2fb;
   --surface-bg: #ffffff;
-  --border-color: #cad4ea;
+  --surface-strong: #f5f8ff;
+  --border-color: #c7d3ea;
   --text-color: #1f2d45;
   --muted-color: #607089;
-  --accent-color: #0e639c;
-  --accent-soft: #e5f2ff;
-  --error-color: #a1260d;
+  --accent-color: #1f6fd7;
+  --accent-soft: #dfeeff;
+  --chip-bg: #e5f1ff;
+  --chip-border: #8bb4ee;
+  --error-color: #b7372a;
   --success-color: #1e7a32;
 }
 
@@ -26,11 +32,14 @@ body.vscode-high-contrast.login-gate-page,
 body.vscode-high-contrast-light.login-gate-page {
   --page-bg: #000000;
   --surface-bg: #000000;
+  --surface-strong: #000000;
   --border-color: #ffffff;
   --text-color: #ffffff;
   --muted-color: #ffffff;
   --accent-color: #ffe761;
-  --accent-soft: #3b3a00;
+  --accent-soft: #363300;
+  --chip-bg: #000000;
+  --chip-border: #ffe761;
   --error-color: #ff9f9f;
   --success-color: #9fff9f;
 }
@@ -47,7 +56,9 @@ body {
 
 body.login-gate-page {
   font-family: "Segoe UI", "Trebuchet MS", sans-serif;
-  background: var(--page-bg);
+  background:
+    radial-gradient(circle at 14% -10%, color-mix(in oklab, var(--accent-color) 28%, transparent) 0, transparent 55%),
+    linear-gradient(180deg, color-mix(in oklab, var(--surface-bg) 70%, var(--page-bg)) 0%, var(--page-bg) 65%);
   color: var(--text-color);
 }
 
@@ -55,30 +66,59 @@ body.login-gate-page {
   min-height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr;
-  align-content: stretch;
-  gap: 0;
 }
 
 .layout-head {
-  padding: 14px 14px 10px;
+  padding: 14px 14px 12px;
   border-bottom: 1px solid var(--border-color);
-  background: color-mix(in oklab, var(--surface-bg) 90%, var(--page-bg));
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--page-bg));
+}
+
+.layout-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .layout-head h1 {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.layout-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--chip-border);
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--text-color);
+  padding: 3px 9px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.layout-subline {
+  margin: 7px 0 0;
+  font-size: 0.73rem;
+  color: var(--muted-color);
+  line-height: 1.35;
 }
 
 .login-card {
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--surface-bg);
-  padding: 12px;
-  margin: 10px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 10px 10px;
   display: grid;
   gap: 12px;
+  align-content: start;
 }
 
 .login-head {
@@ -86,7 +126,6 @@ body.login-gate-page {
   gap: 6px;
 }
 
-.login-head h1,
 .login-head h2 {
   margin: 0;
   font-size: 0.95rem;
@@ -94,51 +133,62 @@ body.login-gate-page {
 
 .login-head p {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.73rem;
   color: var(--muted-color);
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .login-head code {
   font-family: Consolas, "Courier New", monospace;
-  font-size: 0.7rem;
+  font-size: 0.69rem;
 }
 
 .login-form {
   display: grid;
-  gap: 10px;
+  gap: 11px;
 }
 
 .field-row {
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
 .field-row label {
   font-size: 0.72rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .field-row input {
-  min-height: 34px;
+  min-height: 37px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 9px;
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--page-bg));
   color: var(--text-color);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   padding: 0 10px;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.field-row input::placeholder {
+  color: color-mix(in oklab, var(--muted-color) 92%, transparent);
+}
+
+.field-row input:hover {
+  border-color: color-mix(in oklab, var(--accent-color) 55%, var(--border-color));
 }
 
 .field-row input:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent-color) 65%, #ffffff);
-  outline-offset: 0;
+  border-color: color-mix(in oklab, var(--accent-color) 72%, var(--border-color));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 36%, transparent);
+  outline: none;
 }
 
 .form-status {
-  min-height: 16px;
+  min-height: 17px;
   margin: 0;
-  font-size: 0.69rem;
+  font-size: 0.7rem;
   color: var(--muted-color);
 }
 
@@ -151,22 +201,42 @@ body.login-gate-page {
 }
 
 #submit-login-gate {
-  min-height: 34px;
-  border: 1px solid color-mix(in oklab, var(--accent-color) 65%, var(--border-color));
-  border-radius: 8px;
-  background: var(--accent-color);
+  width: 100%;
+  min-height: 37px;
+  border: 1px solid color-mix(in oklab, var(--accent-color) 60%, var(--border-color));
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--accent-color) 88%, #ffffff) 0%, var(--accent-color) 100%);
   color: #ffffff;
   font: inherit;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  transition: filter 150ms ease, transform 150ms ease;
 }
 
 #submit-login-gate:hover {
-  background: color-mix(in oklab, var(--accent-color) 86%, #ffffff);
+  filter: brightness(1.07);
+  transform: translateY(-1px);
 }
 
 #submit-login-gate:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent-color) 70%, #ffffff);
+  outline: 2px solid color-mix(in oklab, var(--accent-color) 75%, #ffffff);
   outline-offset: 1px;
+}
+
+@media (max-width: 560px) {
+  .layout-head {
+    padding: 12px 10px 10px;
+  }
+
+  .login-card {
+    margin: 0;
+    padding: 10px 8px 8px;
+  }
+
+  .layout-head h1 {
+    font-size: 0.95rem;
+  }
 }
