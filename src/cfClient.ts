@@ -1,4 +1,4 @@
-// cspell:words guids hana ondemand
+// cspell:words guids hana ondemand sapcloud
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -56,7 +56,10 @@ export interface CfRunningApp {
  * Region codes may be either the catalog form (e.g. "us-10") or the raw form (e.g. "us10").
  */
 export function getCfApiEndpoint(regionCode: string): string {
-  const regionId = regionCode.replace('-', '');
+  const regionId = regionCode.replace('-', '').toLowerCase();
+  if (regionId.startsWith('cn')) {
+    return `https://api.cf.${regionId}.platform.sapcloud.cn`;
+  }
   return `https://api.cf.${regionId}.hana.ondemand.com`;
 }
 

@@ -18,6 +18,7 @@ import {
   fetchOrgs,
   fetchSpaces,
   fetchStartedAppsViaCfCli,
+  getCfApiEndpoint,
   parseCfAppsOutput,
 } from './cfClient';
 
@@ -33,6 +34,18 @@ function jsonResponse(payload: unknown, status = 200): Response {
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockReset();
+});
+
+describe('getCfApiEndpoint', () => {
+  it('resolves default Cloud Foundry endpoint for non-China regions', () => {
+    expect(getCfApiEndpoint('us-10')).toBe('https://api.cf.us10.hana.ondemand.com');
+    expect(getCfApiEndpoint('eu22')).toBe('https://api.cf.eu22.hana.ondemand.com');
+  });
+
+  it('resolves China Cloud Foundry endpoint on sapcloud domain', () => {
+    expect(getCfApiEndpoint('cn-20')).toBe('https://api.cf.cn20.platform.sapcloud.cn');
+    expect(getCfApiEndpoint('cn40')).toBe('https://api.cf.cn40.platform.sapcloud.cn');
+  });
 });
 
 describe('parseCfAppsOutput', () => {

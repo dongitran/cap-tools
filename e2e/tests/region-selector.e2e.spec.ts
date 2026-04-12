@@ -19,9 +19,9 @@ import {
 } from '../src/launchVscode';
 
 const ACTIVITY_BAR_TITLE = 'SAP Tools';
-const AREA_TO_SELECT = /Americas 7 regions/i;
-const REGION_TO_SELECT = /US East us-10/i;
-const BR10_REGION_TO_SELECT = /Brazil South br-10/i;
+const AREA_TO_SELECT = /Americas \(br - ca - us\)/i;
+const REGION_TO_SELECT = /US East \(VA\) - AWS us-10/i;
+const BR10_REGION_TO_SELECT = /Brazil \(Sao Paulo\) - AWS br-10/i;
 const ORG_TO_SELECT = /finance-services-prod/i;
 const SPACE_TO_SELECT = /^uat$/i;
 const DEFAULT_THEME_NAME = 'Default Dark Modern';
@@ -739,7 +739,7 @@ test.describe('SAP Tools region selector', () => {
       await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
 
       const selectionNotification = session.window
-        .getByText(/Selected SAP BTP region: US East \(us-10\)/i)
+        .getByText(/Selected SAP BTP region: .*\(us-10\)/i)
         .first();
       await expect(selectionNotification).toBeVisible({ timeout: 20000 });
     } finally {
@@ -769,7 +769,7 @@ test.describe('SAP Tools region selector', () => {
           ).length,
         };
       });
-      expect(regionStateAfterSelect.selectedRegionId).toBe('eastus');
+      expect(regionStateAfterSelect.selectedRegionId).toBe('us10');
       expect(regionStateAfterSelect.hiddenRegionCount).toBeGreaterThan(0);
       expect(regionStateAfterSelect.visibleRegionCount).toBe(1);
 
@@ -784,7 +784,7 @@ test.describe('SAP Tools region selector', () => {
             .length,
         };
       });
-      expect(regionStateAfterSecondClick.selectedRegionId).toBe('eastus');
+      expect(regionStateAfterSecondClick.selectedRegionId).toBe('us10');
       expect(regionStateAfterSecondClick.hiddenRegionCount).toBe(
         regionStateAfterSelect.hiddenRegionCount
       );
