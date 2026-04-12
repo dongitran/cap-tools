@@ -848,6 +848,120 @@ body.pattern-dots::before {
   gap: 9px;
 }
 
+.logs-intro {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted-color);
+}
+
+.app-log-catalog {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--frame-bg);
+  max-height: 220px;
+  overflow: auto;
+  display: grid;
+}
+
+.app-log-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 74%, var(--mix-base));
+  cursor: pointer;
+}
+
+.app-log-item:last-child {
+  border-bottom: 0;
+}
+
+.app-log-item input {
+  margin: 0;
+}
+
+.app-log-item.is-logging {
+  background: color-mix(in oklab, var(--accent-soft) 45%, var(--mix-base));
+}
+
+.app-log-name {
+  font-size: 0.69rem;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-log-state {
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  padding: 2px 7px;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.app-log-state.is-idle {
+  color: var(--muted-color);
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
+}
+
+.app-log-state.is-logging {
+  color: var(--state-success-fg);
+  background: var(--state-success-bg);
+  border-color: var(--state-success-border);
+}
+
+.app-log-start {
+  min-width: 160px;
+}
+
+.active-apps-log {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--frame-bg) 86%, var(--surface-bg));
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+}
+
+.active-apps-log h3 {
+  margin: 0;
+  font-size: 0.73rem;
+  font-family: var(--title-font);
+}
+
+.active-app-list {
+  display: grid;
+  gap: 6px;
+}
+
+.active-app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 80%, var(--mix-base));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
+  padding: 6px 8px;
+}
+
+.active-app-name {
+  font-size: 0.67rem;
+  color: var(--text-color);
+}
+
+.active-app-pill {
+  border: 1px solid var(--state-success-border);
+  border-radius: 999px;
+  background: var(--state-success-bg);
+  color: var(--state-success-fg);
+  padding: 2px 7px;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
 .panel-logs-bridge {
   border: 1px solid var(--border-color);
   border-radius: 10px;
