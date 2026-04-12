@@ -30,6 +30,18 @@ const ORG_OPTIONS = [
   },
 ];
 
+const SPACE_APP_OPTIONS = {
+  prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
+  staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
+  integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
+  uat: ['finance-uat-api', 'finance-uat-worker', 'finance-uat-audit'],
+  sandbox: ['sandbox-api', 'sandbox-worker', 'sandbox-observer'],
+  campaigns: ['campaign-engine', 'campaign-events', 'campaign-content'],
+  performance: ['perf-api', 'perf-worker', 'perf-load-probe'],
+  etl: ['etl-scheduler', 'etl-transformer', 'etl-writer'],
+  observability: ['metrics-collector', 'traces-forwarder', 'alerts-dispatcher'],
+};
+
 const LOG_SEED = [
   {
     id: 'log-001',
@@ -188,6 +200,8 @@ let selectedLogId = '';
 let statusMessage = '';
 let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
+let selectedAppLogIds = [];
+let activeAppLogIds = [];
 let pendingSelectionMotion = null;
 const pendingStageHeightMotions = new Map();
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
@@ -262,7 +276,13 @@ appElement.addEventListener('click', (event) => {
   const action = actionElement.dataset.action ?? '';
   queueStageHeightMotionByAction(action);
   const modeBeforeAction = mode;
+  const tabBeforeAction = activeTabId;
   if (!handleAction(action, actionElement)) {
+    return;
+  }
+
+  if (shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeAction)) {
+    refreshWorkspaceLogsView();
     return;
   }
 
@@ -294,6 +314,101 @@ appElement.addEventListener('input', (event) => {
   renderPrototype();
 });
 
+appElement.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  if (target.dataset.role !== 'log-app-checkbox') {
+    return;
+  }
+
+  const appId = target.dataset.appId ?? '';
+  if (appId.length === 0) {
+    return;
+  }
+
+  const selectedIds = new Set(selectedAppLogIds);
+  if (target.checked) {
+    selectedIds.add(appId);
+  } else {
+    selectedIds.delete(appId);
+  }
+
+  selectedAppLogIds = Array.from(selectedIds);
+  if (isWorkspaceLogsMounted()) {
+    refreshWorkspaceLogsView();
+    return;
+  }
+  renderPrototype();
+});
+
+function shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeAction) {
+  const isLogsAction = action === 'start-app-logging' || action === 'stop-app-logging';
+  if (!isLogsAction) {
+    return false;
+  }
+
+  return (
+    modeBeforeAction === 'workspace' &&
+    mode === 'workspace' &&
+    tabBeforeAction === 'logs' &&
+    activeTabId === 'logs'
+  );
+}
+
+function isWorkspaceLogsMounted() {
+  if (mode !== 'workspace' || activeTabId !== 'logs') {
+    return false;
+  }
+
+  return appElement.querySelector('.app-logs-panel') instanceof HTMLElement;
+}
+
+function refreshWorkspaceLogsView() {
+  const logsPanel = appElement.querySelector('.app-logs-panel');
+  if (!(logsPanel instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+
+  const availableApps = resolveCurrentSpaceApps();
+  const selectedApps = new Set(selectedAppLogIds);
+  const activeApps = new Set(activeAppLogIds);
+  const startableSelectionCount = selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
+
+  const catalogElement = logsPanel.querySelector('[data-role="app-log-catalog"]');
+  if (!(catalogElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  catalogElement.innerHTML = renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
+
+  const activeAppsElement = logsPanel.querySelector('[data-role="active-app-log-list"]');
+  if (!(activeAppsElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  activeAppsElement.innerHTML = renderActiveAppsLogList(availableApps, activeApps);
+
+  const startButton = logsPanel.querySelector('[data-action="start-app-logging"]');
+  if (startButton instanceof HTMLButtonElement) {
+    startButton.disabled = startableSelectionCount === 0;
+  }
+
+  const statusElement = logsPanel.querySelector('[data-role="app-log-status"]');
+  if (statusElement instanceof HTMLElement) {
+    statusElement.hidden = statusMessage.length === 0;
+    statusElement.textContent = statusMessage;
+  }
+
+  const syncElement = appElement.querySelector('[data-role="workspace-last-sync"]');
+  if (syncElement instanceof HTMLElement) {
+    syncElement.textContent = `Last sync: ${lastSyncLabel}`;
+  }
+}
+
 function handleGroupSelection(nextGroupId) {
   const nextGroup = groupLookup.get(nextGroupId);
   if (nextGroup === undefined) {
@@ -310,6 +425,7 @@ function handleGroupSelection(nextGroupId) {
   selectedRegionId = '';
   selectedOrgId = '';
   selectedSpaceId = '';
+  resetWorkspaceLoggingState();
 }
 
 function handleRegionSelection(nextRegionId) {
@@ -325,6 +441,7 @@ function handleRegionSelection(nextRegionId) {
   selectedRegionId = nextRegionId;
   selectedOrgId = '';
   selectedSpaceId = '';
+  resetWorkspaceLoggingState();
 
   // Reset live data state so the org stage starts fresh.
   liveOrgOptions = null;
@@ -359,6 +476,7 @@ function handleOrgSelection(nextOrgId) {
 
   selectedOrgId = nextOrgId;
   selectedSpaceId = '';
+  resetWorkspaceLoggingState();
   liveSpaceNames = null;
   spacesErrorMessage = '';
 
@@ -382,6 +500,7 @@ function handleSpaceSelection(nextSpaceId) {
   }
 
   selectedSpaceId = nextSpaceId;
+  resetWorkspaceLoggingState();
 }
 
 function handleAction(action, actionElement) {
@@ -409,6 +528,7 @@ function handleSelectionFlowAction(action) {
     selectedRegionId = '';
     selectedOrgId = '';
     selectedSpaceId = '';
+    resetWorkspaceLoggingState();
     return true;
   }
 
@@ -416,17 +536,20 @@ function handleSelectionFlowAction(action) {
     selectedRegionId = '';
     selectedOrgId = '';
     selectedSpaceId = '';
+    resetWorkspaceLoggingState();
     return true;
   }
 
   if (action === 'reset-org-selection') {
     selectedOrgId = '';
     selectedSpaceId = '';
+    resetWorkspaceLoggingState();
     return true;
   }
 
   if (action === 'reset-space-selection') {
     selectedSpaceId = '';
+    resetWorkspaceLoggingState();
     return true;
   }
 
@@ -437,14 +560,14 @@ function handleSelectionFlowAction(action) {
 
     mode = 'workspace';
     activeTabId = 'logs';
-    statusMessage = 'Scope confirmed. Connect Cloud Foundry to load logs.';
+    statusMessage = '';
     return true;
   }
 
   if (action === 'change-region') {
     mode = 'selection';
     isLiveMode = false;
-    statusMessage = '';
+    resetWorkspaceLoggingState();
     return true;
   }
 
@@ -470,7 +593,7 @@ function handleLogsAction(action, actionElement) {
     return selectionActionHandled;
   }
 
-  const controlActionHandled = handleLogsControlAction(action);
+  const controlActionHandled = handleLogsControlAction(action, actionElement);
   if (controlActionHandled !== null) {
     return controlActionHandled;
   }
@@ -493,7 +616,56 @@ function handleLogsSelectionAction(action, actionElement) {
   return null;
 }
 
-function handleLogsControlAction(action) {
+function handleLogsControlAction(action, actionElement) {
+  if (action === 'start-app-logging') {
+    const availableApps = resolveCurrentSpaceApps();
+    const validAppIds = new Set(availableApps.map((app) => app.id));
+    const selectedValidIds = selectedAppLogIds.filter((appId) => validAppIds.has(appId));
+    const nextActiveAppIds = new Set(activeAppLogIds.filter((appId) => validAppIds.has(appId)));
+
+    if (selectedValidIds.length === 0) {
+      statusMessage = 'Select at least one app to start logging.';
+      return true;
+    }
+
+    let newlyStartedCount = 0;
+    for (const appId of selectedValidIds) {
+      if (!nextActiveAppIds.has(appId)) {
+        newlyStartedCount += 1;
+      }
+      nextActiveAppIds.add(appId);
+    }
+
+    activeAppLogIds = Array.from(nextActiveAppIds);
+    selectedAppLogIds = Array.from(new Set([...selectedValidIds, ...activeAppLogIds]));
+    lastSyncLabel = formatNow();
+    statusMessage =
+      newlyStartedCount === 0
+        ? 'All selected apps are already logging.'
+        : `Logging started for ${newlyStartedCount} app${newlyStartedCount > 1 ? 's' : ''}.`;
+    return true;
+  }
+
+  if (action === 'stop-app-logging') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+
+    const isActive = activeAppLogIds.includes(appId);
+    if (!isActive) {
+      return true;
+    }
+
+    const appName =
+      resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    activeAppLogIds = activeAppLogIds.filter((activeAppId) => activeAppId !== appId);
+    selectedAppLogIds = selectedAppLogIds.filter((selectedAppId) => selectedAppId !== appId);
+    lastSyncLabel = formatNow();
+    statusMessage = `Stopped logging for ${appName}.`;
+    return true;
+  }
+
   if (action === 'open-cf-logs-panel') {
     postOpenCfLogsPanel();
     statusMessage = 'CFLogs panel opened.';
@@ -1164,8 +1336,8 @@ function renderWorkspaceScreen() {
     </section>
 
     <footer class="workspace-footer">
-      <span>Last sync: ${lastSyncLabel}</span>
-      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Change Space</button>
+      <span data-role="workspace-last-sync">Last sync: ${lastSyncLabel}</span>
+      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Change Region</button>
     </footer>
   `;
 }
@@ -1199,30 +1371,105 @@ function renderWorkspaceTabContent() {
 }
 
 function renderLogsTab() {
-  if (!isConnected) {
-    return `
-      <section class="group-card logs-empty-state">
-        <h2>Logs</h2>
-        <p>Cloud Foundry target is not connected for this scope yet.</p>
-        <button type="button" class="primary-action" data-action="connect-cf">Connect Cloud Foundry</button>
-      </section>
-    `;
-  }
-
-  const filteredLogs = getFilteredLogs();
-  const selectedLog = resolveSelectedLog(filteredLogs);
+  const availableApps = resolveCurrentSpaceApps();
+  const selectedApps = new Set(selectedAppLogIds);
+  const activeApps = new Set(activeAppLogIds);
+  const startableSelectionCount = selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
+  const spaceLabel = selectedSpaceId.length > 0 ? selectedSpaceId : 'current-space';
+  const catalogMarkup = renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
+  const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps);
+  const statusMarkup =
+    statusMessage.length === 0
+      ? '<p class="status-note" data-role="app-log-status" hidden></p>'
+      : `<p class="status-note" data-role="app-log-status">${escapeHtml(statusMessage)}</p>`;
 
   return `
-    <section class="group-card logs-panel">
-      <h2>Cloud Foundry Logs</h2>
-      ${renderCfLogsPanelBridge(logsData)}
-      ${renderLogsToolbar()}
-      ${renderLogsFilters()}
-      ${statusMessage.length > 0 ? `<p class="status-note">${escapeHtml(statusMessage)}</p>` : ''}
-      ${renderLogsTable(filteredLogs, selectedLog?.id ?? '')}
-      ${selectedLog === undefined ? renderEmptyLogDetails() : renderLogDetails(selectedLog)}
+    <section class="group-card logs-panel app-logs-panel">
+      <section class="active-apps-log" aria-label="Active apps log">
+        <h3>Active Apps Log</h3>
+        <div data-role="active-app-log-list">${activeAppsMarkup}</div>
+      </section>
+      <h2>Apps Log Control</h2>
+      <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs.</p>
+      <section class="app-log-catalog" aria-label="Apps in selected space" data-role="app-log-catalog">
+        ${catalogMarkup}
+      </section>
+      <div class="toolbar-row" role="group" aria-label="App log actions">
+        <button
+          type="button"
+          class="primary-action app-log-start"
+          data-action="start-app-logging"
+          ${startableSelectionCount === 0 ? 'disabled' : ''}
+        >
+          Start App Logging
+        </button>
+      </div>
+      ${statusMarkup}
     </section>
   `;
+}
+
+function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
+  if (availableApps.length === 0) {
+    return '<p class="logs-empty-message">No apps found in current space.</p>';
+  }
+
+  return availableApps
+    .map((app) => {
+      const isLogging = activeApps.has(app.id);
+      const isChecked = isLogging || selectedApps.has(app.id);
+      const actionMarkup = isLogging
+        ? `
+            <span class="app-log-meta">
+              <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
+                Stop
+              </button>
+              <span class="app-log-state is-logging">Logging</span>
+            </span>
+          `
+        : '<span class="app-log-state is-idle">Ready</span>';
+
+      return `
+        <div class="app-log-item${isLogging ? ' is-logging is-locked' : ''}">
+          <input
+            type="checkbox"
+            data-role="log-app-checkbox"
+            data-app-id="${app.id}"
+            aria-label="Select ${escapeHtml(app.name)}"
+            ${isChecked ? 'checked' : ''}
+            ${isLogging ? 'disabled' : ''}
+          />
+          <span class="app-log-name">${escapeHtml(app.name)}</span>
+          ${actionMarkup}
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderActiveAppsLogList(availableApps, activeAppIds) {
+  const activeItems = availableApps.filter((app) => activeAppIds.has(app.id));
+  if (activeItems.length === 0) {
+    return '<p class="logs-empty-message">No active app logs yet.</p>';
+  }
+
+  const rowsMarkup = activeItems
+    .map((app) => {
+      return `
+        <div class="active-app-row">
+          <span class="active-app-name">${escapeHtml(app.name)}</span>
+          <span class="active-app-meta">
+            <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
+              Stop
+            </button>
+            <span class="active-app-pill">Logging</span>
+          </span>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `<div class="active-app-list">${rowsMarkup}</div>`;
 }
 
 function renderCfLogsPanelBridge(logs) {
@@ -1411,6 +1658,33 @@ function resolveSelectedLog(logs) {
 
 function cloneSeedLogs() {
   return LOG_SEED.map((entry) => ({ ...entry }));
+}
+
+function resolveCurrentSpaceApps() {
+  const spaceKey = selectedSpaceId.trim().toLowerCase();
+  const curatedAppNames = SPACE_APP_OPTIONS[spaceKey];
+  const appNames = Array.isArray(curatedAppNames) ? curatedAppNames : buildFallbackAppNames(spaceKey);
+  return appNames.map((appName) => ({ id: appName, name: appName }));
+}
+
+function buildFallbackAppNames(spaceKey) {
+  const orgName = resolveSelectedOrg()?.name ?? 'app-services';
+  const orgSlug = orgName
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '');
+  const suffix = spaceKey.length > 0 ? spaceKey : 'space';
+  return [
+    `${orgSlug}-${suffix}-api`,
+    `${orgSlug}-${suffix}-worker`,
+    `${orgSlug}-${suffix}-jobs`,
+  ];
+}
+
+function resetWorkspaceLoggingState() {
+  selectedAppLogIds = [];
+  activeAppLogIds = [];
+  statusMessage = '';
 }
 
 function formatNow() {

@@ -49,6 +49,9 @@
     "uksouth",
     "westeurope",
     "westus",
-    "westus2"
+    "westus2",
+    "describedby",
+    "hana",
+    "ondemand"
   ]
 }
