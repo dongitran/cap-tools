@@ -341,7 +341,7 @@ body.pattern-dots::before {
 
 .groups {
   padding: 10px;
-  overflow: auto;
+  overflow: hidden;
   display: grid;
   gap: 10px;
   align-content: start;
@@ -487,6 +487,12 @@ body.pattern-dots::before {
 .region-layout {
   display: grid;
   gap: 7px;
+  max-height: 182px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  align-content: start;
+  padding-right: 2px;
 }
 
 .region-layout.is-collapsed {
@@ -500,6 +506,7 @@ body.pattern-dots::before {
 .region-layout.chips {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
 }
 
 .region-layout.cards {
@@ -703,6 +710,32 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   display: grid;
   grid-template-columns: 1fr;
   gap: 6px;
+  max-height: 182px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  align-content: start;
+  padding-right: 2px;
+}
+
+.region-layout::-webkit-scrollbar,
+.org-picker::-webkit-scrollbar,
+.space-picker::-webkit-scrollbar {
+  width: 8px;
+}
+
+.region-layout::-webkit-scrollbar-track,
+.org-picker::-webkit-scrollbar-track,
+.space-picker::-webkit-scrollbar-track {
+  background: color-mix(in oklab, var(--surface-bg) 78%, var(--mix-base));
+  border-radius: 999px;
+}
+
+.region-layout::-webkit-scrollbar-thumb,
+.org-picker::-webkit-scrollbar-thumb,
+.space-picker::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--accent-color) 48%, var(--mix-base));
+  border-radius: 999px;
 }
 
 .org-option,
