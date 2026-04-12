@@ -56,6 +56,13 @@ body.login-gate-page {
   padding: 14px;
   display: grid;
   align-content: start;
+  gap: 10px;
+}
+
+.layout-head h1 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .login-card {
@@ -72,21 +79,10 @@ body.login-gate-page {
   gap: 6px;
 }
 
-.login-head h1 {
+.login-head h1,
+.login-head h2 {
   margin: 0;
   font-size: 0.95rem;
-}
-
-.login-head p {
-  margin: 0;
-  font-size: 0.72rem;
-  color: var(--muted-color);
-  line-height: 1.35;
-}
-
-.login-head code {
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.7rem;
 }
 
 .login-form {
