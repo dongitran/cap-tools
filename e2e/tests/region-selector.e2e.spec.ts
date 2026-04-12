@@ -19,7 +19,7 @@ import {
 } from '../src/launchVscode';
 
 const ACTIVITY_BAR_TITLE = 'SAP Tools';
-const AREA_TO_SELECT = /Americas \(br - ca - us\)/i;
+const AREA_TO_SELECT = /Americas\s+br - ca - us/i;
 const REGION_TO_SELECT = /US East \(VA\) - AWS us-10/i;
 const BR10_REGION_TO_SELECT = /Brazil \(Sao Paulo\) - AWS br-10/i;
 const ORG_TO_SELECT = /finance-services-prod/i;

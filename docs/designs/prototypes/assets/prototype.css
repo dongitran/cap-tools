@@ -448,10 +448,9 @@ body.pattern-dots::before {
 }
 
 .area-meta {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   color: var(--muted-color);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  line-height: 1.35;
 }
 
 .group-count {

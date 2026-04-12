@@ -1219,6 +1219,7 @@ function renderAreaPicker(selectedGroup) {
     .map((group) => {
       const isActive = group.id === selectedGroupId;
       const isHidden = isCollapsed && !isActive;
+      const areaLabelParts = splitAreaLabel(group.label);
       return `
         <button
           type="button"
@@ -1227,12 +1228,32 @@ function renderAreaPicker(selectedGroup) {
           aria-pressed="${isActive}"
           aria-hidden="${isHidden}"
         >
-          <span class="area-label">${group.label}</span>
-          <span class="area-meta">${group.regions.length} regions</span>
+          <span class="area-label">${areaLabelParts.title}</span>
+          ${
+            areaLabelParts.meta.length > 0
+              ? `<span class="area-meta">${areaLabelParts.meta}</span>`
+              : ''
+          }
         </button>
       `;
     })
     .join('');
+}
+
+function splitAreaLabel(label) {
+  const normalizedLabel = label.trim();
+  const match = /^(.+?)\s*\(([^)]+)\)$/.exec(normalizedLabel);
+  if (match === null) {
+    return {
+      title: normalizedLabel,
+      meta: '',
+    };
+  }
+
+  return {
+    title: match[1].trim(),
+    meta: match[2].trim(),
+  };
 }
 
 function renderSelectedGroupPanel(group) {
