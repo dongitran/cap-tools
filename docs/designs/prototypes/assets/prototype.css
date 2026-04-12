@@ -824,20 +824,6 @@ body.pattern-dots::before {
   color: var(--muted-color);
 }
 
-.workspace-footer-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.live-indicator {
-  font-weight: 700;
-}
-
-.live-indicator.is-live {
-  color: var(--state-success-fg);
-}
-
 .logs-panel {
   display: grid;
   gap: 9px;
@@ -1131,8 +1117,9 @@ body.pattern-dots::before {
 
   .workspace-footer {
     padding: 8px;
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .area-picker {

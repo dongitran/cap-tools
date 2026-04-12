@@ -1015,11 +1015,8 @@ function renderWorkspaceScreen() {
     </section>
 
     <footer class="workspace-footer">
-      <div class="workspace-footer-main">
-        <span>Last sync: ${lastSyncLabel}</span>
-        <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
-      </div>
-      <span class="live-indicator${isLiveMode ? ' is-live' : ''}">Live ${isLiveMode ? 'ON' : 'OFF'}</span>
+      <span>Last sync: ${lastSyncLabel}</span>
+      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
     </footer>
   `;
 }
