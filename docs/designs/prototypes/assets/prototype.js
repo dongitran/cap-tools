@@ -7,7 +7,7 @@ const TAB_ITEMS = [
   { id: 'settings', label: 'Settings' },
 ];
 
-const ORG_OPTIONS = [
+const DEFAULT_ORG_OPTIONS = [
   {
     id: 'org-core-prod',
     name: 'core-platform-prod',
@@ -27,6 +27,27 @@ const ORG_OPTIONS = [
     id: 'org-data-prod',
     name: 'data-foundation-prod',
     spaces: ['prod', 'etl', 'observability'],
+  },
+];
+
+const BR10_ORG_OPTIONS = [
+  { id: 'org-br10-core-platform', name: 'core-platform-prod', spaces: ['prod', 'staging', 'integration'] },
+  { id: 'org-br10-finance-services', name: 'finance-services-prod', spaces: ['prod', 'uat', 'sandbox'] },
+  { id: 'org-br10-retail-experience', name: 'retail-experience-prod', spaces: ['prod', 'campaigns', 'performance'] },
+  { id: 'org-br10-data-foundation', name: 'data-foundation-prod', spaces: ['prod', 'etl', 'observability'] },
+  { id: 'org-br10-tax-engineering', name: 'tax-engineering-prod', spaces: ['prod', 'uat'] },
+  { id: 'org-br10-payments-ledger', name: 'payments-ledger-prod', spaces: ['prod', 'staging'] },
+  { id: 'org-br10-supply-chain', name: 'supply-chain-control-prod', spaces: ['prod', 'integration'] },
+  { id: 'org-br10-customer-insights', name: 'customer-insights-prod', spaces: ['prod', 'performance'] },
+  { id: 'org-br10-partner-gateway', name: 'partner-gateway-prod', spaces: ['prod', 'sandbox'] },
+  { id: 'org-br10-revenue-ops', name: 'revenue-operations-prod', spaces: ['prod', 'uat', 'observability'] },
+  { id: 'org-br10-commerce-catalog', name: 'commerce-catalog-prod', spaces: ['prod', 'campaigns'] },
+  { id: 'org-br10-risk-compliance', name: 'risk-compliance-prod', spaces: ['prod', 'staging', 'observability'] },
+  { id: 'org-br10-identity-access', name: 'identity-access-prod', spaces: ['prod', 'integration', 'sandbox'] },
+  {
+    id: 'org-br10-billing-reconciliation',
+    name: 'billing-reconciliation-prod',
+    spaces: ['prod', 'uat', 'etl'],
   },
 ];
 
@@ -236,8 +257,6 @@ const regionLookup = new Map(
 const regionGroupLookup = new Map(
   REGION_GROUPS.flatMap((group) => group.regions.map((region) => [region.id, group.id]))
 );
-const orgLookup = new Map(ORG_OPTIONS.map((org) => [org.id, org]));
-
 let mode = 'selection';
 let selectedGroupId = '';
 let selectedRegionId = '';
@@ -524,7 +543,7 @@ function handleOrgSelection(nextOrgId) {
   const orgExists =
     vscodeApi !== null && liveOrgOptions !== null
       ? liveOrgLookup.has(nextOrgId)
-      : orgLookup.has(nextOrgId);
+      : resolveCurrentMockOrgOptions().some((org) => org.id === nextOrgId);
 
   if (!orgExists) {
     return;
@@ -1279,7 +1298,7 @@ function renderOrgStage() {
   const activeOrgs =
     vscodeApi !== null && liveOrgOptions !== null
       ? liveOrgOptions.map((o) => ({ id: o.guid, name: o.name }))
-      : ORG_OPTIONS.map((o) => ({ id: o.id, name: o.name }));
+      : resolveCurrentMockOrgOptions().map((o) => ({ id: o.id, name: o.name }));
 
   const isCollapsed = selectedOrgId.length > 0;
   const orgButtons = activeOrgs
@@ -1752,7 +1771,16 @@ function resolveSelectedOrg() {
     return liveOrgLookup.get(selectedOrgId);
   }
 
-  return orgLookup.get(selectedOrgId);
+  return resolveCurrentMockOrgOptions().find((org) => org.id === selectedOrgId);
+}
+
+function resolveCurrentMockOrgOptions() {
+  const selectedRegion = resolveSelectedRegion();
+  if (selectedRegion?.code === 'br-10') {
+    return BR10_ORG_OPTIONS;
+  }
+
+  return DEFAULT_ORG_OPTIONS;
 }
 
 function resolveSelectableSpaces() {
