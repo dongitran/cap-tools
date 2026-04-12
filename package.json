@@ -19,7 +19,8 @@
   "activationEvents": [
     "onView:sapTools.regionView",
     "onView:sapTools.cfLogsView",
-    "onCommand:sapTools.selectSapBtpRegion"
+    "onCommand:sapTools.selectSapBtpRegion",
+    "onCommand:sapTools.openCfLogsPanel"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -27,6 +28,11 @@
       {
         "command": "sapTools.selectSapBtpRegion",
         "title": "SAP Tools: Open Region Menu",
+        "category": "SAP Tools"
+      },
+      {
+        "command": "sapTools.openCfLogsPanel",
+        "title": "SAP Tools: Open CFLogs Panel",
         "category": "SAP Tools"
       }
     ],

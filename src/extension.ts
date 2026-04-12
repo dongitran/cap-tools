@@ -4,6 +4,7 @@ import { CF_LOGS_VIEW_ID, CfLogsPanelProvider } from './cfLogsPanel';
 import { REGION_VIEW_ID, RegionSidebarProvider } from './sidebarProvider';
 
 const OPEN_REGION_MENU_COMMAND = 'sapTools.selectSapBtpRegion';
+const OPEN_CF_LOGS_PANEL_COMMAND = 'sapTools.openCfLogsPanel';
 const OUTPUT_CHANNEL_NAME = 'SAP Tools';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -45,12 +46,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const openCfLogsPanelCommand = vscode.commands.registerCommand(
+    OPEN_CF_LOGS_PANEL_COMMAND,
+    async (): Promise<void> => {
+      await vscode.commands.executeCommand(`${CF_LOGS_VIEW_ID}.focus`);
+    }
+  );
+
   context.subscriptions.push(
     outputChannel,
     regionSidebarProvider,
     cfLogsPanel,
     webviewProviderRegistration,
     cfLogsPanelRegistration,
-    openRegionMenuCommand
+    openRegionMenuCommand,
+    openCfLogsPanelCommand
   );
 }

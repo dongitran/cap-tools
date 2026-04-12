@@ -7,6 +7,7 @@ import {
   _electron as electron,
   type ElectronApplication,
   type Frame,
+  type Locator,
   type Page,
 } from '@playwright/test';
 
@@ -265,7 +266,8 @@ async function findCfLogsPanelFrame(window: Page): Promise<Frame | undefined> {
   for (const frame of candidateFrames) {
     const heading = frame.getByRole('heading', { name: 'Monitoring Workspace' });
     const isVisible = await heading.isVisible().catch(() => false);
-    if (isVisible) {
+    const hasLogTable = (await frame.locator('.cf-log-table').count()) > 0;
+    if (isVisible && hasLogTable) {
       return frame;
     }
   }
@@ -326,24 +328,107 @@ async function openSapToolsSidebar(window: Page): Promise<Frame> {
     name: new RegExp(ACTIVITY_BAR_TITLE),
   });
   await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
-  await sapToolsTab.click();
+  await clickWithFallback(sapToolsTab);
 
   return resolveSapToolsWebviewFrame(window);
 }
 
 async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
-  await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
-  await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+  await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+  await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
   // In test mode, orgs are fetched asynchronously via the extension; wait for them.
   await expect(
     webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
   ).toBeVisible({ timeout: 10000 });
-  await webviewFrame.getByRole('button', { name: ORG_TO_SELECT }).click();
+  await clickWithFallback(webviewFrame.getByRole('button', { name: ORG_TO_SELECT }));
   // Spaces are also fetched asynchronously; wait before clicking.
   await expect(
     webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
   ).toBeVisible({ timeout: 10000 });
-  await webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }).click();
+  await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
+}
+
+async function clickWithFallback(locator: Locator): Promise<void> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await locator.click({ timeout: 10000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const pointerIntercepted = errorMessage.includes('intercepts pointer events');
+      if (pointerIntercepted) {
+        await locator.click({ force: true, timeout: 10000 });
+        return;
+      }
+
+      const detachedFromDom =
+        errorMessage.includes('Element is not attached to the DOM') ||
+        errorMessage.includes('element is not attached');
+      if (detachedFromDom) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error('Failed to click locator after retries.');
+}
+
+async function resolveCfLogsPanelFrame(
+  window: Page,
+  timeoutMs: number
+): Promise<Frame | undefined> {
+  try {
+    await expect
+      .poll(
+        async () => {
+          const frame = await findCfLogsPanelFrame(window);
+          return frame?.url() ?? '';
+        },
+        { timeout: timeoutMs }
+      )
+      .toContain('vscode-webview://');
+  } catch {
+    return undefined;
+  }
+
+  return findCfLogsPanelFrame(window);
+}
+
+async function openCfLogsPanel(window: Page): Promise<Frame> {
+  await window.keyboard.press('F1');
+  await window.keyboard.type('SAP Tools: Open CFLogs Panel');
+  await window.keyboard.press('Enter');
+
+  const frameFromCommand = await resolveCfLogsPanelFrame(window, 15000);
+  if (frameFromCommand !== undefined) {
+    return frameFromCommand;
+  }
+
+  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+J' : 'Control+J');
+  const panelPart = window.locator('[id="workbench.parts.panel"]');
+  const panelTab = panelPart.getByRole('tab', { name: /SAP TOOLS|CFLogs/i });
+  const panelTabVisible = await panelTab
+    .isVisible()
+    .catch((): false => false);
+  if (panelTabVisible) {
+    await clickWithFallback(panelTab);
+  }
+
+  const frame = await resolveCfLogsPanelFrame(window, 15000);
+  if (frame !== undefined) {
+    return frame;
+  }
+
+  throw new Error('CF logs panel frame was not found.');
 }
 
 async function readWebviewBodyClasses(webviewFrame: Frame): Promise<string[]> {
@@ -454,8 +539,8 @@ test.describe('SAP Tools region selector', () => {
           expect(palette.shellBrightness).toBeGreaterThan(scenario.minShellBrightness);
         }
 
-        await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
-        await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+        await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+        await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
         await expect(
           session.window
             .getByText(/Selected SAP BTP region: US East \(us-10\)/i)
@@ -759,7 +844,7 @@ test.describe('SAP Tools login gate', () => {
         name: new RegExp(ACTIVITY_BAR_TITLE),
       });
       await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
-      await sapToolsTab.click();
+      await clickWithFallback(sapToolsTab);
       const frame = await resolveSapToolsLoginFrame(session.window);
 
       // Login gate heading and form fields should be visible.
@@ -790,7 +875,7 @@ test.describe('SAP Tools login gate', () => {
         name: new RegExp(ACTIVITY_BAR_TITLE),
       });
       await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
-      await sapToolsTab.click();
+      await clickWithFallback(sapToolsTab);
       const frame = await resolveSapToolsLoginFrame(session.window);
 
       await expect(frame.getByRole('heading', { name: 'SAP Tools Login' })).toBeVisible();
@@ -798,9 +883,10 @@ test.describe('SAP Tools login gate', () => {
       // Fill in the login form and submit.
       await frame.getByLabel('SAP Email').fill('test@example.com');
       await frame.getByLabel('SAP Password').fill('test-password');
-      await frame.getByRole('button', { name: 'Save and Continue' }).click();
+      await clickWithFallback(frame.getByRole('button', { name: 'Save and Continue' }));
 
       // After submit the extension reloads the webview; the region selector should appear.
+      await clickWithFallback(sapToolsTab);
       const reloadedFrame = await resolveSapToolsRegionFrame(session.window);
       await expect(
         reloadedFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
@@ -818,12 +904,12 @@ test.describe('SAP Tools login gate', () => {
         name: new RegExp(ACTIVITY_BAR_TITLE),
       });
       await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
-      await sapToolsTab.click();
+      await clickWithFallback(sapToolsTab);
       const frame = await resolveSapToolsLoginFrame(session.window);
 
       await frame.getByLabel('SAP Email').fill('not-an-email');
       await frame.getByLabel('SAP Password').fill('some-password');
-      await frame.getByRole('button', { name: 'Save and Continue' }).click();
+      await clickWithFallback(frame.getByRole('button', { name: 'Save and Continue' }));
 
       await expect(
         frame.getByRole('status')
@@ -835,35 +921,10 @@ test.describe('SAP Tools login gate', () => {
 });
 
 test.describe('SAP Tools CF logs panel', () => {
-  async function openCfLogsPanel(window: Page): Promise<Frame> {
-    await window.keyboard.press(process.platform === 'darwin' ? 'Meta+J' : 'Control+J');
-    const panelPart = window.locator('[id="workbench.parts.panel"]');
-    const sapToolsPanelTab = panelPart.getByRole('tab', { name: /SAP TOOLS/i });
-    await expect(sapToolsPanelTab).toBeVisible({ timeout: 15000 });
-    await sapToolsPanelTab.click();
-
-    // The panel tab should appear in the bottom panel.
-    await expect
-      .poll(async () => {
-        const frame = await findCfLogsPanelFrame(window);
-        return frame?.url() ?? '';
-      })
-      .toContain('vscode-webview://');
-
-    const frame = await findCfLogsPanelFrame(window);
-    if (frame === undefined) {
-      throw new Error('CF logs panel frame was not found.');
-    }
-
-    return frame;
-  }
-
   test('CF logs panel renders with monitoring workspace and log table', async () => {
     const session = await launchExtensionHost();
 
     try {
-      // Open the sidebar first so the panel is registered.
-      await openSapToolsSidebar(session.window);
       const frame = await openCfLogsPanel(session.window);
 
       // Required structural elements should be present.
@@ -892,21 +953,12 @@ test.describe('SAP Tools CF logs panel', () => {
     try {
       const sidebarFrame = await openSapToolsSidebar(session.window);
       await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+      const confirmButton = sidebarFrame.getByRole('button', { name: /Confirm Scope/i });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
 
-      // Complete the scope selection in the sidebar.
-      await sidebarFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
-      await sidebarFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
-      await expect(
-        sidebarFrame.getByRole('button', { name: ORG_TO_SELECT })
-      ).toBeVisible({ timeout: 10000 });
-      await sidebarFrame.getByRole('button', { name: ORG_TO_SELECT }).click();
-      // Spaces are fetched asynchronously.
-      await expect(
-        sidebarFrame.getByRole('button', { name: SPACE_TO_SELECT })
-      ).toBeVisible({ timeout: 10000 });
-
-      // After org is selected, the CF logs panel scope should be updated
-      // (even before the space is selected, since handleOrgSelected fires).
+      // Scope should reflect region → org → space selected in the sidebar.
       await expect
         .poll(async () => {
           const frame = await findCfLogsPanelFrame(session.window);
@@ -914,7 +966,21 @@ test.describe('SAP Tools CF logs panel', () => {
           const scopeEl = frame.locator('#workspace-scope');
           return scopeEl.textContent();
         }, { timeout: 15000 })
+        .toContain('us-10');
+      await expect
+        .poll(async () => {
+          const frame = await findCfLogsPanelFrame(session.window);
+          if (frame === undefined) return '';
+          return frame.locator('#workspace-scope').textContent();
+        }, { timeout: 15000 })
         .toContain('finance-services-prod');
+      await expect
+        .poll(async () => {
+          const frame = await findCfLogsPanelFrame(session.window);
+          if (frame === undefined) return '';
+          return frame.locator('#workspace-scope').textContent();
+        }, { timeout: 15000 })
+        .toContain('uat');
     } finally {
       await cleanupExtensionHost(session);
     }

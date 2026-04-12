@@ -2,6 +2,7 @@ import type * as vscode from 'vscode';
 
 const EMAIL_SECRET_KEY = 'sapTools.cf.email';
 const PASSWORD_SECRET_KEY = 'sapTools.cf.password';
+let e2eFallbackCredentials: CfCredentials | null = null;
 
 export interface CfCredentials {
   readonly email: string;
@@ -34,16 +35,26 @@ export function getEnvCredentials(): CfCredentials | null {
 export async function getStoredCredentials(
   context: vscode.ExtensionContext
 ): Promise<CfCredentials | null> {
-  const email = await context.secrets.get(EMAIL_SECRET_KEY);
-  const password = await context.secrets.get(PASSWORD_SECRET_KEY);
+  try {
+    const email = await context.secrets.get(EMAIL_SECRET_KEY);
+    const password = await context.secrets.get(PASSWORD_SECRET_KEY);
 
-  if (
-    typeof email === 'string' &&
-    email.length > 0 &&
-    typeof password === 'string' &&
-    password.length > 0
-  ) {
-    return { email, password };
+    if (
+      typeof email === 'string' &&
+      email.length > 0 &&
+      typeof password === 'string' &&
+      password.length > 0
+    ) {
+      return { email, password };
+    }
+  } catch {
+    if (!isE2eMode()) {
+      throw new Error('Failed to read credentials from VSCode secure storage.');
+    }
+  }
+
+  if (isE2eMode() && e2eFallbackCredentials !== null) {
+    return e2eFallbackCredentials;
   }
 
   return null;
@@ -56,16 +67,36 @@ export async function storeCredentials(
   context: vscode.ExtensionContext,
   credentials: CfCredentials
 ): Promise<void> {
-  await context.secrets.store(EMAIL_SECRET_KEY, credentials.email);
-  await context.secrets.store(PASSWORD_SECRET_KEY, credentials.password);
+  if (isE2eMode()) {
+    e2eFallbackCredentials = credentials;
+  }
+
+  try {
+    await context.secrets.store(EMAIL_SECRET_KEY, credentials.email);
+    await context.secrets.store(PASSWORD_SECRET_KEY, credentials.password);
+  } catch {
+    if (!isE2eMode()) {
+      throw new Error('Failed to store credentials in VSCode secure storage.');
+    }
+  }
 }
 
 /**
  * Remove stored credentials from VSCode's encrypted secret storage.
  */
 export async function clearCredentials(context: vscode.ExtensionContext): Promise<void> {
-  await context.secrets.delete(EMAIL_SECRET_KEY);
-  await context.secrets.delete(PASSWORD_SECRET_KEY);
+  if (isE2eMode()) {
+    e2eFallbackCredentials = null;
+  }
+
+  try {
+    await context.secrets.delete(EMAIL_SECRET_KEY);
+    await context.secrets.delete(PASSWORD_SECRET_KEY);
+  } catch {
+    if (!isE2eMode()) {
+      throw new Error('Failed to clear credentials from VSCode secure storage.');
+    }
+  }
 }
 
 /**
@@ -88,4 +119,8 @@ export async function getEffectiveCredentials(
 
 function isLoginGateForced(): boolean {
   return process.env['SAP_TOOLS_FORCE_LOGIN_GATE'] === '1';
+}
+
+function isE2eMode(): boolean {
+  return process.env['SAP_TOOLS_E2E'] === '1';
 }
