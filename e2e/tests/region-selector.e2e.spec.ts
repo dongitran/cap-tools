@@ -413,6 +413,12 @@ async function resolveCfLogsPanelFrame(
 }
 
 async function openCfLogsPanel(window: Page): Promise<Frame> {
+  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+Alt+L' : 'Control+Alt+L');
+  const frameFromShortcut = await resolveCfLogsPanelFrame(window, 10000);
+  if (frameFromShortcut !== undefined) {
+    return frameFromShortcut;
+  }
+
   await runWorkbenchCommand(window, 'SAP Tools: Open CFLogs Panel');
 
   const frameFromCommand = await resolveCfLogsPanelFrame(window, 15000);

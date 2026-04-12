@@ -35,6 +35,10 @@ export function getEnvCredentials(): CfCredentials | null {
 export async function getStoredCredentials(
   context: vscode.ExtensionContext
 ): Promise<CfCredentials | null> {
+  if (isE2eMode()) {
+    return e2eFallbackCredentials;
+  }
+
   try {
     const email = await context.secrets.get(EMAIL_SECRET_KEY);
     const password = await context.secrets.get(PASSWORD_SECRET_KEY);
@@ -69,6 +73,7 @@ export async function storeCredentials(
 ): Promise<void> {
   if (isE2eMode()) {
     e2eFallbackCredentials = credentials;
+    return;
   }
 
   try {
@@ -87,6 +92,7 @@ export async function storeCredentials(
 export async function clearCredentials(context: vscode.ExtensionContext): Promise<void> {
   if (isE2eMode()) {
     e2eFallbackCredentials = null;
+    return;
   }
 
   try {

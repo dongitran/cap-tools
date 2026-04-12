@@ -67,7 +67,15 @@
           "type": "webview"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "sapTools.openCfLogsPanel",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "true"
+      }
+    ]
   },
   "files": [
     "dist",
