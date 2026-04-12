@@ -7,6 +7,8 @@
   --panel-accent: #0e639c;
   --panel-accent-soft: #093a5b;
   --panel-error: #d16969;
+  --panel-warning: #d7ba7d;
+  --panel-success: #89d185;
 }
 
 * {
@@ -34,6 +36,8 @@ body.vscode-light.cf-logs-panel-page {
   --panel-accent: #0e639c;
   --panel-accent-soft: #e7f2fb;
   --panel-error: #a1260d;
+  --panel-warning: #8f5f00;
+  --panel-success: #1e7a32;
 }
 
 body.vscode-high-contrast.cf-logs-panel-page,
@@ -46,19 +50,33 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   --panel-accent: #ffe761;
   --panel-accent-soft: #303000;
   --panel-error: #ff9f9f;
+  --panel-warning: #ffe761;
+  --panel-success: #9fff9f;
 }
 
 .panel-prototype-shell {
   min-height: 100dvh;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(220px, 36dvh);
+  grid-template-rows: minmax(0, 1fr) minmax(260px, 44dvh);
 }
 
 .editor-area {
   background:
-    linear-gradient(to right, transparent 0, transparent 24px, color-mix(in oklab, var(--panel-border) 44%, transparent) 24px, color-mix(in oklab, var(--panel-border) 44%, transparent) 25px)
+    linear-gradient(
+      to right,
+      transparent 0,
+      transparent 24px,
+      color-mix(in oklab, var(--panel-border) 44%, transparent) 24px,
+      color-mix(in oklab, var(--panel-border) 44%, transparent) 25px
+    )
       0 0 / 100% 100%,
-    linear-gradient(to bottom, transparent 0, transparent 34px, color-mix(in oklab, var(--panel-border) 44%, transparent) 34px, color-mix(in oklab, var(--panel-border) 44%, transparent) 35px)
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 34px,
+      color-mix(in oklab, var(--panel-border) 44%, transparent) 34px,
+      color-mix(in oklab, var(--panel-border) 44%, transparent) 35px
+    )
       0 0 / 100% 100%,
     color-mix(in oklab, var(--panel-bg) 82%, #000000);
 }
@@ -145,46 +163,229 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   font-size: 0.66rem;
 }
 
-.cf-log-table {
+.filter-panel {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  background: color-mix(in oklab, var(--panel-surface) 85%, var(--panel-bg));
+}
+
+.filter-row {
+  display: grid;
+  gap: 4px;
+}
+
+.filter-row label {
+  font-size: 0.62rem;
+  color: var(--panel-muted);
+}
+
+.filter-row input,
+.filter-row select {
+  min-height: 28px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--panel-surface);
+  color: var(--panel-text);
+  font: inherit;
+  font-size: 0.65rem;
+  padding: 0 8px;
+}
+
+.filter-row input:focus-visible,
+.filter-row select:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--panel-accent) 62%, #ffffff);
+  outline-offset: 0;
+}
+
+.table-shell {
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   overflow: auto;
-  max-height: min(220px, 24dvh);
-  background: color-mix(in oklab, var(--panel-surface) 84%, var(--panel-bg));
+  max-height: min(286px, 28dvh);
+  background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
 }
 
-.cf-log-table p {
-  margin: 0;
-  padding: 6px 8px;
-  display: grid;
-  grid-template-columns: 56px 40px 54px minmax(0, 1fr);
-  gap: 6px;
-  border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 76%, transparent);
+.cf-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.64rem;
 }
 
-.cf-log-table p:last-child {
+.cf-log-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in oklab, var(--panel-surface) 92%, var(--panel-bg));
+  color: var(--panel-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--panel-border);
+  padding: 6px 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cf-log-table th:nth-child(1) {
+  width: 172px;
+}
+
+.cf-log-table th:nth-child(2) {
+  width: 118px;
+}
+
+.cf-log-table th:nth-child(3),
+.cf-log-table th:nth-child(4),
+.cf-log-table th:nth-child(5) {
+  width: 64px;
+}
+
+.cf-log-table th:nth-child(6),
+.cf-log-table th:nth-child(7) {
+  width: 112px;
+}
+
+.cf-log-table th:nth-child(8),
+.cf-log-table th:nth-child(9) {
+  width: 108px;
+}
+
+.cf-log-table th:nth-child(10) {
+  min-width: 340px;
+}
+
+.cf-log-table tbody td {
+  border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 76%, transparent);
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+.cf-log-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.cf-log-table p span:last-child {
+.cf-log-table tbody tr {
+  cursor: pointer;
+}
+
+.cf-log-table tbody tr:hover {
+  background: color-mix(in oklab, var(--panel-accent) 10%, transparent);
+}
+
+.cf-log-table tbody tr.is-selected {
+  background: color-mix(in oklab, var(--panel-accent) 18%, transparent);
+}
+
+.cf-log-table .cell-message,
+.cf-log-table .cell-logger,
+.cf-log-table .cell-component,
+.cf-log-table .cell-org,
+.cf-log-table .cell-space {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.cf-log-table p.is-error {
+.cf-log-table .empty-row {
+  color: var(--panel-muted);
+  text-align: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  min-height: 18px;
+  padding: 0 6px;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-level-info {
+  color: var(--panel-success);
+}
+
+.badge-level-warn {
+  color: var(--panel-warning);
+}
+
+.badge-level-err,
+.badge-level-fatal {
   color: var(--panel-error);
-  background: color-mix(in oklab, var(--panel-error) 12%, transparent);
+}
+
+.badge-format-json {
+  color: color-mix(in oklab, var(--panel-accent) 74%, var(--panel-text));
+}
+
+.table-summary {
+  margin: 0;
+  font-size: 0.65rem;
+  color: var(--panel-muted);
+}
+
+.log-detail {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
+}
+
+.log-detail h2,
+.log-detail h3,
+.log-detail p,
+.log-detail pre {
+  margin: 0;
+}
+
+.log-detail h2 {
+  font-size: 0.72rem;
+}
+
+.log-detail h3 {
+  font-size: 0.65rem;
+  color: var(--panel-muted);
+}
+
+.log-detail p {
+  font-size: 0.64rem;
+}
+
+.log-detail pre {
+  font-size: 0.62rem;
+  padding: 6px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  max-height: 128px;
+  overflow: auto;
+  background: color-mix(in oklab, var(--panel-surface) 80%, var(--panel-bg));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .filter-panel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
   .panel-prototype-shell {
-    grid-template-rows: minmax(0, 1fr) minmax(260px, 46dvh);
+    grid-template-rows: minmax(0, 1fr) minmax(300px, 52dvh);
   }
 
-  .cf-log-table p {
-    grid-template-columns: 52px 34px 48px minmax(0, 1fr);
-    font-size: 0.62rem;
+  .filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .cf-log-table {
+    font-size: 0.6rem;
   }
 }

@@ -766,3 +766,56 @@
 3. `npm run cspell`
 4. `npm run validate`
 5. `npm --prefix e2e test`
+
+---
+
+# Follow-up Plan: Make CFLogs Prototype Full Width
+
+## Goal
+1. Ensure CFLogs prototype uses full viewport width in gallery.
+2. Remove leftover split-view layout that reserved right-side editor area.
+3. Keep floating controls visible and responsive.
+
+## Planned Changes
+1. Update gallery layout to one-column full-width shell.
+- File: `docs/designs/prototypes/assets/gallery.css`
+- Set `.workspace-shell` to `grid-template-columns: 1fr`.
+- Remove sidebar border-right and keep iframe at full viewport width.
+- Hide `.editor-surface` globally.
+
+2. Keep current mobile behavior intact.
+- Keep existing media rules for controls sizing and safe-area positioning.
+
+## Verification
+1. Open `index.html` in browser/Playwright and confirm `CFLogs Panel` fills width.
+2. Run `npm run cspell` and `npm run lint`.
+
+---
+
+# Follow-up Plan: CFLogs Mixed Format Table + Filter Prototype
+
+## Goal
+1. Parse and render both CF log body formats: plain text and JSON object.
+2. Show one unified table with columns usable for filtering.
+3. Add practical filters directly in prototype index flow (theme + full-width panel kept).
+
+## Planned Changes
+1. Add parser + interactive render script.
+- File: `docs/designs/prototypes/assets/cf-logs-panel.js`
+- Parse line prefix (`timestamp/source/stream/body`) and JSON body when possible.
+- Derive normalized fields for filtering (`format`, `level`, `logger`, `component`, `org`, `space`, `message`).
+
+2. Update CFLogs panel markup to interactive controls.
+- File: `docs/designs/prototypes/variants/cf-logs-panel.html`
+- Add filter controls (`search`, `format`, `stream`, `level`, `source`).
+- Add table head/body and detail panel for selected row.
+
+3. Expand panel styles for filter + table UX.
+- File: `docs/designs/prototypes/assets/cf-logs-panel.css`
+- Add compact toolbar/filter chips/select/input and sticky table header.
+- Keep visual model matching VS Code bottom panel.
+
+## Verification
+1. `npm run cspell`
+2. `npm run lint`
+3. Open prototype with Playwright MCP and verify filtering on both text+JSON rows.

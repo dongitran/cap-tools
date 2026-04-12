@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CFLogs Panel Prototype</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="../assets/cf-logs-panel.css" />
+    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260412c" />
   </head>
   <body class="cf-logs-panel-page vscode-dark">
     <main class="panel-prototype-shell">
@@ -22,10 +22,11 @@
         <section class="cf-logs-panel" aria-label="CFLogs panel content">
           <header class="cf-logs-head">
             <h1>CFLogs</h1>
-            <div class="stream-meta" role="status">
-              <span>billing-api</span>
-              <span>LIVE</span>
-              <span>Buffer 1283/5000</span>
+            <div class="stream-meta" role="status" aria-live="polite">
+              <span id="meta-app">config-admin</span>
+              <span id="meta-stream">RECENT</span>
+              <span id="meta-buffer">Rows 0</span>
+              <span id="meta-format">JSON 0 • Text 0</span>
             </div>
           </header>
 
@@ -37,15 +38,92 @@
             <button type="button">Export</button>
           </div>
 
-          <div class="cf-log-table" role="log" aria-live="polite">
-            <p><span>11:25:18</span><span>INFO</span><span>APP/0</span><span>GET /invoices/INV-123 200 in 38ms</span></p>
-            <p><span>11:25:22</span><span>WARN</span><span>APP/1</span><span>Retry 1/3 to S/4 ERP destination after timeout</span></p>
-            <p class="is-error"><span>11:25:30</span><span>ERR</span><span>APP/0</span><span>Failed to bind queue consumer</span></p>
-            <p><span>11:25:31</span><span>INFO</span><span>CELL/0</span><span>Container started</span></p>
-            <p><span>11:25:35</span><span>INFO</span><span>RTR/2</span><span>GET /invoices/INV-124 200</span></p>
+          <section class="filter-panel" aria-label="CF log filters">
+            <div class="filter-row">
+              <label for="filter-search">Search</label>
+              <input id="filter-search" type="search" placeholder="message, logger, org, space" />
+            </div>
+            <div class="filter-row">
+              <label for="filter-format">Format</label>
+              <select id="filter-format">
+                <option value="all">All</option>
+                <option value="json">JSON</option>
+                <option value="text">Text</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-stream">Stream</label>
+              <select id="filter-stream">
+                <option value="all">All</option>
+                <option value="OUT" selected>OUT</option>
+                <option value="ERR">ERR</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-level">Level</label>
+              <select id="filter-level">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-source">Source</label>
+              <select id="filter-source">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-logger">Logger</label>
+              <select id="filter-logger">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-component">Component</label>
+              <select id="filter-component">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-org">Org</label>
+              <select id="filter-org">
+                <option value="all">All</option>
+              </select>
+            </div>
+            <div class="filter-row">
+              <label for="filter-space">Space</label>
+              <select id="filter-space">
+                <option value="all">All</option>
+              </select>
+            </div>
+          </section>
+
+          <div class="table-shell" role="region" aria-label="Filtered logs table">
+            <table class="cf-log-table" aria-describedby="table-summary">
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Stream</th>
+                  <th scope="col">Format</th>
+                  <th scope="col">Level</th>
+                  <th scope="col">Logger</th>
+                  <th scope="col">Component</th>
+                  <th scope="col">Org</th>
+                  <th scope="col">Space</th>
+                  <th scope="col">Message</th>
+                </tr>
+              </thead>
+              <tbody id="log-table-body"></tbody>
+            </table>
           </div>
+
+          <p id="table-summary" class="table-summary" role="status" aria-live="polite"></p>
+
+          <section id="log-detail" class="log-detail" aria-label="Selected log detail"></section>
         </section>
       </section>
     </main>
+
+    <script type="module" src="../assets/cf-logs-panel.js?v=20260412c"></script>
   </body>
 </html>
