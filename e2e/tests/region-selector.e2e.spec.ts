@@ -21,6 +21,7 @@ import {
 const ACTIVITY_BAR_TITLE = 'SAP Tools';
 const AREA_TO_SELECT = /Americas 7 regions/i;
 const REGION_TO_SELECT = /US East us-10/i;
+const BR10_REGION_TO_SELECT = /Brazil South br-10/i;
 const ORG_TO_SELECT = /finance-services-prod/i;
 const SPACE_TO_SELECT = /^uat$/i;
 const DEFAULT_THEME_NAME = 'Default Dark Modern';
@@ -703,6 +704,27 @@ test.describe('SAP Tools region selector', () => {
         sameRegionSlotNode: true,
       };
       expect(shellNodeStability).toEqual(expectedStabilitySnapshot);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can load fourteen organizations when selecting br-10 in test mode', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: BR10_REGION_TO_SELECT }));
+
+      await expect
+        .poll(
+          async () => {
+            return webviewFrame.locator('.org-picker .org-option').count();
+          },
+          { timeout: 10000 }
+        )
+        .toBe(14);
     } finally {
       await cleanupExtensionHost(session);
     }

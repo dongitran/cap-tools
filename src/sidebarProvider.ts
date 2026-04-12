@@ -192,7 +192,10 @@ export class RegionSidebarProvider
     this.selectedRegionCode = region.code;
 
     if (isTestMode()) {
-      this.postMessage({ type: MSG_ORGS_LOADED, orgs: MOCK_ORGS });
+      this.postMessage({
+        type: MSG_ORGS_LOADED,
+        orgs: resolveMockOrgsForRegion(region.code),
+      });
       return;
     }
 
@@ -229,8 +232,7 @@ export class RegionSidebarProvider
 
   private async handleOrgSelected(org: { guid: string; name: string }): Promise<void> {
     if (isTestMode()) {
-      const mockOrg = MOCK_ORGS.find((o) => o.guid === org.guid);
-      const spaces = MOCK_SPACES[mockOrg?.name ?? ''] ?? MOCK_SPACES['core-platform-prod'] ?? [];
+      const spaces = resolveMockSpacesForOrg(org);
       this.cfLogsPanel.updateScope(
         buildScopeLabel(this.selectedRegionCode, org.name, 'select-space')
       );
@@ -454,11 +456,36 @@ export class RegionSidebarProvider
 
 // ── Test-mode mock data ──────────────────────────────────────────────────────
 
-const MOCK_ORGS = [
+interface MockOrg {
+  readonly guid: string;
+  readonly name: string;
+}
+
+const DEFAULT_MOCK_ORGS: readonly MockOrg[] = [
   { guid: 'org-core-prod', name: 'core-platform-prod' },
   { guid: 'org-finance-prod', name: 'finance-services-prod' },
   { guid: 'org-retail-prod', name: 'retail-experience-prod' },
   { guid: 'org-data-prod', name: 'data-foundation-prod' },
+] as const;
+
+const BR10_MOCK_ORGS: readonly MockOrg[] = [
+  { guid: 'org-br10-core-platform', name: 'core-platform-prod' },
+  { guid: 'org-br10-finance-services', name: 'finance-services-prod' },
+  { guid: 'org-br10-retail-experience', name: 'retail-experience-prod' },
+  { guid: 'org-br10-data-foundation', name: 'data-foundation-prod' },
+  { guid: 'org-br10-tax-engineering', name: 'tax-engineering-prod' },
+  { guid: 'org-br10-payments-ledger', name: 'payments-ledger-prod' },
+  { guid: 'org-br10-supply-chain', name: 'supply-chain-control-prod' },
+  { guid: 'org-br10-customer-insights', name: 'customer-insights-prod' },
+  { guid: 'org-br10-partner-gateway', name: 'partner-gateway-prod' },
+  { guid: 'org-br10-revenue-ops', name: 'revenue-operations-prod' },
+  { guid: 'org-br10-commerce-catalog', name: 'commerce-catalog-prod' },
+  { guid: 'org-br10-risk-compliance', name: 'risk-compliance-prod' },
+  { guid: 'org-br10-identity-access', name: 'identity-access-prod' },
+  {
+    guid: 'org-br10-billing-reconciliation',
+    name: 'billing-reconciliation-prod',
+  },
 ] as const;
 
 const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
@@ -466,6 +493,16 @@ const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
   'finance-services-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'sandbox' }],
   'retail-experience-prod': [{ name: 'prod' }, { name: 'campaigns' }, { name: 'performance' }],
   'data-foundation-prod': [{ name: 'prod' }, { name: 'etl' }, { name: 'observability' }],
+  'tax-engineering-prod': [{ name: 'prod' }, { name: 'uat' }],
+  'payments-ledger-prod': [{ name: 'prod' }, { name: 'staging' }],
+  'supply-chain-control-prod': [{ name: 'prod' }, { name: 'integration' }],
+  'customer-insights-prod': [{ name: 'prod' }, { name: 'performance' }],
+  'partner-gateway-prod': [{ name: 'prod' }, { name: 'sandbox' }],
+  'revenue-operations-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'observability' }],
+  'commerce-catalog-prod': [{ name: 'prod' }, { name: 'campaigns' }],
+  'risk-compliance-prod': [{ name: 'prod' }, { name: 'staging' }, { name: 'observability' }],
+  'identity-access-prod': [{ name: 'prod' }, { name: 'integration' }, { name: 'sandbox' }],
+  'billing-reconciliation-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'etl' }],
 };
 
 const MOCK_APPS_BY_SPACE: Record<string, readonly string[]> = {
@@ -590,4 +627,20 @@ function resolveMockApps(spaceName: string): string[] {
     `${fallbackPrefix}-worker`,
     `${fallbackPrefix}-jobs`,
   ];
+}
+
+function resolveMockOrgsForRegion(regionCode: string): readonly MockOrg[] {
+  const normalizedRegionCode = regionCode.trim().toLowerCase();
+  if (normalizedRegionCode === 'br-10') {
+    return BR10_MOCK_ORGS;
+  }
+  return DEFAULT_MOCK_ORGS;
+}
+
+function resolveMockSpacesForOrg(org: { guid: string; name: string }): readonly { name: string }[] {
+  const spacesByName = MOCK_SPACES[org.name];
+  if (spacesByName !== undefined) {
+    return spacesByName;
+  }
+  return MOCK_SPACES['core-platform-prod'] ?? [];
 }
