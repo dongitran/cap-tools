@@ -1584,7 +1584,7 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
       const isLogging = activeApps.has(app.id);
       const isChecked = isLogging || selectedApps.has(app.id);
       const actionMarkup = isLogging
-        ? '<span class="app-log-state is-logging">Logging</span>'
+        ? ''
         : '<span class="app-log-state is-idle">Ready</span>';
 
       return `
