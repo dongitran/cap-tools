@@ -921,6 +921,49 @@ test.describe('SAP Tools region selector', () => {
       await cleanupExtensionHost(session);
     }
   });
+
+  test('User can open settings, update sync interval, and return to selection screen', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
+      await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+      await clickWithFallback(webviewFrame.getByRole('button', { name: '12 hours' }));
+      await expect(webviewFrame.getByRole('status')).toContainText(
+        /Sync interval updated to 12 hours/i
+      );
+
+      await clickWithFallback(
+        webviewFrame.getByRole('button', { name: 'Close Settings' })
+      );
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
+      ).toBeVisible();
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can logout from settings and return to login gate', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
+      await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Logout' }));
+      const loginFrame = await resolveSapToolsLoginFrame(session.window);
+      await expect(
+        loginFrame.getByRole('heading', { name: 'SAP Tools Login' })
+      ).toBeVisible({ timeout: 15000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
 });
 
 test.describe('SAP Tools login gate', () => {

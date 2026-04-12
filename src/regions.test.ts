@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SAP_BTP_REGIONS } from './regions';
+import { SAP_BTP_REGIONS, toHyphenatedRegionCode } from './regions';
 
 function countByArea(area: string): number {
   return SAP_BTP_REGIONS.filter((region) => region.area === area).length;
@@ -17,5 +17,10 @@ describe('SAP_BTP_REGIONS', () => {
     expect(countByArea('Middle East and Africa')).toBe(4);
     expect(countByArea('Asia Pacific')).toBe(13);
     expect(countByArea('China')).toBe(2);
+  });
+
+  it('formats region code into hyphen form', () => {
+    expect(toHyphenatedRegionCode('us10')).toBe('us-10');
+    expect(toHyphenatedRegionCode('CN40')).toBe('cn-40');
   });
 });

@@ -295,6 +295,34 @@ body.pattern-dots::before {
   letter-spacing: 0.01em;
 }
 
+.shell-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.header-icon-button {
+  border: 1px solid color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 84%, var(--frame-bg));
+  color: var(--chip-text);
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.header-icon-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent-color) 56%, var(--mix-base));
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--frame-bg));
+}
+
 .shell-subline {
   margin-top: 6px;
   display: flex;
@@ -445,6 +473,17 @@ body.pattern-dots::before {
   display: none;
 }
 
+.area-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.area-option.is-disabled:hover {
+  transform: none;
+  border-color: color-mix(in oklab, var(--border-color) 88%, var(--mix-base));
+}
+
 .area-label {
   font-family: var(--title-font);
   font-size: 0.78rem;
@@ -556,6 +595,17 @@ body.pattern-dots::before {
   display: none;
 }
 
+.region-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.region-option.is-disabled:hover {
+  transform: none;
+  border-color: var(--border-color);
+}
+
 .region-name {
   font-weight: 700;
   font-size: 0.74rem;
@@ -616,6 +666,10 @@ body.pattern-dots::before {
 
 .prototype-shell.mode-workspace {
   grid-template-rows: auto auto 1fr auto;
+}
+
+.prototype-shell.mode-settings {
+  grid-template-rows: auto 1fr;
 }
 
 .confirm-stage {
@@ -901,6 +955,95 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   display: grid;
   align-content: start;
   gap: 10px;
+}
+
+.settings-body {
+  padding-top: 10px;
+}
+
+.settings-section {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-size: 0.84rem;
+  font-family: var(--title-font);
+}
+
+.sync-interval-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sync-interval-option {
+  border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));
+  border-radius: 8px;
+  min-height: 34px;
+  background: var(--frame-bg);
+  color: var(--muted-color);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.sync-interval-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent-color) 50%, var(--mix-base));
+}
+
+.sync-interval-option.is-selected {
+  border-color: color-mix(in oklab, var(--accent-color) 64%, var(--mix-base));
+  background: var(--accent-soft);
+  color: var(--chip-text);
+}
+
+.settings-meta {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted-color);
+}
+
+.settings-status-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-status-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px dashed color-mix(in oklab, var(--border-color) 74%, var(--mix-base));
+  padding-bottom: 4px;
+  font-size: 0.72rem;
+  color: var(--muted-color);
+}
+
+.settings-status-list li:last-child {
+  border-bottom: 0;
+}
+
+.settings-status-list strong {
+  color: var(--text-color);
+  font-size: 0.71rem;
+  text-align: right;
+}
+
+.settings-status-message {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--chip-text);
+}
+
+.settings-actions {
+  margin-top: 2px;
 }
 
 .workspace-logout {
@@ -1383,6 +1526,10 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   .area-picker {
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+
+  .sync-interval-picker {
+    grid-template-columns: 1fr;
   }
 
   .region-layout.grid,

@@ -115,12 +115,18 @@ const LOG_SEED = [
 ];
 
 const appElement = document.getElementById('app');
+const REQUEST_INITIAL_STATE_MESSAGE_TYPE = 'sapTools.requestInitialState';
 const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
 const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
 const SPACE_SELECTED_MESSAGE_TYPE = 'sapTools.spaceSelected';
 const ACTIVE_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.activeAppsChanged';
+const UPDATE_SYNC_INTERVAL_MESSAGE_TYPE = 'sapTools.updateSyncInterval';
+const SYNC_NOW_MESSAGE_TYPE = 'sapTools.syncNow';
+const LOGOUT_MESSAGE_TYPE = 'sapTools.logout';
 const vscodeApi = resolveVscodeApi();
+
+const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
 
 // Live data state — only used in VSCode mode (vscodeApi !== null).
 let liveOrgOptions = null;        // [{guid, name}] when loaded, null = use mock data
@@ -133,6 +139,16 @@ let appsLoadingState = 'idle';    // 'idle' | 'loading' | 'loaded' | 'error'
 let orgsErrorMessage = '';
 let spacesErrorMessage = '';
 let appsErrorMessage = '';
+let syncIntervalHours = 24;
+let syncInProgress = false;
+let lastSyncStartedAt = null;
+let lastSyncCompletedAt = null;
+let nextSyncAt = null;
+let lastSyncError = '';
+let activeUserEmail = '';
+let settingsStatusMessage = '';
+let previousModeBeforeSettings = 'selection';
+let regionAccessById = new Map();
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -241,6 +257,22 @@ window.addEventListener('message', (event) => {
       return;
     }
     renderPrototype();
+    return;
+  }
+
+  if (msg.type === 'sapTools.cacheState') {
+    applyCacheStateSnapshot(msg.snapshot);
+    return;
+  }
+
+  if (msg.type === 'sapTools.logoutResult') {
+    const success = msg.success === true;
+    settingsStatusMessage = success
+      ? 'Logging out...'
+      : (typeof msg.error === 'string' && msg.error.length > 0
+        ? msg.error
+        : 'Failed to logout.');
+    renderPrototype();
   }
 });
 
@@ -283,6 +315,7 @@ const SELECTION_STAGE_SLOT_IDS = ['area', 'region', 'org', 'space', 'confirm'];
 
 applyDesignTokens(activeDesign);
 renderPrototype();
+requestInitialState();
 
 appElement.addEventListener('click', (event) => {
   const target = event.target;
@@ -292,6 +325,9 @@ appElement.addEventListener('click', (event) => {
 
   const areaButton = target.closest('[data-group-id]');
   if (areaButton instanceof HTMLButtonElement) {
+    if (areaButton.disabled) {
+      return;
+    }
     const nextGroupId = areaButton.dataset.groupId ?? '';
     if (selectedGroupId !== nextGroupId) {
       queueSelectionMotion(areaButton, buildDataSelector('data-group-id', nextGroupId));
@@ -304,6 +340,9 @@ appElement.addEventListener('click', (event) => {
 
   const regionButton = target.closest('[data-region-id]');
   if (regionButton instanceof HTMLButtonElement) {
+    if (regionButton.disabled) {
+      return;
+    }
     const nextRegionId = regionButton.dataset.regionId ?? '';
     if (selectedRegionId === nextRegionId) {
       return;
@@ -485,7 +524,7 @@ function refreshWorkspaceLogsView() {
 
 function handleGroupSelection(nextGroupId) {
   const nextGroup = groupLookup.get(nextGroupId);
-  if (nextGroup === undefined) {
+  if (nextGroup === undefined || isAreaDisabled(nextGroupId)) {
     return;
   }
 
@@ -503,6 +542,10 @@ function handleGroupSelection(nextGroupId) {
 }
 
 function handleRegionSelection(nextRegionId) {
+  if (isRegionDisabled(nextRegionId)) {
+    return;
+  }
+
   const nextRegion = regionLookup.get(nextRegionId);
   const nextGroupId = regionGroupLookup.get(nextRegionId) ?? '';
   const nextGroup = groupLookup.get(nextGroupId);
@@ -612,6 +655,30 @@ function handleAction(action, actionElement) {
 }
 
 function handleSelectionFlowAction(action) {
+  if (action === 'open-settings') {
+    previousModeBeforeSettings = mode;
+    mode = 'settings';
+    settingsStatusMessage = '';
+    return true;
+  }
+
+  if (action === 'close-settings') {
+    mode = previousModeBeforeSettings === 'workspace' ? 'workspace' : 'selection';
+    return true;
+  }
+
+  if (action === 'set-sync-interval') {
+    return null;
+  }
+
+  if (action === 'sync-now') {
+    return null;
+  }
+
+  if (action === 'logout') {
+    return null;
+  }
+
   if (action === 'reset-area-selection') {
     selectedGroupId = '';
     selectedRegionId = '';
@@ -663,6 +730,34 @@ function handleSelectionFlowAction(action) {
   return null;
 }
 
+function handleSettingsAction(action, actionElement) {
+  if (action === 'set-sync-interval') {
+    const syncHoursRaw = Number.parseInt(actionElement.dataset.syncHours ?? '', 10);
+    if (!SYNC_INTERVAL_OPTIONS.includes(syncHoursRaw)) {
+      return false;
+    }
+
+    syncIntervalHours = syncHoursRaw;
+    settingsStatusMessage = `Sync interval updated to ${formatSyncIntervalLabel(syncHoursRaw)}.`;
+    postSyncIntervalUpdate(syncHoursRaw);
+    return true;
+  }
+
+  if (action === 'sync-now') {
+    settingsStatusMessage = 'Sync started...';
+    postSyncNow();
+    return true;
+  }
+
+  if (action === 'logout') {
+    settingsStatusMessage = 'Signing out...';
+    postLogout();
+    return true;
+  }
+
+  return null;
+}
+
 function handleTabAction(action, tabId) {
   if (action !== 'switch-tab') {
     return null;
@@ -677,6 +772,11 @@ function handleTabAction(action, tabId) {
 }
 
 function handleLogsAction(action, actionElement) {
+  const settingsActionHandled = handleSettingsAction(action, actionElement);
+  if (settingsActionHandled !== null) {
+    return settingsActionHandled;
+  }
+
   const selectionActionHandled = handleLogsSelectionAction(action, actionElement);
   if (selectionActionHandled !== null) {
     return selectionActionHandled;
@@ -810,6 +910,256 @@ function handleLogsControlAction(action, actionElement) {
   return null;
 }
 
+function applyCacheStateSnapshot(snapshot) {
+  if (!isRecord(snapshot)) {
+    return;
+  }
+
+  if (
+    typeof snapshot.syncIntervalHours === 'number' &&
+    SYNC_INTERVAL_OPTIONS.includes(snapshot.syncIntervalHours)
+  ) {
+    syncIntervalHours = snapshot.syncIntervalHours;
+  }
+
+  syncInProgress = snapshot.syncInProgress === true;
+  lastSyncStartedAt =
+    typeof snapshot.lastSyncStartedAt === 'string' && snapshot.lastSyncStartedAt.length > 0
+      ? snapshot.lastSyncStartedAt
+      : null;
+  lastSyncCompletedAt =
+    typeof snapshot.lastSyncCompletedAt === 'string' && snapshot.lastSyncCompletedAt.length > 0
+      ? snapshot.lastSyncCompletedAt
+      : null;
+  nextSyncAt =
+    typeof snapshot.nextSyncAt === 'string' && snapshot.nextSyncAt.length > 0
+      ? snapshot.nextSyncAt
+      : null;
+  lastSyncError =
+    typeof snapshot.lastSyncError === 'string' ? snapshot.lastSyncError : '';
+  activeUserEmail =
+    typeof snapshot.activeUserEmail === 'string' ? snapshot.activeUserEmail : '';
+  regionAccessById = normalizeRegionAccessById(snapshot.regionAccessById);
+
+  const selectedRegionExists = regionLookup.has(selectedRegionId);
+  if (!selectedRegionExists) {
+    selectedRegionId = '';
+    selectedOrgId = '';
+    selectedSpaceId = '';
+    resetWorkspaceLoggingState();
+  }
+
+  if (mode === 'selection' && isSelectionShellMounted()) {
+    updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
+    return;
+  }
+
+  if (isWorkspaceLogsMounted()) {
+    refreshWorkspaceLogsView();
+    return;
+  }
+
+  renderPrototype();
+}
+
+function normalizeRegionAccessById(rawRegionAccessById) {
+  const accessMap = new Map();
+  if (!isRecord(rawRegionAccessById)) {
+    return accessMap;
+  }
+
+  for (const [rawRegionId, rawState] of Object.entries(rawRegionAccessById)) {
+    const regionId = rawRegionId.trim().toLowerCase();
+    if (regionId.length === 0) {
+      continue;
+    }
+
+    const normalizedState = normalizeRegionAccessState(rawState);
+    accessMap.set(regionId, normalizedState);
+  }
+
+  return accessMap;
+}
+
+function normalizeRegionAccessState(rawState) {
+  if (typeof rawState !== 'string') {
+    return 'unknown';
+  }
+
+  const normalized = rawState.trim().toLowerCase();
+  if (normalized === 'accessible') {
+    return 'accessible';
+  }
+
+  if (normalized === 'inaccessible') {
+    return 'inaccessible';
+  }
+
+  if (normalized === 'error') {
+    return 'error';
+  }
+
+  return 'unknown';
+}
+
+function resolveOrderedGroups() {
+  const orderedGroups = REGION_GROUPS.slice();
+  orderedGroups.sort((leftGroup, rightGroup) => {
+    const leftRank = resolveGroupAccessRank(leftGroup);
+    const rightRank = resolveGroupAccessRank(rightGroup);
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return leftGroup.label.localeCompare(rightGroup.label);
+  });
+  return orderedGroups;
+}
+
+function resolveGroupAccessRank(group) {
+  const regionStates = group.regions.map((region) => resolveRegionAccessState(region.id));
+  if (regionStates.some((state) => state === 'accessible')) {
+    return 0;
+  }
+
+  if (regionStates.some((state) => state === 'unknown')) {
+    return 1;
+  }
+
+  if (regionStates.some((state) => state === 'inaccessible')) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function resolveOrderedRegions(group) {
+  const orderedRegions = group.regions.slice();
+  orderedRegions.sort((leftRegion, rightRegion) => {
+    const leftRank = resolveRegionAccessRank(leftRegion.id);
+    const rightRank = resolveRegionAccessRank(rightRegion.id);
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return leftRegion.code.localeCompare(rightRegion.code);
+  });
+  return orderedRegions;
+}
+
+function resolveRegionAccessRank(regionId) {
+  const state = resolveRegionAccessState(regionId);
+  if (state === 'accessible') {
+    return 0;
+  }
+
+  if (state === 'unknown') {
+    return 1;
+  }
+
+  if (state === 'inaccessible') {
+    return 2;
+  }
+
+  return 3;
+}
+
+function resolveRegionAccessState(regionId) {
+  if (regionAccessById.size === 0) {
+    return 'unknown';
+  }
+
+  const normalizedRegionId = regionId.trim().toLowerCase();
+  const state = regionAccessById.get(normalizedRegionId);
+  if (typeof state !== 'string') {
+    return 'unknown';
+  }
+
+  return state;
+}
+
+function isAreaDisabled(groupId) {
+  if (regionAccessById.size === 0) {
+    return false;
+  }
+
+  const group = groupLookup.get(groupId);
+  if (group === undefined) {
+    return true;
+  }
+
+  return group.regions.every((region) => {
+    const state = resolveRegionAccessState(region.id);
+    return state !== 'accessible' && state !== 'unknown';
+  });
+}
+
+function isRegionDisabled(regionId) {
+  if (regionAccessById.size === 0) {
+    return false;
+  }
+
+  const state = resolveRegionAccessState(regionId);
+  return state === 'inaccessible' || state === 'error';
+}
+
+function formatSyncIntervalLabel(syncHours) {
+  if (syncHours === 24) {
+    return '1 day';
+  }
+
+  if (syncHours % 24 === 0) {
+    return `${String(syncHours / 24)} days`;
+  }
+
+  return `${String(syncHours)} hours`;
+}
+
+function formatTimestampLabel(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return 'Never';
+  }
+
+  const timestampMs = Date.parse(value);
+  if (Number.isNaN(timestampMs)) {
+    return 'Never';
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(timestampMs));
+}
+
+function resolveSyncStatusLabel() {
+  if (syncInProgress) {
+    return 'Sync in progress...';
+  }
+
+  if (lastSyncError.length > 0) {
+    return `Last sync failed: ${lastSyncError}`;
+  }
+
+  if (lastSyncCompletedAt !== null) {
+    return `Last sync completed at ${formatTimestampLabel(lastSyncCompletedAt)}.`;
+  }
+
+  return 'Sync has not started yet.';
+}
+
+function resolveSettingsStatusMessage() {
+  if (settingsStatusMessage.length > 0) {
+    return settingsStatusMessage;
+  }
+
+  return resolveSyncStatusLabel();
+}
+
 function applyDesignTokens(design) {
   const root = document.body;
   const themeClass = `theme-${String(design.id).padStart(2, '0')}`;
@@ -844,7 +1194,7 @@ function applyDesignClasses(root, patternClass, themeClass) {
 }
 
 function renderPrototype() {
-  const shellMarkup = mode === 'selection' ? renderSelectionScreen() : renderWorkspaceScreen();
+  const shellMarkup = resolveShellMarkupByMode();
 
   appElement.innerHTML = `
     <section class="prototype-shell select-style-${activeDesign.selectStyle} mode-${mode}">
@@ -855,6 +1205,18 @@ function renderPrototype() {
   if (mode === 'selection') {
     updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
   }
+}
+
+function resolveShellMarkupByMode() {
+  if (mode === 'selection') {
+    return renderSelectionScreen();
+  }
+
+  if (mode === 'settings') {
+    return renderSettingsScreen();
+  }
+
+  return renderWorkspaceScreen();
 }
 
 function rerenderSelectionStageSlotsWithMotion(stageSlotIds) {
@@ -1026,6 +1388,16 @@ function resolveVscodeApi() {
   return acquireVsCodeApi();
 }
 
+function requestInitialState() {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: REQUEST_INITIAL_STATE_MESSAGE_TYPE,
+  });
+}
+
 function postRegionSelection(region, areaLabel) {
   if (vscodeApi === null) {
     return;
@@ -1107,15 +1479,117 @@ function postActiveAppsChanged(appNames) {
   });
 }
 
+function postSyncIntervalUpdate(syncHours) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: UPDATE_SYNC_INTERVAL_MESSAGE_TYPE,
+    syncIntervalHours: syncHours,
+  });
+}
+
+function postSyncNow() {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: SYNC_NOW_MESSAGE_TYPE,
+  });
+}
+
+function postLogout() {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: LOGOUT_MESSAGE_TYPE,
+  });
+}
+
 function renderSelectionScreen() {
   return `
     <header class="shell-header">
-      <h1>Select SAP BTP Region</h1>
+      <div class="shell-header-row">
+        <h1>Select SAP BTP Region</h1>
+        <button
+          type="button"
+          class="header-icon-button"
+          data-action="open-settings"
+          aria-label="Open Settings"
+          title="Settings"
+        >
+          &#9881;
+        </button>
+      </div>
     </header>
 
     <div class="groups" role="list">
       ${renderSelectionStageSlots()}
     </div>
+  `;
+}
+
+function renderSettingsScreen() {
+  const syncIntervalButtons = SYNC_INTERVAL_OPTIONS.map((hours) => {
+    const isSelected = syncIntervalHours === hours;
+    return `
+      <button
+        type="button"
+        class="sync-interval-option${isSelected ? ' is-selected' : ''}"
+        data-action="set-sync-interval"
+        data-sync-hours="${String(hours)}"
+        aria-pressed="${isSelected}"
+      >
+        ${formatSyncIntervalLabel(hours)}
+      </button>
+    `;
+  }).join('');
+
+  const userLabel = activeUserEmail.length > 0 ? activeUserEmail : 'Not signed in';
+  const syncStatusMessage = resolveSettingsStatusMessage();
+
+  return `
+    <header class="shell-header settings-header">
+      <div class="shell-header-row">
+        <h1>Settings</h1>
+        <button
+          type="button"
+          class="stage-reset"
+          data-action="close-settings"
+          aria-label="Close Settings"
+        >
+          Back
+        </button>
+      </div>
+    </header>
+
+    <section class="workspace-body settings-body">
+      <section class="group-card settings-section">
+        <h2>Cache Sync Interval</h2>
+        <div class="sync-interval-picker" role="group" aria-label="Choose cache sync interval">
+          ${syncIntervalButtons}
+        </div>
+        <p class="settings-meta">Current account: ${escapeHtml(userLabel)}</p>
+      </section>
+
+      <section class="group-card settings-section">
+        <h2>Sync Status</h2>
+        <ul class="settings-status-list">
+          <li><span>Last start</span><strong>${escapeHtml(formatTimestampLabel(lastSyncStartedAt))}</strong></li>
+          <li><span>Last completion</span><strong>${escapeHtml(formatTimestampLabel(lastSyncCompletedAt))}</strong></li>
+          <li><span>Next sync</span><strong>${escapeHtml(formatTimestampLabel(nextSyncAt))}</strong></li>
+        </ul>
+        <p class="settings-status-message" role="status" aria-live="polite">${escapeHtml(syncStatusMessage)}</p>
+        <div class="toolbar-row settings-actions" role="group" aria-label="Settings actions">
+          <button type="button" class="primary-action" data-action="sync-now">Sync now</button>
+          <button type="button" class="secondary-action" data-action="logout">Logout</button>
+        </div>
+      </section>
+    </section>
   `;
 }
 
@@ -1227,6 +1701,7 @@ function isSelectionShellMounted() {
 
 function renderAreaStage(selectedGroup) {
   const isCollapsed = selectedGroup !== undefined;
+  const orderedGroups = resolveOrderedGroups();
 
   return `
     <section class="group-card area-stage" aria-label="Area selector" data-stage-id="area">
@@ -1235,31 +1710,34 @@ function renderAreaStage(selectedGroup) {
         ${
           isCollapsed
             ? '<button type="button" class="stage-reset" data-action="reset-area-selection">Change</button>'
-            : `<span class="group-count">${REGION_GROUPS.length}</span>`
+            : `<span class="group-count">${orderedGroups.length}</span>`
         }
       </div>
       <div class="area-picker${isCollapsed ? ' is-collapsed' : ''}" role="listbox" aria-label="SAP area groups">
-        ${renderAreaPicker(selectedGroup)}
+        ${renderAreaPicker(selectedGroup, orderedGroups)}
       </div>
     </section>
   `;
 }
 
-function renderAreaPicker(selectedGroup) {
+function renderAreaPicker(selectedGroup, orderedGroups) {
   const isCollapsed = selectedGroup !== undefined;
 
-  return REGION_GROUPS
+  return orderedGroups
     .map((group) => {
       const isActive = group.id === selectedGroupId;
       const isHidden = isCollapsed && !isActive;
+      const isDisabled = isAreaDisabled(group.id) && !isActive;
       const areaLabelParts = splitAreaLabel(group.label);
       return `
         <button
           type="button"
-          class="area-option${isActive ? ' is-active' : ''}${isHidden ? ' is-hidden' : ''}"
+          class="area-option${isActive ? ' is-active' : ''}${isHidden ? ' is-hidden' : ''}${isDisabled ? ' is-disabled' : ''}"
           data-group-id="${group.id}"
           aria-pressed="${isActive}"
           aria-hidden="${isHidden}"
+          aria-disabled="${isDisabled}"
+          ${isDisabled ? 'disabled' : ''}
         >
           <span class="area-label">${areaLabelParts.title}</span>
           ${
@@ -1291,17 +1769,21 @@ function splitAreaLabel(label) {
 
 function renderSelectedGroupPanel(group) {
   const isCollapsed = selectedRegionId.length > 0;
-  const regionOptionsMarkup = group.regions
+  const orderedRegions = resolveOrderedRegions(group);
+  const regionOptionsMarkup = orderedRegions
     .map((region) => {
       const isSelected = region.id === selectedRegionId;
       const isHidden = isCollapsed && !isSelected;
+      const isDisabled = isRegionDisabled(region.id) && !isSelected;
       return `
         <button
           type="button"
-          class="region-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
+          class="region-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}${isDisabled ? ' is-disabled' : ''}"
           data-region-id="${region.id}"
           aria-pressed="${isSelected}"
           aria-hidden="${isHidden}"
+          aria-disabled="${isDisabled}"
+          ${isDisabled ? 'disabled' : ''}
         >
           <span class="region-name">${region.name}</span>
           <span class="region-code">${region.code}</span>
@@ -1490,7 +1972,18 @@ function renderWorkspaceScreen() {
 
   return `
     <header class="shell-header workspace-header">
-      <h1>Monitoring Workspace</h1>
+      <div class="shell-header-row">
+        <h1>Monitoring Workspace</h1>
+        <button
+          type="button"
+          class="header-icon-button"
+          data-action="open-settings"
+          aria-label="Open Settings"
+          title="Settings"
+        >
+          &#9881;
+        </button>
+      </div>
       <p class="workspace-context">${workspaceSummary}</p>
     </header>
 

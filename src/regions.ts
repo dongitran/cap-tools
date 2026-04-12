@@ -96,3 +96,17 @@ export const SAP_BTP_REGIONS: readonly SapBtpRegion[] = [
   { id: 'cn20', displayName: 'China (North 3)', area: 'China', provider: 'Azure' },
   { id: 'cn40', displayName: 'China (Shanghai)', area: 'China', provider: 'Alibaba' },
 ] as const;
+
+/**
+ * Convert region id from catalog form (`us10`) into hyphen form (`us-10`).
+ */
+export function toHyphenatedRegionCode(regionId: string): string {
+  const normalized = regionId.trim().toLowerCase();
+  if (normalized.length < 3) {
+    return normalized;
+  }
+
+  const head = normalized.slice(0, 2);
+  const tail = normalized.slice(2);
+  return `${head}-${tail}`;
+}

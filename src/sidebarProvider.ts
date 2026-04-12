@@ -1,43 +1,52 @@
 import * as vscode from 'vscode';
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
 
 import {
-  fetchCfLoginInfo,
   cfLogin,
+  fetchCfLoginInfo,
   fetchOrgs,
   fetchSpaces,
-  getCfApiEndpoint,
   fetchStartedAppsViaCfCli,
+  getCfApiEndpoint,
 } from './cfClient';
 import type { CfSession } from './cfClient';
+import { ensureCfHomeDir } from './cfHome';
+import type { CacheRuntimeSnapshot, CacheSyncService } from './cacheSyncService';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
-import { getEffectiveCredentials, storeCredentials } from './credentialStore';
+import { clearCredentials, getEffectiveCredentials, storeCredentials } from './credentialStore';
+import { isSyncIntervalHours } from './cacheModels';
+import type { SyncIntervalHours } from './cacheModels';
+import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } from './testModeData';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
 const PROTOTYPE_DESIGN_ID = '34';
 
-// ── Inbound message types (webview → extension) ────────────────────────────
+// ── Inbound message types (webview → extension) ─────────────────────────────
 
+const MSG_REQUEST_INITIAL_STATE = 'sapTools.requestInitialState';
 const MSG_LOGIN_SUBMIT = 'sapTools.loginSubmit';
 const MSG_REGION_SELECTED = 'sapTools.regionSelected';
 const MSG_ORG_SELECTED = 'sapTools.orgSelected';
 const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
 const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
+const MSG_UPDATE_SYNC_INTERVAL = 'sapTools.updateSyncInterval';
+const MSG_SYNC_NOW = 'sapTools.syncNow';
+const MSG_LOGOUT = 'sapTools.logout';
 
-// ── Outbound message types (extension → webview) ───────────────────────────
+// ── Outbound message types (extension → webview) ────────────────────────────
 
 const MSG_LOGIN_RESULT = 'sapTools.loginResult';
+const MSG_LOGOUT_RESULT = 'sapTools.logoutResult';
 const MSG_ORGS_LOADED = 'sapTools.orgsLoaded';
 const MSG_ORGS_ERROR = 'sapTools.orgsError';
 const MSG_SPACES_LOADED = 'sapTools.spacesLoaded';
 const MSG_SPACES_ERROR = 'sapTools.spacesError';
 const MSG_APPS_LOADED = 'sapTools.appsLoaded';
 const MSG_APPS_ERROR = 'sapTools.appsError';
+const MSG_CACHE_STATE = 'sapTools.cacheState';
 
-// ── Payload interfaces ─────────────────────────────────────────────────────
+// ── Payload interfaces ───────────────────────────────────────────────────────
 
 interface RegionSelectionPayload {
   readonly id: string;
@@ -57,7 +66,44 @@ interface SpaceSelectionPayload {
   readonly orgName: string;
 }
 
-// ── Provider ───────────────────────────────────────────────────────────────
+interface ActiveAppsChangedPayload {
+  readonly appNames: string[];
+}
+
+interface UpdateSyncIntervalPayload {
+  readonly syncIntervalHours: SyncIntervalHours;
+}
+
+interface LogoutResultPayload {
+  readonly type: string;
+  readonly success: boolean;
+  readonly error?: string;
+}
+
+interface CacheStatePayload {
+  readonly type: string;
+  readonly snapshot: {
+    readonly activeUserEmail: string | null;
+    readonly syncInProgress: boolean;
+    readonly lastSyncStartedAt: string | null;
+    readonly lastSyncCompletedAt: string | null;
+    readonly lastSyncError: string;
+    readonly syncIntervalHours: number;
+    readonly nextSyncAt: string | null;
+    readonly regionAccessById: Record<string, string>;
+  };
+}
+
+interface CfLogSessionSeed {
+  readonly apiEndpoint: string;
+  readonly email: string;
+  readonly password: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+  readonly cfHomeDir: string;
+}
+
+// ── Provider ─────────────────────────────────────────────────────────────────
 
 export class RegionSidebarProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
@@ -65,18 +111,27 @@ export class RegionSidebarProvider
   private webviewView: vscode.WebviewView | undefined;
   private cfSession: CfSession | null = null;
   private selectedRegionCode = '';
+  private selectedRegionId = '';
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly outputChannel: vscode.OutputChannel,
     private readonly context: vscode.ExtensionContext,
-    private readonly cfLogsPanel: CfLogsPanelProvider
-  ) {}
+    private readonly cfLogsPanel: CfLogsPanelProvider,
+    private readonly cacheSyncService: CacheSyncService
+  ) {
+    const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
+      this.postCacheState(snapshot);
+    });
+    this.disposables.push(cacheSubscription);
+  }
 
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
     this.webviewView = webviewView;
     this.cfSession = null;
+    this.selectedRegionCode = '';
+    this.selectedRegionId = '';
 
     const assetsRoot = vscode.Uri.joinPath(
       this.extensionUri,
@@ -92,6 +147,7 @@ export class RegionSidebarProvider
     };
 
     const credentials = await getEffectiveCredentials(this.context);
+    await this.cacheSyncService.setCredentials(credentials);
     const nonce = createNonce();
 
     webviewView.webview.html =
@@ -113,7 +169,7 @@ export class RegionSidebarProvider
     }
   }
 
-  // ── Message dispatcher ──────────────────────────────────────────────────
+  // ── Message dispatcher ───────────────────────────────────────────────────
 
   private async handleWebviewMessage(message: unknown): Promise<void> {
     if (!isRecord(message)) {
@@ -122,30 +178,33 @@ export class RegionSidebarProvider
 
     const type = message['type'];
 
+    if (type === MSG_REQUEST_INITIAL_STATE) {
+      await this.handleRequestInitialState();
+      return;
+    }
+
     if (type === MSG_LOGIN_SUBMIT && isLoginSubmitMessage(message)) {
-      await this.handleLoginSubmit(
-        message['email'] as string,
-        message['password'] as string
-      );
+      const payload = readLoginSubmitPayload(message);
+      await this.handleLoginSubmit(payload.email, payload.password);
       return;
     }
 
     if (type === MSG_REGION_SELECTED && isRegionSelectedMessage(message)) {
-      const region = message['region'] as RegionSelectionPayload;
-      this.logRegionSelection(region);
-      await this.handleRegionSelected(region);
+      const payload = readRegionSelectionPayload(message);
+      this.logRegionSelection(payload);
+      await this.handleRegionSelected(payload);
       return;
     }
 
     if (type === MSG_ORG_SELECTED && isOrgSelectedMessage(message)) {
-      const org = message['org'] as OrgSelectionPayload;
-      await this.handleOrgSelected(org);
+      const payload = readOrgSelectionPayload(message);
+      await this.handleOrgSelected(payload);
       return;
     }
 
     if (type === MSG_SPACE_SELECTED && isSpaceSelectedMessage(message)) {
-      const spacePayload = message['scope'] as SpaceSelectionPayload;
-      await this.handleSpaceSelected(spacePayload);
+      const payload = readSpaceSelectionPayload(message);
+      await this.handleSpaceSelected(payload);
       return;
     }
 
@@ -155,16 +214,42 @@ export class RegionSidebarProvider
     }
 
     if (type === MSG_ACTIVE_APPS_CHANGED && isActiveAppsChangedMessage(message)) {
-      const appNames = message['appNames'] as string[];
-      this.cfLogsPanel.updateActiveApps(appNames);
+      const payload = readActiveAppsChangedPayload(message);
+      this.cfLogsPanel.updateActiveApps(payload.appNames);
+      return;
+    }
+
+    if (type === MSG_UPDATE_SYNC_INTERVAL && isUpdateSyncIntervalMessage(message)) {
+      const payload = readUpdateSyncIntervalPayload(message);
+      const snapshot = await this.cacheSyncService.updateSyncInterval(
+        payload.syncIntervalHours
+      );
+      this.postCacheState(snapshot);
+      return;
+    }
+
+    if (type === MSG_SYNC_NOW) {
+      const snapshot = await this.cacheSyncService.triggerSyncNow();
+      this.postCacheState(snapshot);
+      return;
+    }
+
+    if (type === MSG_LOGOUT) {
+      await this.handleLogout();
     }
   }
 
-  // ── Login submit ────────────────────────────────────────────────────────
+  private async handleRequestInitialState(): Promise<void> {
+    const snapshot = await this.cacheSyncService.getRuntimeSnapshot();
+    this.postCacheState(snapshot);
+  }
+
+  // ── Login / logout ───────────────────────────────────────────────────────
 
   private async handleLoginSubmit(email: string, password: string): Promise<void> {
     try {
       await storeCredentials(this.context, { email, password });
+      await this.cacheSyncService.setCredentials({ email, password });
       this.reloadToMainView();
     } catch (error) {
       const errorMessage =
@@ -173,10 +258,36 @@ export class RegionSidebarProvider
     }
   }
 
+  private async handleLogout(): Promise<void> {
+    try {
+      await clearCredentials(this.context);
+      await this.cacheSyncService.setCredentials(null);
+      this.cfSession = null;
+      this.selectedRegionCode = '';
+      this.selectedRegionId = '';
+      this.cfLogsPanel.updateApps([], null);
+      this.cfLogsPanel.updateScope('No scope selected');
+      this.reloadToLoginView();
+      this.postMessage({
+        type: MSG_LOGOUT_RESULT,
+        success: true,
+      } satisfies LogoutResultPayload);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to clear credentials.';
+      this.postMessage({
+        type: MSG_LOGOUT_RESULT,
+        success: false,
+        error: errorMessage,
+      } satisfies LogoutResultPayload);
+    }
+  }
+
   private reloadToMainView(): void {
     if (this.webviewView === undefined) {
       return;
     }
+
     const assetsRoot = vscode.Uri.joinPath(
       this.extensionUri,
       'docs',
@@ -192,10 +303,34 @@ export class RegionSidebarProvider
     );
   }
 
-  // ── Region selected → fetch orgs ────────────────────────────────────────
+  private reloadToLoginView(): void {
+    if (this.webviewView === undefined) {
+      return;
+    }
+
+    const assetsRoot = vscode.Uri.joinPath(
+      this.extensionUri,
+      'docs',
+      'designs',
+      'prototypes',
+      'assets'
+    );
+    const nonce = createNonce();
+    this.webviewView.webview.html = this.buildLoginGateHtml(
+      this.webviewView.webview,
+      nonce,
+      assetsRoot
+    );
+  }
+
+  // ── Region selected → fetch orgs ─────────────────────────────────────────
 
   private async handleRegionSelected(region: RegionSelectionPayload): Promise<void> {
+    this.selectedRegionId = region.id;
     this.selectedRegionCode = region.code;
+    this.cfSession = null;
+    this.cfLogsPanel.updateApps([], null);
+    this.cfLogsPanel.updateScope(buildScopeLabel(region.code, 'select-org', 'select-space'));
 
     if (isTestMode()) {
       this.postMessage({
@@ -207,154 +342,217 @@ export class RegionSidebarProvider
 
     const credentials = await getEffectiveCredentials(this.context);
     if (credentials === null) {
-      this.postMessage({
-        type: MSG_ORGS_ERROR,
-        message: 'No credentials found. Please re-open SAP Tools and log in.',
-      });
-      this.cfLogsPanel.updateApps([], null);
+      this.postOrgsError('No credentials found. Please re-open SAP Tools and log in.');
       return;
     }
 
-    const apiEndpoint = getCfApiEndpoint(region.code);
+    const cachedOrgs = await this.cacheSyncService.getCachedOrgs(region.id);
+    if (cachedOrgs !== null) {
+      this.postMessage({
+        type: MSG_ORGS_LOADED,
+        orgs: cachedOrgs,
+      });
+      void this.establishRegionSession(credentials, region.code);
+      return;
+    }
 
     try {
-      const loginInfo = await fetchCfLoginInfo(apiEndpoint);
-      const token = await cfLogin(
-        loginInfo.authorizationEndpoint,
-        credentials.email,
-        credentials.password
-      );
-      this.cfSession = { token, apiEndpoint };
-
-      const orgs = await fetchOrgs(this.cfSession);
+      const session = await this.ensureRegionSession(credentials);
+      const orgs = await fetchOrgs(session);
       this.postMessage({ type: MSG_ORGS_LOADED, orgs });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to connect to Cloud Foundry.';
-      this.postMessage({ type: MSG_ORGS_ERROR, message: errorMessage });
-      this.cfLogsPanel.updateApps([], null);
+      this.postOrgsError(errorMessage);
     }
   }
 
-  // ── Org selected → fetch spaces ─────────────────────────────────────────
+  // ── Org selected → fetch spaces ──────────────────────────────────────────
 
-  private async handleOrgSelected(org: { guid: string; name: string }): Promise<void> {
+  private async handleOrgSelected(org: OrgSelectionPayload): Promise<void> {
+    const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
+    this.cfLogsPanel.updateScope(scopeLabel);
+    this.cfLogsPanel.updateApps([], null);
+
     if (isTestMode()) {
-      const spaces = resolveMockSpacesForOrg(org);
-      this.cfLogsPanel.updateScope(
-        buildScopeLabel(this.selectedRegionCode, org.name, 'select-space')
-      );
-      this.cfLogsPanel.updateApps([], null);
-      this.postMessage({ type: MSG_SPACES_LOADED, spaces });
+      this.postMessage({ type: MSG_SPACES_LOADED, spaces: resolveMockSpacesForOrg(org) });
       return;
     }
 
-    if (this.cfSession === null) {
-      this.postMessage({
-        type: MSG_SPACES_ERROR,
-        message: 'CF session expired. Please select a region again.',
-      });
-      this.cfLogsPanel.updateApps([], null);
-      return;
-    }
-
-    try {
-      const spaces = await fetchSpaces(this.cfSession, org.guid);
-      const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
-      this.cfLogsPanel.updateScope(scopeLabel);
-      this.cfLogsPanel.updateApps([], null);
-      this.postMessage({ type: MSG_SPACES_LOADED, spaces });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to fetch spaces.';
-      this.postMessage({ type: MSG_SPACES_ERROR, message: errorMessage });
-      this.cfLogsPanel.updateApps([], null);
-    }
-  }
-
-  // ── Space selected → fetch apps ────────────────────────────────────────
-
-  private async handleSpaceSelected(payload: SpaceSelectionPayload): Promise<void> {
-    if (isTestMode()) {
-      if (payload.spaceName === 'failspace') {
-        this.postMessage({
-          type: MSG_APPS_ERROR,
-          message: 'Simulated CF CLI failure: could not reach API endpoint for failspace.',
-        });
-        this.cfLogsPanel.updateApps([], null);
-        return;
-      }
-
-      const apps = resolveMockApps(payload.spaceName).map((name) => ({
-        id: name,
-        name,
-        runningInstances: 1,
-      }));
-      this.postMessage({ type: MSG_APPS_LOADED, apps });
-      this.cfLogsPanel.updateScope(
-        buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
-      );
-      this.cfLogsPanel.updateApps(apps, null);
-      return;
-    }
-
-    if (this.cfSession === null) {
-      this.postMessage({
-        type: MSG_APPS_ERROR,
-        message: 'CF session expired. Please select a region again.',
-      });
-      this.cfLogsPanel.updateApps([], null);
+    const cachedSpaces = await this.cacheSyncService.getCachedSpaces(
+      this.selectedRegionId,
+      org.guid
+    );
+    if (cachedSpaces !== null) {
+      this.postMessage({ type: MSG_SPACES_LOADED, spaces: cachedSpaces });
       return;
     }
 
     const credentials = await getEffectiveCredentials(this.context);
     if (credentials === null) {
-      this.postMessage({
-        type: MSG_APPS_ERROR,
-        message: 'No credentials found. Please re-open SAP Tools and log in.',
-      });
-      this.cfLogsPanel.updateApps([], null);
+      this.postSpacesError('No credentials found. Please re-open SAP Tools and log in.');
       return;
     }
 
     try {
-      const cfHomeDir = await ensureCfHomeDir(this.context);
+      const session = await this.ensureRegionSession(credentials);
+      const spaces = await fetchSpaces(session, org.guid);
+      this.postMessage({ type: MSG_SPACES_LOADED, spaces });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to fetch spaces.';
+      this.postSpacesError(errorMessage);
+    }
+  }
+
+  // ── Space selected → fetch apps ───────────────────────────────────────────
+
+  private async handleSpaceSelected(payload: SpaceSelectionPayload): Promise<void> {
+    if (isTestMode()) {
+      this.handleTestModeSpaceSelection(payload);
+      return;
+    }
+
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      this.postAppsError('No credentials found. Please re-open SAP Tools and log in.');
+      return;
+    }
+
+    const cachedApps = await this.cacheSyncService.getCachedApps(
+      this.selectedRegionId,
+      payload.orgGuid,
+      payload.spaceName
+    );
+    const cfHomeDir = await ensureCfHomeDir(this.context);
+    if (cachedApps !== null) {
+      const apps = cachedApps.map((app) => ({
+        id: app.id,
+        name: app.name,
+        runningInstances: app.runningInstances,
+      }));
+      this.postAppsLoaded(apps, payload, credentials, cfHomeDir);
+      return;
+    }
+
+    try {
+      const session = await this.ensureRegionSession(credentials);
       const runningApps = await fetchStartedAppsViaCfCli({
-        apiEndpoint: this.cfSession.apiEndpoint,
+        apiEndpoint: session.apiEndpoint,
         email: credentials.email,
         password: credentials.password,
         orgName: payload.orgName,
         spaceName: payload.spaceName,
         cfHomeDir,
       });
-
       const apps = runningApps.map((app) => ({
         id: app.name,
         name: app.name,
         runningInstances: app.runningInstances,
       }));
-
-      this.postMessage({ type: MSG_APPS_LOADED, apps });
-      this.cfLogsPanel.updateScope(
-        buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
-      );
-      this.cfLogsPanel.updateApps(apps, {
-        apiEndpoint: this.cfSession.apiEndpoint,
-        email: credentials.email,
-        password: credentials.password,
-        orgName: payload.orgName,
-        spaceName: payload.spaceName,
-        cfHomeDir,
-      });
+      this.postAppsLoaded(apps, payload, credentials, cfHomeDir);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch apps from CF CLI.';
-      this.postMessage({ type: MSG_APPS_ERROR, message: errorMessage });
-      this.cfLogsPanel.updateApps([], null);
+      this.postAppsError(errorMessage);
     }
   }
 
-  // ── Region logging ──────────────────────────────────────────────────────
+  private handleTestModeSpaceSelection(payload: SpaceSelectionPayload): void {
+    if (payload.spaceName === 'failspace') {
+      this.postAppsError(
+        'Simulated CF CLI failure: could not reach API endpoint for failspace.'
+      );
+      return;
+    }
+
+    const apps = resolveMockApps(payload.spaceName).map((name) => ({
+      id: name,
+      name,
+      runningInstances: 1,
+    }));
+    this.postMessage({ type: MSG_APPS_LOADED, apps });
+    this.cfLogsPanel.updateScope(
+      buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
+    );
+    this.cfLogsPanel.updateApps(apps, null);
+  }
+
+  // ── Session helpers ───────────────────────────────────────────────────────
+
+  private async ensureRegionSession(
+    credentials: { readonly email: string; readonly password: string }
+  ): Promise<CfSession> {
+    if (this.cfSession !== null) {
+      return this.cfSession;
+    }
+
+    const regionCode = this.selectedRegionCode;
+    if (regionCode.length === 0) {
+      throw new Error('CF session expired. Please select a region again.');
+    }
+
+    const apiEndpoint = getCfApiEndpoint(regionCode);
+    const loginInfo = await fetchCfLoginInfo(apiEndpoint);
+    const token = await cfLogin(
+      loginInfo.authorizationEndpoint,
+      credentials.email,
+      credentials.password
+    );
+    this.cfSession = { token, apiEndpoint };
+    return this.cfSession;
+  }
+
+  private async establishRegionSession(
+    credentials: { readonly email: string; readonly password: string },
+    regionCode: string
+  ): Promise<void> {
+    const apiEndpoint = getCfApiEndpoint(regionCode);
+    const loginInfo = await fetchCfLoginInfo(apiEndpoint);
+    const token = await cfLogin(
+      loginInfo.authorizationEndpoint,
+      credentials.email,
+      credentials.password
+    );
+    this.cfSession = { token, apiEndpoint };
+  }
+
+  private postAppsLoaded(
+    apps: { id: string; name: string; runningInstances: number }[],
+    payload: SpaceSelectionPayload,
+    credentials: { readonly email: string; readonly password: string },
+    cfHomeDir: string
+  ): void {
+    this.postMessage({ type: MSG_APPS_LOADED, apps });
+    this.cfLogsPanel.updateScope(
+      buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
+    );
+    this.cfLogsPanel.updateApps(apps, {
+      apiEndpoint: getCfApiEndpoint(this.selectedRegionCode),
+      email: credentials.email,
+      password: credentials.password,
+      orgName: payload.orgName,
+      spaceName: payload.spaceName,
+      cfHomeDir,
+    } satisfies CfLogSessionSeed);
+  }
+
+  private postOrgsError(message: string): void {
+    this.postMessage({ type: MSG_ORGS_ERROR, message });
+    this.cfLogsPanel.updateApps([], null);
+  }
+
+  private postSpacesError(message: string): void {
+    this.postMessage({ type: MSG_SPACES_ERROR, message });
+    this.cfLogsPanel.updateApps([], null);
+  }
+
+  private postAppsError(message: string): void {
+    this.postMessage({ type: MSG_APPS_ERROR, message });
+    this.cfLogsPanel.updateApps([], null);
+  }
+
+  // ── Region logging ───────────────────────────────────────────────────────
 
   private logRegionSelection(region: RegionSelectionPayload): void {
     const timestamp = new Date().toISOString();
@@ -373,13 +571,29 @@ export class RegionSidebarProvider
     }
   }
 
-  // ── postMessage helper ──────────────────────────────────────────────────
+  // ── postMessage helpers ──────────────────────────────────────────────────
 
   private postMessage(message: Record<string, unknown>): void {
     void this.webviewView?.webview.postMessage(message);
   }
 
-  // ── HTML builders ───────────────────────────────────────────────────────
+  private postCacheState(snapshot: CacheRuntimeSnapshot): void {
+    this.postMessage({
+      type: MSG_CACHE_STATE,
+      snapshot: {
+        activeUserEmail: snapshot.activeUserEmail,
+        syncInProgress: snapshot.syncInProgress,
+        lastSyncStartedAt: snapshot.lastSyncStartedAt,
+        lastSyncCompletedAt: snapshot.lastSyncCompletedAt,
+        lastSyncError: snapshot.lastSyncError,
+        syncIntervalHours: snapshot.syncIntervalHours,
+        nextSyncAt: snapshot.nextSyncAt,
+        regionAccessById: snapshot.regionAccessById,
+      },
+    } satisfies CacheStatePayload);
+  }
+
+  // ── HTML builders ────────────────────────────────────────────────────────
 
   private buildMainHtml(
     webview: vscode.Webview,
@@ -426,7 +640,6 @@ export class RegionSidebarProvider
     const cssSrc = webview
       .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'login-gate.css'))
       .toString();
-
     const csp = buildCsp(webview, nonce);
 
     return `<!doctype html>
@@ -487,84 +700,11 @@ export class RegionSidebarProvider
   }
 }
 
-// ── Test-mode mock data ──────────────────────────────────────────────────────
-
-interface MockOrg {
-  readonly guid: string;
-  readonly name: string;
-}
-
-const DEFAULT_MOCK_ORGS: readonly MockOrg[] = [
-  { guid: 'org-core-prod', name: 'core-platform-prod' },
-  { guid: 'org-finance-prod', name: 'finance-services-prod' },
-  { guid: 'org-retail-prod', name: 'retail-experience-prod' },
-  { guid: 'org-data-prod', name: 'data-foundation-prod' },
-  { guid: 'org-apps-proof', name: 'apps-proof-prod' },
-] as const;
-
-const BR10_MOCK_ORGS: readonly MockOrg[] = [
-  { guid: 'org-br10-core-platform', name: 'core-platform-prod' },
-  { guid: 'org-br10-finance-services', name: 'finance-services-prod' },
-  { guid: 'org-br10-retail-experience', name: 'retail-experience-prod' },
-  { guid: 'org-br10-data-foundation', name: 'data-foundation-prod' },
-  { guid: 'org-br10-tax-engineering', name: 'tax-engineering-prod' },
-  { guid: 'org-br10-payments-ledger', name: 'payments-ledger-prod' },
-  { guid: 'org-br10-supply-chain', name: 'supply-chain-control-prod' },
-  { guid: 'org-br10-customer-insights', name: 'customer-insights-prod' },
-  { guid: 'org-br10-partner-gateway', name: 'partner-gateway-prod' },
-  { guid: 'org-br10-revenue-ops', name: 'revenue-operations-prod' },
-  { guid: 'org-br10-commerce-catalog', name: 'commerce-catalog-prod' },
-  { guid: 'org-br10-risk-compliance', name: 'risk-compliance-prod' },
-  { guid: 'org-br10-identity-access', name: 'identity-access-prod' },
-  {
-    guid: 'org-br10-billing-reconciliation',
-    name: 'billing-reconciliation-prod',
-  },
-] as const;
-
-const MOCK_SPACES: Record<string, readonly { name: string }[]> = {
-  'core-platform-prod': [{ name: 'prod' }, { name: 'staging' }, { name: 'integration' }],
-  'finance-services-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'sandbox' }],
-  'retail-experience-prod': [{ name: 'prod' }, { name: 'campaigns' }, { name: 'performance' }],
-  'data-foundation-prod': [
-    { name: 'prod' },
-    { name: 'etl' },
-    { name: 'observability' },
-    { name: 'noapps' },
-    { name: 'failspace' },
-  ],
-  'apps-proof-prod': [{ name: 'proofspace' }],
-  'tax-engineering-prod': [{ name: 'prod' }, { name: 'uat' }],
-  'payments-ledger-prod': [{ name: 'prod' }, { name: 'staging' }],
-  'supply-chain-control-prod': [{ name: 'prod' }, { name: 'integration' }],
-  'customer-insights-prod': [{ name: 'prod' }, { name: 'performance' }],
-  'partner-gateway-prod': [{ name: 'prod' }, { name: 'sandbox' }],
-  'revenue-operations-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'observability' }],
-  'commerce-catalog-prod': [{ name: 'prod' }, { name: 'campaigns' }],
-  'risk-compliance-prod': [{ name: 'prod' }, { name: 'staging' }, { name: 'observability' }],
-  'identity-access-prod': [{ name: 'prod' }, { name: 'integration' }, { name: 'sandbox' }],
-  'billing-reconciliation-prod': [{ name: 'prod' }, { name: 'uat' }, { name: 'etl' }],
-};
-
-const MOCK_APPS_BY_SPACE: Record<string, readonly string[]> = {
-  noapps: [],
-  prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
-  staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
-  integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
-  uat: ['finance-uat-api', 'finance-uat-worker', 'finance-uat-audit'],
-  sandbox: ['sandbox-api', 'sandbox-worker', 'sandbox-observer'],
-  campaigns: ['campaign-engine', 'campaign-events', 'campaign-content'],
-  performance: ['perf-api', 'perf-worker', 'perf-load-probe'],
-  etl: ['etl-scheduler', 'etl-transformer', 'etl-writer'],
-  observability: ['metrics-collector', 'traces-forwarder', 'alerts-dispatcher'],
-  proofspace: ['proof-gateway', 'proof-worker'],
-};
-
 function isTestMode(): boolean {
   return process.env['SAP_TOOLS_TEST_MODE'] === '1';
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildCsp(webview: vscode.Webview, nonce: string): string {
   return [
@@ -597,7 +737,7 @@ function sanitizeForLog(value: string): string {
   return value.replaceAll(/\s+/g, ' ').trim();
 }
 
-// ── Type guards ──────────────────────────────────────────────────────────────
+// ── Type guards ─────────────────────────────────────────────────────────────
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -612,9 +752,17 @@ function isNonEmptyString(value: unknown, maxLength: number): value is string {
 }
 
 function isLoginSubmitMessage(value: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(value['email'], 256) && isNonEmptyString(value['password'], 256)
-  );
+  return isNonEmptyString(value['email'], 256) && isNonEmptyString(value['password'], 256);
+}
+
+function readLoginSubmitPayload(value: Record<string, unknown>): {
+  readonly email: string;
+  readonly password: string;
+} {
+  return {
+    email: String(value['email']),
+    password: String(value['password']),
+  };
 }
 
 function isRegionSelectedMessage(value: Record<string, unknown>): boolean {
@@ -630,12 +778,30 @@ function isRegionSelectedMessage(value: Record<string, unknown>): boolean {
   );
 }
 
+function readRegionSelectionPayload(value: Record<string, unknown>): RegionSelectionPayload {
+  const region = value['region'] as Record<string, unknown>;
+  return {
+    id: String(region['id']),
+    name: String(region['name']),
+    code: String(region['code']),
+    area: String(region['area']),
+  };
+}
+
 function isOrgSelectedMessage(value: Record<string, unknown>): boolean {
   const org = value['org'];
   if (!isRecord(org)) {
     return false;
   }
   return isNonEmptyString(org['guid'], 128) && isNonEmptyString(org['name'], 128);
+}
+
+function readOrgSelectionPayload(value: Record<string, unknown>): OrgSelectionPayload {
+  const org = value['org'] as Record<string, unknown>;
+  return {
+    guid: String(org['guid']),
+    name: String(org['name']),
+  };
 }
 
 function isSpaceSelectedMessage(value: Record<string, unknown>): boolean {
@@ -649,6 +815,15 @@ function isSpaceSelectedMessage(value: Record<string, unknown>): boolean {
     isNonEmptyString(scope['orgGuid'], 128) &&
     isNonEmptyString(scope['orgName'], 128)
   );
+}
+
+function readSpaceSelectionPayload(value: Record<string, unknown>): SpaceSelectionPayload {
+  const scope = value['scope'] as Record<string, unknown>;
+  return {
+    spaceName: String(scope['spaceName']),
+    orgGuid: String(scope['orgGuid']),
+    orgName: String(scope['orgName']),
+  };
 }
 
 function isActiveAppsChangedMessage(value: Record<string, unknown>): boolean {
@@ -666,39 +841,23 @@ function isActiveAppsChangedMessage(value: Record<string, unknown>): boolean {
   return true;
 }
 
-async function ensureCfHomeDir(context: vscode.ExtensionContext): Promise<string> {
-  const cfHomeDir = join(context.globalStorageUri.fsPath, 'cf-home');
-  await mkdir(cfHomeDir, { recursive: true });
-  return cfHomeDir;
+function readActiveAppsChangedPayload(
+  value: Record<string, unknown>
+): ActiveAppsChangedPayload {
+  return {
+    appNames: (value['appNames'] as string[]).map((name) => name.trim()),
+  };
 }
 
-function resolveMockApps(spaceName: string): string[] {
-  const key = spaceName.trim().toLowerCase();
-  const apps = MOCK_APPS_BY_SPACE[key];
-  if (apps !== undefined) {
-    return [...apps];
-  }
-
-  const fallbackPrefix = key.length > 0 ? key : 'space';
-  return [
-    `${fallbackPrefix}-api`,
-    `${fallbackPrefix}-worker`,
-    `${fallbackPrefix}-jobs`,
-  ];
+function isUpdateSyncIntervalMessage(value: Record<string, unknown>): boolean {
+  const syncIntervalHours = value['syncIntervalHours'];
+  return typeof syncIntervalHours === 'number' && isSyncIntervalHours(syncIntervalHours);
 }
 
-function resolveMockOrgsForRegion(regionCode: string): readonly MockOrg[] {
-  const normalizedRegionCode = regionCode.trim().toLowerCase();
-  if (normalizedRegionCode === 'br-10') {
-    return BR10_MOCK_ORGS;
-  }
-  return DEFAULT_MOCK_ORGS;
-}
-
-function resolveMockSpacesForOrg(org: { guid: string; name: string }): readonly { name: string }[] {
-  const spacesByName = MOCK_SPACES[org.name];
-  if (spacesByName !== undefined) {
-    return spacesByName;
-  }
-  return MOCK_SPACES['core-platform-prod'] ?? [];
+function readUpdateSyncIntervalPayload(
+  value: Record<string, unknown>
+): UpdateSyncIntervalPayload {
+  return {
+    syncIntervalHours: value['syncIntervalHours'] as SyncIntervalHours,
+  };
 }
