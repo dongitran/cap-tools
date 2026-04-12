@@ -53,15 +53,21 @@ body.login-gate-page {
 
 .login-shell {
   min-height: 100dvh;
-  padding: 14px;
   display: grid;
-  align-content: start;
-  gap: 10px;
+  grid-template-rows: auto 1fr;
+  align-content: stretch;
+  gap: 0;
+}
+
+.layout-head {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--surface-bg) 90%, var(--page-bg));
 }
 
 .layout-head h1 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -70,6 +76,7 @@ body.login-gate-page {
   border-radius: 12px;
   background: var(--surface-bg);
   padding: 12px;
+  margin: 10px;
   display: grid;
   gap: 12px;
 }
@@ -83,6 +90,18 @@ body.login-gate-page {
 .login-head h2 {
   margin: 0;
   font-size: 0.95rem;
+}
+
+.login-head p {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted-color);
+  line-height: 1.3;
+}
+
+.login-head code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.7rem;
 }
 
 .login-form {
