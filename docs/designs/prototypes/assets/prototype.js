@@ -276,7 +276,13 @@ appElement.addEventListener('click', (event) => {
   const action = actionElement.dataset.action ?? '';
   queueStageHeightMotionByAction(action);
   const modeBeforeAction = mode;
+  const tabBeforeAction = activeTabId;
   if (!handleAction(action, actionElement)) {
+    return;
+  }
+
+  if (shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeAction)) {
+    refreshWorkspaceLogsView();
     return;
   }
 
@@ -331,8 +337,77 @@ appElement.addEventListener('change', (event) => {
   }
 
   selectedAppLogIds = Array.from(selectedIds);
+  if (isWorkspaceLogsMounted()) {
+    refreshWorkspaceLogsView();
+    return;
+  }
   renderPrototype();
 });
+
+function shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeAction) {
+  const isLogsAction = action === 'start-app-logging' || action === 'stop-app-logging';
+  if (!isLogsAction) {
+    return false;
+  }
+
+  return (
+    modeBeforeAction === 'workspace' &&
+    mode === 'workspace' &&
+    tabBeforeAction === 'logs' &&
+    activeTabId === 'logs'
+  );
+}
+
+function isWorkspaceLogsMounted() {
+  if (mode !== 'workspace' || activeTabId !== 'logs') {
+    return false;
+  }
+
+  return appElement.querySelector('.app-logs-panel') instanceof HTMLElement;
+}
+
+function refreshWorkspaceLogsView() {
+  const logsPanel = appElement.querySelector('.app-logs-panel');
+  if (!(logsPanel instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+
+  const availableApps = resolveCurrentSpaceApps();
+  const selectedApps = new Set(selectedAppLogIds);
+  const activeApps = new Set(activeAppLogIds);
+  const startableSelectionCount = selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
+
+  const catalogElement = logsPanel.querySelector('[data-role="app-log-catalog"]');
+  if (!(catalogElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  catalogElement.innerHTML = renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
+
+  const activeAppsElement = logsPanel.querySelector('[data-role="active-app-log-list"]');
+  if (!(activeAppsElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  activeAppsElement.innerHTML = renderActiveAppsLogList(availableApps, activeApps);
+
+  const startButton = logsPanel.querySelector('[data-action="start-app-logging"]');
+  if (startButton instanceof HTMLButtonElement) {
+    startButton.disabled = startableSelectionCount === 0;
+  }
+
+  const statusElement = logsPanel.querySelector('[data-role="app-log-status"]');
+  if (statusElement instanceof HTMLElement) {
+    statusElement.hidden = statusMessage.length === 0;
+    statusElement.textContent = statusMessage;
+  }
+
+  const syncElement = appElement.querySelector('[data-role="workspace-last-sync"]');
+  if (syncElement instanceof HTMLElement) {
+    syncElement.textContent = `Last sync: ${lastSyncLabel}`;
+  }
+}
 
 function handleGroupSelection(nextGroupId) {
   const nextGroup = groupLookup.get(nextGroupId);
@@ -518,7 +593,7 @@ function handleLogsAction(action, actionElement) {
     return selectionActionHandled;
   }
 
-  const controlActionHandled = handleLogsControlAction(action);
+  const controlActionHandled = handleLogsControlAction(action, actionElement);
   if (controlActionHandled !== null) {
     return controlActionHandled;
   }
@@ -541,20 +616,53 @@ function handleLogsSelectionAction(action, actionElement) {
   return null;
 }
 
-function handleLogsControlAction(action) {
+function handleLogsControlAction(action, actionElement) {
   if (action === 'start-app-logging') {
     const availableApps = resolveCurrentSpaceApps();
     const validAppIds = new Set(availableApps.map((app) => app.id));
     const selectedValidIds = selectedAppLogIds.filter((appId) => validAppIds.has(appId));
+    const nextActiveAppIds = new Set(activeAppLogIds.filter((appId) => validAppIds.has(appId)));
 
     if (selectedValidIds.length === 0) {
       statusMessage = 'Select at least one app to start logging.';
       return true;
     }
 
-    activeAppLogIds = [...selectedValidIds];
+    let newlyStartedCount = 0;
+    for (const appId of selectedValidIds) {
+      if (!nextActiveAppIds.has(appId)) {
+        newlyStartedCount += 1;
+      }
+      nextActiveAppIds.add(appId);
+    }
+
+    activeAppLogIds = Array.from(nextActiveAppIds);
+    selectedAppLogIds = Array.from(new Set([...selectedValidIds, ...activeAppLogIds]));
     lastSyncLabel = formatNow();
-    statusMessage = `Logging started for ${selectedValidIds.length} app${selectedValidIds.length > 1 ? 's' : ''}.`;
+    statusMessage =
+      newlyStartedCount === 0
+        ? 'All selected apps are already logging.'
+        : `Logging started for ${newlyStartedCount} app${newlyStartedCount > 1 ? 's' : ''}.`;
+    return true;
+  }
+
+  if (action === 'stop-app-logging') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+
+    const isActive = activeAppLogIds.includes(appId);
+    if (!isActive) {
+      return true;
+    }
+
+    const appName =
+      resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    activeAppLogIds = activeAppLogIds.filter((activeAppId) => activeAppId !== appId);
+    selectedAppLogIds = selectedAppLogIds.filter((selectedAppId) => selectedAppId !== appId);
+    lastSyncLabel = formatNow();
+    statusMessage = `Stopped logging for ${appName}.`;
     return true;
   }
 
@@ -1228,7 +1336,7 @@ function renderWorkspaceScreen() {
     </section>
 
     <footer class="workspace-footer">
-      <span>Last sync: ${lastSyncLabel}</span>
+      <span data-role="workspace-last-sync">Last sync: ${lastSyncLabel}</span>
       <button type="button" class="secondary-action workspace-logout" data-action="change-region">Change Region</button>
     </footer>
   `;
@@ -1266,39 +1374,24 @@ function renderLogsTab() {
   const availableApps = resolveCurrentSpaceApps();
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
+  const startableSelectionCount = selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
   const spaceLabel = selectedSpaceId.length > 0 ? selectedSpaceId : 'current-space';
-  const catalogMarkup =
-    availableApps.length === 0
-      ? '<p class="logs-empty-message">No apps found in current space.</p>'
-      : availableApps
-          .map((app) => {
-            const isChecked = selectedApps.has(app.id);
-            const isLogging = activeApps.has(app.id);
-            return `
-              <label class="app-log-item${isLogging ? ' is-logging' : ''}">
-                <input
-                  type="checkbox"
-                  data-role="log-app-checkbox"
-                  data-app-id="${app.id}"
-                  ${isChecked ? 'checked' : ''}
-                />
-                <span class="app-log-name">${escapeHtml(app.name)}</span>
-                <span class="app-log-state ${isLogging ? 'is-logging' : 'is-idle'}">${isLogging ? 'Logging' : 'Ready'}</span>
-              </label>
-            `;
-          })
-          .join('');
+  const catalogMarkup = renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps);
   const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps);
+  const statusMarkup =
+    statusMessage.length === 0
+      ? '<p class="status-note" data-role="app-log-status" hidden></p>'
+      : `<p class="status-note" data-role="app-log-status">${escapeHtml(statusMessage)}</p>`;
 
   return `
     <section class="group-card logs-panel app-logs-panel">
       <section class="active-apps-log" aria-label="Active apps log">
         <h3>Active Apps Log</h3>
-        ${activeAppsMarkup}
+        <div data-role="active-app-log-list">${activeAppsMarkup}</div>
       </section>
       <h2>Apps Log Control</h2>
       <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs.</p>
-      <section class="app-log-catalog" aria-label="Apps in selected space">
+      <section class="app-log-catalog" aria-label="Apps in selected space" data-role="app-log-catalog">
         ${catalogMarkup}
       </section>
       <div class="toolbar-row" role="group" aria-label="App log actions">
@@ -1306,14 +1399,52 @@ function renderLogsTab() {
           type="button"
           class="primary-action app-log-start"
           data-action="start-app-logging"
-          ${selectedAppLogIds.length === 0 ? 'disabled' : ''}
+          ${startableSelectionCount === 0 ? 'disabled' : ''}
         >
           Start App Logging
         </button>
       </div>
-      ${statusMessage.length > 0 ? `<p class="status-note">${escapeHtml(statusMessage)}</p>` : ''}
+      ${statusMarkup}
     </section>
   `;
+}
+
+function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
+  if (availableApps.length === 0) {
+    return '<p class="logs-empty-message">No apps found in current space.</p>';
+  }
+
+  return availableApps
+    .map((app) => {
+      const isLogging = activeApps.has(app.id);
+      const isChecked = isLogging || selectedApps.has(app.id);
+      const actionMarkup = isLogging
+        ? `
+            <span class="app-log-meta">
+              <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
+                Stop
+              </button>
+              <span class="app-log-state is-logging">Logging</span>
+            </span>
+          `
+        : '<span class="app-log-state is-idle">Ready</span>';
+
+      return `
+        <div class="app-log-item${isLogging ? ' is-logging is-locked' : ''}">
+          <input
+            type="checkbox"
+            data-role="log-app-checkbox"
+            data-app-id="${app.id}"
+            aria-label="Select ${escapeHtml(app.name)}"
+            ${isChecked ? 'checked' : ''}
+            ${isLogging ? 'disabled' : ''}
+          />
+          <span class="app-log-name">${escapeHtml(app.name)}</span>
+          ${actionMarkup}
+        </div>
+      `;
+    })
+    .join('');
 }
 
 function renderActiveAppsLogList(availableApps, activeAppIds) {
@@ -1327,7 +1458,12 @@ function renderActiveAppsLogList(availableApps, activeAppIds) {
       return `
         <div class="active-app-row">
           <span class="active-app-name">${escapeHtml(app.name)}</span>
-          <span class="active-app-pill">Logging</span>
+          <span class="active-app-meta">
+            <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
+              Stop
+            </button>
+            <span class="active-app-pill">Logging</span>
+          </span>
         </div>
       `;
     })
