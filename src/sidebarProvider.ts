@@ -25,6 +25,7 @@ const MSG_REGION_SELECTED = 'sapTools.regionSelected';
 const MSG_ORG_SELECTED = 'sapTools.orgSelected';
 const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
+const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
 
 // ── Outbound message types (extension → webview) ───────────────────────────
 
@@ -151,6 +152,11 @@ export class RegionSidebarProvider
     if (type === MSG_OPEN_CF_LOGS_PANEL) {
       this.cfLogsPanel.focus();
       return;
+    }
+
+    if (type === MSG_ACTIVE_APPS_CHANGED && isActiveAppsChangedMessage(message)) {
+      const appNames = message['appNames'] as string[];
+      this.cfLogsPanel.updateActiveApps(appNames);
     }
   }
 
@@ -643,6 +649,21 @@ function isSpaceSelectedMessage(value: Record<string, unknown>): boolean {
     isNonEmptyString(scope['orgGuid'], 128) &&
     isNonEmptyString(scope['orgName'], 128)
   );
+}
+
+function isActiveAppsChangedMessage(value: Record<string, unknown>): boolean {
+  const appNames = value['appNames'];
+  if (!Array.isArray(appNames) || appNames.length > 64) {
+    return false;
+  }
+
+  for (const appName of appNames) {
+    if (!isNonEmptyString(appName, 128)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 async function ensureCfHomeDir(context: vscode.ExtensionContext): Promise<string> {

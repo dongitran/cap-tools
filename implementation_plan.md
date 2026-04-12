@@ -1,70 +1,120 @@
-# Implementation Plan — Extension + E2E Hardening
+# Optimization Plan — SAP Tools CF Logs (Latency + Reliability)
 
-## Scope
-- Review all current code changes in this repo.
-- Analyze full current source and prototype behavior.
-- Commit all current code (local only, no push).
-- Run E2E deeply, classify failures (code vs test), fix all.
-- Re-check extension UI parity against prototype and improve parity gaps.
-- Reference `/Users/dongtran/Documents/brain/01-projects/13-cds-debug` for CF app list parsing/filtering:
-  - show only apps in `started` state
-  - hide apps with started state but `instances == 0`
+## 1) Goal
+- Reduce log latency after `Start App Logging` and improve stream stability.
+- Keep UI consistent: CFLogs dropdown shows only active logging apps.
+- Preserve strict quality gates and release workflow discipline.
 
-## Execution Steps
+## 2) Current Bottlenecks (already identified)
+1. Polling model (`cf logs --recent`) is not true streaming, so latency is bounded by poll interval + CLI execution time.
+2. Repeated CLI process spawn still costs time even after session-prep optimization.
+3. UI receives periodic snapshots, not incremental log deltas.
+4. No persistent stream process per active app yet.
 
-1. Baseline review and source analysis
-- Inspect `git diff` for all modified/untracked code files.
-- Read full source in `src/`, `docs/designs/prototypes/assets/`, `e2e/`.
-- Identify mismatch risks between:
-  - extension message contracts (`src/*`)
-  - prototype runtime contracts (`prototype.js`, `login-gate.js`, `cf-logs-panel.js`)
-  - E2E expectations.
+## 3) Target Architecture (Stream-first, fallback-safe)
 
-2. First local commit (checkpoint)
-- Stage all relevant current code changes in this repo (exclude transient debug artifacts).
-- Run required checks needed by hooks; fix only blocking issues for a clean commit.
-- Create commit #1 locally (do not push).
+### 3.1 Stream engine
+- Add a dedicated stream manager in extension host:
+  - one process per active app: `cf logs <app>`
+  - incremental line parsing and batched push to webview
+  - per-app state: `starting | streaming | reconnecting | stopped | error`
 
-3. E2E verification phase
-- Run E2E suite in isolation.
-- For every failing case:
-  - capture exact failing assertion/log
-  - determine if root cause is product code or test expectation drift
-  - fix with minimal but correct change.
+### 3.2 Scope/session lifecycle
+- On scope change:
+  - stop all running streams
+  - clear active app states
+  - prepare CF target once for new scope
+- On `activeAppsChanged`:
+  - start streams for newly active apps
+  - stop streams for removed apps
 
-4. CF apps parsing + filtering implementation (code parity with reference)
-- Add/adjust CF app parsing in `src/cfClient.ts`:
-  - parse `cf apps` output robustly for both `instances` and `processes` style output.
-  - derive app state with an `empty` equivalent when requested state is started but running instances are zero.
-- Add extension-side filtering before sending app options to webview:
-  - include only apps effectively running (`started` with running instances > 0).
-- Wire message flow from extension host to webview for app list updates.
+### 3.3 Fallback strategy
+- If stream process crashes:
+  - retry with bounded exponential backoff
+  - fallback to `--recent` polling mode per app while reconnecting
 
-5. UI/UX parity pass (extension vs prototype)
-- Compare current extension runtime UI against prototype behavior:
-  - login gate flow
-  - progressive selection flow
-  - workspace/app log control interactions.
-- Patch extension/prototype integration gaps to match intended UX.
-- Keep CSP-safe event delegation (no inline handlers).
+### 3.4 Webview protocol
+- Keep existing messages for compatibility.
+- Add delta protocol for better UX:
+  - `sapTools.logsAppend` (new lines)
+  - `sapTools.logsStreamState` (status per app)
+  - optional `sapTools.logsReset` on scope/app switch
 
-6. E2E updates and final verification
-- Update E2E tests only where behavior intentionally changed.
-- Re-run:
-  - root validation commands
-  - E2E suite.
-- Ensure no failing tests, lint, typecheck, cspell issues.
+## 4) UX/Performance Improvements
+- Dropdown in CFLogs panel remains filtered to active apps only.
+- Auto-select first active app when none selected.
+- In-flight request guard remains (no concurrent duplicate fetch).
+- Adaptive refresh (if fallback mode):
+  - active visible app: fast interval
+  - hidden/inactive: paused
 
-7. Final local commit(s)
-- If code/test changes were made after checkpoint commit:
-  - create commit #2 (and additional atomic commits if needed), local only.
-- No push.
+## 5) Security/Robustness Constraints
+- Never log secrets (`password`, tokens, auth headers).
+- Sanitize streamed lines before forwarding to webview.
+- Enforce max payload size per message batch.
+- Kill child processes on scope reset, deactivate, and dispose.
 
-## Validation Checklist
-- `npm run typecheck`
-- `npm run lint`
-- `npm run cspell`
-- `npm run test:unit`
-- `npm --prefix e2e run validate`
-- `npm --prefix e2e test`
+## 6) Step-by-Step Execution (with gate after each step)
 
+### Step A — Baseline metrics
+- Measure:
+  - time from click `Start App Logging` to first visible line
+  - update frequency and staleness under app restart scenario
+- Gate:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run cspell`
+
+### Step B — Introduce stream manager
+- Implement stream lifecycle (start/stop/retry/dispose).
+- Wire from `activeAppsChanged`.
+- Keep existing polling path as temporary fallback.
+- Gate:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run cspell`
+  - `npm run test:unit`
+
+### Step C — Webview delta rendering
+- Consume append events and update table incrementally.
+- Maintain filter/search behavior and selection stability.
+- Gate:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run cspell`
+
+### Step D — E2E upgrade
+- Add/adjust E2E for:
+  - active-app-only dropdown
+  - stream starts quickly after `Start App Logging`
+  - stream state on stop/scope change
+- Gate:
+  - `npm --prefix e2e run validate`
+  - `npm --prefix e2e test`
+
+### Step E — Full validation + release prep
+- Run full pipeline:
+  - `npm run validate`
+  - `npm --prefix e2e test`
+- Fix issues until fully green.
+- Bump extension version in `package.json`.
+- Commit and push.
+- Monitor GitHub Actions and iterate until green.
+
+## 7) Success Criteria
+- First log appears quickly after start (target: near-real-time experience).
+- No duplicate polling bursts or stale overwrite races.
+- Dropdown always matches active app set.
+- All gates pass locally and on GitHub Actions.
+
+## 8) Completion Checklist
+- [x] lint passed
+- [x] typecheck passed
+- [x] cspell passed
+- [x] unit tests passed
+- [x] e2e validate passed
+- [x] e2e run passed
+- [x] package version bumped
+- [ ] commit done
+- [ ] push done
+- [ ] actions green

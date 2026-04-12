@@ -1039,34 +1039,115 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel loads logs and populates app selector after space selection', async () => {
+  test('CF logs panel keeps app selector empty until user starts app logging', async () => {
     const session = await launchExtensionHost();
 
     try {
       const sidebarFrame = await openSapToolsSidebar(session.window);
       const logsFrame = await openCfLogsPanel(session.window);
 
-      // Select a scope so the extension sends appsUpdate + logsLoaded.
+      // Select a scope so the extension sends apps catalog to the panel.
       await selectDefaultScope(sidebarFrame);
 
-      // App selector should be enabled and populated (finance-services-prod/uat has 3 mock apps).
+      // Until Start App Logging is triggered from sidebar workspace,
+      // panel app selector should remain disabled.
+      const appSelect = logsFrame.getByLabel('Select app');
+      await expect(appSelect).toBeDisabled({ timeout: 10000 });
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toContainText(
+        /Start App Logging/i
+      );
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel dropdown includes only apps started for logging', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await expect(
+        sidebarFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-worker'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
       const appSelect = logsFrame.getByLabel('Select app');
       await expect(appSelect).toBeEnabled({ timeout: 10000 });
-      const optionCount = await appSelect.locator('option').count();
-      expect(optionCount).toBeGreaterThan(0);
-
-      // Logs should be loaded from test-mode sample data.
       await expect
         .poll(
-          async () => logsFrame.locator('#log-table-body tr').count(),
+          async () => appSelect.locator('option').count(),
           { timeout: 15000 }
-        )
-        .toBeGreaterThan(0);
+        ).toBe(2);
 
-      // Rows should NOT be the empty-state placeholder.
+      const optionTexts = await appSelect.locator('option').allTextContents();
+      expect(optionTexts.some((text) => text.includes('finance-uat-api'))).toBe(true);
+      expect(optionTexts.some((text) => text.includes('finance-uat-worker'))).toBe(true);
+      expect(optionTexts.some((text) => text.includes('finance-uat-audit'))).toBe(false);
+
+      // Logs should be loaded for one of the selected active apps.
       await expect(
         logsFrame.locator('#log-table-body td.empty-row')
       ).toBeHidden({ timeout: 10000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel dropdown removes app after stop logging from sidebar', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-worker'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      const appSelect = logsFrame.getByLabel('Select app');
+      await expect
+        .poll(
+          async () => appSelect.locator('option').count(),
+          { timeout: 15000 }
+        ).toBe(2);
+
+      const apiRow = sidebarFrame.locator('.active-app-row', {
+        hasText: 'finance-uat-api',
+      });
+      await expect(apiRow).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(apiRow.getByRole('button', { name: 'Stop' }));
+
+      await expect
+        .poll(
+          async () => appSelect.locator('option').count(),
+          { timeout: 15000 }
+        ).toBe(1);
+
+      const optionTexts = await appSelect.locator('option').allTextContents();
+      expect(optionTexts.some((text) => text.includes('finance-uat-api'))).toBe(false);
+      expect(optionTexts.some((text) => text.includes('finance-uat-worker'))).toBe(true);
     } finally {
       await cleanupExtensionHost(session);
     }

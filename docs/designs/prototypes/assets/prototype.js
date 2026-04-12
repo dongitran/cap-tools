@@ -119,6 +119,7 @@ const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
 const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
 const SPACE_SELECTED_MESSAGE_TYPE = 'sapTools.spaceSelected';
+const ACTIVE_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.activeAppsChanged';
 const vscodeApi = resolveVscodeApi();
 
 // Live data state — only used in VSCode mode (vscodeApi !== null).
@@ -734,6 +735,8 @@ function handleLogsControlAction(action, actionElement) {
 
     activeAppLogIds = Array.from(nextActiveAppIds);
     selectedAppLogIds = Array.from(new Set([...selectedValidIds, ...activeAppLogIds]));
+    postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
+    postOpenCfLogsPanel();
     lastSyncLabel = formatNow();
     statusMessage =
       newlyStartedCount === 0
@@ -757,6 +760,7 @@ function handleLogsControlAction(action, actionElement) {
       resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
     activeAppLogIds = activeAppLogIds.filter((activeAppId) => activeAppId !== appId);
     selectedAppLogIds = selectedAppLogIds.filter((selectedAppId) => selectedAppId !== appId);
+    postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
     lastSyncLabel = formatNow();
     statusMessage = `Stopped logging for ${appName}.`;
     return true;
@@ -1089,6 +1093,17 @@ function postOpenCfLogsPanel() {
 
   vscodeApi.postMessage({
     type: OPEN_CF_LOGS_PANEL_MESSAGE_TYPE,
+  });
+}
+
+function postActiveAppsChanged(appNames) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: ACTIVE_APPS_CHANGED_MESSAGE_TYPE,
+    appNames,
   });
 }
 
@@ -1866,6 +1881,18 @@ function resolveCurrentSpaceApps() {
   return appNames.map((appName) => ({ id: appName, name: appName }));
 }
 
+function resolveActiveAppNamesByIds(activeAppIds) {
+  const appNameById = new Map(resolveCurrentSpaceApps().map((app) => [app.id, app.name]));
+  const names = [];
+  for (const appId of activeAppIds) {
+    const appName = appNameById.get(appId);
+    if (typeof appName === 'string' && appName.length > 0) {
+      names.push(appName);
+    }
+  }
+  return names;
+}
+
 function buildFallbackAppNames(spaceKey) {
   const orgName = resolveSelectedOrg()?.name ?? 'app-services';
   const orgSlug = orgName
@@ -1881,15 +1908,20 @@ function buildFallbackAppNames(spaceKey) {
 }
 
 function resetWorkspaceLoggingState() {
+  const hadActiveApps = activeAppLogIds.length > 0;
   selectedAppLogIds = [];
   activeAppLogIds = [];
   statusMessage = '';
+  if (hadActiveApps) {
+    postActiveAppsChanged([]);
+  }
 }
 
 function pruneSelectedAppIds() {
   const allowedAppIds = new Set(resolveCurrentSpaceApps().map((app) => app.id));
   selectedAppLogIds = selectedAppLogIds.filter((appId) => allowedAppIds.has(appId));
   activeAppLogIds = activeAppLogIds.filter((appId) => allowedAppIds.has(appId));
+  postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
 }
 
 function formatNow() {

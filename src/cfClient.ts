@@ -1,5 +1,6 @@
 // cspell:words guids hana ondemand sapcloud
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -19,6 +20,15 @@ interface ParsedCfAppRow {
   readonly name: string;
   readonly requestedState: string;
   readonly runningInstances: number;
+}
+
+interface CfCliTargetParams {
+  readonly apiEndpoint: string;
+  readonly email: string;
+  readonly password: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+  readonly cfHomeDir?: string;
 }
 
 export interface CfLoginInfo {
@@ -49,6 +59,11 @@ export interface CfSession {
 export interface CfRunningApp {
   readonly name: string;
   readonly runningInstances: number;
+}
+
+export interface CfLogStreamHandle {
+  readonly process: ChildProcessWithoutNullStreams;
+  stop(): void;
 }
 
 /**
@@ -215,6 +230,24 @@ export async function fetchStartedAppsViaCfCli(params: {
   readonly spaceName: string;
   readonly cfHomeDir?: string;
 }): Promise<CfRunningApp[]> {
+  await prepareCfCliSession(params);
+
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const appsStdout = await runCfCommand(['apps'], {
+    ...cfHomeOptions,
+    failureMessage: 'Failed to fetch apps from CF CLI.',
+  });
+
+  return parseCfAppsOutput(appsStdout)
+    .filter((row) => row.requestedState === 'started' && row.runningInstances > 0)
+    .map((row) => ({ name: row.name, runningInstances: row.runningInstances }));
+}
+
+/**
+ * Prepare CF CLI context for a specific API + org + space.
+ * This is an expensive step and should be reused when possible.
+ */
+export async function prepareCfCliSession(params: CfCliTargetParams): Promise<void> {
   const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
 
   await runCfCommand(['api', params.apiEndpoint], {
@@ -231,15 +264,6 @@ export async function fetchStartedAppsViaCfCli(params: {
     ...cfHomeOptions,
     failureMessage: 'Failed to target CF org/space.',
   });
-
-  const appsStdout = await runCfCommand(['apps'], {
-    ...cfHomeOptions,
-    failureMessage: 'Failed to fetch apps from CF CLI.',
-  });
-
-  return parseCfAppsOutput(appsStdout)
-    .filter((row) => row.requestedState === 'started' && row.runningInstances > 0)
-    .map((row) => ({ name: row.name, runningInstances: row.runningInstances }));
 }
 
 /**
@@ -255,22 +279,22 @@ export async function fetchRecentAppLogs(params: {
   readonly appName: string;
   readonly cfHomeDir?: string;
 }): Promise<string> {
+  await prepareCfCliSession(params);
   const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
-
-  await runCfCommand(['api', params.apiEndpoint], {
+  return fetchRecentAppLogsFromTarget({
+    appName: params.appName,
     ...cfHomeOptions,
-    failureMessage: 'Failed to set CF API endpoint.',
   });
+}
 
-  await runCfCommand(['auth', params.email, params.password], {
-    ...cfHomeOptions,
-    failureMessage: 'Failed to authenticate Cloud Foundry CLI.',
-  });
-
-  await runCfCommand(['target', '-o', params.orgName, '-s', params.spaceName], {
-    ...cfHomeOptions,
-    failureMessage: 'Failed to target CF org/space.',
-  });
+/**
+ * Fetch recent logs assuming CF CLI has already been targeted.
+ */
+export async function fetchRecentAppLogsFromTarget(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<string> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
 
   return runCfCommand(['logs', params.appName, '--recent'], {
     ...cfHomeOptions,
@@ -278,14 +302,35 @@ export async function fetchRecentAppLogs(params: {
   });
 }
 
+/**
+ * Spawn long-running `cf logs <app>` stream process.
+ * Requires CF target to be prepared beforehand.
+ */
+export function spawnAppLogStreamFromTarget(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): CfLogStreamHandle {
+  const env = buildCfCliEnv(params.cfHomeDir);
+  const process = spawn('cf', ['logs', params.appName], {
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  return {
+    process,
+    stop(): void {
+      if (!process.killed) {
+        process.kill();
+      }
+    },
+  };
+}
+
 async function runCfCommand(
   args: string[],
   options: CfCliExecutionOptions
 ): Promise<string> {
-  const env = { ...process.env };
-  if (typeof options.cfHomeDir === 'string' && options.cfHomeDir.length > 0) {
-    env['CF_HOME'] = options.cfHomeDir;
-  }
+  const env = buildCfCliEnv(options.cfHomeDir);
 
   try {
     const { stdout } = await execFileAsync('cf', args, {
@@ -299,6 +344,14 @@ async function runCfCommand(
     const detailSuffix = safeDetail.length > 0 ? ` ${safeDetail}` : '';
     throw new Error(`${options.failureMessage}${detailSuffix}`);
   }
+}
+
+function buildCfCliEnv(cfHomeDir: string | undefined): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (typeof cfHomeDir === 'string' && cfHomeDir.length > 0) {
+    env['CF_HOME'] = cfHomeDir;
+  }
+  return env;
 }
 
 function parseRunningInstances(instancesToken: string): number {

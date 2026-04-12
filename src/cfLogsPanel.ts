@@ -1,14 +1,26 @@
-// cspell:words guid appname logsloaded logserror fetchlogs appsupdate
+// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate
 import * as vscode from 'vscode';
-import { fetchRecentAppLogs } from './cfClient';
+import {
+  fetchRecentAppLogsFromTarget,
+  prepareCfCliSession,
+  spawnAppLogStreamFromTarget,
+} from './cfClient';
+import type { CfLogStreamHandle } from './cfClient';
 
 export const CF_LOGS_VIEW_ID = 'sapTools.cfLogsView';
 
 const SCOPE_UPDATE_MESSAGE_TYPE = 'sapTools.scopeUpdate';
 const APPS_UPDATE_MESSAGE_TYPE = 'sapTools.appsUpdate';
+const ACTIVE_APPS_UPDATE_MESSAGE_TYPE = 'sapTools.activeAppsUpdate';
 const LOGS_LOADED_MESSAGE_TYPE = 'sapTools.logsLoaded';
+const LOGS_APPEND_MESSAGE_TYPE = 'sapTools.logsAppend';
+const LOGS_STREAM_STATE_MESSAGE_TYPE = 'sapTools.logsStreamState';
 const LOGS_ERROR_MESSAGE_TYPE = 'sapTools.logsError';
 const FETCH_LOGS_MESSAGE_TYPE = 'sapTools.fetchLogs';
+
+const STREAM_BATCH_FLUSH_MS = 150;
+const STREAM_RETRY_INITIAL_MS = 1_000;
+const STREAM_RETRY_MAX_MS = 20_000;
 
 /* cspell:disable */
 const TEST_MODE_SAMPLE_LOGS = `Retrieving logs for app finance-uat-api in org finance-services-prod / space uat as developer@example.com...
@@ -51,11 +63,32 @@ interface PendingAppsUpdate {
   readonly sessionParams: LogSessionParams | null;
 }
 
+type StreamStateStatus = 'starting' | 'streaming' | 'reconnecting' | 'stopped' | 'error';
+
+interface AppStreamRuntime {
+  readonly appName: string;
+  readonly token: number;
+  readonly handle: CfLogStreamHandle;
+  lineRemainder: string;
+  lineBuffer: string[];
+  flushTimer: NodeJS.Timeout | null;
+  stoppedByRequest: boolean;
+}
+
 export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private webviewView: vscode.WebviewView | undefined;
   private sessionParams: LogSessionParams | null = null;
   private pendingAppsUpdate: PendingAppsUpdate | null = null;
   private pendingScope: string | null = null;
+  private pendingActiveAppNames: string[] = [];
+  private availableAppNames = new Set<string>();
+  private readonly runningStreams = new Map<string, AppStreamRuntime>();
+  private readonly pendingStarts = new Set<string>();
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly reconnectDelays = new Map<string, number>();
+  private preparedFetchToken = -1;
+  private preparingFetchToken: number | null = null;
+  private prepareSessionPromise: Promise<void> | null = null;
   private fetchToken = 0;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -101,6 +134,7 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       const { apps, sessionParams } = this.pendingAppsUpdate;
       this.doUpdateApps(apps, sessionParams);
     }
+    this.doUpdateActiveApps(this.pendingActiveAppNames);
   }
 
   /**
@@ -130,10 +164,28 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
    */
   updateApps(apps: CfAppEntry[], sessionParams: LogSessionParams | null): void {
     this.pendingAppsUpdate = { apps, sessionParams };
+    this.availableAppNames = new Set(apps.map((app) => app.name));
+    this.pendingActiveAppNames = this.filterActiveAppNames(this.pendingActiveAppNames, apps);
+    this.stopAllStreams();
     this.doUpdateApps(apps, sessionParams);
+    this.doUpdateActiveApps(this.pendingActiveAppNames);
+    void this.syncStreamsToActiveApps();
+  }
+
+  /**
+   * Sync active logging apps coming from the sidebar workspace.
+   * The list is normalized and filtered against currently available app names.
+   */
+  updateActiveApps(appNames: string[]): void {
+    const normalized = this.normalizeAppNames(appNames);
+    const availableApps = this.pendingAppsUpdate?.apps ?? null;
+    this.pendingActiveAppNames = this.filterActiveAppNames(normalized, availableApps);
+    this.doUpdateActiveApps(this.pendingActiveAppNames);
+    void this.syncStreamsToActiveApps();
   }
 
   dispose(): void {
+    this.stopAllStreams();
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
@@ -144,11 +196,420 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private doUpdateApps(apps: CfAppEntry[], sessionParams: LogSessionParams | null): void {
     this.fetchToken += 1;
     this.sessionParams = sessionParams;
-    const selectedApp = apps[0]?.name ?? '';
+    this.preparedFetchToken = -1;
+    this.preparingFetchToken = null;
+    this.prepareSessionPromise = null;
+    const selectedApp = this.resolvePreferredSelectedApp(apps);
     void this.webviewView?.webview.postMessage({
       type: APPS_UPDATE_MESSAGE_TYPE,
       apps,
       selectedApp,
+    });
+  }
+
+  private doUpdateActiveApps(appNames: string[]): void {
+    void this.webviewView?.webview.postMessage({
+      type: ACTIVE_APPS_UPDATE_MESSAGE_TYPE,
+      appNames,
+    });
+  }
+
+  private resolvePreferredSelectedApp(apps: CfAppEntry[]): string {
+    const appNameSet = new Set(apps.map((app) => app.name));
+    for (const appName of this.pendingActiveAppNames) {
+      if (appNameSet.has(appName)) {
+        return appName;
+      }
+    }
+    return apps[0]?.name ?? '';
+  }
+
+  private normalizeAppNames(appNames: string[]): string[] {
+    const uniqueNames = new Set<string>();
+    const normalizedNames: string[] = [];
+
+    for (const appName of appNames) {
+      const normalized = appName.trim();
+      if (normalized.length === 0 || normalized.length > 128 || uniqueNames.has(normalized)) {
+        continue;
+      }
+      uniqueNames.add(normalized);
+      normalizedNames.push(normalized);
+    }
+
+    return normalizedNames;
+  }
+
+  private filterActiveAppNames(
+    appNames: string[],
+    availableApps: CfAppEntry[] | null
+  ): string[] {
+    if (availableApps === null) {
+      return appNames;
+    }
+
+    if (availableApps.length === 0) {
+      return [];
+    }
+
+    const availableNameSet = new Set(availableApps.map((app) => app.name));
+    return appNames.filter((appName) => availableNameSet.has(appName));
+  }
+
+  private async syncStreamsToActiveApps(): Promise<void> {
+    for (const appName of this.reconnectTimers.keys()) {
+      if (!this.pendingActiveAppNames.includes(appName)) {
+        this.clearReconnectTimer(appName);
+        this.reconnectDelays.delete(appName);
+      }
+    }
+
+    for (const [appName] of this.runningStreams) {
+      if (!this.pendingActiveAppNames.includes(appName)) {
+        this.stopStream(appName, true);
+      }
+    }
+
+    for (const appName of this.pendingActiveAppNames) {
+      await this.startStreamIfNeeded(appName);
+    }
+  }
+
+  private async startStreamIfNeeded(appName: string): Promise<void> {
+    if (!this.availableAppNames.has(appName)) {
+      return;
+    }
+    if (this.runningStreams.has(appName) || this.pendingStarts.has(appName)) {
+      return;
+    }
+    const params = this.sessionParams;
+    const expectedFetchToken = this.fetchToken;
+    if (params === null || isTestMode()) {
+      return;
+    }
+
+    this.clearReconnectTimer(appName);
+    this.pendingStarts.add(appName);
+    this.postStreamState(appName, 'starting');
+
+    try {
+      await this.ensureCliPrepared(params, expectedFetchToken);
+      if (!this.pendingActiveAppNames.includes(appName)) {
+        this.postStreamState(appName, 'stopped');
+        return;
+      }
+      if (this.fetchToken !== expectedFetchToken) {
+        return;
+      }
+      this.createAndStartStream(appName, params, expectedFetchToken);
+      this.reconnectDelays.delete(appName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start log stream.';
+      this.postStreamState(appName, 'error', message);
+      this.scheduleStreamReconnect(appName, this.getNextReconnectDelay(appName));
+    } finally {
+      this.pendingStarts.delete(appName);
+    }
+  }
+
+  private async ensureCliPrepared(
+    params: LogSessionParams,
+    expectedFetchToken: number
+  ): Promise<void> {
+    if (this.preparedFetchToken === expectedFetchToken) {
+      return;
+    }
+    if (
+      this.prepareSessionPromise !== null &&
+      this.preparingFetchToken === expectedFetchToken
+    ) {
+      await this.prepareSessionPromise;
+      return;
+    }
+
+    if (this.prepareSessionPromise !== null) {
+      await this.prepareSessionPromise.catch(() => undefined);
+      if (this.preparedFetchToken === expectedFetchToken) {
+        return;
+      }
+    }
+
+    const preparePromise = prepareCfCliSession({
+      apiEndpoint: params.apiEndpoint,
+      email: params.email,
+      password: params.password,
+      orgName: params.orgName,
+      spaceName: params.spaceName,
+      cfHomeDir: params.cfHomeDir,
+    });
+    this.prepareSessionPromise = preparePromise;
+    this.preparingFetchToken = expectedFetchToken;
+
+    try {
+      await preparePromise;
+      if (this.fetchToken === expectedFetchToken) {
+        this.preparedFetchToken = expectedFetchToken;
+      }
+    } finally {
+      if (this.prepareSessionPromise === preparePromise) {
+        this.prepareSessionPromise = null;
+        this.preparingFetchToken = null;
+      }
+    }
+
+    if (this.preparedFetchToken !== expectedFetchToken) {
+      throw new Error('CF scope changed while preparing stream session.');
+    }
+  }
+
+  private createAndStartStream(
+    appName: string,
+    params: LogSessionParams,
+    expectedFetchToken: number
+  ): void {
+    const handle = spawnAppLogStreamFromTarget({
+      appName,
+      cfHomeDir: params.cfHomeDir,
+    });
+
+    const stream: AppStreamRuntime = {
+      appName,
+      token: expectedFetchToken,
+      handle,
+      lineRemainder: '',
+      lineBuffer: [],
+      flushTimer: null,
+      stoppedByRequest: false,
+    };
+    this.runningStreams.set(appName, stream);
+    this.attachStreamListeners(stream);
+    this.postStreamState(appName, 'streaming');
+  }
+
+  private attachStreamListeners(stream: AppStreamRuntime): void {
+    stream.handle.process.stdout.on('data', (chunk: Buffer): void => {
+      this.handleStreamChunk(stream, chunk.toString('utf8'));
+    });
+
+    stream.handle.process.stderr.on('data', (chunk: Buffer): void => {
+      this.handleStreamChunk(stream, chunk.toString('utf8'));
+    });
+
+    stream.handle.process.on('exit', (code: number | null, signal: NodeJS.Signals | null): void => {
+      this.handleStreamExit(stream, code, signal);
+    });
+
+    stream.handle.process.on('error', (error: Error): void => {
+      this.handleStreamError(stream, error);
+    });
+  }
+
+  private handleStreamChunk(stream: AppStreamRuntime, chunkText: string): void {
+    const { lines, remainder } = splitLinesWithRemainder(stream.lineRemainder, chunkText);
+    stream.lineRemainder = remainder;
+    if (lines.length === 0) {
+      return;
+    }
+
+    const sanitizedLines = lines.map((line) => this.sanitizeLineForUi(line));
+    stream.lineBuffer.push(...sanitizedLines);
+
+    if (stream.flushTimer !== null) {
+      return;
+    }
+
+    stream.flushTimer = setTimeout(() => {
+      this.flushStreamLines(stream.appName);
+    }, STREAM_BATCH_FLUSH_MS);
+  }
+
+  private flushStreamLines(appName: string): void {
+    const stream = this.runningStreams.get(appName);
+    if (stream === undefined) {
+      return;
+    }
+    this.flushStreamBuffer(stream);
+  }
+
+  private handleStreamExit(
+    stream: AppStreamRuntime,
+    code: number | null,
+    signal: NodeJS.Signals | null
+  ): void {
+    const active = this.runningStreams.get(stream.appName);
+    if (active !== stream) {
+      return;
+    }
+
+    this.flushStreamBuffer(stream);
+    this.clearStreamTimers(stream);
+    this.runningStreams.delete(stream.appName);
+
+    const shouldReconnect =
+      !stream.stoppedByRequest &&
+      this.pendingActiveAppNames.includes(stream.appName) &&
+      stream.token === this.fetchToken;
+
+    if (!shouldReconnect) {
+      this.postStreamState(stream.appName, 'stopped');
+      return;
+    }
+
+    const reason = `Stream exited (${String(code ?? '')}${signal !== null ? ` ${signal}` : ''}).`;
+    this.postStreamState(stream.appName, 'reconnecting', reason);
+    this.scheduleStreamReconnect(stream.appName, this.getNextReconnectDelay(stream.appName));
+  }
+
+  private handleStreamError(stream: AppStreamRuntime, error: Error): void {
+    const active = this.runningStreams.get(stream.appName);
+    if (active !== stream) {
+      return;
+    }
+
+    this.flushStreamBuffer(stream);
+    this.clearStreamTimers(stream);
+    this.runningStreams.delete(stream.appName);
+
+    const shouldReconnect =
+      !stream.stoppedByRequest &&
+      this.pendingActiveAppNames.includes(stream.appName) &&
+      stream.token === this.fetchToken;
+
+    if (!shouldReconnect) {
+      this.postStreamState(stream.appName, 'stopped');
+      return;
+    }
+
+    const reason = error.message.trim().length > 0 ? error.message.trim() : 'Stream process error.';
+    this.postStreamState(stream.appName, 'error', reason);
+    this.scheduleStreamReconnect(stream.appName, this.getNextReconnectDelay(stream.appName));
+  }
+
+  private scheduleStreamReconnect(appName: string, delayMs: number): void {
+    if (!this.pendingActiveAppNames.includes(appName)) {
+      return;
+    }
+    if (this.runningStreams.has(appName)) {
+      return;
+    }
+    if (this.reconnectTimers.has(appName)) {
+      return;
+    }
+
+    const delay = Math.min(Math.max(delayMs, STREAM_RETRY_INITIAL_MS), STREAM_RETRY_MAX_MS);
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(appName);
+      void this.startStreamIfNeeded(appName);
+    }, delay);
+    this.reconnectTimers.set(appName, timer);
+    this.postStreamState(appName, 'reconnecting', `Retrying in ${String(delay)} ms.`);
+  }
+
+  private stopAllStreams(notify = false): void {
+    for (const [appName] of this.runningStreams) {
+      this.stopStream(appName, notify);
+    }
+    for (const appName of this.reconnectTimers.keys()) {
+      this.clearReconnectTimer(appName);
+    }
+    this.reconnectDelays.clear();
+    this.pendingStarts.clear();
+  }
+
+  private stopStream(appName: string, notify: boolean): void {
+    const stream = this.runningStreams.get(appName);
+    if (stream === undefined) {
+      return;
+    }
+
+    stream.stoppedByRequest = true;
+    this.clearStreamTimers(stream);
+    this.clearReconnectTimer(appName);
+    this.reconnectDelays.delete(appName);
+    stream.handle.stop();
+    this.runningStreams.delete(appName);
+
+    if (notify) {
+      this.postStreamState(appName, 'stopped');
+    }
+  }
+
+  private clearStreamTimers(stream: AppStreamRuntime): void {
+    if (stream.flushTimer !== null) {
+      clearTimeout(stream.flushTimer);
+      stream.flushTimer = null;
+    }
+  }
+
+  private clearReconnectTimer(appName: string): void {
+    const timer = this.reconnectTimers.get(appName);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(appName);
+    }
+  }
+
+  private getNextReconnectDelay(appName: string): number {
+    const current = this.reconnectDelays.get(appName) ?? STREAM_RETRY_INITIAL_MS;
+    const next = Math.min(current * 2, STREAM_RETRY_MAX_MS);
+    this.reconnectDelays.set(appName, next);
+    return current;
+  }
+
+  private flushStreamBuffer(stream: AppStreamRuntime): void {
+    if (stream.flushTimer !== null) {
+      clearTimeout(stream.flushTimer);
+      stream.flushTimer = null;
+    }
+
+    if (stream.lineRemainder.length > 0) {
+      stream.lineBuffer.push(this.sanitizeLineForUi(stream.lineRemainder));
+      stream.lineRemainder = '';
+    }
+
+    if (stream.lineBuffer.length === 0) {
+      return;
+    }
+
+    const lines = [...stream.lineBuffer];
+    stream.lineBuffer = [];
+    this.postAppendedLines(stream.appName, lines);
+  }
+
+  private sanitizeLineForUi(line: string): string {
+    const params = this.sessionParams;
+    if (params === null) {
+      return line;
+    }
+
+    let output = line;
+    if (params.password.length > 0) {
+      output = output.split(params.password).join('***');
+    }
+    if (params.email.length > 0) {
+      output = output.split(params.email).join('***');
+    }
+    return output;
+  }
+
+  private postAppendedLines(appName: string, lines: string[]): void {
+    if (lines.length === 0) {
+      return;
+    }
+
+    void this.webviewView?.webview.postMessage({
+      type: LOGS_APPEND_MESSAGE_TYPE,
+      appName,
+      lines,
+    });
+  }
+
+  private postStreamState(appName: string, status: StreamStateStatus, message?: string): void {
+    void this.webviewView?.webview.postMessage({
+      type: LOGS_STREAM_STATE_MESSAGE_TYPE,
+      appName,
+      status,
+      message,
     });
   }
 
@@ -199,15 +660,7 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     const params = this.sessionParams;
 
     try {
-      const logText = await fetchRecentAppLogs({
-        apiEndpoint: params.apiEndpoint,
-        email: params.email,
-        password: params.password,
-        orgName: params.orgName,
-        spaceName: params.spaceName,
-        appName,
-        cfHomeDir: params.cfHomeDir,
-      });
+      const logText = await this.fetchLogsWithPreparedSession(params, appName, myToken);
 
       // Discard if a scope change arrived while this fetch was in flight.
       if (this.fetchToken !== myToken) {
@@ -230,6 +683,33 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
         appName,
         requestId,
         message: msg,
+      });
+    }
+  }
+
+  private async fetchLogsWithPreparedSession(
+    params: LogSessionParams,
+    appName: string,
+    expectedFetchToken: number
+  ): Promise<string> {
+    await this.ensureCliPrepared(params, expectedFetchToken);
+
+    try {
+      return await fetchRecentAppLogsFromTarget({
+        appName,
+        cfHomeDir: params.cfHomeDir,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (!shouldRetryPreparedSession(message)) {
+        throw error;
+      }
+
+      this.preparedFetchToken = -1;
+      await this.ensureCliPrepared(params, expectedFetchToken);
+      return fetchRecentAppLogsFromTarget({
+        appName,
+        cfHomeDir: params.cfHomeDir,
       });
     }
   }
@@ -316,6 +796,27 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
 function isTestMode(): boolean {
   return process.env['SAP_TOOLS_TEST_MODE'] === '1';
+}
+
+function shouldRetryPreparedSession(errorMessage: string): boolean {
+  const normalized = errorMessage.toLowerCase();
+  return (
+    normalized.includes('not logged in') ||
+    normalized.includes('cf login') ||
+    normalized.includes('no org and space targeted') ||
+    normalized.includes('not targeted')
+  );
+}
+
+function splitLinesWithRemainder(
+  existingRemainder: string,
+  incomingChunk: string
+): { lines: string[]; remainder: string } {
+  const combined = `${existingRemainder}${incomingChunk}`;
+  const parts = combined.split(/\r?\n/);
+  const remainder = parts.pop() ?? '';
+  const lines = parts.filter((line) => line.length > 0);
+  return { lines, remainder };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

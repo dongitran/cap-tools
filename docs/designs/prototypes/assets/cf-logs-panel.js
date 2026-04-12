@@ -1,8 +1,10 @@
-// cspell:words appname logsloaded logserror fetchlogs appsupdate guid
+// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate guid
 const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+const MAX_RAW_LOG_TEXT_CHARS = 1_000_000;
+const MAX_PARSED_LOG_ROWS = 5_000;
 
 /* cspell:disable */
 const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
@@ -33,10 +35,19 @@ let filteredRows = [];
 let selectedRowId = null;
 let pendingRequestId = 0;
 let emptyStateMessage = 'Select a CF space in the SAP Tools sidebar to load logs.';
+let activeAppNames = new Set();
+let latestApps = [];
+let rawLogTextByApp = new Map();
+let parsedRowsByApp = new Map();
+let streamStateByApp = new Map();
+let isLogsRequestInFlight = false;
+let pendingRequestAppName = '';
 
 if (vscodeApi === null) {
   // Browser prototype mode: render sample data and populate app selector.
   allRows = parseCfRecentLog(PROTOTYPE_SAMPLE_LOG);
+  rawLogTextByApp.set('finance-config-admin', PROTOTYPE_SAMPLE_LOG);
+  parsedRowsByApp.set('finance-config-admin', allRows);
   elements.workspaceScope.textContent = 'za-10 \u2192 data-foundation-prod \u2192 observability';
   rebuildAppSelect([{ name: 'finance-config-admin', runningInstances: 1 }], 'finance-config-admin');
 }
@@ -365,7 +376,7 @@ function rebuildAppSelect(apps, selectedApp) {
   if (apps.length === 0) {
     const noAppsOption = document.createElement('option');
     noAppsOption.value = '';
-    noAppsOption.textContent = '— no apps available —';
+    noAppsOption.textContent = '— no active app logging —';
     elements.filters.app.append(noAppsOption);
     elements.filters.app.disabled = true;
     return;
@@ -399,52 +410,40 @@ function bindFilterEvents() {
   elements.filters.app.addEventListener('change', () => {
     const selectedApp = elements.filters.app.value;
     if (selectedApp.length > 0) {
-      allRows = [];
-      filteredRows = [];
-      selectedRowId = null;
-      emptyStateMessage = `Loading logs for ${selectedApp}\u2026`;
-      applyFiltersAndRender();
-      requestLogsForApp(selectedApp);
+      showSelectedAppLogs(selectedApp, true);
     }
   });
 }
 
 // ── Extension messaging ──────────────────────────────────────────────────────
 
-function requestLogsForApp(appName) {
+function requestLogsForApp(appName, force) {
   if (vscodeApi !== null) {
+    const shouldForce = force === true;
+    if (!shouldForce && isLogsRequestInFlight) {
+      return;
+    }
+
+    if (isLogsRequestInFlight && pendingRequestAppName === appName) {
+      return;
+    }
+
+    isLogsRequestInFlight = true;
     pendingRequestId += 1;
+    pendingRequestAppName = appName;
     vscodeApi.postMessage({ type: 'sapTools.fetchLogs', appName, requestId: pendingRequestId });
   }
 }
 
 function handleAppsUpdate(apps, selectedApp) {
-  rebuildAppSelect(apps, selectedApp);
+  latestApps = normalizeAppsCatalog(apps);
+  activeAppNames = filterActiveNamesByCatalog(activeAppNames, latestApps);
+  refreshAppSelectorAndLogs(selectedApp);
+}
 
-  if (apps.length === 0) {
-    allRows = [];
-    filteredRows = [];
-    selectedRowId = null;
-    pendingRequestId += 1;
-    emptyStateMessage = 'No running apps found in the selected space.';
-    hydrateDynamicFilterOptions([]);
-    applyFiltersAndRender();
-    return;
-  }
-
-  const appToFetch =
-    typeof selectedApp === 'string' && selectedApp.length > 0
-      ? selectedApp
-      : (apps[0]?.name ?? '');
-
-  if (appToFetch.length > 0) {
-    emptyStateMessage = `Loading logs for ${appToFetch}\u2026`;
-    allRows = [];
-    filteredRows = [];
-    selectedRowId = null;
-    applyFiltersAndRender();
-    requestLogsForApp(appToFetch);
-  }
+function handleActiveAppsUpdate(appNames) {
+  activeAppNames = normalizeActiveAppNames(appNames);
+  refreshAppSelectorAndLogs(elements.filters.app.value);
 }
 
 function handleLogsLoaded(appName, logText, requestId) {
@@ -452,12 +451,11 @@ function handleLogsLoaded(appName, logText, requestId) {
   if (requestId !== pendingRequestId) {
     return;
   }
-  allRows = parseCfRecentLog(logText);
-  filteredRows = [];
-  selectedRowId = null;
-  emptyStateMessage = `No log entries found for ${appName}.`;
-  hydrateDynamicFilterOptions(allRows);
-  applyFiltersAndRender();
+  isLogsRequestInFlight = false;
+  pendingRequestAppName = '';
+  rawLogTextByApp.set(appName, logText);
+  parsedRowsByApp.set(appName, trimRowsForMemory(parseCfRecentLog(logText)));
+  showSelectedAppLogs(elements.filters.app.value, false);
 }
 
 function handleLogsError(appName, message, requestId) {
@@ -465,6 +463,8 @@ function handleLogsError(appName, message, requestId) {
   if (requestId !== pendingRequestId) {
     return;
   }
+  isLogsRequestInFlight = false;
+  pendingRequestAppName = '';
   allRows = [];
   filteredRows = [];
   selectedRowId = null;
@@ -472,6 +472,40 @@ function handleLogsError(appName, message, requestId) {
   // Reset level filter so stale options from a previous successful load are cleared.
   hydrateDynamicFilterOptions([]);
   applyFiltersAndRender();
+}
+
+function handleLogsAppend(appName, lines) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return;
+  }
+
+  const textLines = lines
+    .filter((line) => typeof line === 'string')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0);
+  if (textLines.length === 0) {
+    return;
+  }
+
+  const currentRaw = rawLogTextByApp.get(appName) ?? '';
+  const updatedRaw = appendRawLogText(currentRaw, textLines.join('\n'));
+  rawLogTextByApp.set(appName, updatedRaw);
+
+  if (elements.filters.app.value === appName) {
+    const parsedRows = appendParsedLinesForApp(appName, textLines);
+    showRowsForSelectedApp(appName, parsedRows);
+    return;
+  }
+
+  // Defer parsing for non-selected apps to reduce UI CPU load under multi-app streams.
+  parsedRowsByApp.delete(appName);
+}
+
+function handleLogsStreamState(appName, status, message) {
+  streamStateByApp.set(appName, { status, message: typeof message === 'string' ? message : '' });
+  if (elements.filters.app.value === appName) {
+    applyFiltersAndRender();
+  }
 }
 
 /**
@@ -493,6 +527,10 @@ function bindExtensionMessages() {
       handleAppsUpdate(msg.apps, selectedApp);
     }
 
+    if (msg.type === 'sapTools.activeAppsUpdate' && Array.isArray(msg.appNames)) {
+      handleActiveAppsUpdate(msg.appNames);
+    }
+
     if (
       msg.type === 'sapTools.logsLoaded' &&
       typeof msg.appName === 'string' &&
@@ -502,6 +540,18 @@ function bindExtensionMessages() {
       handleLogsLoaded(msg.appName, msg.logText, requestId);
     }
 
+    if (msg.type === 'sapTools.logsAppend' && typeof msg.appName === 'string') {
+      handleLogsAppend(msg.appName, msg.lines);
+    }
+
+    if (
+      msg.type === 'sapTools.logsStreamState' &&
+      typeof msg.appName === 'string' &&
+      typeof msg.status === 'string'
+    ) {
+      handleLogsStreamState(msg.appName, msg.status, msg.message);
+    }
+
     if (msg.type === 'sapTools.logsError' && typeof msg.appName === 'string') {
       const errorMsg = typeof msg.message === 'string' ? msg.message : 'Unknown error.';
       const requestId = typeof msg.requestId === 'number' ? msg.requestId : -1;
@@ -509,6 +559,235 @@ function bindExtensionMessages() {
     }
   });
 }
+
+function normalizeActiveAppNames(appNames) {
+  const nextSet = new Set();
+  for (const appName of appNames) {
+    if (typeof appName !== 'string') {
+      continue;
+    }
+    const normalized = appName.trim();
+    if (normalized.length === 0) {
+      continue;
+    }
+    nextSet.add(normalized);
+  }
+  return nextSet;
+}
+
+function normalizeAppsCatalog(apps) {
+  const normalized = [];
+  for (const app of apps) {
+    if (typeof app !== 'object' || app === null) {
+      continue;
+    }
+
+    const name = typeof app.name === 'string' ? app.name.trim() : '';
+    if (name.length === 0) {
+      continue;
+    }
+
+    const runningInstances =
+      typeof app.runningInstances === 'number' && Number.isFinite(app.runningInstances)
+        ? app.runningInstances
+        : 0;
+
+    normalized.push({
+      name,
+      runningInstances,
+    });
+  }
+
+  return normalized;
+}
+
+function filterActiveNamesByCatalog(activeNames, appsCatalog) {
+  if (appsCatalog.length === 0) {
+    return new Set();
+  }
+
+  const catalogNameSet = new Set(appsCatalog.map((app) => app.name));
+  const filtered = new Set();
+  for (const name of activeNames) {
+    if (catalogNameSet.has(name)) {
+      filtered.add(name);
+    }
+  }
+  return filtered;
+}
+
+function resolveActiveCatalogApps(appsCatalog, activeNames) {
+  if (appsCatalog.length === 0 || activeNames.size === 0) {
+    return [];
+  }
+
+  return appsCatalog.filter((app) => activeNames.has(app.name));
+}
+
+function clearTableToMessage(message) {
+  allRows = [];
+  filteredRows = [];
+  selectedRowId = null;
+  pendingRequestId += 1;
+  isLogsRequestInFlight = false;
+  pendingRequestAppName = '';
+  emptyStateMessage = message;
+  hydrateDynamicFilterOptions([]);
+  applyFiltersAndRender();
+}
+
+function refreshAppSelectorAndLogs(preferredAppName) {
+  if (latestApps.length === 0) {
+    pruneAppCaches(new Set());
+    rebuildAppSelect([], '');
+    clearTableToMessage('No running apps found in the selected space.');
+    return;
+  }
+
+  const activeApps = resolveActiveCatalogApps(latestApps, activeAppNames);
+  const activeNameSet = new Set(activeApps.map((app) => app.name));
+  pruneAppCaches(activeNameSet);
+
+  if (activeApps.length === 0) {
+    rebuildAppSelect([], '');
+    clearTableToMessage('Start App Logging in the SAP Tools sidebar to stream logs.');
+    return;
+  }
+
+  rebuildAppSelect(activeApps, preferredAppName);
+  const selectedApp = elements.filters.app.value;
+  if (selectedApp.length > 0) {
+    showSelectedAppLogs(selectedApp, true);
+  }
+}
+
+function showSelectedAppLogs(appName, requestSnapshotIfMissing) {
+  const parsedRows = resolveParsedRowsForApp(appName);
+  if (Array.isArray(parsedRows) && parsedRows.length > 0) {
+    showRowsForSelectedApp(appName, parsedRows);
+    return;
+  }
+
+  if (Array.isArray(parsedRows) && parsedRows.length === 0) {
+    showRowsForSelectedApp(appName, parsedRows);
+    return;
+  }
+
+  clearTableToMessage(`Loading logs for ${appName}\u2026`);
+  if (requestSnapshotIfMissing) {
+    requestLogsForApp(appName, true);
+  }
+}
+
+function appendRawLogText(existingText, appendedText) {
+  const mergedText = existingText.length > 0 ? `${existingText}\n${appendedText}` : appendedText;
+  if (mergedText.length <= MAX_RAW_LOG_TEXT_CHARS) {
+    return mergedText;
+  }
+
+  return mergedText.slice(mergedText.length - MAX_RAW_LOG_TEXT_CHARS);
+}
+
+function showRowsForSelectedApp(appName, rows) {
+  allRows = rows.slice();
+  filteredRows = [];
+  selectedRowId = null;
+  emptyStateMessage = `No log entries found for ${appName}.`;
+  hydrateDynamicFilterOptions(allRows);
+  applyFiltersAndRender();
+}
+
+function resolveParsedRowsForApp(appName) {
+  const cachedRows = parsedRowsByApp.get(appName);
+  if (Array.isArray(cachedRows)) {
+    return cachedRows;
+  }
+
+  const rawLogText = rawLogTextByApp.get(appName);
+  if (typeof rawLogText !== 'string') {
+    return null;
+  }
+
+  const parsedRows = trimRowsForMemory(parseCfRecentLog(rawLogText));
+  parsedRowsByApp.set(appName, parsedRows);
+  return parsedRows;
+}
+
+function appendParsedLinesForApp(appName, textLines) {
+  const cachedRows = resolveParsedRowsForApp(appName);
+  let nextRows = Array.isArray(cachedRows) ? cachedRows.slice() : [];
+  let previousRow = nextRows.length > 0 ? nextRows[nextRows.length - 1] : null;
+  let nextId =
+    previousRow !== null && typeof previousRow.id === 'number' ? previousRow.id + 1 : 1;
+
+  for (const line of textLines) {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length === 0) {
+      continue;
+    }
+
+    if (trimmedLine.startsWith('Retrieving logs for app')) {
+      continue;
+    }
+
+    const parsedRow = parseCfLine(trimmedLine, nextId);
+    if (parsedRow !== null) {
+      nextRows.push(parsedRow);
+      previousRow = parsedRow;
+      nextId += 1;
+      continue;
+    }
+
+    if (previousRow !== null) {
+      previousRow.message = `${previousRow.message}\n${trimmedLine}`;
+      previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
+      previousRow.searchableText = buildSearchableText(previousRow);
+      continue;
+    }
+
+    const fallbackRow = buildTextRow({
+      id: nextId,
+      timestamp: 'N/A',
+      source: 'SYSTEM',
+      stream: 'OUT',
+      body: trimmedLine,
+    });
+    nextRows.push(fallbackRow);
+    previousRow = fallbackRow;
+    nextId += 1;
+  }
+
+  nextRows = trimRowsForMemory(nextRows);
+  parsedRowsByApp.set(appName, nextRows);
+  return nextRows;
+}
+
+function pruneAppCaches(allowedAppNames) {
+  pruneMapByKeys(rawLogTextByApp, allowedAppNames);
+  pruneMapByKeys(parsedRowsByApp, allowedAppNames);
+  pruneMapByKeys(streamStateByApp, allowedAppNames);
+}
+
+function pruneMapByKeys(map, allowedKeys) {
+  for (const key of Array.from(map.keys())) {
+    if (!allowedKeys.has(key)) {
+      map.delete(key);
+    }
+  }
+}
+
+function trimRowsForMemory(rows) {
+  if (rows.length <= MAX_PARSED_LOG_ROWS) {
+    return rows;
+  }
+
+  const trimmed = rows.slice(rows.length - MAX_PARSED_LOG_ROWS);
+  for (let index = 0; index < trimmed.length; index += 1) {
+    trimmed[index].id = index + 1;
+  }
+  return trimmed;
+}
+
 
 // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -600,6 +879,18 @@ function renderSummary(rows, all) {
   const activeBits = [];
   if (elements.filters.level.value !== 'all') {
     activeBits.push(`level=${elements.filters.level.value}`);
+  }
+
+  const selectedApp = elements.filters.app.value;
+  const streamState = streamStateByApp.get(selectedApp);
+  if (
+    typeof selectedApp === 'string' &&
+    selectedApp.length > 0 &&
+    typeof streamState === 'object' &&
+    streamState !== null &&
+    typeof streamState.status === 'string'
+  ) {
+    activeBits.push(`stream=${streamState.status}`);
   }
 
   const activeFilterText = activeBits.length > 0 ? ` (${activeBits.join(', ')})` : '';
