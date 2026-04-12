@@ -1014,12 +1014,11 @@ function renderWorkspaceScreen() {
       ${renderWorkspaceTabContent()}
     </section>
 
-    <section class="workspace-actions" aria-label="Workspace actions">
-      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
-    </section>
-
     <footer class="workspace-footer">
-      <span>Last sync: ${lastSyncLabel}</span>
+      <div class="workspace-footer-main">
+        <span>Last sync: ${lastSyncLabel}</span>
+        <button type="button" class="secondary-action workspace-logout" data-action="change-region">Logout</button>
+      </div>
       <span class="live-indicator${isLiveMode ? ' is-live' : ''}">Live ${isLiveMode ? 'ON' : 'OFF'}</span>
     </footer>
   `;

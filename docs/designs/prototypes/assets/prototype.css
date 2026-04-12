@@ -805,15 +805,11 @@ body.pattern-dots::before {
   gap: 10px;
 }
 
-.workspace-actions {
-  padding: 0 10px 10px;
-  display: flex;
-  justify-content: center;
-}
-
 .workspace-logout {
-  min-width: 160px;
-  padding-inline: 18px;
+  min-width: 84px;
+  min-height: 26px;
+  padding-inline: 10px;
+  font-size: 0.64rem;
 }
 
 .workspace-footer {
@@ -821,10 +817,17 @@ body.pattern-dots::before {
   background: color-mix(in oklab, var(--surface-bg) 92%, var(--mix-base));
   padding: 8px 10px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-size: 0.67rem;
   color: var(--muted-color);
+}
+
+.workspace-footer-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .live-indicator {

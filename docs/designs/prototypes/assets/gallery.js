@@ -1,6 +1,9 @@
 const frameElement = document.getElementById('prototype-frame');
 const prototypePicker = document.getElementById('prototype-picker');
 const themeButton = document.getElementById('theme-cycle');
+const controlsToggle = document.getElementById('controls-toggle');
+const controlsPanel = document.getElementById('floating-controls-panel');
+const floatingNav = document.querySelector('.floating-nav');
 
 const GALLERY_THEME_CLASS_PREFIX = 'gallery-theme-';
 const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
@@ -52,19 +55,24 @@ const THEME_VARIANTS = [
 if (
   !(frameElement instanceof HTMLIFrameElement) ||
   !(prototypePicker instanceof HTMLSelectElement) ||
-  !(themeButton instanceof HTMLButtonElement)
+  !(themeButton instanceof HTMLButtonElement) ||
+  !(controlsToggle instanceof HTMLButtonElement) ||
+  !(controlsPanel instanceof HTMLDivElement) ||
+  !(floatingNav instanceof HTMLElement)
 ) {
   throw new Error('Prototype gallery is missing required DOM nodes.');
 }
 
 let currentVariantIndex = resolveInitialVariantIndex();
 let currentThemeIndex = resolveInitialThemeIndex();
+let isControlsPanelOpen = false;
 frameElement.addEventListener('load', () => {
   applyThemeToPrototypeFrame();
 });
 
 prototypePicker.addEventListener('change', () => {
   switchVariantById(prototypePicker.value);
+  setControlsPanelOpen(false);
 });
 
 themeButton.addEventListener('click', () => {
@@ -74,7 +82,16 @@ themeButton.addEventListener('click', () => {
   updateUrlState();
 });
 
+controlsToggle.addEventListener('click', () => {
+  setControlsPanelOpen(!isControlsPanelOpen);
+});
+
 window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && isControlsPanelOpen) {
+    setControlsPanelOpen(false);
+    return;
+  }
+
   if (event.key === 'ArrowLeft') {
     currentVariantIndex = wrapVariantIndex(currentVariantIndex - 1);
     renderCurrentVariant();
@@ -103,8 +120,21 @@ window.addEventListener('message', (event) => {
   switchVariantById(variantId);
 });
 
+window.addEventListener('click', (event) => {
+  if (!(event.target instanceof Node)) {
+    return;
+  }
+
+  if (!isControlsPanelOpen || floatingNav.contains(event.target)) {
+    return;
+  }
+
+  setControlsPanelOpen(false);
+});
+
 applyGalleryTheme();
 renderCurrentVariant();
+setControlsPanelOpen(false);
 
 function resolveInitialVariantIndex() {
   const hash = window.location.hash.replace(/^#/, '');
@@ -155,6 +185,12 @@ function renderCurrentVariant() {
   frameElement.src = variant.framePath;
   prototypePicker.value = variant.id;
   updateUrlState();
+}
+
+function setControlsPanelOpen(isOpen) {
+  isControlsPanelOpen = isOpen;
+  controlsPanel.hidden = !isOpen;
+  controlsToggle.setAttribute('aria-expanded', String(isOpen));
 }
 
 function switchVariantById(variantId) {

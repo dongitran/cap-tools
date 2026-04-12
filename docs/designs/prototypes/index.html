@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SAP Tools Region Menu Prototypes</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./assets/gallery.css?v=20260412g" />
+    <link rel="stylesheet" href="./assets/gallery.css?v=20260412h" />
   </head>
   <body class="gallery-page">
     <main class="workspace-shell">
@@ -17,17 +17,30 @@
           src="./variants/login-gate.html?v=20260412f"
         ></iframe>
         <nav class="floating-nav" aria-label="Prototype controls">
-          <select id="prototype-picker" class="prototype-picker" aria-label="Select prototype page">
-            <option value="login-gate">Login Gate</option>
-            <option value="design-34">Main Menu</option>
-            <option value="cf-logs-panel">CF Logs Panel</option>
-          </select>
-          <button id="theme-cycle" type="button" aria-live="polite">Theme: Dark</button>
+          <button
+            id="controls-toggle"
+            class="controls-toggle"
+            type="button"
+            aria-label="Toggle prototype controls"
+            aria-expanded="false"
+            aria-controls="floating-controls-panel"
+          >
+            i
+          </button>
+
+          <div id="floating-controls-panel" class="floating-controls-panel" hidden>
+            <select id="prototype-picker" class="prototype-picker" aria-label="Select prototype page">
+              <option value="login-gate">Login Gate</option>
+              <option value="design-34">Main Menu</option>
+              <option value="cf-logs-panel">CF Logs Panel</option>
+            </select>
+            <button id="theme-cycle" type="button" aria-live="polite">Theme: Dark</button>
+          </div>
         </nav>
       </aside>
 
       <section class="editor-surface" aria-hidden="true"></section>
     </main>
-    <script type="module" src="./assets/gallery.js?v=20260412g"></script>
+    <script type="module" src="./assets/gallery.js?v=20260412h"></script>
   </body>
 </html>

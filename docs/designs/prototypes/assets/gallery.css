@@ -83,63 +83,88 @@ body.gallery-page {
 
 .floating-nav {
   position: absolute;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-  transform: translateX(-50%);
-  z-index: 9;
-  display: inline-flex;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  right: 8px;
+  z-index: 20;
+  display: grid;
+  justify-items: end;
   gap: 8px;
-  padding: 4px 6px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--sidebar-shell) 72%, transparent);
-  border: 1px solid color-mix(in oklab, var(--button-border) 65%, transparent);
-  backdrop-filter: blur(3px);
 }
 
-.floating-nav button,
-.floating-nav select {
+.controls-toggle {
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--button-border);
   background: color-mix(in oklab, var(--button-bg) 90%, #000000);
   color: var(--button-text);
   border-radius: 999px;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 1.05rem;
+  font-weight: 700;
   letter-spacing: 0.02em;
-  padding: 7px 12px;
+  line-height: 1;
+  padding: 0;
   cursor: pointer;
   box-shadow: 0 7px 18px var(--shadow-color);
   transition: background 150ms ease, transform 150ms ease;
 }
 
-.floating-nav select {
-  min-width: 186px;
-  padding-right: 26px;
+.floating-controls-panel {
+  width: min(220px, calc(100vw - 24px));
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--sidebar-shell) 82%, transparent);
+  border: 1px solid color-mix(in oklab, var(--button-border) 65%, transparent);
+  box-shadow: 0 10px 24px var(--shadow-color);
+  backdrop-filter: blur(4px);
+}
+
+.floating-controls-panel[hidden] {
+  display: none;
+}
+
+.floating-controls-panel button,
+.floating-controls-panel select {
+  width: 100%;
+  border: 1px solid var(--button-border);
+  background: color-mix(in oklab, var(--button-bg) 90%, #000000);
+  color: var(--button-text);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  padding: 7px 12px;
   cursor: pointer;
 }
 
-.floating-nav #theme-cycle {
-  min-width: 138px;
+.floating-controls-panel select {
+  min-width: 0;
+  padding-right: 26px;
 }
 
-.floating-nav button:hover,
-.floating-nav select:hover {
+.controls-toggle:hover,
+.floating-controls-panel button:hover,
+.floating-controls-panel select:hover {
   background: var(--button-hover);
   transform: translateY(-1px);
 }
 
-.floating-nav button:disabled {
+.floating-controls-panel button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
-.floating-nav button:focus-visible {
+.controls-toggle:focus-visible,
+.floating-controls-panel button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
-.floating-nav select:focus-visible {
+.floating-controls-panel select:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -212,17 +237,7 @@ body.gallery-page.mode-region-menu .editor-surface::before {
   }
 
   .floating-nav {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    right: 6px;
   }
-
-  .floating-nav button {
-    font-size: 0.74rem;
-    padding: 6px 11px;
-  }
-
-  .floating-nav select {
-    font-size: 0.74rem;
-    min-width: 156px;
-  }
-
 }
