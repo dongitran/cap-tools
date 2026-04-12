@@ -9,16 +9,10 @@ const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
 
 const PROTOTYPE_VARIANTS = [
   {
-    id: 'sidebar',
-    hash: 'sidebar',
-    label: 'Prototype: Sidebar',
-    framePath: './variants/design-34.html?v=20260411c',
-  },
-  {
     id: 'cf-logs-panel',
     hash: 'cf-logs-panel',
     label: 'Prototype: CFLogs Panel',
-    framePath: './variants/cf-logs-panel.html?v=20260411a',
+    framePath: './variants/cf-logs-panel.html?v=20260412a',
   },
 ];
 
@@ -89,22 +83,10 @@ window.addEventListener('keydown', (event) => {
 });
 
 applyGalleryTheme();
+setVariantNavigationState();
 renderCurrentVariant();
 
 function resolveInitialVariantIndex() {
-  const hashValue = window.location.hash.replace('#', '').toLowerCase();
-  if (hashValue === 'design-34') {
-    return 0;
-  }
-
-  const hashWithoutPrefix = hashValue.replace('prototype-', '');
-  const indexByHash = PROTOTYPE_VARIANTS.findIndex(
-    (variant) => variant.hash === hashWithoutPrefix
-  );
-  if (indexByHash >= 0) {
-    return indexByHash;
-  }
-
   return 0;
 }
 
@@ -141,6 +123,17 @@ function renderCurrentVariant() {
   frameElement.src = variant.framePath;
   prototypeKind.textContent = variant.label;
   updateUrlState();
+}
+
+function setVariantNavigationState() {
+  if (PROTOTYPE_VARIANTS.length > 1) {
+    previousButton.disabled = false;
+    nextButton.disabled = false;
+    return;
+  }
+
+  previousButton.disabled = true;
+  nextButton.disabled = true;
 }
 
 function resolveInitialThemeIndex() {

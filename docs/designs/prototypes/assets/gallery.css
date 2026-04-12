@@ -131,6 +131,13 @@ body.gallery-page {
   transform: translateY(-1px);
 }
 
+.floating-nav button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .floating-nav button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
