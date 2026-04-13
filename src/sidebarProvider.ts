@@ -110,8 +110,12 @@ export class RegionSidebarProvider
 {
   private webviewView: vscode.WebviewView | undefined;
   private cfSession: CfSession | null = null;
+  private cfSessionRegionCode = '';
   private selectedRegionCode = '';
   private selectedRegionId = '';
+  private regionSelectionRequestId = 0;
+  private orgSelectionRequestId = 0;
+  private spaceSelectionRequestId = 0;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -130,8 +134,10 @@ export class RegionSidebarProvider
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
     this.webviewView = webviewView;
     this.cfSession = null;
+    this.cfSessionRegionCode = '';
     this.selectedRegionCode = '';
     this.selectedRegionId = '';
+    this.bumpRegionSelectionRequestId();
 
     const assetsRoot = vscode.Uri.joinPath(
       this.extensionUri,
@@ -263,8 +269,10 @@ export class RegionSidebarProvider
       await clearCredentials(this.context);
       await this.cacheSyncService.setCredentials(null);
       this.cfSession = null;
+      this.cfSessionRegionCode = '';
       this.selectedRegionCode = '';
       this.selectedRegionId = '';
+      this.bumpRegionSelectionRequestId();
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
       this.reloadToLoginView();
@@ -326,9 +334,11 @@ export class RegionSidebarProvider
   // ── Region selected → fetch orgs ─────────────────────────────────────────
 
   private async handleRegionSelected(region: RegionSelectionPayload): Promise<void> {
+    const requestId = this.bumpRegionSelectionRequestId();
     this.selectedRegionId = region.id;
     this.selectedRegionCode = region.code;
     this.cfSession = null;
+    this.cfSessionRegionCode = '';
     this.cfLogsPanel.updateApps([], null);
     this.cfLogsPanel.updateScope(buildScopeLabel(region.code, 'select-org', 'select-space'));
 
@@ -347,12 +357,24 @@ export class RegionSidebarProvider
     }
 
     const cachedOrgs = await this.cacheSyncService.getCachedOrgs(region.id);
+    if (!this.isCurrentRegionRequest(requestId)) {
+      return;
+    }
+
     if (cachedOrgs !== null) {
       this.postMessage({
         type: MSG_ORGS_LOADED,
         orgs: cachedOrgs,
       });
-      void this.establishRegionSession(credentials, region.code).catch((error: unknown) => {
+      const warmupRequestId = requestId;
+      void this.establishRegionSession(
+        credentials,
+        region.code,
+        warmupRequestId
+      ).catch((error: unknown) => {
+        if (!this.isCurrentRegionRequest(warmupRequestId)) {
+          return;
+        }
         const errorMessage =
           error instanceof Error
             ? error.message
@@ -366,9 +388,18 @@ export class RegionSidebarProvider
 
     try {
       const session = await this.ensureRegionSession(credentials);
+      if (!this.isCurrentRegionRequest(requestId)) {
+        return;
+      }
       const orgs = await fetchOrgs(session);
+      if (!this.isCurrentRegionRequest(requestId)) {
+        return;
+      }
       this.postMessage({ type: MSG_ORGS_LOADED, orgs });
     } catch (error) {
+      if (!this.isCurrentRegionRequest(requestId)) {
+        return;
+      }
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to connect to Cloud Foundry.';
       this.postOrgsError(errorMessage);
@@ -378,6 +409,7 @@ export class RegionSidebarProvider
   // ── Org selected → fetch spaces ──────────────────────────────────────────
 
   private async handleOrgSelected(org: OrgSelectionPayload): Promise<void> {
+    const requestId = this.bumpOrgSelectionRequestId();
     const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
     this.cfLogsPanel.updateScope(scopeLabel);
     this.cfLogsPanel.updateApps([], null);
@@ -391,6 +423,10 @@ export class RegionSidebarProvider
       this.selectedRegionId,
       org.guid
     );
+    if (!this.isCurrentOrgRequest(requestId)) {
+      return;
+    }
+
     if (cachedSpaces !== null) {
       this.postMessage({ type: MSG_SPACES_LOADED, spaces: cachedSpaces });
       return;
@@ -404,9 +440,18 @@ export class RegionSidebarProvider
 
     try {
       const session = await this.ensureRegionSession(credentials);
+      if (!this.isCurrentOrgRequest(requestId)) {
+        return;
+      }
       const spaces = await fetchSpaces(session, org.guid);
+      if (!this.isCurrentOrgRequest(requestId)) {
+        return;
+      }
       this.postMessage({ type: MSG_SPACES_LOADED, spaces });
     } catch (error) {
+      if (!this.isCurrentOrgRequest(requestId)) {
+        return;
+      }
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch spaces.';
       this.postSpacesError(errorMessage);
@@ -416,6 +461,9 @@ export class RegionSidebarProvider
   // ── Space selected → fetch apps ───────────────────────────────────────────
 
   private async handleSpaceSelected(payload: SpaceSelectionPayload): Promise<void> {
+    const requestId = this.bumpSpaceSelectionRequestId();
+    const regionCode = this.selectedRegionCode;
+
     if (isTestMode()) {
       this.handleTestModeSpaceSelection(payload);
       return;
@@ -432,19 +480,29 @@ export class RegionSidebarProvider
       payload.orgGuid,
       payload.spaceName
     );
+    if (!this.isCurrentSpaceRequest(requestId)) {
+      return;
+    }
     const cfHomeDir = await ensureCfHomeDir(this.context);
+    if (!this.isCurrentSpaceRequest(requestId)) {
+      return;
+    }
+
     if (cachedApps !== null) {
       const apps = cachedApps.map((app) => ({
         id: app.id,
         name: app.name,
         runningInstances: app.runningInstances,
       }));
-      this.postAppsLoaded(apps, payload, credentials, cfHomeDir);
+      this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
       return;
     }
 
     try {
       const session = await this.ensureRegionSession(credentials);
+      if (!this.isCurrentSpaceRequest(requestId)) {
+        return;
+      }
       const runningApps = await fetchStartedAppsViaCfCli({
         apiEndpoint: session.apiEndpoint,
         email: credentials.email,
@@ -458,8 +516,14 @@ export class RegionSidebarProvider
         name: app.name,
         runningInstances: app.runningInstances,
       }));
-      this.postAppsLoaded(apps, payload, credentials, cfHomeDir);
+      if (!this.isCurrentSpaceRequest(requestId)) {
+        return;
+      }
+      this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
     } catch (error) {
+      if (!this.isCurrentSpaceRequest(requestId)) {
+        return;
+      }
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch apps from CF CLI.';
       this.postAppsError(errorMessage);
@@ -491,7 +555,11 @@ export class RegionSidebarProvider
   private async ensureRegionSession(
     credentials: { readonly email: string; readonly password: string }
   ): Promise<CfSession> {
-    if (this.cfSession !== null) {
+    if (
+      this.cfSession !== null &&
+      this.cfSessionRegionCode.length > 0 &&
+      this.cfSessionRegionCode === this.selectedRegionCode
+    ) {
       return this.cfSession;
     }
 
@@ -508,12 +576,14 @@ export class RegionSidebarProvider
       credentials.password
     );
     this.cfSession = { token, apiEndpoint };
+    this.cfSessionRegionCode = regionCode;
     return this.cfSession;
   }
 
   private async establishRegionSession(
     credentials: { readonly email: string; readonly password: string },
-    regionCode: string
+    regionCode: string,
+    requestId: number
   ): Promise<void> {
     const apiEndpoint = getCfApiEndpoint(regionCode);
     const loginInfo = await fetchCfLoginInfo(apiEndpoint);
@@ -522,21 +592,26 @@ export class RegionSidebarProvider
       credentials.email,
       credentials.password
     );
+    if (!this.isCurrentRegionRequest(requestId) || this.selectedRegionCode !== regionCode) {
+      return;
+    }
     this.cfSession = { token, apiEndpoint };
+    this.cfSessionRegionCode = regionCode;
   }
 
   private postAppsLoaded(
     apps: { id: string; name: string; runningInstances: number }[],
     payload: SpaceSelectionPayload,
     credentials: { readonly email: string; readonly password: string },
-    cfHomeDir: string
+    cfHomeDir: string,
+    regionCode: string
   ): void {
     this.postMessage({ type: MSG_APPS_LOADED, apps });
     this.cfLogsPanel.updateScope(
-      buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
+      buildScopeLabel(regionCode, payload.orgName, payload.spaceName)
     );
     this.cfLogsPanel.updateApps(apps, {
-      apiEndpoint: getCfApiEndpoint(this.selectedRegionCode),
+      apiEndpoint: getCfApiEndpoint(regionCode),
       email: credentials.email,
       password: credentials.password,
       orgName: payload.orgName,
@@ -558,6 +633,36 @@ export class RegionSidebarProvider
   private postAppsError(message: string): void {
     this.postMessage({ type: MSG_APPS_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+  }
+
+  private bumpRegionSelectionRequestId(): number {
+    this.regionSelectionRequestId += 1;
+    this.orgSelectionRequestId += 1;
+    this.spaceSelectionRequestId += 1;
+    return this.regionSelectionRequestId;
+  }
+
+  private bumpOrgSelectionRequestId(): number {
+    this.orgSelectionRequestId += 1;
+    this.spaceSelectionRequestId += 1;
+    return this.orgSelectionRequestId;
+  }
+
+  private bumpSpaceSelectionRequestId(): number {
+    this.spaceSelectionRequestId += 1;
+    return this.spaceSelectionRequestId;
+  }
+
+  private isCurrentRegionRequest(requestId: number): boolean {
+    return requestId === this.regionSelectionRequestId;
+  }
+
+  private isCurrentOrgRequest(requestId: number): boolean {
+    return requestId === this.orgSelectionRequestId;
+  }
+
+  private isCurrentSpaceRequest(requestId: number): boolean {
+    return requestId === this.spaceSelectionRequestId;
   }
 
   // ── Region logging ───────────────────────────────────────────────────────

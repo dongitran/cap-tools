@@ -231,3 +231,22 @@
 - Final:
 1. `npm --prefix e2e run validate`
 2. `npm --prefix e2e test`
+
+## 9) Async race-condition hardening (post-review deep dive)
+
+### R1: Region/org/space stale response guard
+- Add request-id guards inside `RegionSidebarProvider` for:
+1. `handleRegionSelected`
+2. `handleOrgSelected`
+3. `handleSpaceSelected`
+- Ignore stale async completions after a newer selection is made.
+- Prevent out-of-order `orgs/spaces/apps` UI payloads from overwriting latest state.
+
+### R2: Bind CF session to selected region
+- Track `cfSessionRegionCode` alongside `cfSession`.
+- Reuse session only when its region matches `selectedRegionCode`.
+- Warm-up (`establishRegionSession`) must not overwrite session if request is stale.
+
+### R3: Consistent scope payload for logs panel
+- Pass region code captured at request time into `postAppsLoaded`.
+- Avoid race where a later region change mutates scope/API endpoint while apps response is in flight.
