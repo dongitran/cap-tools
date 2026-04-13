@@ -15,7 +15,9 @@ vi.mock('node:child_process', () => ({
 }));
 
 import {
+  fetchDefaultEnvJsonFromTarget,
   fetchOrgs,
+  fetchPnpmLockFromTarget,
   fetchRecentAppLogs,
   fetchSpaces,
   fetchStartedAppsViaCfCli,
@@ -228,6 +230,131 @@ describe('fetchRecentAppLogs', () => {
         appName: 'unknown-app',
       })
     ).rejects.toThrow('Failed to fetch recent logs for app "unknown-app".');
+  });
+});
+
+describe('fetchDefaultEnvJsonFromTarget', () => {
+  beforeEach(() => {
+    execFileAsyncMock.mockReset();
+  });
+
+  it('builds default-env json from app env payload', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'app-guid-123\n' })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          system_env_json: {
+            VCAP_SERVICES: {
+              hana: [{ name: 'hana-service' }],
+            },
+            VCAP_APPLICATION: {
+              application_name: 'finance-uat-api',
+            },
+          },
+          environment_variables: {
+            NODE_ENV: 'production',
+          },
+          running_env_json: {
+            MEMORY_LIMIT: '512M',
+          },
+        }),
+      });
+
+    const defaultEnvJson = await fetchDefaultEnvJsonFromTarget({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    const parsed = JSON.parse(defaultEnvJson) as Record<string, unknown>;
+    expect(parsed['VCAP_SERVICES']).toEqual({
+      hana: [{ name: 'hana-service' }],
+    });
+    expect(parsed['VCAP_APPLICATION']).toEqual({
+      application_name: 'finance-uat-api',
+    });
+    expect(parsed['NODE_ENV']).toBe('production');
+    expect(parsed['MEMORY_LIMIT']).toBe('512M');
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      1,
+      'cf',
+      ['app', 'finance-uat-api', '--guid'],
+      expect.any(Object)
+    );
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      2,
+      'cf',
+      ['curl', '/v3/apps/app-guid-123/env'],
+      expect.any(Object)
+    );
+  });
+
+  it('fails when app env payload is not json', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'app-guid-123\n' })
+      .mockResolvedValueOnce({ stdout: 'not-json' });
+
+    await expect(
+      fetchDefaultEnvJsonFromTarget({
+        appName: 'finance-uat-api',
+      })
+    ).rejects.toThrow('Unexpected JSON format for CF app environment payload.');
+  });
+});
+
+describe('fetchPnpmLockFromTarget', () => {
+  beforeEach(() => {
+    execFileAsyncMock.mockReset();
+  });
+
+  it('returns lock file content from app via cf ssh', async () => {
+    const lockfile = 'lockfileVersion: 9.0\nimporters:\n  .:\n    dependencies:\n';
+    execFileAsyncMock.mockResolvedValueOnce({ stdout: lockfile });
+
+    const content = await fetchPnpmLockFromTarget({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    expect(content).toBe(lockfile);
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      1,
+      'cf',
+      ['ssh', 'finance-uat-api', '-c', 'cat /home/vcap/app/pnpm-lock.yaml'],
+      expect.any(Object)
+    );
+  });
+
+  it('tries fallback command when primary ssh command fails', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stderr: 'No such file' })
+      .mockResolvedValueOnce({ stdout: 'lockfileVersion: 9.0\n' });
+
+    const content = await fetchPnpmLockFromTarget({
+      appName: 'finance-uat-api',
+    });
+
+    expect(content).toContain('lockfileVersion: 9.0');
+    expect(execFileAsyncMock).toHaveBeenCalledTimes(2);
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      2,
+      'cf',
+      ['ssh', 'finance-uat-api', '-c', 'cat pnpm-lock.yaml'],
+      expect.any(Object)
+    );
+  });
+
+  it('returns actionable error when lock file cannot be fetched', async () => {
+    execFileAsyncMock
+      .mockRejectedValueOnce({ stderr: 'No such file' })
+      .mockRejectedValueOnce({ stderr: 'ssh is disabled for this app' });
+
+    await expect(
+      fetchPnpmLockFromTarget({
+        appName: 'finance-uat-api',
+      })
+    ).rejects.toThrow(
+      'Unable to read pnpm-lock.yaml from app "finance-uat-api". Ensure SSH is enabled and the file exists in the app container.'
+    );
   });
 });
 

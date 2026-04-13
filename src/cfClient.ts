@@ -308,6 +308,74 @@ export async function fetchRecentAppLogsFromTarget(params: {
 }
 
 /**
+ * Fetch a synthesized default-env.json payload for an app from CF runtime environment data.
+ * Requires CF CLI to be already targeted to the intended org/space.
+ */
+export async function fetchDefaultEnvJsonFromTarget(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<string> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const appGuidStdout = await runCfCommand(['app', params.appName, '--guid'], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to resolve app GUID for "${params.appName}".`,
+  });
+  const appGuid = appGuidStdout.trim();
+  if (appGuid.length === 0) {
+    throw new Error(`CF returned an empty app GUID for "${params.appName}".`);
+  }
+
+  const encodedGuid = encodeURIComponent(appGuid);
+  const appEnvStdout = await runCfCommand(['curl', `/v3/apps/${encodedGuid}/env`], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to fetch CF environment for app "${params.appName}".`,
+  });
+
+  const appEnvPayload = parseJsonRecord(appEnvStdout, 'CF app environment payload');
+  const defaultEnvPayload = buildDefaultEnvPayload(appEnvPayload);
+
+  return `${JSON.stringify(defaultEnvPayload, null, 2)}\n`;
+}
+
+/**
+ * Fetch pnpm-lock.yaml from the app container via CF SSH.
+ * Requires CF CLI to be already targeted to the intended org/space.
+ */
+export async function fetchPnpmLockFromTarget(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<string> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const lockFileCommands = [
+    'cat /home/vcap/app/pnpm-lock.yaml',
+    'cat pnpm-lock.yaml',
+  ];
+
+  const errors: string[] = [];
+  for (const command of lockFileCommands) {
+    try {
+      const content = await runCfCommand(['ssh', params.appName, '-c', command], {
+        ...cfHomeOptions,
+        failureMessage: `Failed to fetch pnpm-lock.yaml for app "${params.appName}".`,
+      });
+      if (content.trim().length > 0) {
+        return content;
+      }
+      errors.push(`CF SSH command returned empty content: ${command}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown CF SSH command error.';
+      errors.push(errorMessage);
+    }
+  }
+
+  const errorDetail = errors.length > 0 ? ` (${errors.join(' | ')})` : '';
+  throw new Error(
+    `Unable to read pnpm-lock.yaml from app "${params.appName}". Ensure SSH is enabled and the file exists in the app container.${errorDetail}`
+  );
+}
+
+/**
  * Spawn long-running `cf logs <app>` stream process.
  * Requires CF target to be prepared beforehand.
  */
@@ -489,6 +557,49 @@ function buildCfAuthHeaders(accessToken: string): Record<string, string> {
     Authorization: `Bearer ${accessToken}`,
     Accept: 'application/json',
   };
+}
+
+function parseJsonRecord(jsonText: string, label: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error(`Unexpected JSON format for ${label}.`);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(`Unexpected JSON object format for ${label}.`);
+  }
+
+  return parsed;
+}
+
+function buildDefaultEnvPayload(appEnvPayload: Record<string, unknown>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+
+  mergeRecordIntoPayload(payload, appEnvPayload['system_env_json']);
+  mergeRecordIntoPayload(payload, appEnvPayload['environment_variables']);
+  mergeRecordIntoPayload(payload, appEnvPayload['running_env_json']);
+  mergeRecordIntoPayload(payload, appEnvPayload['staging_env_json']);
+
+  if (Object.keys(payload).length === 0) {
+    throw new Error('No environment variables found to build default-env.json.');
+  }
+
+  return payload;
+}
+
+function mergeRecordIntoPayload(
+  payload: Record<string, unknown>,
+  source: unknown
+): void {
+  if (!isRecord(source)) {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    payload[key] = value;
+  }
 }
 
 async function fetchCfApi(url: string, init: RequestInit): Promise<Response> {

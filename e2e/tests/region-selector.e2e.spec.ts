@@ -922,6 +922,51 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
+  test('User can open Apps tab and view service artifact export controls', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Service Artifact Export' })
+      ).toBeVisible({ timeout: 10000 });
+
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Select Root Folder' })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Refresh Mapping' })
+      ).toBeDisabled();
+
+      await expect(webviewFrame.getByRole('button', { name: 'Export Both' })).toBeDisabled();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export default-env.json' })
+      ).toBeDisabled();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export pnpm-lock.yaml' })
+      ).toBeDisabled();
+
+      await expect(webviewFrame.getByText('Root: Not selected')).toBeVisible();
+      await expect(webviewFrame.getByText('finance-uat-api')).toBeVisible();
+      await expect(webviewFrame.getByText('finance-uat-worker')).toBeVisible();
+      await expect(webviewFrame.getByText('finance-uat-audit')).toBeVisible();
+      await expect(
+        webviewFrame.locator('.service-map-row.is-unmapped')
+      ).toHaveCount(3);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can open settings, update sync interval, and return to selection screen', async () => {
     const session = await launchExtensionHost();
 

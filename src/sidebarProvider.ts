@@ -15,6 +15,14 @@ import type { CfLogsPanelProvider } from './cfLogsPanel';
 import { clearCredentials, getEffectiveCredentials, storeCredentials } from './credentialStore';
 import { isSyncIntervalHours } from './cacheModels';
 import type { SyncIntervalHours } from './cacheModels';
+import {
+  buildServiceFolderMappings,
+  type ServiceFolderMapping,
+} from './serviceFolderMapping';
+import {
+  exportServiceArtifacts,
+  type ServiceExportSession,
+} from './serviceArtifactExporter';
 import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } from './testModeData';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
@@ -33,6 +41,11 @@ const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
 const MSG_UPDATE_SYNC_INTERVAL = 'sapTools.updateSyncInterval';
 const MSG_SYNC_NOW = 'sapTools.syncNow';
 const MSG_LOGOUT = 'sapTools.logout';
+const MSG_SELECT_LOCAL_ROOT_FOLDER = 'sapTools.selectLocalRootFolder';
+const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappings';
+const MSG_EXPORT_DEFAULT_ENV = 'sapTools.exportDefaultEnv';
+const MSG_EXPORT_PNPM_LOCK = 'sapTools.exportPnpmLock';
+const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
 
 // ── Outbound message types (extension → webview) ────────────────────────────
 
@@ -45,6 +58,11 @@ const MSG_SPACES_ERROR = 'sapTools.spacesError';
 const MSG_APPS_LOADED = 'sapTools.appsLoaded';
 const MSG_APPS_ERROR = 'sapTools.appsError';
 const MSG_CACHE_STATE = 'sapTools.cacheState';
+const MSG_LOCAL_ROOT_FOLDER_UPDATED = 'sapTools.localRootFolderUpdated';
+const MSG_SERVICE_FOLDER_MAPPINGS_LOADED = 'sapTools.serviceFolderMappingsLoaded';
+const MSG_SERVICE_FOLDER_MAPPINGS_ERROR = 'sapTools.serviceFolderMappingsError';
+const MSG_EXPORT_ARTIFACT_PROGRESS = 'sapTools.exportArtifactProgress';
+const MSG_EXPORT_ARTIFACT_RESULT = 'sapTools.exportArtifactResult';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -72,6 +90,17 @@ interface ActiveAppsChangedPayload {
 
 interface UpdateSyncIntervalPayload {
   readonly syncIntervalHours: SyncIntervalHours;
+}
+
+interface RefreshServiceFolderMappingsPayload {
+  readonly rootFolderPath: string;
+  readonly appNames: readonly string[];
+}
+
+interface ExportServiceArtifactsPayload {
+  readonly appId: string;
+  readonly appName: string;
+  readonly rootFolderPath: string;
 }
 
 interface LogoutResultPayload {
@@ -103,6 +132,12 @@ interface CfLogSessionSeed {
   readonly cfHomeDir: string;
 }
 
+interface SidebarAppEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly runningInstances: number;
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export class RegionSidebarProvider
@@ -116,6 +151,11 @@ export class RegionSidebarProvider
   private regionSelectionRequestId = 0;
   private orgSelectionRequestId = 0;
   private spaceSelectionRequestId = 0;
+  private selectedLocalRootFolderPath = '';
+  private currentApps: SidebarAppEntry[] = [];
+  private currentLogSessionSeed: CfLogSessionSeed | null = null;
+  private serviceFolderMappings: ServiceFolderMapping[] = [];
+  private exportInProgress = false;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -138,6 +178,10 @@ export class RegionSidebarProvider
     this.selectedRegionCode = '';
     this.selectedRegionId = '';
     this.bumpRegionSelectionRequestId();
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
 
     const assetsRoot = vscode.Uri.joinPath(
       this.extensionUri,
@@ -225,6 +269,47 @@ export class RegionSidebarProvider
       return;
     }
 
+    if (type === MSG_SELECT_LOCAL_ROOT_FOLDER) {
+      await this.handleSelectLocalRootFolder();
+      return;
+    }
+
+    if (
+      type === MSG_REFRESH_SERVICE_FOLDER_MAPPINGS &&
+      isRefreshServiceFolderMappingsMessage(message)
+    ) {
+      const payload = readRefreshServiceFolderMappingsPayload(message);
+      await this.handleRefreshServiceFolderMappings(payload);
+      return;
+    }
+
+    if (type === MSG_EXPORT_DEFAULT_ENV && isExportServiceArtifactsMessage(message)) {
+      const payload = readExportServiceArtifactsPayload(message);
+      await this.handleExportServiceArtifacts(payload, {
+        includeDefaultEnv: true,
+        includePnpmLock: false,
+      });
+      return;
+    }
+
+    if (type === MSG_EXPORT_PNPM_LOCK && isExportServiceArtifactsMessage(message)) {
+      const payload = readExportServiceArtifactsPayload(message);
+      await this.handleExportServiceArtifacts(payload, {
+        includeDefaultEnv: false,
+        includePnpmLock: true,
+      });
+      return;
+    }
+
+    if (type === MSG_EXPORT_SERVICE_ARTIFACTS && isExportServiceArtifactsMessage(message)) {
+      const payload = readExportServiceArtifactsPayload(message);
+      await this.handleExportServiceArtifacts(payload, {
+        includeDefaultEnv: true,
+        includePnpmLock: true,
+      });
+      return;
+    }
+
     if (type === MSG_UPDATE_SYNC_INTERVAL && isUpdateSyncIntervalMessage(message)) {
       const payload = readUpdateSyncIntervalPayload(message);
       const snapshot = await this.cacheSyncService.updateSyncInterval(
@@ -248,6 +333,199 @@ export class RegionSidebarProvider
   private async handleRequestInitialState(): Promise<void> {
     const snapshot = await this.cacheSyncService.getRuntimeSnapshot();
     this.postCacheState(snapshot);
+    this.postMessage({
+      type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
+      path: this.selectedLocalRootFolderPath,
+    });
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
+  }
+
+  private async handleSelectLocalRootFolder(): Promise<void> {
+    const selectedUris = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      title: 'Select local root folder for service mapping',
+    });
+    const selectedUri = selectedUris?.[0];
+    if (selectedUri === undefined) {
+      return;
+    }
+
+    const selectedPath = selectedUri.fsPath.trim();
+    if (selectedPath.length === 0) {
+      return;
+    }
+
+    this.selectedLocalRootFolderPath = selectedPath;
+    this.postMessage({
+      type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
+      path: selectedPath,
+    });
+    await this.refreshServiceFolderMappings();
+  }
+
+  private async handleRefreshServiceFolderMappings(
+    payload: RefreshServiceFolderMappingsPayload
+  ): Promise<void> {
+    const rootFolderPath = payload.rootFolderPath.trim();
+    if (rootFolderPath.length > 0 && rootFolderPath !== this.selectedLocalRootFolderPath) {
+      this.selectedLocalRootFolderPath = rootFolderPath;
+      this.postMessage({
+        type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
+        path: this.selectedLocalRootFolderPath,
+      });
+    }
+
+    await this.refreshServiceFolderMappings();
+  }
+
+  private async refreshServiceFolderMappings(): Promise<void> {
+    if (this.selectedLocalRootFolderPath.length === 0) {
+      this.postMessage({
+        type: MSG_SERVICE_FOLDER_MAPPINGS_ERROR,
+        message: 'Select a local root folder before scanning service mappings.',
+      });
+      return;
+    }
+
+    if (this.currentApps.length === 0) {
+      this.serviceFolderMappings = [];
+      this.postMessage({
+        type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+        mappings: this.serviceFolderMappings,
+      });
+      return;
+    }
+
+    try {
+      const mappings = await buildServiceFolderMappings(
+        this.selectedLocalRootFolderPath,
+        this.currentApps.map((app) => app.name)
+      );
+      this.serviceFolderMappings = [...mappings];
+      this.postMessage({
+        type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+        mappings: this.serviceFolderMappings,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to scan local folders for service mapping.';
+      this.postMessage({
+        type: MSG_SERVICE_FOLDER_MAPPINGS_ERROR,
+        message: errorMessage,
+      });
+    }
+  }
+
+  private async handleExportServiceArtifacts(
+    payload: ExportServiceArtifactsPayload,
+    options: {
+      readonly includeDefaultEnv: boolean;
+      readonly includePnpmLock: boolean;
+    }
+  ): Promise<void> {
+    if (this.exportInProgress) {
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_RESULT,
+        success: false,
+        message: 'Another export is already running. Please wait.',
+      });
+      return;
+    }
+
+    const mapping = this.resolveServiceFolderMapping(payload);
+    if (mapping === null || mapping.folderPath.length === 0) {
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_RESULT,
+        success: false,
+        message: `No mapped local folder found for service "${payload.appName}".`,
+      });
+      return;
+    }
+
+    const session = this.currentLogSessionSeed;
+    if (session === null) {
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_RESULT,
+        success: false,
+        message: 'No active CF scope session. Select region/org/space again.',
+      });
+      return;
+    }
+
+    const exportSession: ServiceExportSession = {
+      apiEndpoint: session.apiEndpoint,
+      email: session.email,
+      password: session.password,
+      orgName: session.orgName,
+      spaceName: session.spaceName,
+      cfHomeDir: session.cfHomeDir,
+    };
+
+    this.exportInProgress = true;
+    this.postMessage({
+      type: MSG_EXPORT_ARTIFACT_PROGRESS,
+      inProgress: true,
+      message: `Exporting artifacts for "${payload.appName}"...`,
+    });
+
+    try {
+      const result = await exportServiceArtifacts({
+        appName: payload.appName,
+        targetFolderPath: mapping.folderPath,
+        session: exportSession,
+        includeDefaultEnv: options.includeDefaultEnv,
+        includePnpmLock: options.includePnpmLock,
+      });
+
+      const filesLabel = result.writtenFiles
+        .map((filePath) => `"${filePath}"`)
+        .join(', ');
+      this.outputChannel.appendLine(
+        `[export] ${sanitizeForLog(payload.appName)} -> ${sanitizeForLog(filesLabel)}`
+      );
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_RESULT,
+        success: true,
+        message: `Export completed for "${payload.appName}". ${filesLabel}`,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to export service artifacts.';
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_RESULT,
+        success: false,
+        message: errorMessage,
+      });
+    } finally {
+      this.exportInProgress = false;
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_PROGRESS,
+        inProgress: false,
+      });
+    }
+  }
+
+  private resolveServiceFolderMapping(
+    payload: ExportServiceArtifactsPayload
+  ): ServiceFolderMapping | null {
+    const mappingById = this.serviceFolderMappings.find((mapping) => {
+      return mapping.appId === payload.appId;
+    });
+    if (mappingById !== undefined) {
+      return mappingById;
+    }
+
+    const mappingByName = this.serviceFolderMappings.find((mapping) => {
+      return mapping.appName === payload.appName;
+    });
+    return mappingByName ?? null;
   }
 
   // ── Login / logout ───────────────────────────────────────────────────────
@@ -273,6 +551,10 @@ export class RegionSidebarProvider
       this.selectedRegionCode = '';
       this.selectedRegionId = '';
       this.bumpRegionSelectionRequestId();
+      this.currentApps = [];
+      this.currentLogSessionSeed = null;
+      this.serviceFolderMappings = [];
+      this.exportInProgress = false;
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
       this.reloadToLoginView();
@@ -339,8 +621,16 @@ export class RegionSidebarProvider
     this.selectedRegionCode = region.code;
     this.cfSession = null;
     this.cfSessionRegionCode = '';
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
     this.cfLogsPanel.updateApps([], null);
     this.cfLogsPanel.updateScope(buildScopeLabel(region.code, 'select-org', 'select-space'));
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
 
     if (isTestMode()) {
       this.postMessage({
@@ -413,6 +703,14 @@ export class RegionSidebarProvider
     const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
     this.cfLogsPanel.updateScope(scopeLabel);
     this.cfLogsPanel.updateApps([], null);
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
 
     if (isTestMode()) {
       this.postMessage({ type: MSG_SPACES_LOADED, spaces: resolveMockSpacesForOrg(org) });
@@ -548,6 +846,17 @@ export class RegionSidebarProvider
       buildScopeLabel(this.selectedRegionCode, payload.orgName, payload.spaceName)
     );
     this.cfLogsPanel.updateApps(apps, null);
+    this.currentApps = apps;
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
+    if (this.selectedLocalRootFolderPath.length > 0) {
+      void this.refreshServiceFolderMappings();
+    }
   }
 
   // ── Session helpers ───────────────────────────────────────────────────────
@@ -600,7 +909,7 @@ export class RegionSidebarProvider
   }
 
   private postAppsLoaded(
-    apps: { id: string; name: string; runningInstances: number }[],
+    apps: SidebarAppEntry[],
     payload: SpaceSelectionPayload,
     credentials: { readonly email: string; readonly password: string },
     cfHomeDir: string,
@@ -618,21 +927,63 @@ export class RegionSidebarProvider
       spaceName: payload.spaceName,
       cfHomeDir,
     } satisfies CfLogSessionSeed);
+    this.currentApps = apps;
+    this.currentLogSessionSeed = {
+      apiEndpoint: getCfApiEndpoint(regionCode),
+      email: credentials.email,
+      password: credentials.password,
+      orgName: payload.orgName,
+      spaceName: payload.spaceName,
+      cfHomeDir,
+    };
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
+    if (this.selectedLocalRootFolderPath.length > 0) {
+      void this.refreshServiceFolderMappings();
+    }
   }
 
   private postOrgsError(message: string): void {
     this.postMessage({ type: MSG_ORGS_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
   }
 
   private postSpacesError(message: string): void {
     this.postMessage({ type: MSG_SPACES_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
   }
 
   private postAppsError(message: string): void {
     this.postMessage({ type: MSG_APPS_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.exportInProgress = false;
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
   }
 
   private bumpRegionSelectionRequestId(): number {
@@ -972,5 +1323,57 @@ function readUpdateSyncIntervalPayload(
 ): UpdateSyncIntervalPayload {
   return {
     syncIntervalHours: value['syncIntervalHours'] as SyncIntervalHours,
+  };
+}
+
+function isRefreshServiceFolderMappingsMessage(
+  value: Record<string, unknown>
+): boolean {
+  const rootFolderPath = value['rootFolderPath'];
+  const appNames = value['appNames'];
+  if (
+    typeof rootFolderPath !== 'string' ||
+    rootFolderPath.trim().length > 4096 ||
+    !Array.isArray(appNames) ||
+    appNames.length > 256
+  ) {
+    return false;
+  }
+
+  for (const appName of appNames) {
+    if (!isNonEmptyString(appName, 128)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function readRefreshServiceFolderMappingsPayload(
+  value: Record<string, unknown>
+): RefreshServiceFolderMappingsPayload {
+  const appNamesRaw = value['appNames'] as string[];
+  return {
+    rootFolderPath: String(value['rootFolderPath']).trim(),
+    appNames: appNamesRaw.map((appName) => appName.trim()),
+  };
+}
+
+function isExportServiceArtifactsMessage(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value['appId'], 128) &&
+    isNonEmptyString(value['appName'], 128) &&
+    typeof value['rootFolderPath'] === 'string' &&
+    value['rootFolderPath'].trim().length <= 4096
+  );
+}
+
+function readExportServiceArtifactsPayload(
+  value: Record<string, unknown>
+): ExportServiceArtifactsPayload {
+  return {
+    appId: String(value['appId']).trim(),
+    appName: String(value['appName']).trim(),
+    rootFolderPath: String(value['rootFolderPath']).trim(),
   };
 }

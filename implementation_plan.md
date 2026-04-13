@@ -1,252 +1,167 @@
-# Implementation Plan — Region Access Cache + Background Sync + Settings
+# Implementation Plan — CF Service Artifact Export (default-env + pnpm-lock)
 
-## 1) Scope and goals
-- Build a production-ready cache system for SAP Tools extension:
-1. Cache accessible regions for current SAP account.
-2. Cache orgs per region.
-3. Cache spaces per org.
-4. Cache running apps per space.
-- Run sync in background automatically (on extension activation and by interval).
-- Update sidebar UX so inaccessible area/region are disabled and sorted to bottom.
-- Add top-right gear button in region UI to open Settings page.
-- Add Settings options for sync interval: `12h`, `1 day (default)`, `2 days`, `4 days`.
-- Preserve per-user cache across logout/login cycles (user A/B scenario).
+## Objective
+Add a new SAP Tools feature that lets users:
+1. Select a local root folder (group folder).
+2. Auto-scan and map Cloud Foundry app names to local service folders.
+3. Select one mapped service.
+4. Export `default-env.json` and `pnpm-lock.yaml` into that local service folder.
 
-## 2) Current architecture findings
-- Extension host flow is in `src/sidebarProvider.ts` + `src/cfLogsPanel.ts`.
-- Region webview UI is driven by `docs/designs/prototypes/assets/prototype.js` + `prototype.css`.
-- CF API + CLI helpers are in `src/cfClient.ts`.
-- Credentials are in `src/credentialStore.ts` (env first, then secure storage).
-- E2E tests are in `e2e/tests/region-selector.e2e.spec.ts`.
+This follows user-required sequence:
+1. Prototype first.
+2. Validate prototype with MCP Playwright.
+3. Implement extension feature.
+4. Add/update tests and run full quality gates.
+5. Commit/push and create dedicated feature branch.
 
-## 3) Implementation design
+## Context Verified
+- Project 14 current architecture:
+  - Sidebar webview: `src/sidebarProvider.ts` + `docs/designs/prototypes/assets/prototype.js`.
+  - CF logs panel: `src/cfLogsPanel.ts`.
+  - CF integration: `src/cfClient.ts`.
+  - Space apps currently loaded from CF CLI and passed to webview.
+- Project 13 reusable pattern confirmed:
+  - Recursive folder scan by repo name with `package.json` guard.
+  - Service-folder name candidates from app name (`-` and `_` variants).
+  - Group folder selection through VS Code `showOpenDialog`.
 
-### 3.1 New backend modules
-- `src/cacheStore.ts`
-1. Persist cache model in `context.globalState`.
-2. Keep data per normalized user email.
-3. Store sync interval setting and sync status timestamps.
+## Scope
+### In scope
+- Prototype UX for service export flow.
+- New webview actions/messages for folder selection, mapping, export.
+- Extension host logic for:
+  - folder selection
+  - app-folder scanning/matching
+  - export `default-env.json`
+  - export `pnpm-lock.yaml`
+- Unit tests + E2E updates.
 
-- `src/cacheSyncService.ts`
-1. Sequentially process all regions.
-2. For each region:
-   - CF login discovery (`fetchCfLoginInfo` + `cfLogin`)
-   - fetch orgs
-   - fetch spaces per org
-   - fetch started apps per space via CF CLI
-3. Produce access map + full nested cache.
-4. Expose `startSyncNow`, `scheduleNext`, `updateInterval`.
+### Out of scope
+- Running `cf login` command redesign (reuse existing auth/session flow).
+- Refactor of unrelated tabs/features.
 
-- `src/cacheModels.ts`
-1. Shared strict types for cache payload and sync status.
-2. Region access states: `unknown | accessible | inaccessible | error`.
+## High-Level Design
+### 1) UI/UX (Prototype + actual extension webview)
+- Reuse `Apps` tab as “Service Artifact Export” workspace.
+- Components:
+  - `Select Root Folder` button + selected folder path display.
+  - Mapping table: app name, match status, matched folder path.
+  - Service selection (single-select).
+  - Action buttons:
+    - `Export default-env.json`
+    - `Export pnpm-lock.yaml`
+    - `Export Both`
+  - Inline status area (success/error/progress).
+- Behavior:
+  - After root folder selected, auto-scan and map current space apps.
+  - Export buttons enabled only when one mapped service is selected.
 
-### 3.2 Sidebar provider integration
-- Update `src/sidebarProvider.ts` to:
-1. Initialize cache service with effective credentials (if available).
-2. Push cache state updates to webview.
-3. Use cached orgs/spaces/apps immediately on selection if available.
-4. Fall back to live CF fetch when cache node is missing.
-5. Handle new webview messages:
-   - `sapTools.openSettings`
-   - `sapTools.closeSettings`
-   - `sapTools.updateSyncInterval`
-   - `sapTools.syncNow`
-   - `sapTools.logout`
-6. On logout:
-   - clear secure credentials
-   - keep user cache data untouched
-   - switch to login gate
-7. On login submit:
-   - store credentials
-   - start/refresh scheduler for that user
-   - switch to main view.
+### 2) Extension message contract
+- New inbound messages (webview -> extension):
+  - `sapTools.selectLocalRootFolder`
+  - `sapTools.refreshServiceFolderMappings`
+  - `sapTools.exportDefaultEnv`
+  - `sapTools.exportPnpmLock`
+  - `sapTools.exportServiceArtifacts`
+- New outbound messages (extension -> webview):
+  - `sapTools.localRootFolderUpdated`
+  - `sapTools.serviceFolderMappingsLoaded`
+  - `sapTools.serviceFolderMappingsError`
+  - `sapTools.exportArtifactResult`
+  - `sapTools.exportArtifactProgress`
 
-### 3.3 Webview protocol additions
-- Outbound (extension → webview):
-1. `sapTools.cacheState`
-2. `sapTools.syncState`
-3. `sapTools.authState`
+### 3) Folder scanning & mapping
+- Add dedicated module (project 14) based on project 13 pattern:
+  - recursive directory scan with depth limit
+  - `package.json` check
+  - candidate mapping for app name: exact + underscore variant
+- Optimize by scanning once and indexing basenames.
 
-- Inbound (webview → extension):
-1. `sapTools.updateSyncInterval`
-2. `sapTools.syncNow`
-3. `sapTools.logout`
+### 4) Artifact export strategy
+- `default-env.json`:
+  - Build from CF app environment (machine-readable API/CLI output).
+  - Write pretty JSON to selected mapped local folder.
+- `pnpm-lock.yaml`:
+  - Retrieve from running app context using CF CLI command path.
+  - Validate non-empty content before writing.
+- Both exports must use existing targeted CF session/cf home context from current scope.
 
-### 3.4 UI updates (`prototype.js` + `prototype.css`)
-- Add settings mode and gear action in top-right header.
-- Settings screen contains:
-1. sync interval segmented options (`12h`, `1 day`, `2 days`, `4 days`)
-2. last sync timestamp
-3. sync status indicator (`idle`, `running`, `error`)
-4. `Sync now` button
-5. `Logout` button
-6. back button to previous mode
+### 5) State handling
+- Track in `RegionSidebarProvider`:
+  - current apps list for selected scope
+  - selected local root folder
+  - latest mapping results
+  - export-in-progress guard
+- Clear mapping state when scope changes.
 
-- Area/region rendering behavior:
-1. Sort accessible first, then unknown, then inaccessible.
-2. Disable inaccessible items (`disabled`, `aria-disabled`).
-3. Keep selected item visible in collapsed flow.
-4. Inaccessible area (no accessible/unknown region) moved to bottom and disabled.
+## Files To Modify
+### Prototype/UI
+- `docs/designs/prototypes/assets/prototype.js`
+- `docs/designs/prototypes/assets/prototype.css`
+- (if needed) `docs/designs/prototypes/assets/design-catalog.js`
 
-### 3.5 User cache lifecycle policy
-- Cache key: normalized email (`trim().toLowerCase()`).
-- User A login:
-1. if cache exists, use immediately
-2. schedule background sync.
-- User A logout: keep cache.
-- User B login: use B cache if exists, otherwise sync B.
-- User B logout: keep cache.
-- User A login again: resume from A cache + schedule next sync.
+### Extension host + backend
+- `src/sidebarProvider.ts`
+- `src/cfClient.ts`
+- New module(s):
+  - `src/folderScan.ts` (or equivalent)
+  - `src/serviceArtifactExport.ts` (or equivalent)
 
-## 4) File changes (planned)
-- Add:
-1. `src/cacheModels.ts`
-2. `src/cacheStore.ts`
-3. `src/cacheSyncService.ts`
+### Tests
+- `src/cfClient.test.ts`
+- new/updated unit tests for scanning/export helpers
+- `e2e/tests/region-selector.e2e.spec.ts`
 
-- Update:
-1. `src/sidebarProvider.ts`
-2. `src/extension.ts` (wire service lifecycle if needed)
-3. `docs/designs/prototypes/assets/prototype.js`
-4. `docs/designs/prototypes/assets/prototype.css`
-5. `e2e/tests/region-selector.e2e.spec.ts`
-6. unit tests for cache modules and sidebar cache logic
-7. `README.md` (behavior docs)
-8. `CHANGELOG.md`
-9. `package.json` (version bump at final step only)
+### Metadata
+- `package.json` (version bump only after all checks pass)
+- `CHANGELOG.md` (if release notes are maintained in repo flow)
 
-## 5) Step-by-step execution with mandatory quality gates
+## Step-by-Step Execution Plan
+1. Implement prototype UI flow in `prototype.js/.css`.
+2. Validate prototype locally using MCP Playwright and fix UX issues.
+3. Add extension message types + state wiring in `sidebarProvider.ts`.
+4. Implement folder scan module and integrate with selected scope apps.
+5. Implement CF artifact export functions in backend client/service layer.
+6. Wire export actions to UI status updates and success/error reporting.
+7. Add/adjust unit tests for:
+   - folder matching logic
+   - export pipeline behavior
+   - failure handling
+8. Update E2E:
+   - verify mapping UI appears in `Apps` tab
+   - verify select folder + mapping rendering
+   - verify export action button state transitions
+9. Run full validation:
+   - `npm run typecheck`
+   - `npm run lint`
+   - `npm run cspell`
+   - `npm run test:unit`
+   - `npm --prefix e2e run validate`
+   - `npm --prefix e2e test`
+10. If all pass:
+   - bump version in `package.json`
+   - commit with clear message
+   - push
+   - create/push feature branch for this capability.
 
-### Step A — Add cache domain models + storage
-- Implement `cacheModels` + `cacheStore`.
-- Add unit tests for serialization, per-user lookup, interval persistence.
-- Gate A:
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm run cspell`
-4. `npm run test:unit`
+## Risks and Mitigations
+- CF CLI output/permissions differences:
+  - Mitigation: strict error handling + user-visible actionable messages.
+- Large/slow folder trees:
+  - Mitigation: scan depth cap + directory skip list.
+- Race conditions when scope changes while exporting:
+  - Mitigation: request token guard + export lock.
+- Webview full rerender regressions:
+  - Mitigation: preserve existing slot rerender strategy and add targeted updates.
 
-### Step B — Add background sync service
-- Implement sequential region/org/space/app sync runner + scheduler.
-- Add unit tests with mocked CF client calls.
-- Gate B:
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm run cspell`
-4. `npm run test:unit`
-
-### Step C — Integrate sidebar provider
-- Wire cache service into login/selection flow.
-- Add new message handlers for settings/sync/logout.
-- Ensure no secret leakage in logs/messages.
-- Gate C:
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm run cspell`
-4. `npm run test:unit`
-
-### Step D — Update prototype UI to match new behavior
-- Add gear/settings view + access-disable/sort UX.
-- Validate keyboard/focus/ARIA semantics.
-- Gate D:
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm run cspell`
-
-### Step E — E2E expansion and hard validation
-- Update/create tests for:
-1. settings open/save interval
-2. inaccessible region disabled
-3. area ordering by access
-4. logout/login gate flow
-5. cache-based fast list rendering sanity
-- Run e2e and fix either code or tests based on root cause.
-- Gate E:
-1. `npm --prefix e2e run validate`
-2. `npm --prefix e2e test`
-
-### Step F — Final polish, release readiness
-- Run full validations:
-1. `npm run validate`
-2. `npm --prefix e2e test`
-- Update docs/changelog.
-- Bump `package.json` version.
-- Final self-review against prototype and runtime behavior.
-- Commit and push.
-- Watch GitHub Actions and iterate until green.
-
-## 6) Risk handling
-- Large org/space trees can make sync long:
-1. keep sequential execution (as requested)
-2. emit progress state to UI
-3. preserve last good cache if current sync partially fails.
-- Network/API failures:
-1. mark region as `error`/`inaccessible` with safe reason
-2. never clear previous successful user cache until full write completes.
-- Credentials and privacy:
-1. no password in output channel
-2. no password in webview messages
-3. mask email when displayed in settings if needed.
-
-## 7) Definition of done
-- Cache + scheduler implemented and persisted per user.
-- Area/region disable + ordering works from cache state.
-- Settings screen works with interval update and sync now.
-- Logout keeps cache; sign in again restores that user cache.
-- All quality gates pass (`lint`, `typecheck`, `cspell`, unit tests, e2e).
-- Version bumped, commit pushed, GitHub Actions green.
-
-## 8) Post-implementation hardening plan (review findings)
-
-### H1: Prevent lost updates in cache persistence
-- Introduce serialized write queue inside `CacheStore.updateState`.
-- Ensure concurrent `setSyncIntervalHours` and `upsertUser` cannot overwrite each other.
-- Add/extend unit tests with concurrent write scenario.
-
-### H2: Avoid false-empty app cache snapshots on transient CF CLI errors
-- During sync, pass previous cached region/org/space snapshots.
-- If app fetch fails for a space:
-  - fallback to previous app list for that exact space when available.
-  - if no previous app list exists, propagate error so region is marked degraded (not silently empty).
-
-### H3: Eliminate unhandled promise in cache-first region flow
-- Wrap background `establishRegionSession(...)` warm-up with `.catch(...)` and output safe diagnostic.
-
-### H4: Remove password from CF CLI process arguments
-- Replace `cf auth <email> <password>` with `cf auth` and env variables:
-  - `CF_USERNAME`
-  - `CF_PASSWORD`
-- Keep `CF_HOME` behavior unchanged.
-
-### H5: Fix prototype login fallback navigation consistency
-- Update gallery standalone fallback route from deprecated `design-34` path to current `design` path.
-
-### Hardening verification gates
-- After each hardening step:
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm run cspell`
-4. `npm run test:unit`
-- Final:
-1. `npm --prefix e2e run validate`
-2. `npm --prefix e2e test`
-
-## 9) Async race-condition hardening (post-review deep dive)
-
-### R1: Region/org/space stale response guard
-- Add request-id guards inside `RegionSidebarProvider` for:
-1. `handleRegionSelected`
-2. `handleOrgSelected`
-3. `handleSpaceSelected`
-- Ignore stale async completions after a newer selection is made.
-- Prevent out-of-order `orgs/spaces/apps` UI payloads from overwriting latest state.
-
-### R2: Bind CF session to selected region
-- Track `cfSessionRegionCode` alongside `cfSession`.
-- Reuse session only when its region matches `selectedRegionCode`.
-- Warm-up (`establishRegionSession`) must not overwrite session if request is stale.
-
-### R3: Consistent scope payload for logs panel
-- Pass region code captured at request time into `postAppsLoaded`.
-- Avoid race where a later region change mutates scope/API endpoint while apps response is in flight.
+## Definition of Done
+- User can complete full flow:
+  - select area/region/org/space
+  - open `Apps` tab
+  - choose local root folder
+  - see mapped services
+  - select service
+  - export `default-env.json` and `pnpm-lock.yaml`
+- No regression in logs flow.
+- All quality gates and e2e pass.
+- Version bumped and code committed/pushed on dedicated feature branch.
