@@ -132,8 +132,13 @@ describe('fetchStartedAppsViaCfCli', () => {
     expect(execFileAsyncMock).toHaveBeenNthCalledWith(
       2,
       'cf',
-      ['auth', 'test@example.com', 'super-secret-password'],
-      expect.any(Object)
+      ['auth'],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          CF_USERNAME: 'test@example.com',
+          CF_PASSWORD: 'super-secret-password',
+        }),
+      })
     );
     expect(execFileAsyncMock).toHaveBeenNthCalledWith(
       3,

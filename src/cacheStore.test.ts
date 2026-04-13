@@ -131,6 +131,39 @@ describe('CacheStore', () => {
     const state = await store.readState();
     expect(Object.keys(state.users)).toEqual(['user.c@example.com']);
   });
+
+  it('serializes concurrent writes to prevent lost updates', async () => {
+    const storage = new Map<string, unknown>();
+    let inFlightUpdates = 0;
+    let maxInFlightUpdates = 0;
+
+    const context = {
+      globalState: {
+        get: vi.fn((key: string) => storage.get(key)),
+        update: vi.fn(async (key: string, value: unknown) => {
+          inFlightUpdates += 1;
+          maxInFlightUpdates = Math.max(maxInFlightUpdates, inFlightUpdates);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          storage.set(key, value);
+          inFlightUpdates -= 1;
+        }),
+      },
+    } as unknown as vscode.ExtensionContext;
+
+    const store = new CacheStore(context);
+
+    await Promise.all([
+      store.setSyncIntervalHours(48),
+      store.upsertUser('race.a@example.com', () => createSampleUser('race.a@example.com')),
+      store.upsertUser('race.b@example.com', () => createSampleUser('race.b@example.com')),
+    ]);
+
+    const state = await store.readState();
+    expect(state.settings.syncIntervalHours).toBe(48);
+    expect(state.users['race.a@example.com']?.email).toBe('race.a@example.com');
+    expect(state.users['race.b@example.com']?.email).toBe('race.b@example.com');
+    expect(maxInFlightUpdates).toBe(1);
+  });
 });
 
 describe('normalizeUserEmail', () => {
@@ -140,4 +173,3 @@ describe('normalizeUserEmail', () => {
     );
   });
 });
-

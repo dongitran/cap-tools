@@ -21,6 +21,8 @@ const CACHE_STATE_KEY = 'sapTools.cache.state.v1';
 const EMPTY_USERS: Record<string, CachedUserEntry> = Object.freeze({});
 
 export class CacheStore {
+  private writeQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   readState(): Promise<CacheState> {
@@ -93,10 +95,21 @@ export class CacheStore {
   async updateState(
     updater: (current: CacheState) => CacheState
   ): Promise<CacheState> {
-    const currentState = await this.readState();
-    const nextState = updater(currentState);
-    await this.writeState(nextState);
-    return nextState;
+    return this.enqueueWrite(async () => {
+      const currentState = await this.readState();
+      const nextState = updater(currentState);
+      await this.writeState(nextState);
+      return nextState;
+    });
+  }
+
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const nextOperation = this.writeQueue.then(operation, operation);
+    this.writeQueue = nextOperation.then(
+      () => undefined,
+      () => undefined
+    );
+    return nextOperation;
   }
 }
 

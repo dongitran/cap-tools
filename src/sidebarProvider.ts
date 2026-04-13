@@ -352,7 +352,15 @@ export class RegionSidebarProvider
         type: MSG_ORGS_LOADED,
         orgs: cachedOrgs,
       });
-      void this.establishRegionSession(credentials, region.code);
+      void this.establishRegionSession(credentials, region.code).catch((error: unknown) => {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : 'Unknown warm-up error while preparing CF session.';
+        this.outputChannel.appendLine(
+          `[session] Warm-up failed for ${region.code}: ${errorMessage}`
+        );
+      });
       return;
     }
 

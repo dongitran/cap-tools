@@ -12,6 +12,7 @@ const CF_V3_PAGE_SIZE = 200;
 
 interface CfCliExecutionOptions {
   readonly cfHomeDir?: string;
+  readonly envOverrides?: Record<string, string>;
   readonly timeoutMs?: number;
   readonly failureMessage: string;
 }
@@ -255,8 +256,12 @@ export async function prepareCfCliSession(params: CfCliTargetParams): Promise<vo
     failureMessage: 'Failed to set CF API endpoint.',
   });
 
-  await runCfCommand(['auth', params.email, params.password], {
+  await runCfCommand(['auth'], {
     ...cfHomeOptions,
+    envOverrides: {
+      CF_USERNAME: params.email,
+      CF_PASSWORD: params.password,
+    },
     failureMessage: 'Failed to authenticate Cloud Foundry CLI.',
   });
 
@@ -310,7 +315,7 @@ export function spawnAppLogStreamFromTarget(params: {
   readonly appName: string;
   readonly cfHomeDir?: string;
 }): CfLogStreamHandle {
-  const env = buildCfCliEnv(params.cfHomeDir);
+  const env = buildCfCliEnv(params.cfHomeDir, undefined);
   const process = spawn('cf', ['logs', params.appName], {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -330,7 +335,7 @@ async function runCfCommand(
   args: string[],
   options: CfCliExecutionOptions
 ): Promise<string> {
-  const env = buildCfCliEnv(options.cfHomeDir);
+  const env = buildCfCliEnv(options.cfHomeDir, options.envOverrides);
 
   try {
     const { stdout } = await execFileAsync('cf', args, {
@@ -346,10 +351,18 @@ async function runCfCommand(
   }
 }
 
-function buildCfCliEnv(cfHomeDir: string | undefined): NodeJS.ProcessEnv {
+function buildCfCliEnv(
+  cfHomeDir: string | undefined,
+  envOverrides: Record<string, string> | undefined
+): NodeJS.ProcessEnv {
   const env = { ...process.env };
   if (typeof cfHomeDir === 'string' && cfHomeDir.length > 0) {
     env['CF_HOME'] = cfHomeDir;
+  }
+  if (envOverrides !== undefined) {
+    for (const [key, value] of Object.entries(envOverrides)) {
+      env[key] = value;
+    }
   }
   return env;
 }

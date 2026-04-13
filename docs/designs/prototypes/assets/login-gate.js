@@ -104,7 +104,7 @@ function persistState(email) {
 function postNavigateToMainMenu() {
   const message = {
     type: 'saptools.prototype.navigate',
-    variantId: 'design-34',
+    variantId: 'design',
   };
 
   if (window.parent !== window) {
@@ -112,7 +112,7 @@ function postNavigateToMainMenu() {
     return;
   }
 
-  window.location.href = './design-34.html';
+  window.location.href = './design.html';
 }
 
 function setStatus(message, status) {

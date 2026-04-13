@@ -218,4 +218,105 @@ describe('CacheSyncService', () => {
       },
     ]);
   });
+
+  it('keeps previous cached apps when app sync fails for a known space', async () => {
+    fetchCfLoginInfoMock.mockResolvedValue({
+      authorizationEndpoint: 'https://uaa.example.com',
+    });
+    cfLoginMock.mockResolvedValue(createTokenResponse());
+    fetchOrgsMock.mockResolvedValue([
+      { guid: 'org-guid-1', name: 'finance-services-prod' },
+    ]);
+    fetchSpacesMock.mockResolvedValue([{ guid: 'space-guid-1', name: 'uat' }]);
+    fetchStartedAppsViaCfCliMock.mockRejectedValue(new Error('cf apps failed'));
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const now = new Date().toISOString();
+    const context = createMockContext({
+      version: 1,
+      settings: { syncIntervalHours: 24 },
+      users: {
+        'dev@example.com': {
+          email: 'dev@example.com',
+          syncInProgress: false,
+          lastSyncStartedAt: now,
+          lastSyncCompletedAt: now,
+          lastSyncError: '',
+          regions: [
+            {
+              regionId: 'us10',
+              regionCode: 'us-10',
+              area: 'Americas',
+              displayName: 'US East (VA)',
+              accessState: 'accessible',
+              accessMessage: '',
+              updatedAt: now,
+              orgs: [
+                {
+                  guid: 'org-guid-1',
+                  name: 'finance-services-prod',
+                  spaces: [
+                    {
+                      guid: 'space-guid-1',
+                      name: 'uat',
+                      apps: [
+                        {
+                          id: 'app-1',
+                          name: 'finance-uat-api',
+                          runningInstances: 1,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    const snapshot = await service.triggerSyncNow();
+    const apps = await service.getCachedApps('us10', 'org-guid-1', 'uat');
+
+    expect(snapshot.regionAccessById['us10']).toBe('accessible');
+    expect(apps).toEqual([
+      {
+        id: 'app-1',
+        name: 'finance-uat-api',
+        runningInstances: 1,
+      },
+    ]);
+  });
+
+  it('marks region as error when app sync fails and no previous space cache exists', async () => {
+    fetchCfLoginInfoMock.mockResolvedValue({
+      authorizationEndpoint: 'https://uaa.example.com',
+    });
+    cfLoginMock.mockResolvedValue(createTokenResponse());
+    fetchOrgsMock.mockResolvedValue([
+      { guid: 'org-guid-1', name: 'finance-services-prod' },
+    ]);
+    fetchSpacesMock.mockResolvedValue([{ guid: 'space-guid-1', name: 'uat' }]);
+    fetchStartedAppsViaCfCliMock.mockRejectedValue(new Error('cf apps failed'));
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const context = createMockContext();
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    const snapshot = await service.triggerSyncNow();
+    expect(snapshot.regionAccessById['us10']).toBe('error');
+  });
 });

@@ -196,3 +196,38 @@
 - Logout keeps cache; sign in again restores that user cache.
 - All quality gates pass (`lint`, `typecheck`, `cspell`, unit tests, e2e).
 - Version bumped, commit pushed, GitHub Actions green.
+
+## 8) Post-implementation hardening plan (review findings)
+
+### H1: Prevent lost updates in cache persistence
+- Introduce serialized write queue inside `CacheStore.updateState`.
+- Ensure concurrent `setSyncIntervalHours` and `upsertUser` cannot overwrite each other.
+- Add/extend unit tests with concurrent write scenario.
+
+### H2: Avoid false-empty app cache snapshots on transient CF CLI errors
+- During sync, pass previous cached region/org/space snapshots.
+- If app fetch fails for a space:
+  - fallback to previous app list for that exact space when available.
+  - if no previous app list exists, propagate error so region is marked degraded (not silently empty).
+
+### H3: Eliminate unhandled promise in cache-first region flow
+- Wrap background `establishRegionSession(...)` warm-up with `.catch(...)` and output safe diagnostic.
+
+### H4: Remove password from CF CLI process arguments
+- Replace `cf auth <email> <password>` with `cf auth` and env variables:
+  - `CF_USERNAME`
+  - `CF_PASSWORD`
+- Keep `CF_HOME` behavior unchanged.
+
+### H5: Fix prototype login fallback navigation consistency
+- Update gallery standalone fallback route from deprecated `design-34` path to current `design` path.
+
+### Hardening verification gates
+- After each hardening step:
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run cspell`
+4. `npm run test:unit`
+- Final:
+1. `npm --prefix e2e run validate`
+2. `npm --prefix e2e test`

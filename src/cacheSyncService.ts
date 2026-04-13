@@ -317,12 +317,18 @@ export class CacheSyncService implements vscode.Disposable {
     }
 
     const credentials = this.credentials;
+    const previousUser = await this.cacheStore.getUser(credentials.email);
+    const previousRegionsById = buildRegionByIdMap(previousUser?.regions ?? []);
     const syncStartedAt = new Date().toISOString();
     await this.markUserSyncStarted(credentials.email, syncStartedAt);
 
     try {
       const cfHomeDir = await ensureCfHomeDir(this.context);
-      const regions = await syncAllRegions(credentials, cfHomeDir);
+      const regions = await syncAllRegions(
+        credentials,
+        cfHomeDir,
+        previousRegionsById
+      );
       await this.markUserSyncCompleted(credentials.email, syncStartedAt, regions);
     } catch (error) {
       const errorMessage = toSafeErrorMessage(error);
@@ -440,11 +446,17 @@ class ListenerDisposable implements vscode.Disposable {
 
 async function syncAllRegions(
   credentials: CfCredentials,
-  cfHomeDir: string
+  cfHomeDir: string,
+  previousRegionsById: ReadonlyMap<string, CachedRegionEntry>
 ): Promise<readonly CachedRegionEntry[]> {
   const regions: CachedRegionEntry[] = [];
   for (const region of SAP_BTP_REGIONS) {
-    const syncedRegion = await syncSingleRegion(credentials, cfHomeDir, region);
+    const syncedRegion = await syncSingleRegion(
+      credentials,
+      cfHomeDir,
+      region,
+      previousRegionsById.get(region.id) ?? null
+    );
     regions.push(syncedRegion);
   }
   return regions;
@@ -453,7 +465,8 @@ async function syncAllRegions(
 async function syncSingleRegion(
   credentials: CfCredentials,
   cfHomeDir: string,
-  region: (typeof SAP_BTP_REGIONS)[number]
+  region: (typeof SAP_BTP_REGIONS)[number],
+  previousRegion: CachedRegionEntry | null
 ): Promise<CachedRegionEntry> {
   const regionCode = toHyphenatedRegionCode(region.id);
   const apiEndpoint = getCfApiEndpoint(regionCode);
@@ -467,7 +480,13 @@ async function syncSingleRegion(
       credentials.password
     );
     const session = { token, apiEndpoint };
-    const orgs = await syncOrgsForRegion(session, credentials, regionCode, cfHomeDir);
+    const orgs = await syncOrgsForRegion(
+      session,
+      credentials,
+      regionCode,
+      cfHomeDir,
+      previousRegion
+    );
     return {
       regionId: region.id,
       regionCode,
@@ -497,12 +516,21 @@ async function syncOrgsForRegion(
   session: CfSession,
   credentials: CfCredentials,
   regionCode: string,
-  cfHomeDir: string
+  cfHomeDir: string,
+  previousRegion: CachedRegionEntry | null
 ): Promise<readonly CachedOrgEntry[]> {
   const orgs = await fetchOrgs(session);
   const syncedOrgs: CachedOrgEntry[] = [];
+  const previousOrgsByGuid = buildOrgByGuidMap(previousRegion?.orgs ?? []);
   for (const org of orgs) {
-    const spaces = await syncSpacesForOrg(session, credentials, regionCode, org, cfHomeDir);
+    const spaces = await syncSpacesForOrg(
+      session,
+      credentials,
+      regionCode,
+      org,
+      cfHomeDir,
+      previousOrgsByGuid.get(org.guid) ?? null
+    );
     syncedOrgs.push({
       guid: org.guid,
       name: org.name,
@@ -517,13 +545,22 @@ async function syncSpacesForOrg(
   credentials: CfCredentials,
   regionCode: string,
   org: { readonly guid: string; readonly name: string },
-  cfHomeDir: string
+  cfHomeDir: string,
+  previousOrg: CachedOrgEntry | null
 ): Promise<readonly CachedSpaceEntry[]> {
   const spaces = await fetchSpaces(session, org.guid);
   const syncedSpaces: CachedSpaceEntry[] = [];
+  const previousSpacesByName = buildSpaceByNameMap(previousOrg?.spaces ?? []);
 
   for (const space of spaces) {
-    const apps = await syncAppsForSpace(credentials, regionCode, org.name, space, cfHomeDir);
+    const apps = await syncAppsForSpace(
+      credentials,
+      regionCode,
+      org.name,
+      space,
+      cfHomeDir,
+      previousSpacesByName.get(space.name)?.apps ?? null
+    );
     syncedSpaces.push({
       guid: space.guid,
       name: space.name,
@@ -539,7 +576,8 @@ async function syncAppsForSpace(
   regionCode: string,
   orgName: string,
   space: { readonly guid: string; readonly name: string },
-  cfHomeDir: string
+  cfHomeDir: string,
+  previousApps: readonly CachedAppEntry[] | null
 ): Promise<readonly CachedAppEntry[]> {
   try {
     const runningApps = await fetchStartedAppsViaCfCli({
@@ -556,8 +594,12 @@ async function syncAppsForSpace(
       name: app.name,
       runningInstances: app.runningInstances,
     }));
-  } catch {
-    return [];
+  } catch (error) {
+    if (previousApps !== null) {
+      return previousApps;
+    }
+
+    throw error;
   }
 }
 
@@ -606,6 +648,27 @@ function buildRegionAccessMap(
     map[region.regionId] = region.accessState;
   }
   return map;
+}
+
+function buildRegionByIdMap(
+  regions: readonly CachedRegionEntry[]
+): ReadonlyMap<string, CachedRegionEntry> {
+  const entries = regions.map((region) => [region.regionId, region] as const);
+  return new Map(entries);
+}
+
+function buildOrgByGuidMap(
+  orgs: readonly CachedOrgEntry[]
+): ReadonlyMap<string, CachedOrgEntry> {
+  const entries = orgs.map((org) => [org.guid, org] as const);
+  return new Map(entries);
+}
+
+function buildSpaceByNameMap(
+  spaces: readonly CachedSpaceEntry[]
+): ReadonlyMap<string, CachedSpaceEntry> {
+  const entries = spaces.map((space) => [space.name, space] as const);
+  return new Map(entries);
 }
 
 function toSafeErrorMessage(error: unknown): string {
