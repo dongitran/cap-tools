@@ -499,14 +499,16 @@ async function syncSingleRegion(
     };
   } catch (error) {
     const message = toSafeErrorMessage(error);
+    const accessState = resolveAccessStateFromMessage(message);
+    const fallbackOrgs = accessState === 'error' ? previousRegion?.orgs ?? [] : [];
     return {
       regionId: region.id,
       regionCode,
       area: region.area,
       displayName: region.displayName,
-      accessState: resolveAccessStateFromMessage(message),
+      accessState,
       accessMessage: message,
-      orgs: [],
+      orgs: fallbackOrgs,
       updatedAt,
     };
   }
@@ -624,16 +626,20 @@ function resolveDelayUntilNextSync(
 
 function resolveAccessStateFromMessage(message: string): RegionAccessState {
   const normalized = message.toLowerCase();
-  if (
-    normalized.includes('invalid sap credentials') ||
-    normalized.includes('authentication failed') ||
-    normalized.includes('status 401') ||
-    normalized.includes('status 403')
-  ) {
+  const statusMatch = /\bstatus\s+(\d{3})\b/.exec(normalized);
+  if (statusMatch !== null) {
+    const statusCode = Number.parseInt(statusMatch[1] ?? '0', 10);
+    if (statusCode === 401 || statusCode === 403 || statusCode === 404) {
+      return 'inaccessible';
+    }
+    return 'error';
+  }
+
+  if (normalized.includes('invalid sap credentials')) {
     return 'inaccessible';
   }
 
-  if (normalized.includes('status 404')) {
+  if (normalized.includes('authentication failed')) {
     return 'inaccessible';
   }
 

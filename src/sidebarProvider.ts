@@ -713,6 +713,19 @@ export class RegionSidebarProvider
       cfHomeDir: session.cfHomeDir,
     };
 
+    const confirmed = await this.confirmSensitiveExport({
+      appName: payload.appName,
+      exportType: 'artifacts',
+    });
+    if (!confirmed) {
+      this.postMessage({
+        type: MSG_EXPORT_ARTIFACT_RESULT,
+        success: false,
+        message: 'Export cancelled.',
+      });
+      return;
+    }
+
     this.exportInProgress = true;
     this.postMessage({
       type: MSG_EXPORT_ARTIFACT_PROGRESS,
@@ -808,6 +821,19 @@ export class RegionSidebarProvider
       cfHomeDir: session.cfHomeDir,
     };
 
+    const confirmed = await this.confirmSensitiveExport({
+      appName: payload.appName,
+      exportType: 'sqltools',
+    });
+    if (!confirmed) {
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: false,
+        message: 'Export cancelled.',
+      });
+      return;
+    }
+
     this.exportInProgress = true;
     this.postMessage({
       type: MSG_EXPORT_SQLTOOLS_PROGRESS,
@@ -865,6 +891,35 @@ export class RegionSidebarProvider
       return mapping.appName === payload.appName;
     });
     return mappingByName ?? null;
+  }
+
+  private async confirmSensitiveExport(options: {
+    readonly appName: string;
+    readonly exportType: 'artifacts' | 'sqltools';
+  }): Promise<boolean> {
+    if (shouldSkipSensitiveExportConfirmation()) {
+      return true;
+    }
+
+    const message =
+      options.exportType === 'sqltools'
+        ? `Export SQLTools config for "${options.appName}"? This can write database credentials to .vscode/settings.json.`
+        : `Export artifacts for "${options.appName}"? default-env.json may contain secrets.`;
+
+    const detail =
+      options.exportType === 'sqltools'
+        ? 'Do not commit generated credentials to source control.'
+        : 'Do not commit generated artifact files to source control.';
+
+    const selectedAction = await vscode.window.showWarningMessage(
+      message,
+      {
+        modal: true,
+        detail,
+      },
+      'Export'
+    );
+    return selectedAction === 'Export';
   }
 
   // ── Login / logout ───────────────────────────────────────────────────────
@@ -1135,14 +1190,17 @@ export class RegionSidebarProvider
       return;
     }
 
-    if (cachedApps !== null) {
-      const apps = cachedApps.map((app) => ({
-        id: app.id,
-        name: app.name,
-        runningInstances: app.runningInstances,
-      }));
-      this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
-      return;
+    const cachedSidebarApps =
+      cachedApps === null
+        ? null
+        : cachedApps.map((app) => ({
+            id: app.id,
+            name: app.name,
+            runningInstances: app.runningInstances,
+          }));
+
+    if (cachedSidebarApps !== null) {
+      this.postAppsLoaded(cachedSidebarApps, payload, credentials, cfHomeDir, regionCode);
     }
 
     try {
@@ -1166,9 +1224,19 @@ export class RegionSidebarProvider
       if (!this.isCurrentSpaceRequest(requestId)) {
         return;
       }
-      this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
+      if (cachedSidebarApps === null || !areSidebarAppsEqual(cachedSidebarApps, apps)) {
+        this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
+      }
     } catch (error) {
       if (!this.isCurrentSpaceRequest(requestId)) {
+        return;
+      }
+      if (cachedSidebarApps !== null) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to refresh live apps from CF CLI.';
+        this.outputChannel.appendLine(
+          `[apps] Live refresh failed for ${sanitizeForLog(payload.spaceName)}: ${sanitizeForLog(errorMessage)}`
+        );
         return;
       }
       const errorMessage =
@@ -1382,7 +1450,6 @@ export class RegionSidebarProvider
     ].join(' ');
 
     this.outputChannel.appendLine(formattedMessage);
-    this.outputChannel.show(true);
 
     if (process.env['SAP_TOOLS_E2E'] === '1') {
       void vscode.window.showInformationMessage(formattedMessage);
@@ -1425,7 +1492,7 @@ export class RegionSidebarProvider
       .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'prototype.css'))
       .toString();
     const themeCssSrc = webview
-      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'themes', 'design-34.css'))
+      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'themes', 'design.css'))
       .toString();
 
     const csp = buildCsp(webview, nonce);
@@ -1553,6 +1620,38 @@ function createNonce(): string {
 
 function sanitizeForLog(value: string): string {
   return value.replaceAll(/\s+/g, ' ').trim();
+}
+
+function areSidebarAppsEqual(
+  leftApps: readonly SidebarAppEntry[],
+  rightApps: readonly SidebarAppEntry[]
+): boolean {
+  if (leftApps.length !== rightApps.length) {
+    return false;
+  }
+
+  const rightById = new Map(
+    rightApps.map((app) => {
+      return [app.id, app] as const;
+    })
+  );
+  for (const leftApp of leftApps) {
+    const rightApp = rightById.get(leftApp.id);
+    if (rightApp === undefined) {
+      return false;
+    }
+    if (
+      rightApp.name !== leftApp.name ||
+      rightApp.runningInstances !== leftApp.runningInstances
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function shouldSkipSensitiveExportConfirmation(): boolean {
+  return process.env['SAP_TOOLS_E2E'] === '1' || process.env['SAP_TOOLS_TEST_MODE'] === '1';
 }
 
 async function pathExists(pathValue: string): Promise<boolean> {

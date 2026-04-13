@@ -321,4 +321,160 @@ describe('CacheSyncService', () => {
     const snapshot = await service.triggerSyncNow();
     expect(snapshot.regionAccessById['us10']).toBe('error');
   });
+
+  it('marks region as error (not inaccessible) when CF auth endpoint returns server-side error', async () => {
+    fetchCfLoginInfoMock.mockResolvedValue({
+      authorizationEndpoint: 'https://uaa.example.com',
+    });
+    cfLoginMock.mockRejectedValue(
+      new Error('CF authentication failed with status 503.')
+    );
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const context = createMockContext();
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    const snapshot = await service.triggerSyncNow();
+
+    // A 503 server error must be 'error', never 'inaccessible'.
+    // 'inaccessible' would permanently disable the region button in the UI.
+    expect(snapshot.regionAccessById['us10']).toBe('error');
+  });
+
+  it('preserves previously cached orgs when region login fails transiently', async () => {
+    fetchCfLoginInfoMock.mockResolvedValue({
+      authorizationEndpoint: 'https://uaa.example.com',
+    });
+    cfLoginMock.mockRejectedValue(new Error('Network timeout'));
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const now = new Date().toISOString();
+    const context = createMockContext({
+      version: 1,
+      settings: { syncIntervalHours: 24 },
+      users: {
+        'dev@example.com': {
+          email: 'dev@example.com',
+          syncInProgress: false,
+          lastSyncStartedAt: now,
+          lastSyncCompletedAt: now,
+          lastSyncError: '',
+          regions: [
+            {
+              regionId: 'br10',
+              regionCode: 'br-10',
+              area: 'Americas',
+              displayName: 'Brazil (Sao Paulo)',
+              accessState: 'accessible',
+              accessMessage: '',
+              updatedAt: now,
+              orgs: [
+                {
+                  guid: 'org-guid-br10',
+                  name: 'tax-engineering-prod',
+                  spaces: [
+                    {
+                      guid: 'space-guid-prod',
+                      name: 'prod',
+                      apps: [
+                        { id: 'app-br10-1', name: 'tax-api', runningInstances: 2 },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      exportRootFolders: {},
+    });
+
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    const snapshot = await service.triggerSyncNow();
+    expect(snapshot.regionAccessById['br10']).toBe('error');
+
+    const orgs = await service.getCachedOrgs('br10');
+    expect(orgs).toEqual([{ guid: 'org-guid-br10', name: 'tax-engineering-prod' }]);
+
+    const apps = await service.getCachedApps('br10', 'org-guid-br10', 'prod');
+    expect(apps).toEqual([{ id: 'app-br10-1', name: 'tax-api', runningInstances: 2 }]);
+  });
+
+  it('clears cached orgs when region becomes inaccessible due to invalid credentials', async () => {
+    fetchCfLoginInfoMock.mockResolvedValue({
+      authorizationEndpoint: 'https://uaa.example.com',
+    });
+    cfLoginMock.mockRejectedValue(
+      new Error('Invalid SAP credentials. Check your email and password.')
+    );
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const now = new Date().toISOString();
+    const context = createMockContext({
+      version: 1,
+      settings: { syncIntervalHours: 24 },
+      users: {
+        'dev@example.com': {
+          email: 'dev@example.com',
+          syncInProgress: false,
+          lastSyncStartedAt: now,
+          lastSyncCompletedAt: now,
+          lastSyncError: '',
+          regions: [
+            {
+              regionId: 'br10',
+              regionCode: 'br-10',
+              area: 'Americas',
+              displayName: 'Brazil (Sao Paulo)',
+              accessState: 'accessible',
+              accessMessage: '',
+              updatedAt: now,
+              orgs: [
+                {
+                  guid: 'org-guid-br10',
+                  name: 'tax-engineering-prod',
+                  spaces: [
+                    {
+                      guid: 'space-guid-prod',
+                      name: 'prod',
+                      apps: [{ id: 'app-br10-1', name: 'tax-api', runningInstances: 2 }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      exportRootFolders: {},
+    });
+
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    const snapshot = await service.triggerSyncNow();
+    expect(snapshot.regionAccessById['br10']).toBe('inaccessible');
+
+    const orgs = await service.getCachedOrgs('br10');
+    expect(orgs).toEqual([]);
+
+    const apps = await service.getCachedApps('br10', 'org-guid-br10', 'prod');
+    expect(apps).toBeNull();
+  });
 });

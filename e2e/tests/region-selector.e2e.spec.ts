@@ -20,8 +20,8 @@ import {
 
 const ACTIVITY_BAR_TITLE = 'SAP Tools';
 const AREA_TO_SELECT = /Americas\s+br - ca - us/i;
-const REGION_TO_SELECT = /US East \(VA\) - AWS us-10/i;
-const BR10_REGION_TO_SELECT = /Brazil \(Sao Paulo\) - AWS br-10/i;
+const REGION_TO_SELECT = /us-10\s+US East \(VA\)/i;
+const BR10_REGION_TO_SELECT = /br-10\s+Brazil \(Sao Paulo\)/i;
 const ORG_TO_SELECT = /finance-services-prod/i;
 const PROOF_ORG_TO_SELECT = /apps-proof-prod/i;
 const SPACE_TO_SELECT = /^uat$/i;
@@ -634,6 +634,23 @@ test.describe('SAP Tools region selector', () => {
       expect(classesAfterSelection).toEqual(
         expect.arrayContaining(initialThemeClasses)
       );
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees code-first region labels without cloud provider suffix', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+
+      const regionButton = webviewFrame.getByRole('button', { name: REGION_TO_SELECT });
+      await expect(regionButton).toBeVisible({ timeout: 10000 });
+      const regionLabel = await regionButton.innerText();
+      expect(regionLabel).toMatch(/^\s*us-10\s+US East \(VA\)/i);
+      expect(regionLabel).not.toMatch(/\b(aws|azure|gcp)\b/i);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -1315,6 +1332,19 @@ test.describe('SAP Tools region selector', () => {
 
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
       await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
+      await expect(
+        webviewFrame.locator('.settings-status-list li span', { hasText: 'Last start' })
+      ).toHaveCount(0);
+
+      const buttonHeights = await Promise.all([
+        webviewFrame.getByRole('button', { name: 'Sync now' }).evaluate((button) => {
+          return Math.round(button.getBoundingClientRect().height);
+        }),
+        webviewFrame.getByRole('button', { name: 'Logout' }).evaluate((button) => {
+          return Math.round(button.getBoundingClientRect().height);
+        }),
+      ]);
+      expect(Math.abs(buttonHeights[0] - buttonHeights[1])).toBeLessThanOrEqual(1);
 
       await webviewFrame.getByLabel('Cache sync interval').selectOption('12');
       await expect(webviewFrame.getByRole('status')).toContainText(

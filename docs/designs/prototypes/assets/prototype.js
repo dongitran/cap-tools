@@ -1472,7 +1472,7 @@ function isAreaDisabled(groupId) {
 
   return group.regions.every((region) => {
     const state = resolveRegionAccessState(region.id);
-    return state !== 'accessible' && state !== 'unknown';
+    return state === 'inaccessible';
   });
 }
 
@@ -1482,7 +1482,7 @@ function isRegionDisabled(regionId) {
   }
 
   const state = resolveRegionAccessState(regionId);
-  return state === 'inaccessible' || state === 'error';
+  return state === 'inaccessible';
 }
 
 function formatSyncIntervalLabel(syncHours) {
@@ -1896,7 +1896,6 @@ function renderSettingsScreen() {
       <section class="group-card settings-section">
         <h2>Sync Status</h2>
         <ul class="settings-status-list">
-          <li><span>Last start</span><strong>${escapeHtml(formatTimestampLabel(lastSyncStartedAt))}</strong></li>
           <li><span>Last completion</span><strong>${escapeHtml(formatTimestampLabel(lastSyncCompletedAt))}</strong></li>
           <li><span>Next sync</span><strong>${escapeHtml(formatTimestampLabel(nextSyncAt))}</strong></li>
         </ul>
@@ -2102,8 +2101,8 @@ function renderSelectedGroupPanel(group) {
           aria-disabled="${isDisabled}"
           ${isDisabled ? 'disabled' : ''}
         >
-          <span class="region-name">${region.name}</span>
           <span class="region-code">${region.code}</span>
+          <span class="region-name">${region.name}</span>
         </button>
       `;
     })

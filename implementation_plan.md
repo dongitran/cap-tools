@@ -1,77 +1,87 @@
-# Implementation Plan — Sidebar Selection UX Stability + Workspace Header + App Row Selection
+# Implementation Plan — UI Refinement + Cache Access Reliability + Export Safety
 
 ## 1) Goal
-Implement and verify three UX changes end-to-end in the SAP Tools extension:
-1. Investigate and fix selection-stage behavior so choosing a region/organization does not trigger unnecessary full-page rerender effects.
-2. Move `Change Region` from workspace footer to workspace header, positioned left of the settings gear.
-3. In `Apps Log Control`, allow selecting an app by clicking anywhere on the app row (not only the checkbox).
+Implement and verify all requested changes with root-cause fixes:
+1. Fix UX/UI details in `Choose Region` and `Settings`.
+2. Investigate and fix cache-sync logic where `br-10` can become disabled after sync despite valid org access.
+3. Fix previously identified issues 2→5:
+   - stale app list from cache-only flow,
+   - wrong theme CSS path in extension webview,
+   - forced Output panel focus on region selection,
+   - missing safety guard before exporting sensitive artifacts.
+4. Update tests and run full quality gates.
 
-This plan also includes prototype sync, Playwright MCP visual validation, automated quality gates, version bump, commit, push, and post-push CI checks.
-
-## 2) Scope Discovery (Completed Before Editing)
-Reviewed files:
-- `src/sidebarProvider.ts` (webview host wiring and prototype asset loading)
-- `docs/designs/prototypes/assets/prototype.js` (UI state machine + render logic)
-- `docs/designs/prototypes/assets/prototype.css` (layout/styling for workspace and app rows)
-- `docs/designs/prototypes/index.html`
-- `docs/designs/prototypes/assets/gallery.js`
+## 2) Context Reviewed
+Files and flows to inspect end-to-end:
+- `src/sidebarProvider.ts`
+- `src/cacheSyncService.ts`, `src/cacheSyncService.test.ts`
+- `src/cfClient.ts`
+- `docs/designs/prototypes/assets/prototype.js`
+- `docs/designs/prototypes/assets/prototype.css`
+- `docs/designs/prototypes/assets/design-catalog.js`
 - `e2e/tests/region-selector.e2e.spec.ts`
 - `package.json`
 
-Key observations:
-- Extension webview directly executes `docs/designs/prototypes/assets/prototype.js`, so prototype updates are production UI updates.
-- Selection interactions already use slot-level rerender helpers, but several message paths still call full `renderPrototype()` and can cause whole-shell redraw perception.
-- Workspace currently renders `Change Region` in footer.
-- App row click behavior is not wired; only checkbox `change` drives state.
+## 3) Root-Cause Hypotheses
+### H1 — Region disable regression after sync
+- Region access state classification can mark transient auth/server/network failures as inaccessible.
+- UI disables regions for inaccessible/error states.
+- Sync fallback behavior may erase org/space data on transient failures.
 
-## 3) Files Expected to Change
-- `docs/designs/prototypes/assets/prototype.js`
-- `docs/designs/prototypes/assets/prototype.css`
-- `e2e/tests/region-selector.e2e.spec.ts`
-- `docs/designs/prototypes/variants/design.html` (cache-bust query string if needed)
-- `package.json` (+ `package-lock.json`) for patch version bump
-- `implementation_plan.md` (this document)
+### H2 — Stale apps in workspace
+- On space selection, cached apps are returned and flow exits before live CF fetch.
+- If cache is stale, UI and logs panel remain stale until next sync.
 
-## 4) Detailed Execution Steps
+### H3 — Export safety
+- Export operations write sensitive content (`default-env.json`, SQLTools credentials) without explicit user confirmation.
 
-### Step A — Fix selection rerender behavior
-1. Add/adjust refresh helpers in `prototype.js` so selection-mode updates prefer slot-level refresh instead of full `renderPrototype()`.
-2. Ensure region/org selection flows only update the relevant stage slots (`region`, `org`, `space`, `confirm`) and preserve shell/header/group containers.
-3. Remove or narrow full rerender fallbacks in selection-related inbound message handlers where safe.
-4. Keep workspace-specific targeted refresh behavior unchanged for logs/apps tabs.
+## 4) Implementation Steps
+### Step A — Fix UI requirements
+1. `Choose Region`:
+   - remove cloud vendor suffix (`- AWS`, `- Azure`, etc.) from region labels (already partially changed in catalog; verify complete).
+   - render region name smaller and non-bold.
+   - render region code (`br-10`) larger and bold.
+2. `Settings`:
+   - make `Sync now` and `Logout` equal height.
+   - remove `Last start` line under `Sync Status`.
 
-### Step B — Move `Change Region` control to workspace header
-1. Update `renderWorkspaceScreen()` markup to include header actions container:
-- left: `Change Region`
-- right: settings gear button
-2. Remove footer `Change Region` button usage while keeping footer last-sync label.
-3. Adjust CSS for header action row alignment and button sizing.
-4. Preserve responsive behavior for narrow widths.
+### Step B — Fix cache-sync access reliability
+1. Review `resolveAccessStateFromMessage()` to avoid classifying transient backend failures as inaccessible.
+2. Preserve cached org/space/apps only for transient `error` state, not for true `inaccessible` state.
+3. Ensure `br-10` remains selectable when latest sync error is transient and cached data exists.
 
-### Step C — Enable click-anywhere app row selection
-1. Add delegated click handling for `.app-log-item` rows in `prototype.js`.
-2. Keep checkbox behavior accessible:
-- Clicking checkbox continues to work via native input `change`.
-- Clicking row toggles associated checkbox programmatically and dispatches `change`.
-3. Respect disabled/locked rows (`is-logging`/disabled checkbox) so row click does not toggle them.
+### Step C — Fix stale app list (issue #2)
+1. In space selection flow:
+   - if cached apps exist, render immediately for responsiveness.
+   - continue a non-blocking live CF fetch and refresh apps when live data returns.
+   - only show fatal UI error when both cache and live fetch are unavailable.
+2. Keep request-id guards to prevent out-of-order updates.
 
-### Step D — Update and strengthen E2E coverage
-1. Extend selection-shell stability test to include organization selection and verify shell/header/groups/stage-slot nodes are still stable.
-2. Add/adjust a test to verify clicking app row (non-checkbox area) toggles selection and enables `Start App Logging`.
-3. Update assertions for new workspace header placement of `Change Region`.
-4. Ensure test names remain behavior-based and do not include “bug”.
-5. Keep edited tests without inline comments.
+### Step D — Fix issue #3 and #4
+1. Fix main webview theme CSS path to existing file.
+2. Remove forced Output panel focus from region selection logging.
 
-### Step E — Prototype sync and visual verification
-1. Confirm prototype route (`index.html` -> `design` variant) reflects new behaviors.
-2. Use Playwright MCP to open prototype and validate:
-- `Change Region` appears in header beside settings, not footer.
-- App row click toggles checkbox.
-- Selection flow does not visually redraw full shell during region/org picks.
-3. Fix any discovered prototype mismatch before final checks.
+### Step E — Fix issue #5 (export safety guardrail)
+1. Add explicit confirmation dialog before sensitive exports.
+2. Include clear warning that files may contain secrets and should not be committed.
+3. Keep E2E mode non-blocking by bypassing confirmation in test mode.
 
-### Step F — Quality gates
-Run and fix until all pass:
+### Step F — Tests
+1. Update/add unit tests in `cacheSyncService.test.ts` for:
+   - transient auth/server failure mapping,
+   - fallback org preservation behavior.
+2. Update/add E2E tests in `region-selector.e2e.spec.ts` for:
+   - region label format (code first, vendor removed),
+   - settings sync-status content and button sizing behavior,
+   - no regression in scope selection flow.
+3. Validate naming quality for test titles (behavior-driven, no “bug”).
+
+### Step G — Prototype + visual check
+1. Keep prototype aligned with extension webview UI.
+2. Use MCP Playwright to verify updated prototype interactions and visuals.
+
+### Step H — Verification gates
+Run in order, fix until all green:
 1. `npm run typecheck`
 2. `npm run lint`
 3. `npm run cspell`
@@ -79,16 +89,16 @@ Run and fix until all pass:
 5. `npm --prefix e2e run validate`
 6. `npm --prefix e2e test`
 
-### Step G — Release steps
-1. Bump extension patch version in `package.json` and sync lockfile.
-2. Commit all required changes.
-3. Push to `main`.
-4. Monitor GitHub Actions (`gh` CLI) and fix-forward if any workflow fails.
+### Step I — Release hygiene
+1. If extension code changed, bump patch version in `package.json`.
+2. Re-run validation after version bump.
+3. Commit and push.
+4. Re-check CI/GitHub Actions; if failed, root-cause and fix-forward until green.
 
 ## 5) Done Criteria
-1. Region/org selection no longer causes unnecessary full-shell redraw behavior; slot-level updates remain stable.
-2. `Change Region` is in workspace header, to the left of settings.
-3. Clicking any app row in `Apps Log Control` toggles selection (except locked rows).
-4. Prototype and extension behavior are aligned.
-5. Lint, typecheck, unit tests, cspell, e2e validate, and e2e tests all pass.
-6. Version is bumped, code committed, pushed, and CI checked green.
+1. UI changes match requested typography/layout exactly.
+2. `br-10` is not incorrectly disabled by transient sync failures.
+3. Space app list is refreshed live even when cached data is present.
+4. Sensitive exports require explicit confirmation.
+5. All lint/typecheck/cspell/unit/e2e checks pass.
+6. Version bump + commit + push completed after successful verification.

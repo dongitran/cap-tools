@@ -594,15 +594,16 @@ body.pattern-dots::before {
 }
 
 .region-name {
-  font-weight: 700;
-  font-size: 0.74rem;
+  font-weight: 400;
+  font-size: 0.66rem;
 }
 
 .region-code {
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  font-size: 0.61rem;
-  color: var(--muted-color);
+  font-size: 0.76rem;
+  color: var(--text-color);
 }
 
 .prototype-shell.select-style-solid .region-option.is-selected {
@@ -1035,6 +1036,12 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
 
 .settings-actions {
   margin-top: 2px;
+  align-items: stretch;
+}
+
+.settings-actions .primary-action,
+.settings-actions .secondary-action {
+  min-height: 36px;
 }
 
 .workspace-change-region {
