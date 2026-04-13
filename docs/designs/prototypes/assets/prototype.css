@@ -1224,6 +1224,153 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   font-weight: 700;
 }
 
+.service-export-tab {
+  display: grid;
+  gap: 10px;
+}
+
+.service-export-header {
+  display: grid;
+  gap: 4px;
+}
+
+.service-export-header h2 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-family: var(--title-font);
+}
+
+.service-export-subline {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted-color);
+}
+
+.service-export-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.service-export-path {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--chip-text);
+  border: 1px solid color-mix(in oklab, var(--border-color) 78%, var(--mix-base));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
+  padding: 7px 9px;
+  word-break: break-all;
+}
+
+.service-mapping-list {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--frame-bg);
+  max-height: 240px;
+  overflow: auto;
+  display: grid;
+}
+
+.service-map-row {
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 76%, var(--mix-base));
+  background: transparent;
+  color: inherit;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.service-map-row:last-child {
+  border-bottom: 0;
+}
+
+.service-map-row:hover {
+  background: color-mix(in oklab, var(--accent-soft) 36%, var(--mix-base));
+}
+
+.service-map-row.is-selected {
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--mix-base));
+  border-left: 2px solid color-mix(in oklab, var(--accent-color) 62%, var(--mix-base));
+}
+
+.service-map-row.is-unmapped {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.service-map-row.is-unmapped:hover {
+  background: transparent;
+}
+
+.service-map-name {
+  font-size: 0.69rem;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-map-path {
+  font-size: 0.65rem;
+  color: var(--muted-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-map-state {
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--chip-text);
+  background: color-mix(in oklab, var(--surface-bg) 86%, var(--mix-base));
+}
+
+.service-map-row.is-unmapped .service-map-state {
+  color: var(--state-danger-fg);
+  border-color: var(--state-danger-border);
+  background: color-mix(in oklab, var(--state-danger-bg) 80%, var(--mix-base));
+}
+
+.service-export-selected {
+  margin: 0;
+  font-size: 0.69rem;
+  color: var(--muted-color);
+}
+
+.service-export-actions {
+  margin-top: 2px;
+}
+
+.service-export-button {
+  min-width: 132px;
+}
+
+.service-export-status {
+  margin: 0;
+  font-size: 0.68rem;
+}
+
+.service-export-status.is-info {
+  color: var(--chip-text);
+}
+
+.service-export-status.is-success {
+  color: var(--state-success-fg);
+}
+
+.service-export-status.is-error {
+  color: var(--state-danger-fg);
+}
+
 .panel-logs-bridge {
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -1530,5 +1677,15 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   .log-row {
     grid-template-columns: 56px 44px 76px minmax(0, 1fr);
     padding: 6px 7px;
+  }
+
+  .service-map-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    align-items: start;
+  }
+
+  .service-map-state {
+    justify-self: start;
   }
 }

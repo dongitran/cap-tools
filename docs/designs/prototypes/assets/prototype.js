@@ -124,6 +124,12 @@ const ACTIVE_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.activeAppsChanged';
 const UPDATE_SYNC_INTERVAL_MESSAGE_TYPE = 'sapTools.updateSyncInterval';
 const SYNC_NOW_MESSAGE_TYPE = 'sapTools.syncNow';
 const LOGOUT_MESSAGE_TYPE = 'sapTools.logout';
+const SELECT_LOCAL_ROOT_FOLDER_MESSAGE_TYPE = 'sapTools.selectLocalRootFolder';
+const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
+  'sapTools.refreshServiceFolderMappings';
+const EXPORT_DEFAULT_ENV_MESSAGE_TYPE = 'sapTools.exportDefaultEnv';
+const EXPORT_PNPM_LOCK_MESSAGE_TYPE = 'sapTools.exportPnpmLock';
+const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -149,6 +155,13 @@ let activeUserEmail = '';
 let settingsStatusMessage = '';
 let previousModeBeforeSettings = 'selection';
 let regionAccessById = new Map();
+let localServiceRootFolderPath = '';
+let serviceFolderMappings = [];
+let selectedServiceExportAppId = '';
+let serviceExportStatusMessage = '';
+let serviceExportStatusTone = 'info';
+let serviceFolderScanInProgress = false;
+let serviceExportInProgress = false;
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -237,6 +250,11 @@ window.addEventListener('message', (event) => {
     appsLoadingState = 'loaded';
     appsErrorMessage = '';
     pruneSelectedAppIds();
+    if (localServiceRootFolderPath.length > 0) {
+      refreshServiceMappingsAfterAppsLoaded();
+    } else {
+      clearServiceMappingsForScope();
+    }
 
     if (isWorkspaceLogsMounted()) {
       refreshWorkspaceLogsView();
@@ -251,6 +269,7 @@ window.addEventListener('message', (event) => {
     appsLoadingState = 'error';
     appsErrorMessage = typeof msg.message === 'string' ? msg.message : 'Failed to load apps.';
     pruneSelectedAppIds();
+    clearServiceMappingsForScope();
 
     if (isWorkspaceLogsMounted()) {
       refreshWorkspaceLogsView();
@@ -273,6 +292,72 @@ window.addEventListener('message', (event) => {
         ? msg.error
         : 'Failed to logout.');
     renderPrototype();
+    return;
+  }
+
+  if (msg.type === 'sapTools.localRootFolderUpdated') {
+    if (typeof msg.path === 'string') {
+      localServiceRootFolderPath = msg.path.trim();
+      if (localServiceRootFolderPath.length === 0) {
+        serviceExportStatusTone = 'error';
+        serviceExportStatusMessage = 'Root folder is not selected yet.';
+      }
+      refreshServiceMappingsAfterAppsLoaded();
+      refreshUiAfterServiceExportStateChange();
+    }
+    return;
+  }
+
+  if (msg.type === 'sapTools.serviceFolderMappingsLoaded') {
+    const rawMappings = msg.mappings;
+    if (!Array.isArray(rawMappings)) {
+      return;
+    }
+
+    serviceFolderScanInProgress = false;
+    serviceFolderMappings = normalizeServiceFolderMappings(rawMappings);
+    pruneSelectedServiceExportAppId();
+    const mappedCount = serviceFolderMappings.filter((mapping) => mapping.isMapped).length;
+    serviceExportStatusTone = 'info';
+    serviceExportStatusMessage = `Mapped ${mappedCount}/${serviceFolderMappings.length} services.`;
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === 'sapTools.serviceFolderMappingsError') {
+    serviceFolderScanInProgress = false;
+    serviceFolderMappings = [];
+    selectedServiceExportAppId = '';
+    serviceExportStatusTone = 'error';
+    serviceExportStatusMessage =
+      typeof msg.message === 'string' && msg.message.length > 0
+        ? msg.message
+        : 'Failed to scan local folder mappings.';
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === 'sapTools.exportArtifactProgress') {
+    serviceExportInProgress = msg.inProgress === true;
+    if (typeof msg.message === 'string' && msg.message.length > 0) {
+      serviceExportStatusTone = 'info';
+      serviceExportStatusMessage = msg.message;
+    }
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === 'sapTools.exportArtifactResult') {
+    serviceExportInProgress = false;
+    const success = msg.success === true;
+    serviceExportStatusTone = success ? 'success' : 'error';
+    serviceExportStatusMessage =
+      typeof msg.message === 'string' && msg.message.length > 0
+        ? msg.message
+        : success
+          ? 'Export completed.'
+          : 'Export failed.';
+    refreshUiAfterServiceExportStateChange();
   }
 });
 
@@ -538,6 +623,20 @@ function refreshWorkspaceLogsView() {
   }
 }
 
+function refreshUiAfterServiceExportStateChange() {
+  if (mode === 'selection' && isSelectionShellMounted()) {
+    updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
+    return;
+  }
+
+  if (isWorkspaceLogsMounted()) {
+    refreshWorkspaceLogsView();
+    return;
+  }
+
+  renderPrototype();
+}
+
 function handleGroupSelection(nextGroupId) {
   const nextGroup = groupLookup.get(nextGroupId);
   if (nextGroup === undefined || isAreaDisabled(nextGroupId)) {
@@ -665,6 +764,11 @@ function handleAction(action, actionElement) {
   const logsActionHandled = handleLogsAction(action, actionElement);
   if (logsActionHandled !== null) {
     return logsActionHandled;
+  }
+
+  const serviceExportActionHandled = handleServiceExportAction(action, actionElement);
+  if (serviceExportActionHandled !== null) {
+    return serviceExportActionHandled;
   }
 
   return false;
@@ -801,6 +905,64 @@ function handleLogsAction(action, actionElement) {
   const controlActionHandled = handleLogsControlAction(action, actionElement);
   if (controlActionHandled !== null) {
     return controlActionHandled;
+  }
+
+  return null;
+}
+
+function handleServiceExportAction(action, actionElement) {
+  if (action === 'select-local-root-folder') {
+    serviceExportStatusTone = 'info';
+    serviceExportStatusMessage = '';
+    if (vscodeApi !== null) {
+      serviceFolderScanInProgress = true;
+      vscodeApi.postMessage({
+        type: SELECT_LOCAL_ROOT_FOLDER_MESSAGE_TYPE,
+      });
+      return true;
+    }
+
+    localServiceRootFolderPath = '/Users/demo/workspaces/sap-services';
+    serviceExportStatusMessage = 'Root folder selected. Scan completed with prototype data.';
+    serviceExportStatusTone = 'success';
+    serviceFolderMappings = buildMockServiceFolderMappings(
+      localServiceRootFolderPath,
+      resolveCurrentSpaceApps()
+    );
+    pruneSelectedServiceExportAppId();
+    return true;
+  }
+
+  if (action === 'refresh-service-mappings') {
+    refreshServiceMappingsAfterAppsLoaded();
+    return true;
+  }
+
+  if (action === 'select-export-service') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+    const mapping = serviceFolderMappings.find((entry) => entry.appId === appId);
+    if (mapping === undefined || !mapping.isMapped) {
+      return true;
+    }
+    selectedServiceExportAppId = appId;
+    serviceExportStatusTone = 'info';
+    serviceExportStatusMessage = `Selected ${mapping.appName} for export.`;
+    return true;
+  }
+
+  if (action === 'export-default-env') {
+    return triggerServiceExport('default-env');
+  }
+
+  if (action === 'export-pnpm-lock') {
+    return triggerServiceExport('pnpm-lock');
+  }
+
+  if (action === 'export-service-artifacts') {
+    return triggerServiceExport('both');
   }
 
   return null;
@@ -2043,6 +2205,10 @@ function renderWorkspaceTabContent() {
     return renderLogsTab();
   }
 
+  if (activeTabId === 'apps') {
+    return renderServiceExportTab();
+  }
+
   return renderPlaceholderTab(activeTabId);
 }
 
@@ -2083,6 +2249,151 @@ function renderLogsTab() {
       ${statusMarkup}
     </section>
   `;
+}
+
+function renderServiceExportTab() {
+  const availableApps = resolveCurrentSpaceApps();
+  const mappingRows = resolveServiceExportRows(availableApps);
+  const selectedMapping = mappingRows.find(
+    (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
+  );
+  const selectedSpaceLabel =
+    selectedSpaceId.length > 0 ? selectedSpaceId : 'Select a space first';
+  const selectedServiceLabel =
+    selectedMapping === undefined ? 'No service selected' : selectedMapping.appName;
+  const canRefreshMappings =
+    localServiceRootFolderPath.length > 0 && availableApps.length > 0 && !serviceExportInProgress;
+  const canExport = selectedMapping !== undefined && !serviceExportInProgress;
+
+  return `
+    <section class="group-card service-export-tab" aria-label="Service artifact export">
+      <header class="service-export-header">
+        <h2>Service Artifact Export</h2>
+        <p class="service-export-subline">
+          Scope: <strong>${escapeHtml(selectedSpaceLabel)}</strong>
+        </p>
+      </header>
+
+      <section class="service-export-controls">
+        <button
+          type="button"
+          class="secondary-action"
+          data-action="select-local-root-folder"
+          ${serviceExportInProgress ? 'disabled' : ''}
+        >
+          Select Root Folder
+        </button>
+        <button
+          type="button"
+          class="small-action"
+          data-action="refresh-service-mappings"
+          ${canRefreshMappings ? '' : 'disabled'}
+        >
+          Refresh Mapping
+        </button>
+      </section>
+
+      <p class="service-export-path" title="${escapeHtml(localServiceRootFolderPath)}">
+        Root: ${escapeHtml(localServiceRootFolderPath.length > 0 ? localServiceRootFolderPath : 'Not selected')}
+      </p>
+
+      <section class="service-mapping-list" aria-label="Service folder mappings">
+        ${
+          serviceFolderScanInProgress
+            ? '<p class="stage-loading" aria-live="polite">Scanning local folders&#8230;</p>'
+            : renderServiceExportMappingRows(mappingRows)
+        }
+      </section>
+
+      <p class="service-export-selected">
+        Selected service: <strong>${escapeHtml(selectedServiceLabel)}</strong>
+      </p>
+
+      <div class="toolbar-row service-export-actions" role="group" aria-label="Service export actions">
+        <button
+          type="button"
+          class="primary-action service-export-button"
+          data-action="export-service-artifacts"
+          ${canExport ? '' : 'disabled'}
+        >
+          Export Both
+        </button>
+        <button
+          type="button"
+          class="secondary-action"
+          data-action="export-default-env"
+          ${canExport ? '' : 'disabled'}
+        >
+          Export default-env.json
+        </button>
+        <button
+          type="button"
+          class="secondary-action"
+          data-action="export-pnpm-lock"
+          ${canExport ? '' : 'disabled'}
+        >
+          Export pnpm-lock.yaml
+        </button>
+      </div>
+
+      ${renderServiceExportStatus()}
+    </section>
+  `;
+}
+
+function renderServiceExportMappingRows(mappingRows) {
+  if (mappingRows.length === 0) {
+    if (!isAppsCatalogReady()) {
+      return '<p class="stage-loading" aria-live="polite">Loading apps&#8230;</p>';
+    }
+    if (selectedSpaceId.length === 0) {
+      return '<p class="logs-empty-message">Choose a space first to load services.</p>';
+    }
+    return '<p class="logs-empty-message">No running services available in this space.</p>';
+  }
+
+  const mappedRows = mappingRows.map((mapping) => {
+    const isSelected = selectedServiceExportAppId === mapping.appId;
+    const folderPathLabel = mapping.isMapped ? mapping.folderPath : 'No matching local folder';
+    if (!mapping.isMapped) {
+      return `
+        <div class="service-map-row is-unmapped" aria-disabled="true">
+          <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
+          <span class="service-map-path">${escapeHtml(folderPathLabel)}</span>
+          <span class="service-map-state">Unmapped</span>
+        </div>
+      `;
+    }
+
+    return `
+      <button
+        type="button"
+        class="service-map-row${isSelected ? ' is-selected' : ''}"
+        data-action="select-export-service"
+        data-app-id="${escapeHtml(mapping.appId)}"
+      >
+        <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
+        <span class="service-map-path">${escapeHtml(folderPathLabel)}</span>
+        <span class="service-map-state">Mapped</span>
+      </button>
+    `;
+  });
+
+  return mappedRows.join('');
+}
+
+function renderServiceExportStatus() {
+  if (serviceExportStatusMessage.length === 0) {
+    return '<p class="service-export-status" data-role="service-export-status" hidden></p>';
+  }
+
+  const toneClass =
+    serviceExportStatusTone === 'success'
+      ? 'is-success'
+      : serviceExportStatusTone === 'error'
+        ? 'is-error'
+        : 'is-info';
+  return `<p class="service-export-status ${toneClass}" data-role="service-export-status">${escapeHtml(serviceExportStatusMessage)}</p>`;
 }
 
 function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
@@ -2384,6 +2695,181 @@ function resolveCurrentSpaceApps() {
   return appNames.map((appName) => ({ id: appName, name: appName }));
 }
 
+function resolveServiceExportRows(availableApps) {
+  const mappingByAppId = new Map(serviceFolderMappings.map((mapping) => [mapping.appId, mapping]));
+  return availableApps.map((app) => {
+    const existingMapping = mappingByAppId.get(app.id);
+    if (existingMapping !== undefined) {
+      return existingMapping;
+    }
+
+    return {
+      appId: app.id,
+      appName: app.name,
+      folderPath: '',
+      isMapped: false,
+      matchType: 'none',
+    };
+  });
+}
+
+function normalizeServiceFolderMappings(rawMappings) {
+  const normalizedMappings = [];
+  for (const rawMapping of rawMappings) {
+    if (!isRecord(rawMapping)) {
+      continue;
+    }
+    const appIdRaw = typeof rawMapping.appId === 'string' ? rawMapping.appId.trim() : '';
+    const appNameRaw = typeof rawMapping.appName === 'string' ? rawMapping.appName.trim() : '';
+    const folderPathRaw =
+      typeof rawMapping.folderPath === 'string' ? rawMapping.folderPath.trim() : '';
+    const matchTypeRaw =
+      typeof rawMapping.matchType === 'string' ? rawMapping.matchType.trim() : '';
+    const appId = appIdRaw.length > 0 ? appIdRaw : appNameRaw;
+    if (appId.length === 0 || appNameRaw.length === 0) {
+      continue;
+    }
+    normalizedMappings.push({
+      appId,
+      appName: appNameRaw,
+      folderPath: folderPathRaw,
+      isMapped: folderPathRaw.length > 0,
+      matchType: matchTypeRaw.length > 0 ? matchTypeRaw : 'none',
+    });
+  }
+  return normalizedMappings;
+}
+
+function buildMockServiceFolderMappings(rootFolderPath, availableApps) {
+  return availableApps.map((app, index) => {
+    const shouldMap = index % 3 !== 2;
+    const normalizedFolderName = app.name.replaceAll('-', '_');
+    return {
+      appId: app.id,
+      appName: app.name,
+      folderPath: shouldMap ? `${rootFolderPath}/${normalizedFolderName}` : '',
+      isMapped: shouldMap,
+      matchType: normalizedFolderName === app.name ? 'exact' : 'underscore',
+    };
+  });
+}
+
+function clearServiceMappingsForScope() {
+  serviceFolderMappings = [];
+  selectedServiceExportAppId = '';
+  serviceFolderScanInProgress = false;
+  serviceExportInProgress = false;
+  serviceExportStatusMessage = '';
+  serviceExportStatusTone = 'info';
+}
+
+function pruneSelectedServiceExportAppId() {
+  if (selectedServiceExportAppId.length === 0) {
+    return;
+  }
+  const mappedIds = new Set(
+    serviceFolderMappings
+      .filter((mapping) => mapping.isMapped)
+      .map((mapping) => mapping.appId)
+  );
+  if (!mappedIds.has(selectedServiceExportAppId)) {
+    selectedServiceExportAppId = '';
+  }
+}
+
+function refreshServiceMappingsAfterAppsLoaded() {
+  const availableApps = resolveCurrentSpaceApps();
+  clearServiceMappingsForScope();
+
+  if (localServiceRootFolderPath.length === 0) {
+    serviceExportStatusTone = 'error';
+    serviceExportStatusMessage = 'Select a local root folder before scanning service mappings.';
+    return;
+  }
+
+  if (availableApps.length === 0) {
+    serviceExportStatusTone = 'info';
+    serviceExportStatusMessage = 'No running services available in this space.';
+    return;
+  }
+
+  if (vscodeApi === null) {
+    serviceFolderMappings = buildMockServiceFolderMappings(
+      localServiceRootFolderPath,
+      availableApps
+    );
+    pruneSelectedServiceExportAppId();
+    return;
+  }
+
+  serviceFolderScanInProgress = true;
+  serviceExportStatusTone = 'info';
+  serviceExportStatusMessage = 'Scanning local folders for service mapping...';
+  vscodeApi.postMessage({
+    type: REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE,
+    rootFolderPath: localServiceRootFolderPath,
+    appNames: availableApps.map((app) => app.name),
+  });
+}
+
+function triggerServiceExport(mode) {
+  const selectedMapping = serviceFolderMappings.find(
+    (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
+  );
+  if (selectedMapping === undefined) {
+    serviceExportStatusTone = 'error';
+    serviceExportStatusMessage = 'Choose one mapped service before exporting.';
+    return true;
+  }
+
+  const basePayload = {
+    appId: selectedMapping.appId,
+    appName: selectedMapping.appName,
+    rootFolderPath: localServiceRootFolderPath,
+  };
+
+  serviceExportInProgress = true;
+  serviceExportStatusTone = 'info';
+  serviceExportStatusMessage = 'Exporting artifacts from Cloud Foundry...';
+
+  if (vscodeApi === null) {
+    serviceExportInProgress = false;
+    serviceExportStatusTone = 'success';
+    if (mode === 'default-env') {
+      serviceExportStatusMessage = `default-env.json exported for ${selectedMapping.appName}.`;
+      return true;
+    }
+    if (mode === 'pnpm-lock') {
+      serviceExportStatusMessage = `pnpm-lock.yaml exported for ${selectedMapping.appName}.`;
+      return true;
+    }
+    serviceExportStatusMessage = `default-env.json and pnpm-lock.yaml exported for ${selectedMapping.appName}.`;
+    return true;
+  }
+
+  if (mode === 'default-env') {
+    vscodeApi.postMessage({
+      type: EXPORT_DEFAULT_ENV_MESSAGE_TYPE,
+      ...basePayload,
+    });
+    return true;
+  }
+
+  if (mode === 'pnpm-lock') {
+    vscodeApi.postMessage({
+      type: EXPORT_PNPM_LOCK_MESSAGE_TYPE,
+      ...basePayload,
+    });
+    return true;
+  }
+
+  vscodeApi.postMessage({
+    type: EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE,
+    ...basePayload,
+  });
+  return true;
+}
+
 function resolveActiveAppNamesByIds(activeAppIds) {
   const appNameById = new Map(resolveCurrentSpaceApps().map((app) => [app.id, app.name]));
   const names = [];
@@ -2415,6 +2901,7 @@ function resetWorkspaceLoggingState() {
   selectedAppLogIds = [];
   activeAppLogIds = [];
   statusMessage = '';
+  clearServiceMappingsForScope();
   if (hadActiveApps) {
     postActiveAppsChanged([]);
   }

@@ -52,6 +52,7 @@
     "westus2",
     "describedby",
     "cfapps",
+    "vcap",
     "hana",
     "ondemand",
     "noapps",
