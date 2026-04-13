@@ -56,6 +56,10 @@
     "hana",
     "ondemand",
     "noapps",
-    "failspace"
+    "failspace",
+    "hanacloud",
+    "sqltools",
+    "upsert",
+    "upserts"
   ]
 }

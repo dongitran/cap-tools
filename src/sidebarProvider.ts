@@ -25,6 +25,7 @@ import {
   exportServiceArtifacts,
   type ServiceExportSession,
 } from './serviceArtifactExporter';
+import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
 import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } from './testModeData';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
@@ -47,6 +48,7 @@ const MSG_SELECT_LOCAL_ROOT_FOLDER = 'sapTools.selectLocalRootFolder';
 const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappings';
 const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
+const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
 
 // ── Outbound message types (extension → webview) ────────────────────────────
 
@@ -64,6 +66,8 @@ const MSG_SERVICE_FOLDER_MAPPINGS_LOADED = 'sapTools.serviceFolderMappingsLoaded
 const MSG_SERVICE_FOLDER_MAPPINGS_ERROR = 'sapTools.serviceFolderMappingsError';
 const MSG_EXPORT_ARTIFACT_PROGRESS = 'sapTools.exportArtifactProgress';
 const MSG_EXPORT_ARTIFACT_RESULT = 'sapTools.exportArtifactResult';
+const MSG_EXPORT_SQLTOOLS_PROGRESS = 'sapTools.exportSqlToolsProgress';
+const MSG_EXPORT_SQLTOOLS_RESULT = 'sapTools.exportSqlToolsResult';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -104,6 +108,12 @@ interface SelectServiceFolderMappingPayload {
 }
 
 interface ExportServiceArtifactsPayload {
+  readonly appId: string;
+  readonly appName: string;
+  readonly rootFolderPath: string;
+}
+
+interface ExportSqlToolsConfigPayload {
   readonly appId: string;
   readonly appName: string;
   readonly rootFolderPath: string;
@@ -311,6 +321,12 @@ export class RegionSidebarProvider
         includeDefaultEnv: true,
         includePnpmLock: true,
       });
+      return;
+    }
+
+    if (type === MSG_EXPORT_SQLTOOLS_CONFIG && isExportSqlToolsConfigMessage(message)) {
+      const payload = readExportSqlToolsConfigPayload(message);
+      await this.handleExportSqlToolsConfig(payload);
       return;
     }
 
@@ -741,8 +757,102 @@ export class RegionSidebarProvider
     }
   }
 
+  private async handleExportSqlToolsConfig(
+    payload: ExportSqlToolsConfigPayload
+  ): Promise<void> {
+    if (this.exportInProgress) {
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: false,
+        message: 'Another export is already running. Please wait.',
+      });
+      return;
+    }
+
+    const mapping = this.resolveServiceFolderMapping(payload);
+    if (mapping === null || mapping.folderPath.length === 0) {
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: false,
+        message: `No mapped local folder found for service "${payload.appName}".`,
+      });
+      return;
+    }
+
+    const rootFolderPath = this.selectedLocalRootFolderPath.trim();
+    if (rootFolderPath.length === 0) {
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: false,
+        message: 'No root folder selected. Select a root folder first.',
+      });
+      return;
+    }
+
+    const session = this.currentLogSessionSeed;
+    if (session === null) {
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: false,
+        message: 'No active CF scope session. Select region/org/space again.',
+      });
+      return;
+    }
+
+    const exportSession = {
+      apiEndpoint: session.apiEndpoint,
+      email: session.email,
+      password: session.password,
+      orgName: session.orgName,
+      spaceName: session.spaceName,
+      cfHomeDir: session.cfHomeDir,
+    };
+
+    this.exportInProgress = true;
+    this.postMessage({
+      type: MSG_EXPORT_SQLTOOLS_PROGRESS,
+      inProgress: true,
+      message: `Exporting SQLTools config for "${payload.appName}"...`,
+    });
+
+    try {
+      const result = await exportSqlToolsConfig({
+        appName: payload.appName,
+        regionCode: this.selectedRegionCode,
+        rootFolderPath,
+        session: exportSession,
+      });
+
+      this.outputChannel.appendLine(
+        `[sqltools] ${sanitizeForLog(payload.appName)} -> ${sanitizeForLog(result.settingsPath)}`
+      );
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: true,
+        message: `SQLTools connection "${result.connection.name}" exported to "${result.settingsPath}".`,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to export SQLTools config.';
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_RESULT,
+        success: false,
+        message: errorMessage,
+      });
+    } finally {
+      this.exportInProgress = false;
+      this.postMessage({
+        type: MSG_EXPORT_SQLTOOLS_PROGRESS,
+        inProgress: false,
+      });
+    }
+  }
+
   private resolveServiceFolderMapping(
-    payload: ExportServiceArtifactsPayload
+    payload: {
+      readonly appId: string;
+      readonly appName: string;
+    }
   ): ServiceFolderMapping | null {
     const mappingById = this.serviceFolderMappings.find((mapping) => {
       return mapping.appId === payload.appId;
@@ -1646,6 +1756,25 @@ function isExportServiceArtifactsMessage(value: Record<string, unknown>): boolea
 function readExportServiceArtifactsPayload(
   value: Record<string, unknown>
 ): ExportServiceArtifactsPayload {
+  return {
+    appId: String(value['appId']).trim(),
+    appName: String(value['appName']).trim(),
+    rootFolderPath: String(value['rootFolderPath']).trim(),
+  };
+}
+
+function isExportSqlToolsConfigMessage(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value['appId'], 128) &&
+    isNonEmptyString(value['appName'], 128) &&
+    typeof value['rootFolderPath'] === 'string' &&
+    value['rootFolderPath'].trim().length <= 4096
+  );
+}
+
+function readExportSqlToolsConfigPayload(
+  value: Record<string, unknown>
+): ExportSqlToolsConfigPayload {
   return {
     appId: String(value['appId']).trim(),
     appName: String(value['appName']).trim(),

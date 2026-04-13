@@ -129,6 +129,7 @@ const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
   'sapTools.refreshServiceFolderMappings';
 const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
+const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -356,6 +357,30 @@ window.addEventListener('message', (event) => {
         : success
           ? 'Export completed.'
           : 'Export failed.';
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === 'sapTools.exportSqlToolsProgress') {
+    serviceExportInProgress = msg.inProgress === true;
+    if (typeof msg.message === 'string' && msg.message.length > 0) {
+      serviceExportStatusTone = 'info';
+      serviceExportStatusMessage = msg.message;
+    }
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === 'sapTools.exportSqlToolsResult') {
+    serviceExportInProgress = false;
+    const success = msg.success === true;
+    serviceExportStatusTone = success ? 'success' : 'error';
+    serviceExportStatusMessage =
+      typeof msg.message === 'string' && msg.message.length > 0
+        ? msg.message
+        : success
+          ? 'SQLTools config exported.'
+          : 'SQLTools config export failed.';
     refreshUiAfterServiceExportStateChange();
   }
 });
@@ -621,7 +646,8 @@ function shouldRefreshWorkspaceAppsOnly(action, modeBeforeAction, tabBeforeActio
   const isAppsAction =
     action === 'select-local-root-folder' ||
     action === 'select-export-service' ||
-    action === 'export-service-artifacts';
+    action === 'export-service-artifacts' ||
+    action === 'export-sqltools-config';
   if (!isAppsAction) {
     return false;
   }
@@ -755,6 +781,11 @@ function refreshWorkspaceAppsView() {
   const exportButton = exportTab.querySelector('[data-action="export-service-artifacts"]');
   if (exportButton instanceof HTMLButtonElement) {
     exportButton.disabled = !canExport;
+  }
+
+  const sqlToolsButton = exportTab.querySelector('[data-action="export-sqltools-config"]');
+  if (sqlToolsButton instanceof HTMLButtonElement) {
+    sqlToolsButton.disabled = !canExport;
   }
 
   const statusElement = exportTab.querySelector('[data-role="service-export-status"]');
@@ -1096,6 +1127,10 @@ function handleServiceExportAction(action, actionElement) {
 
   if (action === 'export-service-artifacts') {
     return triggerServiceExport();
+  }
+
+  if (action === 'export-sqltools-config') {
+    return triggerSqlToolsConfigExport();
   }
 
   return null;
@@ -2460,6 +2495,14 @@ function renderServiceExportTab() {
         >
           Export Artifacts
         </button>
+        <button
+          type="button"
+          class="secondary-action service-export-sqltools-button"
+          data-action="export-sqltools-config"
+          ${canExport ? '' : 'disabled'}
+        >
+          Export SQLTools Config
+        </button>
       </div>
 
       ${renderServiceExportStatus()}
@@ -3029,6 +3072,44 @@ function triggerServiceExport() {
 
   vscodeApi.postMessage({
     type: EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE,
+    ...basePayload,
+  });
+  return true;
+}
+
+function triggerSqlToolsConfigExport() {
+  const selectedMapping = serviceFolderMappings.find(
+    (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
+  );
+  if (selectedMapping === undefined) {
+    serviceExportStatusTone = 'error';
+    serviceExportStatusMessage = 'Choose one mapped service before exporting SQLTools config.';
+    refreshUiAfterServiceExportStateChange();
+    return true;
+  }
+
+  const basePayload = {
+    appId: selectedMapping.appId,
+    appName: selectedMapping.appName,
+    rootFolderPath: localServiceRootFolderPath,
+  };
+
+  serviceExportInProgress = true;
+  serviceExportStatusTone = 'info';
+  serviceExportStatusMessage = `Exporting SQLTools config for ${selectedMapping.appName}...`;
+
+  if (vscodeApi === null) {
+    serviceExportInProgress = false;
+    serviceExportStatusTone = 'success';
+    serviceExportStatusMessage =
+      `SQLTools connection "${selectedMapping.appName} (prototype)" exported.`;
+    refreshUiAfterServiceExportStateChange();
+    return true;
+  }
+
+  refreshUiAfterServiceExportStateChange();
+  vscodeApi.postMessage({
+    type: EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE,
     ...basePayload,
   });
   return true;

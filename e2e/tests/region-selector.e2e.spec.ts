@@ -973,6 +973,11 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByRole('button', { name: 'Export Artifacts' })
       ).toBeDisabled();
+      // Export SQLTools Config button must be present and disabled without a selected service
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export SQLTools Config' })
+      ).toBeDisabled();
+
       await expect(webviewFrame.locator('.service-export-root-row')).toHaveCount(1);
       await expect(
         webviewFrame.locator('.service-export-root-row .service-export-path')
@@ -993,6 +998,62 @@ test.describe('SAP Tools region selector', () => {
       ).toHaveCount(3);
     } finally {
       await cleanupExtensionHost(session);
+    }
+  });
+
+  test('Export SQLTools Config button is enabled after a mapped service is selected', async () => {
+    const fixtureRootPath = createServiceRootMappingFixture();
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATH: fixtureRootPath,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+
+      const selectRootFolderButton = webviewFrame.getByRole('button', {
+        name: 'Select Root Folder',
+      });
+      await clickWithFallback(selectRootFolderButton);
+
+      // Wait for folder scan to complete (all 3 services become mapped)
+      const mappedStateCells = webviewFrame.locator(
+        '.service-map-row .service-map-state',
+        { hasText: /^Mapped$/i }
+      );
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
+
+      // Both export buttons are still disabled — no service selected yet
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export Artifacts' })
+      ).toBeDisabled();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export SQLTools Config' })
+      ).toBeDisabled();
+
+      // Select the first mapped service row
+      await clickWithFallback(
+        webviewFrame.locator('.service-map-row').filter({ hasText: 'finance_uat_api' }).first()
+      );
+
+      // Both export buttons must become enabled after service selection
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export Artifacts' })
+      ).toBeEnabled({ timeout: 5000 });
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export SQLTools Config' })
+      ).toBeEnabled({ timeout: 5000 });
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(fixtureRootPath, { recursive: true, force: true });
     }
   });
 
