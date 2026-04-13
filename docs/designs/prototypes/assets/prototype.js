@@ -260,6 +260,13 @@ window.addEventListener('message', (event) => {
       refreshWorkspaceLogsView();
       return;
     }
+    if (isWorkspaceAppsMounted()) {
+      refreshWorkspaceAppsView();
+      return;
+    }
+    if (mode === 'selection') {
+      return;
+    }
     renderPrototype();
     return;
   }
@@ -273,6 +280,13 @@ window.addEventListener('message', (event) => {
 
     if (isWorkspaceLogsMounted()) {
       refreshWorkspaceLogsView();
+      return;
+    }
+    if (isWorkspaceAppsMounted()) {
+      refreshWorkspaceAppsView();
+      return;
+    }
+    if (mode === 'selection') {
       return;
     }
     renderPrototype();
@@ -417,7 +431,6 @@ let logsData = cloneSeedLogs();
 let selectedAppLogIds = [];
 let activeAppLogIds = [];
 let pendingSelectionMotion = null;
-const pendingStageHeightMotions = new Map();
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
 const DESIGN_THEME_CLASS_PREFIX = 'theme-';
 const SELECTION_STAGE_SLOT_IDS = ['area', 'region', 'org', 'space', 'confirm'];
@@ -440,7 +453,6 @@ appElement.addEventListener('click', (event) => {
     const nextGroupId = areaButton.dataset.groupId ?? '';
     if (selectedGroupId !== nextGroupId) {
       queueSelectionMotion(areaButton, buildDataSelector('data-group-id', nextGroupId));
-      queueStageHeightMotion('area');
     }
     handleGroupSelection(nextGroupId);
     rerenderSelectionStageSlotsWithMotion(SELECTION_STAGE_SLOT_IDS);
@@ -457,7 +469,6 @@ appElement.addEventListener('click', (event) => {
       return;
     }
     queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
-    queueStageHeightMotion('region');
     handleRegionSelection(nextRegionId);
     rerenderSelectionStageSlotsWithMotion(['region', 'org', 'space', 'confirm']);
     return;
@@ -470,7 +481,6 @@ appElement.addEventListener('click', (event) => {
       return;
     }
     queueSelectionMotion(orgButton, buildDataSelector('data-org-id', nextOrgId));
-    queueStageHeightMotion('org');
     handleOrgSelection(nextOrgId);
     rerenderSelectionStageSlotsWithMotion(['org', 'space', 'confirm']);
     return;
@@ -483,9 +493,12 @@ appElement.addEventListener('click', (event) => {
       return;
     }
     queueSelectionMotion(spaceButton, buildDataSelector('data-space-id', nextSpaceId));
-    queueStageHeightMotion('space');
     handleSpaceSelection(nextSpaceId);
     rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
+    return;
+  }
+
+  if (handleAppLogRowClick(target)) {
     return;
   }
 
@@ -495,7 +508,6 @@ appElement.addEventListener('click', (event) => {
   }
 
   const action = actionElement.dataset.action ?? '';
-  queueStageHeightMotionByAction(action);
   const modeBeforeAction = mode;
   const tabBeforeAction = activeTabId;
   if (!handleAction(action, actionElement)) {
@@ -674,6 +686,30 @@ function isWorkspaceAppsMounted() {
   }
 
   return appElement.querySelector('.service-export-tab') instanceof HTMLElement;
+}
+
+function handleAppLogRowClick(target) {
+  const appLogRow = target.closest('.app-log-item');
+  if (!(appLogRow instanceof HTMLElement)) {
+    return false;
+  }
+
+  const checkbox = appLogRow.querySelector('[data-role="log-app-checkbox"]');
+  if (!(checkbox instanceof HTMLInputElement)) {
+    return false;
+  }
+
+  if (target === checkbox) {
+    return false;
+  }
+
+  if (checkbox.disabled) {
+    return true;
+  }
+
+  checkbox.checked = !checkbox.checked;
+  checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
 
 function refreshWorkspaceLogsView() {
@@ -1573,13 +1609,11 @@ function rerenderSelectionStageSlotsWithMotion(stageSlotIds) {
 
   if (!isSelectionShellMounted()) {
     renderPrototype();
-    playStageHeightMotions();
     playSelectionMotion();
     return;
   }
 
   updateSelectionStageSlots(stageSlotIds);
-  playStageHeightMotions();
   playSelectionMotion();
 }
 
@@ -1632,79 +1666,6 @@ function playSelectionMotion() {
   pendingSelectionMotion = null;
 }
 
-function queueStageHeightMotion(stageId) {
-  if (mode !== 'selection') {
-    return;
-  }
-
-  const stage = appElement.querySelector(buildStageSelector(stageId));
-  if (!(stage instanceof HTMLElement)) {
-    return;
-  }
-
-  pendingStageHeightMotions.set(stageId, stage.getBoundingClientRect().height);
-}
-
-function queueStageHeightMotionByAction(action) {
-  if (action === 'reset-area-selection') {
-    queueStageHeightMotion('area');
-    return;
-  }
-
-  if (action === 'reset-region-selection') {
-    queueStageHeightMotion('region');
-    return;
-  }
-
-  if (action === 'reset-org-selection') {
-    queueStageHeightMotion('org');
-    return;
-  }
-
-  if (action === 'reset-space-selection') {
-    queueStageHeightMotion('space');
-  }
-}
-
-function playStageHeightMotions() {
-  if (pendingStageHeightMotions.size === 0) {
-    return;
-  }
-
-  const shouldReduceMotion = prefersReducedMotion();
-
-  for (const [stageId, startHeight] of pendingStageHeightMotions.entries()) {
-    const stage = appElement.querySelector(buildStageSelector(stageId));
-    if (!(stage instanceof HTMLElement)) {
-      continue;
-    }
-
-    const endHeight = stage.getBoundingClientRect().height;
-    if (shouldReduceMotion || Math.abs(startHeight - endHeight) < 1) {
-      continue;
-    }
-
-    stage.style.overflow = 'hidden';
-    const animation = stage.animate(
-      [{ height: `${startHeight}px` }, { height: `${endHeight}px` }],
-      {
-        duration: 220,
-        easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)',
-        fill: 'both',
-      }
-    );
-
-    animation.addEventListener('finish', () => {
-      stage.style.overflow = '';
-    });
-    animation.addEventListener('cancel', () => {
-      stage.style.overflow = '';
-    });
-  }
-
-  pendingStageHeightMotions.clear();
-}
-
 function prefersReducedMotion() {
   if (typeof window.matchMedia !== 'function') {
     return false;
@@ -1720,10 +1681,6 @@ function buildDataSelector(attribute, value) {
       : value.replaceAll('"', '\\"');
 
   return `[${attribute}="${escapedValue}"]`;
-}
-
-function buildStageSelector(stageId) {
-  return `[data-stage-id="${stageId}"]`;
 }
 
 function resolveVscodeApi() {
@@ -2334,15 +2291,24 @@ function renderWorkspaceScreen() {
     <header class="shell-header workspace-header">
       <div class="shell-header-row">
         <h1>Monitoring Workspace</h1>
-        <button
-          type="button"
-          class="header-icon-button"
-          data-action="open-settings"
-          aria-label="Open Settings"
-          title="Settings"
-        >
-          &#9881;
-        </button>
+        <div class="workspace-header-actions">
+          <button
+            type="button"
+            class="secondary-action workspace-change-region"
+            data-action="change-region"
+          >
+            Change Region
+          </button>
+          <button
+            type="button"
+            class="header-icon-button"
+            data-action="open-settings"
+            aria-label="Open Settings"
+            title="Settings"
+          >
+            &#9881;
+          </button>
+        </div>
       </div>
       <p class="workspace-context">${workspaceSummary}</p>
     </header>
@@ -2355,7 +2321,6 @@ function renderWorkspaceScreen() {
 
     <footer class="workspace-footer">
       <span data-role="workspace-last-sync">Last sync: ${lastSyncLabel}</span>
-      <button type="button" class="secondary-action workspace-logout" data-action="change-region">Change Region</button>
     </footer>
   `;
 }

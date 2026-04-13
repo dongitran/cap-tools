@@ -398,23 +398,10 @@ body.pattern-dots::before {
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
   border-radius: 12px;
   padding: 10px;
-  animation: float-in 280ms ease;
 }
 
 .area-stage {
   padding: 10px;
-}
-
-@keyframes float-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .group-head {
@@ -833,6 +820,16 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   gap: 8px;
 }
 
+.workspace-header .shell-header-row {
+  align-items: center;
+}
+
+.workspace-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .workspace-context {
   margin: 0;
   font-size: 0.71rem;
@@ -1040,11 +1037,10 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   margin-top: 2px;
 }
 
-.workspace-logout {
-  min-width: 84px;
-  min-height: 26px;
-  padding-inline: 10px;
-  font-size: 0.89rem;
+.workspace-change-region {
+  min-height: 30px;
+  padding-inline: 12px;
+  font-size: 0.8rem;
 }
 
 .workspace-footer {
@@ -1053,7 +1049,7 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   padding: 8px 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   font-size: 0.77rem;
   color: var(--muted-color);
@@ -1729,8 +1725,17 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   .workspace-footer {
     padding: 8px;
     flex-direction: row;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+  }
+
+  .workspace-header .shell-header-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .workspace-header-actions {
+    margin-left: auto;
   }
 
   .area-picker {

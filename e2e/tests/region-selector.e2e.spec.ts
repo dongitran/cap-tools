@@ -76,6 +76,7 @@ interface ShellNodeStabilitySnapshot {
   readonly sameGroupsNode: boolean;
   readonly sameAreaSlotNode: boolean;
   readonly sameRegionSlotNode: boolean;
+  readonly sameOrgSlotNode: boolean;
 }
 
 interface ViewportGutterSnapshot {
@@ -638,7 +639,9 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can select area and region without recreating selection shell nodes', async () => {
+  test(
+    'User can select area region and organization without recreating selection shell nodes',
+    async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -651,13 +654,15 @@ test.describe('SAP Tools region selector', () => {
         const regionSlotElement = document.querySelector(
           '[data-stage-slot="region"]'
         );
+        const orgSlotElement = document.querySelector('[data-stage-slot="org"]');
 
         if (
           !(shellElement instanceof HTMLElement) ||
           !(headerElement instanceof HTMLElement) ||
           !(groupsElement instanceof HTMLElement) ||
           !(areaSlotElement instanceof HTMLElement) ||
-          !(regionSlotElement instanceof HTMLElement)
+          !(regionSlotElement instanceof HTMLElement) ||
+          !(orgSlotElement instanceof HTMLElement)
         ) {
           return false;
         }
@@ -669,6 +674,7 @@ test.describe('SAP Tools region selector', () => {
             groups: HTMLElement;
             areaSlot: HTMLElement;
             regionSlot: HTMLElement;
+            orgSlot: HTMLElement;
           };
         };
 
@@ -678,6 +684,7 @@ test.describe('SAP Tools region selector', () => {
           groups: groupsElement,
           areaSlot: areaSlotElement,
           regionSlot: regionSlotElement,
+          orgSlot: orgSlotElement,
         };
 
         return true;
@@ -686,6 +693,10 @@ test.describe('SAP Tools region selector', () => {
 
       await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
       await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+      await expect(
+        webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await webviewFrame.getByRole('button', { name: ORG_TO_SELECT }).click();
 
       const shellNodeStability = await webviewFrame.evaluate(() => {
         const runtimeWindow = window as Window & {
@@ -695,6 +706,7 @@ test.describe('SAP Tools region selector', () => {
             groups: HTMLElement;
             areaSlot: HTMLElement;
             regionSlot: HTMLElement;
+            orgSlot: HTMLElement;
           };
         };
 
@@ -710,6 +722,7 @@ test.describe('SAP Tools region selector', () => {
         const regionSlotElement = document.querySelector(
           '[data-stage-slot="region"]'
         );
+        const orgSlotElement = document.querySelector('[data-stage-slot="org"]');
 
         return {
           sameShellNode: shellElement === refs.shell,
@@ -717,6 +730,7 @@ test.describe('SAP Tools region selector', () => {
           sameGroupsNode: groupsElement === refs.groups,
           sameAreaSlotNode: areaSlotElement === refs.areaSlot,
           sameRegionSlotNode: regionSlotElement === refs.regionSlot,
+          sameOrgSlotNode: orgSlotElement === refs.orgSlot,
         };
       });
 
@@ -726,12 +740,14 @@ test.describe('SAP Tools region selector', () => {
         sameGroupsNode: true,
         sameAreaSlotNode: true,
         sameRegionSlotNode: true,
+        sameOrgSlotNode: true,
       };
       expect(shellNodeStability).toEqual(expectedStabilitySnapshot);
     } finally {
       await cleanupExtensionHost(session);
     }
-  });
+    }
+  );
 
   test('User can load fourteen organizations when selecting br-10 in test mode', async () => {
     const session = await launchExtensionHost();
@@ -749,6 +765,48 @@ test.describe('SAP Tools region selector', () => {
           { timeout: 10000 }
         )
         .toBe(14);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees stable selection cards without entry animation while choosing scope', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await expect(
+        webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(webviewFrame.getByRole('button', { name: ORG_TO_SELECT }));
+
+      const animationSnapshot = await webviewFrame.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.groups .group-card'));
+        if (cards.length === 0) {
+          return {
+            cardCount: 0,
+            hasAnimatedCard: true,
+          };
+        }
+
+        const hasAnimatedCard = cards.some((card) => {
+          if (!(card instanceof HTMLElement)) {
+            return false;
+          }
+          const animationName = getComputedStyle(card).animationName;
+          return animationName !== 'none';
+        });
+
+        return {
+          cardCount: cards.length,
+          hasAnimatedCard,
+        };
+      });
+
+      expect(animationSnapshot.cardCount).toBeGreaterThan(0);
+      expect(animationSnapshot.hasAnimatedCard).toBe(false);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -935,11 +993,82 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.getByRole('tab', { name: 'Settings' })
       ).toBeVisible();
 
+      const workspaceHeaderLayout = await webviewFrame.evaluate(() => {
+        const headerRow = document.querySelector('.workspace-header .shell-header-row');
+        if (!(headerRow instanceof HTMLElement)) {
+          return {
+            hasChangeRegionInHeader: false,
+            hasSettingsInHeader: false,
+            isChangeBeforeSettings: false,
+            hasFooterChangeButton: false,
+          };
+        }
+
+        const changeRegionButton = headerRow.querySelector('[data-action="change-region"]');
+        const settingsButton = headerRow.querySelector('[data-action="open-settings"]');
+        const footerChangeButton = document.querySelector(
+          '.workspace-footer [data-action="change-region"]'
+        );
+        const isChangeBeforeSettings =
+          changeRegionButton instanceof HTMLElement &&
+          settingsButton instanceof HTMLElement &&
+          changeRegionButton.compareDocumentPosition(settingsButton) ===
+            Node.DOCUMENT_POSITION_FOLLOWING;
+
+        return {
+          hasChangeRegionInHeader: changeRegionButton instanceof HTMLElement,
+          hasSettingsInHeader: settingsButton instanceof HTMLElement,
+          isChangeBeforeSettings,
+          hasFooterChangeButton: footerChangeButton instanceof HTMLElement,
+        };
+      });
+
+      expect(workspaceHeaderLayout).toEqual({
+        hasChangeRegionInHeader: true,
+        hasSettingsInHeader: true,
+        isChangeBeforeSettings: true,
+        hasFooterChangeButton: false,
+      });
+
       await webviewFrame.getByRole('button', { name: 'Change Region' }).click();
       await expect(
         webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
       ).toBeVisible();
       await expect(confirmButton).toBeEnabled();
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can toggle app selection by clicking app row in Apps Log Control', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+
+      const appRow = webviewFrame.locator('.app-log-item', {
+        hasText: 'finance-uat-api',
+      });
+      const appCheckbox = appRow.locator('[data-role="log-app-checkbox"]');
+      const startLoggingButton = webviewFrame.getByRole('button', {
+        name: 'Start App Logging',
+      });
+
+      await expect(appCheckbox).not.toBeChecked();
+      await expect(startLoggingButton).toBeDisabled();
+
+      await clickWithFallback(appRow);
+      await expect(appCheckbox).toBeChecked();
+      await expect(startLoggingButton).toBeEnabled();
+
+      await clickWithFallback(appRow);
+      await expect(appCheckbox).not.toBeChecked();
+      await expect(startLoggingButton).toBeDisabled();
     } finally {
       await cleanupExtensionHost(session);
     }
