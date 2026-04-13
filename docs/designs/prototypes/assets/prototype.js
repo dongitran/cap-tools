@@ -428,6 +428,22 @@ appElement.addEventListener('input', (event) => {
 
 appElement.addEventListener('change', (event) => {
   const target = event.target;
+  if (
+    target instanceof HTMLSelectElement &&
+    target.dataset.role === 'sync-interval-select'
+  ) {
+    const syncHoursRaw = Number.parseInt(target.value, 10);
+    if (!SYNC_INTERVAL_OPTIONS.includes(syncHoursRaw)) {
+      return;
+    }
+
+    syncIntervalHours = syncHoursRaw;
+    settingsStatusMessage = `Sync interval updated to ${formatSyncIntervalLabel(syncHoursRaw)}.`;
+    postSyncIntervalUpdate(syncHoursRaw);
+    renderPrototype();
+    return;
+  }
+
   if (!(target instanceof HTMLInputElement)) {
     return;
   }
@@ -1534,18 +1550,12 @@ function renderSelectionScreen() {
 }
 
 function renderSettingsScreen() {
-  const syncIntervalButtons = SYNC_INTERVAL_OPTIONS.map((hours) => {
+  const syncIntervalOptions = SYNC_INTERVAL_OPTIONS.map((hours) => {
     const isSelected = syncIntervalHours === hours;
     return `
-      <button
-        type="button"
-        class="sync-interval-option${isSelected ? ' is-selected' : ''}"
-        data-action="set-sync-interval"
-        data-sync-hours="${String(hours)}"
-        aria-pressed="${isSelected}"
-      >
+      <option value="${String(hours)}" ${isSelected ? 'selected' : ''}>
         ${formatSyncIntervalLabel(hours)}
-      </button>
+      </option>
     `;
   }).join('');
 
@@ -1570,8 +1580,16 @@ function renderSettingsScreen() {
     <section class="workspace-body settings-body">
       <section class="group-card settings-section">
         <h2>Cache Sync Interval</h2>
-        <div class="sync-interval-picker" role="group" aria-label="Choose cache sync interval">
-          ${syncIntervalButtons}
+        <div class="sync-interval-picker">
+          <label class="sync-interval-label" for="sync-interval-select">Sync interval</label>
+          <select
+            id="sync-interval-select"
+            class="sync-interval-select"
+            data-role="sync-interval-select"
+            aria-label="Cache sync interval"
+          >
+            ${syncIntervalOptions}
+          </select>
         </div>
         <p class="settings-meta">Current account: ${escapeHtml(userLabel)}</p>
       </section>

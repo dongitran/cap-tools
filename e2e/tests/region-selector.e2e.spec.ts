@@ -931,7 +931,7 @@ test.describe('SAP Tools region selector', () => {
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
       await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
-      await clickWithFallback(webviewFrame.getByRole('button', { name: '12 hours' }));
+      await webviewFrame.getByLabel('Cache sync interval').selectOption('12');
       await expect(webviewFrame.getByRole('status')).toContainText(
         /Sync interval updated to 12 hours/i
       );

@@ -974,31 +974,25 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
 
 .sync-interval-picker {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
-.sync-interval-option {
+.sync-interval-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted-color);
+}
+
+.sync-interval-select {
   border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));
   border-radius: 8px;
   min-height: 34px;
+  width: 100%;
   background: var(--frame-bg);
-  color: var(--muted-color);
+  color: var(--text-color);
   font-size: 0.8rem;
   font-weight: 700;
-  cursor: pointer;
-  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
-}
-
-.sync-interval-option:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--accent-color) 50%, var(--mix-base));
-}
-
-.sync-interval-option.is-selected {
-  border-color: color-mix(in oklab, var(--accent-color) 64%, var(--mix-base));
-  background: var(--accent-soft);
-  color: var(--chip-text);
+  padding: 0 10px;
 }
 
 .settings-meta {
@@ -1526,10 +1520,6 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   .area-picker {
     grid-template-columns: 1fr;
     gap: 7px;
-  }
-
-  .sync-interval-picker {
-    grid-template-columns: 1fr;
   }
 
   .region-layout.grid,
