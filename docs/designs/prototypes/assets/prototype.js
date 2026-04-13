@@ -127,6 +127,7 @@ const LOGOUT_MESSAGE_TYPE = 'sapTools.logout';
 const SELECT_LOCAL_ROOT_FOLDER_MESSAGE_TYPE = 'sapTools.selectLocalRootFolder';
 const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
   'sapTools.refreshServiceFolderMappings';
+const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
 const EXPORT_DEFAULT_ENV_MESSAGE_TYPE = 'sapTools.exportDefaultEnv';
 const EXPORT_PNPM_LOCK_MESSAGE_TYPE = 'sapTools.exportPnpmLock';
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
@@ -526,6 +527,48 @@ appElement.addEventListener('change', (event) => {
     settingsStatusMessage = `Sync interval updated to ${formatSyncIntervalLabel(syncHoursRaw)}.`;
     postSyncIntervalUpdate(syncHoursRaw);
     renderPrototype();
+    return;
+  }
+
+  if (
+    target instanceof HTMLSelectElement &&
+    target.dataset.role === 'service-folder-path-select'
+  ) {
+    const appId = target.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return;
+    }
+
+    const selectedFolderPath = target.value.trim();
+    serviceFolderMappings = serviceFolderMappings.map((mapping) => {
+      if (mapping.appId !== appId) {
+        return mapping;
+      }
+
+      const candidateFolderPaths = Array.isArray(mapping.candidateFolderPaths)
+        ? mapping.candidateFolderPaths
+        : [];
+      const isAllowedPath = candidateFolderPaths.includes(selectedFolderPath);
+      const nextFolderPath = isAllowedPath ? selectedFolderPath : '';
+      return {
+        ...mapping,
+        folderPath: nextFolderPath,
+        isMapped: nextFolderPath.length > 0,
+      };
+    });
+
+    if (selectedFolderPath.length > 0) {
+      selectedServiceExportAppId = appId;
+      serviceExportStatusTone = 'info';
+      serviceExportStatusMessage = 'Service folder selected.';
+    } else if (selectedServiceExportAppId === appId) {
+      selectedServiceExportAppId = '';
+      serviceExportStatusTone = 'info';
+      serviceExportStatusMessage = 'Service folder selection cleared.';
+    }
+
+    postSelectServiceFolderMapping(appId, selectedFolderPath);
+    refreshUiAfterServiceExportStateChange();
     return;
   }
 
@@ -1657,6 +1700,18 @@ function postActiveAppsChanged(appNames) {
   });
 }
 
+function postSelectServiceFolderMapping(appId, folderPath) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE,
+    appId,
+    folderPath,
+  });
+}
+
 function postSyncIntervalUpdate(syncHours) {
   if (vscodeApi === null) {
     return;
@@ -2355,6 +2410,28 @@ function renderServiceExportMappingRows(mappingRows) {
   const mappedRows = mappingRows.map((mapping) => {
     const isSelected = selectedServiceExportAppId === mapping.appId;
     const folderPathLabel = mapping.isMapped ? mapping.folderPath : 'No matching local folder';
+
+    if (mapping.hasConflict) {
+      const optionsMarkup = [
+        '<option value="">Choose folder...</option>',
+        ...mapping.candidateFolderPaths.map((candidatePath) => {
+          const isCurrent = mapping.folderPath === candidatePath;
+          return `<option value="${escapeHtml(candidatePath)}" ${isCurrent ? 'selected' : ''}>${escapeHtml(candidatePath)}</option>`;
+        }),
+      ].join('');
+      return `
+        <div class="service-map-row is-conflict${mapping.isMapped ? ' is-resolved' : ''}">
+          <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
+          <label class="service-map-picker">
+            <select data-role="service-folder-path-select" data-app-id="${escapeHtml(mapping.appId)}">
+              ${optionsMarkup}
+            </select>
+          </label>
+          <span class="service-map-state">${mapping.isMapped ? 'Resolved' : 'Choose folder'}</span>
+        </div>
+      `;
+    }
+
     if (!mapping.isMapped) {
       return `
         <div class="service-map-row is-unmapped" aria-disabled="true">
@@ -2708,6 +2785,8 @@ function resolveServiceExportRows(availableApps) {
       appName: app.name,
       folderPath: '',
       isMapped: false,
+      hasConflict: false,
+      candidateFolderPaths: [],
       matchType: 'none',
     };
   });
@@ -2725,15 +2804,32 @@ function normalizeServiceFolderMappings(rawMappings) {
       typeof rawMapping.folderPath === 'string' ? rawMapping.folderPath.trim() : '';
     const matchTypeRaw =
       typeof rawMapping.matchType === 'string' ? rawMapping.matchType.trim() : '';
+    const rawCandidateFolderPaths = Array.isArray(rawMapping.candidateFolderPaths)
+      ? rawMapping.candidateFolderPaths
+      : [];
+    const candidateFolderPaths = rawCandidateFolderPaths
+      .filter((pathValue) => typeof pathValue === 'string')
+      .map((pathValue) => pathValue.trim())
+      .filter((pathValue) => pathValue.length > 0);
+    const hasConflict =
+      rawMapping.hasConflict === true ||
+      matchTypeRaw === 'ambiguous' ||
+      candidateFolderPaths.length > 1;
     const appId = appIdRaw.length > 0 ? appIdRaw : appNameRaw;
     if (appId.length === 0 || appNameRaw.length === 0) {
       continue;
     }
+    const normalizedFolderPath = folderPathRaw.length > 0 ? folderPathRaw : '';
+    const isMapped =
+      normalizedFolderPath.length > 0 &&
+      (!hasConflict || candidateFolderPaths.includes(normalizedFolderPath));
     normalizedMappings.push({
       appId,
       appName: appNameRaw,
-      folderPath: folderPathRaw,
-      isMapped: folderPathRaw.length > 0,
+      folderPath: isMapped ? normalizedFolderPath : '',
+      isMapped,
+      hasConflict,
+      candidateFolderPaths,
       matchType: matchTypeRaw.length > 0 ? matchTypeRaw : 'none',
     });
   }
@@ -2749,6 +2845,8 @@ function buildMockServiceFolderMappings(rootFolderPath, availableApps) {
       appName: app.name,
       folderPath: shouldMap ? `${rootFolderPath}/${normalizedFolderName}` : '',
       isMapped: shouldMap,
+      hasConflict: false,
+      candidateFolderPaths: shouldMap ? [`${rootFolderPath}/${normalizedFolderName}`] : [],
       matchType: normalizedFolderName === app.name ? 'exact' : 'underscore',
     };
   });

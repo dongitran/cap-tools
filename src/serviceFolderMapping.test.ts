@@ -48,18 +48,46 @@ describe('buildServiceFolderMappings', () => {
         appName: 'finance-uat-api',
         folderPath: join(rootDir, 'finance-uat-api'),
         matchType: 'exact',
+        candidateFolderPaths: [join(rootDir, 'finance-uat-api')],
+        hasConflict: false,
       },
       {
         appId: 'finance-uat-worker',
         appName: 'finance-uat-worker',
         folderPath: join(rootDir, 'finance_uat_worker'),
         matchType: 'underscore',
+        candidateFolderPaths: [join(rootDir, 'finance_uat_worker')],
+        hasConflict: false,
       },
       {
         appId: 'missing-service',
         appName: 'missing-service',
         folderPath: '',
         matchType: 'none',
+        candidateFolderPaths: [],
+        hasConflict: false,
+      },
+    ]);
+  });
+
+  it('returns conflict state when multiple local folders match the same app', async (): Promise<void> => {
+    const rootDir = await createTempRootDir();
+    await createRepoFolder(rootDir, 'apps-a/finance-uat-api');
+    await createRepoFolder(rootDir, 'apps-b/finance-uat-api');
+
+    const mappings = await buildServiceFolderMappings(rootDir, ['finance-uat-api']);
+
+    expect(mappings).toEqual([
+      {
+        appId: 'finance-uat-api',
+        appName: 'finance-uat-api',
+        folderPath: '',
+        matchType: 'ambiguous',
+        candidateFolderPaths: [
+          join(rootDir, 'apps-a/finance-uat-api'),
+          join(rootDir, 'apps-b/finance-uat-api'),
+        ],
+        hasConflict: true,
       },
     ]);
   });
@@ -76,6 +104,8 @@ describe('buildServiceFolderMappings', () => {
         appName: 'not-a-repo',
         folderPath: '',
         matchType: 'none',
+        candidateFolderPaths: [],
+        hasConflict: false,
       },
     ]);
   });
@@ -103,6 +133,8 @@ describe('buildServiceFolderMappings', () => {
       appName: 'deep-service',
       folderPath: '',
       matchType: 'none',
+      candidateFolderPaths: [],
+      hasConflict: false,
     });
   });
 });

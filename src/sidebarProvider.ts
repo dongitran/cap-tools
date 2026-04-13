@@ -43,6 +43,7 @@ const MSG_SYNC_NOW = 'sapTools.syncNow';
 const MSG_LOGOUT = 'sapTools.logout';
 const MSG_SELECT_LOCAL_ROOT_FOLDER = 'sapTools.selectLocalRootFolder';
 const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappings';
+const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
 const MSG_EXPORT_DEFAULT_ENV = 'sapTools.exportDefaultEnv';
 const MSG_EXPORT_PNPM_LOCK = 'sapTools.exportPnpmLock';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
@@ -95,6 +96,11 @@ interface UpdateSyncIntervalPayload {
 interface RefreshServiceFolderMappingsPayload {
   readonly rootFolderPath: string;
   readonly appNames: readonly string[];
+}
+
+interface SelectServiceFolderMappingPayload {
+  readonly appId: string;
+  readonly folderPath: string;
 }
 
 interface ExportServiceArtifactsPayload {
@@ -155,6 +161,7 @@ export class RegionSidebarProvider
   private currentApps: SidebarAppEntry[] = [];
   private currentLogSessionSeed: CfLogSessionSeed | null = null;
   private serviceFolderMappings: ServiceFolderMapping[] = [];
+  private readonly serviceFolderSelections = new Map<string, string>();
   private exportInProgress = false;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -181,6 +188,7 @@ export class RegionSidebarProvider
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
 
     const assetsRoot = vscode.Uri.joinPath(
@@ -283,6 +291,15 @@ export class RegionSidebarProvider
       return;
     }
 
+    if (
+      type === MSG_SELECT_SERVICE_FOLDER_MAPPING &&
+      isSelectServiceFolderMappingMessage(message)
+    ) {
+      const payload = readSelectServiceFolderMappingPayload(message);
+      this.handleSelectServiceFolderMapping(payload);
+      return;
+    }
+
     if (type === MSG_EXPORT_DEFAULT_ENV && isExportServiceArtifactsMessage(message)) {
       const payload = readExportServiceArtifactsPayload(message);
       await this.handleExportServiceArtifacts(payload, {
@@ -361,6 +378,7 @@ export class RegionSidebarProvider
     }
 
     this.selectedLocalRootFolderPath = selectedPath;
+    this.serviceFolderSelections.clear();
     this.postMessage({
       type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
       path: selectedPath,
@@ -374,6 +392,7 @@ export class RegionSidebarProvider
     const rootFolderPath = payload.rootFolderPath.trim();
     if (rootFolderPath.length > 0 && rootFolderPath !== this.selectedLocalRootFolderPath) {
       this.selectedLocalRootFolderPath = rootFolderPath;
+      this.serviceFolderSelections.clear();
       this.postMessage({
         type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
         path: this.selectedLocalRootFolderPath,
@@ -381,6 +400,34 @@ export class RegionSidebarProvider
     }
 
     await this.refreshServiceFolderMappings();
+  }
+
+  private handleSelectServiceFolderMapping(
+    payload: SelectServiceFolderMappingPayload
+  ): void {
+    const mapping = this.serviceFolderMappings.find((entry) => {
+      return entry.appId === payload.appId;
+    });
+    if (mapping?.hasConflict !== true) {
+      return;
+    }
+
+    const normalizedFolderPath = payload.folderPath.trim();
+    if (normalizedFolderPath.length === 0) {
+      this.serviceFolderSelections.delete(payload.appId);
+    } else {
+      const allowedPaths = new Set(mapping.candidateFolderPaths);
+      if (!allowedPaths.has(normalizedFolderPath)) {
+        return;
+      }
+      this.serviceFolderSelections.set(payload.appId, normalizedFolderPath);
+    }
+
+    this.serviceFolderMappings = this.applyServiceFolderSelections(this.serviceFolderMappings);
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
   }
 
   private async refreshServiceFolderMappings(): Promise<void> {
@@ -406,12 +453,14 @@ export class RegionSidebarProvider
         this.selectedLocalRootFolderPath,
         this.currentApps.map((app) => app.name)
       );
-      this.serviceFolderMappings = [...mappings];
+      this.serviceFolderMappings = this.applyServiceFolderSelections(mappings);
       this.postMessage({
         type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
         mappings: this.serviceFolderMappings,
       });
     } catch (error) {
+      this.serviceFolderMappings = [];
+      this.serviceFolderSelections.clear();
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -421,6 +470,31 @@ export class RegionSidebarProvider
         message: errorMessage,
       });
     }
+  }
+
+  private applyServiceFolderSelections(
+    baseMappings: readonly ServiceFolderMapping[]
+  ): ServiceFolderMapping[] {
+    return baseMappings.map((mapping) => {
+      if (!mapping.hasConflict) {
+        return { ...mapping };
+      }
+
+      const selectedFolderPath = this.serviceFolderSelections.get(mapping.appId) ?? '';
+      const allowedPaths = new Set(mapping.candidateFolderPaths);
+      if (selectedFolderPath.length === 0 || !allowedPaths.has(selectedFolderPath)) {
+        this.serviceFolderSelections.delete(mapping.appId);
+        return {
+          ...mapping,
+          folderPath: '',
+        };
+      }
+
+      return {
+        ...mapping,
+        folderPath: selectedFolderPath,
+      };
+    });
   }
 
   private async handleExportServiceArtifacts(
@@ -554,6 +628,7 @@ export class RegionSidebarProvider
       this.currentApps = [];
       this.currentLogSessionSeed = null;
       this.serviceFolderMappings = [];
+      this.serviceFolderSelections.clear();
       this.exportInProgress = false;
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
@@ -624,6 +699,7 @@ export class RegionSidebarProvider
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.cfLogsPanel.updateApps([], null);
     this.cfLogsPanel.updateScope(buildScopeLabel(region.code, 'select-org', 'select-space'));
@@ -706,6 +782,7 @@ export class RegionSidebarProvider
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -849,6 +926,7 @@ export class RegionSidebarProvider
     this.currentApps = apps;
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -937,6 +1015,7 @@ export class RegionSidebarProvider
       cfHomeDir,
     };
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -953,6 +1032,7 @@ export class RegionSidebarProvider
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -966,6 +1046,7 @@ export class RegionSidebarProvider
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -979,6 +1060,7 @@ export class RegionSidebarProvider
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -1356,6 +1438,23 @@ function readRefreshServiceFolderMappingsPayload(
   return {
     rootFolderPath: String(value['rootFolderPath']).trim(),
     appNames: appNamesRaw.map((appName) => appName.trim()),
+  };
+}
+
+function isSelectServiceFolderMappingMessage(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value['appId'], 128) &&
+    typeof value['folderPath'] === 'string' &&
+    value['folderPath'].trim().length <= 4096
+  );
+}
+
+function readSelectServiceFolderMappingPayload(
+  value: Record<string, unknown>
+): SelectServiceFolderMappingPayload {
+  return {
+    appId: String(value['appId']).trim(),
+    folderPath: String(value['folderPath']).trim(),
   };
 }
 

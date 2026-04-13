@@ -1304,8 +1304,37 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   opacity: 0.8;
 }
 
+.service-map-row.is-conflict {
+  cursor: default;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) auto;
+}
+
+.service-map-row.is-conflict:hover {
+  background: transparent;
+}
+
+.service-map-row.is-conflict.is-resolved {
+  border-left: 2px solid color-mix(in oklab, var(--accent-color) 62%, var(--mix-base));
+  background: color-mix(in oklab, var(--accent-soft) 34%, var(--mix-base));
+}
+
 .service-map-row.is-unmapped:hover {
   background: transparent;
+}
+
+.service-map-picker {
+  min-width: 0;
+}
+
+.service-map-picker select {
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--frame-bg) 90%, var(--mix-base));
+  color: var(--text-color);
+  font-size: 0.64rem;
+  padding: 4px 8px;
 }
 
 .service-map-name {

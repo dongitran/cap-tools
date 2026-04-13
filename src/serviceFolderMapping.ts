@@ -19,7 +19,9 @@ export interface ServiceFolderMapping {
   readonly appId: string;
   readonly appName: string;
   readonly folderPath: string;
-  readonly matchType: 'exact' | 'underscore' | 'none';
+  readonly matchType: 'exact' | 'underscore' | 'none' | 'ambiguous';
+  readonly candidateFolderPaths: readonly string[];
+  readonly hasConflict: boolean;
 }
 
 export async function buildServiceFolderMappings(
@@ -47,12 +49,26 @@ export async function buildServiceFolderMappings(
       if (candidatePaths === undefined || candidatePaths.length === 0) {
         continue;
       }
-      const bestPath = pickBestPath(candidatePaths);
+
+      if (candidatePaths.length > 1) {
+        return {
+          appId: appName,
+          appName,
+          folderPath: '',
+          matchType: 'ambiguous',
+          candidateFolderPaths: sortCandidatePaths(candidatePaths),
+          hasConflict: true,
+        } satisfies ServiceFolderMapping;
+      }
+
+      const bestPath = candidatePaths[0] ?? '';
       return {
         appId: appName,
         appName,
         folderPath: bestPath,
         matchType: candidate === appName ? 'exact' : 'underscore',
+        candidateFolderPaths: bestPath.length > 0 ? [bestPath] : [],
+        hasConflict: false,
       } satisfies ServiceFolderMapping;
     }
 
@@ -61,6 +77,8 @@ export async function buildServiceFolderMappings(
       appName,
       folderPath: '',
       matchType: 'none',
+      candidateFolderPaths: [],
+      hasConflict: false,
     } satisfies ServiceFolderMapping;
   });
 }
@@ -172,12 +190,8 @@ function createFolderIndex(repoFolders: readonly string[]): Map<string, string[]
   return folderIndex;
 }
 
-function pickBestPath(paths: readonly string[]): string {
-  if (paths.length === 1) {
-    return paths[0] ?? '';
-  }
-
-  const sortedPaths = [...paths].sort((leftPath, rightPath) => {
+function sortCandidatePaths(paths: readonly string[]): string[] {
+  return [...paths].sort((leftPath, rightPath) => {
     const leftDepth = resolvePathDepth(leftPath);
     const rightDepth = resolvePathDepth(rightPath);
     if (leftDepth !== rightDepth) {
@@ -190,8 +204,6 @@ function pickBestPath(paths: readonly string[]): string {
 
     return leftPath.localeCompare(rightPath);
   });
-
-  return sortedPaths[0] ?? '';
 }
 
 function resolvePathDepth(pathValue: string): number {
