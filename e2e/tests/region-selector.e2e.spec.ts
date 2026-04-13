@@ -945,11 +945,15 @@ test.describe('SAP Tools region selector', () => {
       ).toBeVisible();
       await expect(
         webviewFrame.getByRole('button', { name: 'Refresh Mapping' })
-      ).toBeDisabled();
+      ).toHaveCount(0);
 
       await expect(
         webviewFrame.getByRole('button', { name: 'Export Artifacts' })
       ).toBeDisabled();
+      await expect(webviewFrame.locator('.service-export-root-row')).toHaveCount(1);
+      await expect(
+        webviewFrame.locator('.service-export-root-row .service-export-path')
+      ).toHaveCount(1);
       await expect(
         webviewFrame.getByRole('button', { name: 'Export default-env.json' })
       ).toHaveCount(0);

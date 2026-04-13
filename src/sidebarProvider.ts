@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { access } from 'node:fs/promises';
 
 import {
   cfLogin,
@@ -11,6 +12,7 @@ import {
 import type { CfSession } from './cfClient';
 import { ensureCfHomeDir } from './cfHome';
 import type { CacheRuntimeSnapshot, CacheSyncService } from './cacheSyncService';
+import type { CacheStore } from './cacheStore';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
 import { clearCredentials, getEffectiveCredentials, storeCredentials } from './credentialStore';
 import { isSyncIntervalHours } from './cacheModels';
@@ -152,6 +154,7 @@ export class RegionSidebarProvider
   private cfSessionRegionCode = '';
   private selectedRegionCode = '';
   private selectedRegionId = '';
+  private selectedOrgGuid = '';
   private regionSelectionRequestId = 0;
   private orgSelectionRequestId = 0;
   private spaceSelectionRequestId = 0;
@@ -168,7 +171,8 @@ export class RegionSidebarProvider
     private readonly outputChannel: vscode.OutputChannel,
     private readonly context: vscode.ExtensionContext,
     private readonly cfLogsPanel: CfLogsPanelProvider,
-    private readonly cacheSyncService: CacheSyncService
+    private readonly cacheSyncService: CacheSyncService,
+    private readonly cacheStore: CacheStore
   ) {
     const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
       this.postCacheState(snapshot);
@@ -182,6 +186,7 @@ export class RegionSidebarProvider
     this.cfSessionRegionCode = '';
     this.selectedRegionCode = '';
     this.selectedRegionId = '';
+    this.selectedOrgGuid = '';
     this.bumpRegionSelectionRequestId();
     this.currentApps = [];
     this.currentLogSessionSeed = null;
@@ -363,6 +368,7 @@ export class RegionSidebarProvider
       type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
       path: selectedPath,
     });
+    await this.persistRootFolderForCurrentScope(selectedPath);
     await this.refreshServiceFolderMappings();
   }
 
@@ -377,6 +383,7 @@ export class RegionSidebarProvider
         type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
         path: this.selectedLocalRootFolderPath,
       });
+      await this.persistRootFolderForCurrentScope(this.selectedLocalRootFolderPath);
     }
 
     await this.refreshServiceFolderMappings();
@@ -450,6 +457,123 @@ export class RegionSidebarProvider
         message: errorMessage,
       });
     }
+  }
+
+  private async restoreRootFolderForCurrentOrg(requestId: number): Promise<void> {
+    const cacheScope = await this.resolveCurrentRootFolderScope();
+    if (!this.isCurrentOrgRequest(requestId)) {
+      return;
+    }
+
+    if (cacheScope === null) {
+      this.clearRootFolderSelection();
+      return;
+    }
+
+    const cachedEntry = await this.cacheStore.getExportRootFolder(
+      cacheScope.email,
+      cacheScope.regionCode,
+      cacheScope.orgGuid
+    );
+    if (!this.isCurrentOrgRequest(requestId)) {
+      return;
+    }
+
+    if (cachedEntry === null) {
+      this.clearRootFolderSelection();
+      return;
+    }
+
+    const folderExists = await pathExists(cachedEntry.rootFolderPath);
+    if (!this.isCurrentOrgRequest(requestId)) {
+      return;
+    }
+
+    if (!folderExists) {
+      await this.cacheStore.deleteExportRootFolder(
+        cacheScope.email,
+        cacheScope.regionCode,
+        cacheScope.orgGuid
+      );
+      if (!this.isCurrentOrgRequest(requestId)) {
+        return;
+      }
+
+      this.outputChannel.appendLine(
+        `[cache] Removed missing root folder cache for org ${sanitizeForLog(cacheScope.orgGuid)}`
+      );
+      this.clearRootFolderSelection();
+      return;
+    }
+
+    this.selectedLocalRootFolderPath = cachedEntry.rootFolderPath;
+    this.postMessage({
+      type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
+      path: this.selectedLocalRootFolderPath,
+    });
+  }
+
+  private async persistRootFolderForCurrentScope(rootFolderPath: string): Promise<void> {
+    const normalizedRootFolderPath = rootFolderPath.trim();
+    if (normalizedRootFolderPath.length === 0) {
+      return;
+    }
+
+    const cacheScope = await this.resolveCurrentRootFolderScope();
+    if (cacheScope === null) {
+      return;
+    }
+
+    try {
+      await this.cacheStore.setExportRootFolder(
+        cacheScope.email,
+        cacheScope.regionCode,
+        cacheScope.orgGuid,
+        normalizedRootFolderPath
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unable to persist root folder cache.';
+      this.outputChannel.appendLine(
+        `[cache] Failed to persist root folder cache: ${sanitizeForLog(errorMessage)}`
+      );
+    }
+  }
+
+  private async resolveCurrentRootFolderScope(): Promise<{
+    readonly email: string;
+    readonly regionCode: string;
+    readonly orgGuid: string;
+  } | null> {
+    const regionCode = this.selectedRegionCode.trim();
+    const orgGuid = this.selectedOrgGuid.trim();
+    if (regionCode.length === 0 || orgGuid.length === 0) {
+      return null;
+    }
+
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return null;
+    }
+
+    return {
+      email: credentials.email,
+      regionCode,
+      orgGuid,
+    };
+  }
+
+  private clearRootFolderSelection(): void {
+    if (this.selectedLocalRootFolderPath.length === 0) {
+      return;
+    }
+
+    this.selectedLocalRootFolderPath = '';
+    this.serviceFolderSelections.clear();
+    this.postMessage({
+      type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
+      path: '',
+    });
   }
 
   private applyServiceFolderSelections(
@@ -604,6 +728,7 @@ export class RegionSidebarProvider
       this.cfSessionRegionCode = '';
       this.selectedRegionCode = '';
       this.selectedRegionId = '';
+      this.selectedOrgGuid = '';
       this.bumpRegionSelectionRequestId();
       this.currentApps = [];
       this.currentLogSessionSeed = null;
@@ -674,6 +799,7 @@ export class RegionSidebarProvider
     const requestId = this.bumpRegionSelectionRequestId();
     this.selectedRegionId = region.id;
     this.selectedRegionCode = region.code;
+    this.selectedOrgGuid = '';
     this.cfSession = null;
     this.cfSessionRegionCode = '';
     this.currentApps = [];
@@ -756,6 +882,7 @@ export class RegionSidebarProvider
 
   private async handleOrgSelected(org: OrgSelectionPayload): Promise<void> {
     const requestId = this.bumpOrgSelectionRequestId();
+    this.selectedOrgGuid = org.guid;
     const scopeLabel = buildScopeLabel(this.selectedRegionCode, org.name, 'select-space');
     this.cfLogsPanel.updateScope(scopeLabel);
     this.cfLogsPanel.updateApps([], null);
@@ -768,6 +895,10 @@ export class RegionSidebarProvider
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
     });
+    await this.restoreRootFolderForCurrentOrg(requestId);
+    if (!this.isCurrentOrgRequest(requestId)) {
+      return;
+    }
 
     if (isTestMode()) {
       this.postMessage({ type: MSG_SPACES_LOADED, spaces: resolveMockSpacesForOrg(org) });
@@ -1261,6 +1392,20 @@ function createNonce(): string {
 
 function sanitizeForLog(value: string): string {
   return value.replaceAll(/\s+/g, ' ').trim();
+}
+
+async function pathExists(pathValue: string): Promise<boolean> {
+  const normalizedPath = pathValue.trim();
+  if (normalizedPath.length === 0) {
+    return false;
+  }
+
+  try {
+    await access(normalizedPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── Type guards ─────────────────────────────────────────────────────────────

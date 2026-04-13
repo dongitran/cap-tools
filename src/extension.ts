@@ -22,7 +22,8 @@ export function activate(context: vscode.ExtensionContext): void {
     outputChannel,
     context,
     cfLogsPanel,
-    cacheSyncService
+    cacheSyncService,
+    cacheStore
   );
 
   void getEffectiveCredentials(context)

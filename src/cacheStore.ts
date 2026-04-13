@@ -11,6 +11,7 @@ import type {
   CachedSpaceEntry,
   CacheSettings,
   CacheState,
+  ExportRootFolderCacheEntry,
   CachedUserEntry,
   RegionAccessState,
   SyncIntervalHours,
@@ -19,6 +20,8 @@ import type {
 const CACHE_STATE_KEY = 'sapTools.cache.state.v1';
 
 const EMPTY_USERS: Record<string, CachedUserEntry> = Object.freeze({});
+const EMPTY_EXPORT_ROOT_FOLDERS: Record<string, ExportRootFolderCacheEntry> =
+  Object.freeze({});
 
 export class CacheStore {
   private writeQueue: Promise<void> = Promise.resolve();
@@ -60,6 +63,80 @@ export class CacheStore {
     const state = await this.readState();
     const cachedUser = state.users[normalizedKey];
     return cachedUser ?? null;
+  }
+
+  async getExportRootFolder(
+    email: string,
+    regionCode: string,
+    orgGuid: string
+  ): Promise<ExportRootFolderCacheEntry | null> {
+    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid);
+    if (scopeKey.length === 0) {
+      return null;
+    }
+
+    const state = await this.readState();
+    const cachedEntry = state.exportRootFolders[scopeKey];
+    return cachedEntry ?? null;
+  }
+
+  async setExportRootFolder(
+    email: string,
+    regionCode: string,
+    orgGuid: string,
+    rootFolderPath: string
+  ): Promise<ExportRootFolderCacheEntry> {
+    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid);
+    if (scopeKey.length === 0) {
+      throw new Error('Cannot cache export root folder for an empty scope key.');
+    }
+
+    const normalizedRootFolderPath = rootFolderPath.trim();
+    if (normalizedRootFolderPath.length === 0) {
+      throw new Error('Cannot cache an empty export root folder path.');
+    }
+
+    const nextEntry: ExportRootFolderCacheEntry = {
+      rootFolderPath: normalizedRootFolderPath,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.updateState((state) => {
+      return {
+        ...state,
+        exportRootFolders: {
+          ...state.exportRootFolders,
+          [scopeKey]: nextEntry,
+        },
+      };
+    });
+
+    return nextEntry;
+  }
+
+  async deleteExportRootFolder(
+    email: string,
+    regionCode: string,
+    orgGuid: string
+  ): Promise<void> {
+    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid);
+    if (scopeKey.length === 0) {
+      return;
+    }
+
+    await this.updateState((state) => {
+      if (state.exportRootFolders[scopeKey] === undefined) {
+        return state;
+      }
+
+      const remainingEntries = Object.fromEntries(
+        Object.entries(state.exportRootFolders).filter(([key]) => key !== scopeKey)
+      );
+      return {
+        ...state,
+        exportRootFolders: remainingEntries,
+      };
+    });
   }
 
   async upsertUser(
@@ -117,6 +194,33 @@ export function normalizeUserEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+export function normalizeRegionCode(regionCode: string): string {
+  return regionCode.trim().toLowerCase();
+}
+
+export function normalizeOrgGuid(orgGuid: string): string {
+  return orgGuid.trim().toLowerCase();
+}
+
+export function buildExportRootFolderScopeKey(
+  email: string,
+  regionCode: string,
+  orgGuid: string
+): string {
+  const normalizedEmail = normalizeUserEmail(email);
+  const normalizedRegionCode = normalizeRegionCode(regionCode);
+  const normalizedOrgGuid = normalizeOrgGuid(orgGuid);
+  if (
+    normalizedEmail.length === 0 ||
+    normalizedRegionCode.length === 0 ||
+    normalizedOrgGuid.length === 0
+  ) {
+    return '';
+  }
+
+  return `${normalizedEmail}::${normalizedRegionCode}::${normalizedOrgGuid}`;
+}
+
 function normalizeCacheState(rawState: unknown): CacheState {
   if (!isRecord(rawState)) {
     return createDefaultCacheState();
@@ -129,11 +233,13 @@ function normalizeCacheState(rawState: unknown): CacheState {
 
   const rawSettings = normalizeSettings(rawState['settings']);
   const rawUsers = normalizeUsers(rawState['users']);
+  const rawExportRootFolders = normalizeExportRootFolders(rawState['exportRootFolders']);
 
   return {
     version: 1,
     settings: rawSettings,
     users: rawUsers,
+    exportRootFolders: rawExportRootFolders,
   };
 }
 
@@ -177,6 +283,73 @@ function normalizeUsers(rawUsers: unknown): Record<string, CachedUserEntry> {
   }
 
   return users;
+}
+
+function normalizeExportRootFolders(
+  rawExportRootFolders: unknown
+): Record<string, ExportRootFolderCacheEntry> {
+  if (!isRecord(rawExportRootFolders)) {
+    return EMPTY_EXPORT_ROOT_FOLDERS;
+  }
+
+  const entries: Record<string, ExportRootFolderCacheEntry> = {};
+  for (const [rawScopeKey, rawEntry] of Object.entries(rawExportRootFolders)) {
+    const scopeKey = normalizeScopeKey(rawScopeKey);
+    if (scopeKey.length === 0) {
+      continue;
+    }
+
+    const normalizedEntry = normalizeExportRootFolderEntry(rawEntry);
+    if (normalizedEntry === null) {
+      continue;
+    }
+
+    entries[scopeKey] = normalizedEntry;
+  }
+
+  return entries;
+}
+
+function normalizeScopeKey(scopeKey: string): string {
+  const [emailPartRaw, regionCodePartRaw, orgGuidPartRaw] = scopeKey
+    .split('::')
+    .map((part) => part.trim());
+  if (
+    emailPartRaw === undefined ||
+    regionCodePartRaw === undefined ||
+    orgGuidPartRaw === undefined
+  ) {
+    return '';
+  }
+
+  return buildExportRootFolderScopeKey(
+    emailPartRaw,
+    regionCodePartRaw,
+    orgGuidPartRaw
+  );
+}
+
+function normalizeExportRootFolderEntry(
+  rawEntry: unknown
+): ExportRootFolderCacheEntry | null {
+  if (!isRecord(rawEntry)) {
+    return null;
+  }
+
+  const rootFolderPath = readString(rawEntry['rootFolderPath']);
+  if (rootFolderPath.length === 0) {
+    return null;
+  }
+
+  const updatedAt = readString(rawEntry['updatedAt']);
+  if (updatedAt.length === 0) {
+    return null;
+  }
+
+  return {
+    rootFolderPath,
+    updatedAt,
+  };
 }
 
 function normalizeCachedUser(rawUser: unknown): CachedUserEntry | null {
@@ -395,6 +568,7 @@ function createDefaultCacheState(): CacheState {
       syncIntervalHours: DEFAULT_SYNC_INTERVAL_HOURS,
     },
     users: EMPTY_USERS,
+    exportRootFolders: EMPTY_EXPORT_ROOT_FOLDERS,
   };
 }
 

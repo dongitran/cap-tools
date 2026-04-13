@@ -52,10 +52,16 @@ export interface CacheSettings {
   readonly syncIntervalHours: SyncIntervalHours;
 }
 
+export interface ExportRootFolderCacheEntry {
+  readonly rootFolderPath: string;
+  readonly updatedAt: string;
+}
+
 export interface CacheState {
   readonly version: 1;
   readonly settings: CacheSettings;
   readonly users: Record<string, CachedUserEntry>;
+  readonly exportRootFolders: Record<string, ExportRootFolderCacheEntry>;
 }
 
 export function isSyncIntervalHours(
@@ -63,4 +69,3 @@ export function isSyncIntervalHours(
 ): value is SyncIntervalHours {
   return SYNC_INTERVAL_OPTIONS_HOURS.includes(value as SyncIntervalHours);
 }
-

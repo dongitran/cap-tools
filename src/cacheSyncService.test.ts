@@ -195,6 +195,7 @@ describe('CacheSyncService', () => {
           ],
         },
       },
+      exportRootFolders: {},
     });
 
     const cacheStore = new CacheStore(context);
@@ -274,6 +275,7 @@ describe('CacheSyncService', () => {
           ],
         },
       },
+      exportRootFolders: {},
     });
 
     const cacheStore = new CacheStore(context);

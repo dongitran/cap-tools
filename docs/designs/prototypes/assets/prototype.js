@@ -974,11 +974,6 @@ function handleServiceExportAction(action, actionElement) {
     return true;
   }
 
-  if (action === 'refresh-service-mappings') {
-    refreshServiceMappingsAfterAppsLoaded();
-    return true;
-  }
-
   if (action === 'select-export-service') {
     const appId = actionElement.dataset.appId ?? '';
     if (appId.length === 0) {
@@ -2306,8 +2301,6 @@ function renderServiceExportTab() {
     selectedSpaceId.length > 0 ? selectedSpaceId : 'Select a space first';
   const selectedServiceLabel =
     selectedMapping === undefined ? 'No service selected' : selectedMapping.appName;
-  const canRefreshMappings =
-    localServiceRootFolderPath.length > 0 && availableApps.length > 0 && !serviceExportInProgress;
   const canExport = selectedMapping !== undefined && !serviceExportInProgress;
 
   return `
@@ -2319,28 +2312,19 @@ function renderServiceExportTab() {
         </p>
       </header>
 
-      <section class="service-export-controls">
+      <section class="service-export-root-row">
+        <p class="service-export-path" title="${escapeHtml(localServiceRootFolderPath)}">
+          Root: ${escapeHtml(localServiceRootFolderPath.length > 0 ? localServiceRootFolderPath : 'Not selected')}
+        </p>
         <button
           type="button"
-          class="secondary-action"
+          class="secondary-action service-export-select-root"
           data-action="select-local-root-folder"
           ${serviceExportInProgress ? 'disabled' : ''}
         >
           Select Root Folder
         </button>
-        <button
-          type="button"
-          class="small-action"
-          data-action="refresh-service-mappings"
-          ${canRefreshMappings ? '' : 'disabled'}
-        >
-          Refresh Mapping
-        </button>
       </section>
-
-      <p class="service-export-path" title="${escapeHtml(localServiceRootFolderPath)}">
-        Root: ${escapeHtml(localServiceRootFolderPath.length > 0 ? localServiceRootFolderPath : 'Not selected')}
-      </p>
 
       <section class="service-mapping-list" aria-label="Service folder mappings">
         ${

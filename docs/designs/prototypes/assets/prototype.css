@@ -1246,10 +1246,10 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   color: var(--muted-color);
 }
 
-.service-export-controls {
+.service-export-root-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
 
 .service-export-path {
@@ -1260,7 +1260,27 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   border-radius: 8px;
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
   padding: 7px 9px;
-  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-export-select-root {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .service-export-root-row {
+    flex-wrap: wrap;
+  }
+
+  .service-export-select-root {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .service-mapping-list {

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 
-import { CacheStore, normalizeUserEmail } from './cacheStore';
+import {
+  buildExportRootFolderScopeKey,
+  CacheStore,
+  normalizeUserEmail,
+} from './cacheStore';
 import type { CacheState, CachedUserEntry } from './cacheModels';
 
 interface MockGlobalState {
@@ -73,6 +77,7 @@ describe('CacheStore', () => {
       version: 1,
       settings: { syncIntervalHours: 24 },
       users: {},
+      exportRootFolders: {},
     });
   });
 
@@ -124,6 +129,7 @@ describe('CacheStore', () => {
         'USER.C@EXAMPLE.COM': createSampleUser('user.c@example.com'),
         '': createSampleUser('invalid@example.com'),
       },
+      exportRootFolders: {},
     };
     const context = createMockContext(persisted);
     const store = new CacheStore(context);
@@ -164,6 +170,48 @@ describe('CacheStore', () => {
     expect(state.users['race.b@example.com']?.email).toBe('race.b@example.com');
     expect(maxInFlightUpdates).toBe(1);
   });
+
+  it('stores and resolves export root folder by normalized scope key', async () => {
+    const context = createMockContext();
+    const store = new CacheStore(context);
+
+    await store.setExportRootFolder(
+      '  Dev.User@Example.Com ',
+      ' US-10 ',
+      ' ORG-GUID-1 ',
+      ' /tmp/workspace/services '
+    );
+
+    const cachedEntry = await store.getExportRootFolder(
+      'dev.user@example.com',
+      'us-10',
+      'org-guid-1'
+    );
+
+    expect(cachedEntry?.rootFolderPath).toBe('/tmp/workspace/services');
+    expect(typeof cachedEntry?.updatedAt).toBe('string');
+    expect(cachedEntry?.updatedAt.length).toBeGreaterThan(0);
+  });
+
+  it('deletes export root folder cache for scope', async () => {
+    const context = createMockContext();
+    const store = new CacheStore(context);
+
+    await store.setExportRootFolder(
+      'dev@example.com',
+      'us-10',
+      'org-guid-1',
+      '/tmp/workspace/services'
+    );
+    await store.deleteExportRootFolder('dev@example.com', 'us-10', 'org-guid-1');
+
+    const cachedEntry = await store.getExportRootFolder(
+      'dev@example.com',
+      'us-10',
+      'org-guid-1'
+    );
+    expect(cachedEntry).toBeNull();
+  });
 });
 
 describe('normalizeUserEmail', () => {
@@ -171,5 +219,17 @@ describe('normalizeUserEmail', () => {
     expect(normalizeUserEmail('  Dev.User@Example.Com  ')).toBe(
       'dev.user@example.com'
     );
+  });
+});
+
+describe('buildExportRootFolderScopeKey', () => {
+  it('normalizes email, region code and org guid', () => {
+    expect(
+      buildExportRootFolderScopeKey(
+        ' Dev.User@Example.Com ',
+        ' US-10 ',
+        ' ORG-GUID-1 '
+      )
+    ).toBe('dev.user@example.com::us-10::org-guid-1');
   });
 });
