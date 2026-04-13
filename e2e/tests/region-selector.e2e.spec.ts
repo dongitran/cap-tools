@@ -937,7 +937,7 @@ test.describe('SAP Tools region selector', () => {
 
       await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Service Artifact Export' })
+        webviewFrame.getByRole('heading', { name: 'Export Service Artifacts' })
       ).toBeVisible({ timeout: 10000 });
 
       await expect(
@@ -947,13 +947,15 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.getByRole('button', { name: 'Refresh Mapping' })
       ).toBeDisabled();
 
-      await expect(webviewFrame.getByRole('button', { name: 'Export Both' })).toBeDisabled();
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export Artifacts' })
+      ).toBeDisabled();
       await expect(
         webviewFrame.getByRole('button', { name: 'Export default-env.json' })
-      ).toBeDisabled();
+      ).toHaveCount(0);
       await expect(
         webviewFrame.getByRole('button', { name: 'Export pnpm-lock.yaml' })
-      ).toBeDisabled();
+      ).toHaveCount(0);
 
       await expect(webviewFrame.getByText('Root: Not selected')).toBeVisible();
       await expect(webviewFrame.getByText('finance-uat-api')).toBeVisible();

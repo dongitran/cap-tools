@@ -1381,6 +1381,26 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .service-export-button {
   min-width: 132px;
+  border-color: #0f7f70;
+  background: linear-gradient(180deg, #15a58f, #0f7f70);
+  color: #f6fffd;
+}
+
+.service-export-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+body.vscode-dark.prototype-page .service-export-button {
+  border-color: #58c9b6;
+  background: linear-gradient(180deg, #2aa995, #157b6b);
+  color: #eafffa;
+}
+
+body.vscode-high-contrast.prototype-page .service-export-button,
+body.vscode-high-contrast-light.prototype-page .service-export-button {
+  border-color: var(--focus-ring-color);
+  background: var(--focus-ring-color);
+  color: var(--mix-base);
 }
 
 .service-export-status {

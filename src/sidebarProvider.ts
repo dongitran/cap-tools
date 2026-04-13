@@ -44,8 +44,6 @@ const MSG_LOGOUT = 'sapTools.logout';
 const MSG_SELECT_LOCAL_ROOT_FOLDER = 'sapTools.selectLocalRootFolder';
 const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappings';
 const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
-const MSG_EXPORT_DEFAULT_ENV = 'sapTools.exportDefaultEnv';
-const MSG_EXPORT_PNPM_LOCK = 'sapTools.exportPnpmLock';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
 
 // ── Outbound message types (extension → webview) ────────────────────────────
@@ -297,24 +295,6 @@ export class RegionSidebarProvider
     ) {
       const payload = readSelectServiceFolderMappingPayload(message);
       this.handleSelectServiceFolderMapping(payload);
-      return;
-    }
-
-    if (type === MSG_EXPORT_DEFAULT_ENV && isExportServiceArtifactsMessage(message)) {
-      const payload = readExportServiceArtifactsPayload(message);
-      await this.handleExportServiceArtifacts(payload, {
-        includeDefaultEnv: true,
-        includePnpmLock: false,
-      });
-      return;
-    }
-
-    if (type === MSG_EXPORT_PNPM_LOCK && isExportServiceArtifactsMessage(message)) {
-      const payload = readExportServiceArtifactsPayload(message);
-      await this.handleExportServiceArtifacts(payload, {
-        includeDefaultEnv: false,
-        includePnpmLock: true,
-      });
       return;
     }
 

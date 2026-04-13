@@ -128,8 +128,6 @@ const SELECT_LOCAL_ROOT_FOLDER_MESSAGE_TYPE = 'sapTools.selectLocalRootFolder';
 const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
   'sapTools.refreshServiceFolderMappings';
 const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
-const EXPORT_DEFAULT_ENV_MESSAGE_TYPE = 'sapTools.exportDefaultEnv';
-const EXPORT_PNPM_LOCK_MESSAGE_TYPE = 'sapTools.exportPnpmLock';
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const vscodeApi = resolveVscodeApi();
 
@@ -996,16 +994,8 @@ function handleServiceExportAction(action, actionElement) {
     return true;
   }
 
-  if (action === 'export-default-env') {
-    return triggerServiceExport('default-env');
-  }
-
-  if (action === 'export-pnpm-lock') {
-    return triggerServiceExport('pnpm-lock');
-  }
-
   if (action === 'export-service-artifacts') {
-    return triggerServiceExport('both');
+    return triggerServiceExport();
   }
 
   return null;
@@ -2323,7 +2313,7 @@ function renderServiceExportTab() {
   return `
     <section class="group-card service-export-tab" aria-label="Service artifact export">
       <header class="service-export-header">
-        <h2>Service Artifact Export</h2>
+        <h2>Export Service Artifacts</h2>
         <p class="service-export-subline">
           Scope: <strong>${escapeHtml(selectedSpaceLabel)}</strong>
         </p>
@@ -2371,23 +2361,7 @@ function renderServiceExportTab() {
           data-action="export-service-artifacts"
           ${canExport ? '' : 'disabled'}
         >
-          Export Both
-        </button>
-        <button
-          type="button"
-          class="secondary-action"
-          data-action="export-default-env"
-          ${canExport ? '' : 'disabled'}
-        >
-          Export default-env.json
-        </button>
-        <button
-          type="button"
-          class="secondary-action"
-          data-action="export-pnpm-lock"
-          ${canExport ? '' : 'disabled'}
-        >
-          Export pnpm-lock.yaml
+          Export Artifacts
         </button>
       </div>
 
@@ -2910,7 +2884,7 @@ function refreshServiceMappingsAfterAppsLoaded() {
   });
 }
 
-function triggerServiceExport(mode) {
+function triggerServiceExport() {
   const selectedMapping = serviceFolderMappings.find(
     (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
   );
@@ -2933,31 +2907,8 @@ function triggerServiceExport(mode) {
   if (vscodeApi === null) {
     serviceExportInProgress = false;
     serviceExportStatusTone = 'success';
-    if (mode === 'default-env') {
-      serviceExportStatusMessage = `default-env.json exported for ${selectedMapping.appName}.`;
-      return true;
-    }
-    if (mode === 'pnpm-lock') {
-      serviceExportStatusMessage = `pnpm-lock.yaml exported for ${selectedMapping.appName}.`;
-      return true;
-    }
-    serviceExportStatusMessage = `default-env.json and pnpm-lock.yaml exported for ${selectedMapping.appName}.`;
-    return true;
-  }
-
-  if (mode === 'default-env') {
-    vscodeApi.postMessage({
-      type: EXPORT_DEFAULT_ENV_MESSAGE_TYPE,
-      ...basePayload,
-    });
-    return true;
-  }
-
-  if (mode === 'pnpm-lock') {
-    vscodeApi.postMessage({
-      type: EXPORT_PNPM_LOCK_MESSAGE_TYPE,
-      ...basePayload,
-    });
+    serviceExportStatusMessage =
+      `default-env.json and pnpm-lock.yaml exported for ${selectedMapping.appName}.`;
     return true;
   }
 
