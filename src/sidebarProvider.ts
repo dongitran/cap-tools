@@ -163,6 +163,7 @@ export class RegionSidebarProvider
   private currentLogSessionSeed: CfLogSessionSeed | null = null;
   private serviceFolderMappings: ServiceFolderMapping[] = [];
   private readonly serviceFolderSelections = new Map<string, string>();
+  private e2eRootDialogStepIndex = 0;
   private exportInProgress = false;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -192,6 +193,7 @@ export class RegionSidebarProvider
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
     this.serviceFolderSelections.clear();
+    this.e2eRootDialogStepIndex = 0;
     this.exportInProgress = false;
 
     const assetsRoot = vscode.Uri.joinPath(
@@ -346,13 +348,20 @@ export class RegionSidebarProvider
   }
 
   private async handleSelectLocalRootFolder(): Promise<void> {
-    const selectedUris = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      title: 'Select local root folder for service mapping',
-    });
-    const selectedUri = selectedUris?.[0];
+    let selectedUri: vscode.Uri | undefined;
+    const dialogOverride = this.resolveE2eRootDialogOverride();
+    if (dialogOverride.handled) {
+      selectedUri = dialogOverride.uri;
+    } else {
+      const selectedUris = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        title: 'Select local root folder for service mapping',
+      });
+      selectedUri = selectedUris?.[0];
+    }
+
     if (selectedUri === undefined) {
       return;
     }
@@ -370,6 +379,48 @@ export class RegionSidebarProvider
     });
     await this.persistRootFolderForCurrentScope(selectedPath);
     await this.refreshServiceFolderMappings();
+  }
+
+  private resolveE2eRootDialogOverride(): {
+    readonly handled: boolean;
+    readonly uri: vscode.Uri | undefined;
+  } {
+    if (process.env['SAP_TOOLS_E2E'] !== '1') {
+      return { handled: false, uri: undefined };
+    }
+
+    const rawSteps = process.env['SAP_TOOLS_E2E_ROOT_DIALOG_STEPS'] ?? '';
+    const steps = rawSteps
+      .split(',')
+      .map((step) => step.trim().toLowerCase())
+      .filter((step) => step.length > 0);
+    const step = steps[this.e2eRootDialogStepIndex];
+    if (step === undefined) {
+      return { handled: false, uri: undefined };
+    }
+
+    this.e2eRootDialogStepIndex += 1;
+    if (step === 'cancel') {
+      return { handled: true, uri: undefined };
+    }
+
+    if (step === 'select') {
+      const rawPathByStep = process.env['SAP_TOOLS_E2E_ROOT_FOLDER_PATHS'] ?? '';
+      const pathByStep =
+        rawPathByStep.trim().length === 0
+          ? []
+          : rawPathByStep.split('::').map((pathValue) => pathValue.trim());
+      const indexedPath = pathByStep[this.e2eRootDialogStepIndex - 1] ?? '';
+      const fallbackPath = process.env['SAP_TOOLS_E2E_ROOT_FOLDER_PATH']?.trim() ?? '';
+      const rawPath = indexedPath.length > 0 ? indexedPath : fallbackPath;
+      if (rawPath.length === 0) {
+        return { handled: true, uri: undefined };
+      }
+
+      return { handled: true, uri: vscode.Uri.file(rawPath) };
+    }
+
+    return { handled: false, uri: undefined };
   }
 
   private async handleRefreshServiceFolderMappings(

@@ -482,6 +482,11 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  if (shouldRefreshWorkspaceAppsOnly(action, modeBeforeAction, tabBeforeAction)) {
+    refreshWorkspaceAppsView();
+    return;
+  }
+
   if (mode !== modeBeforeAction || mode !== 'selection') {
     renderPrototype();
     return;
@@ -612,12 +617,37 @@ function shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeActio
   );
 }
 
+function shouldRefreshWorkspaceAppsOnly(action, modeBeforeAction, tabBeforeAction) {
+  const isAppsAction =
+    action === 'select-local-root-folder' ||
+    action === 'select-export-service' ||
+    action === 'export-service-artifacts';
+  if (!isAppsAction) {
+    return false;
+  }
+
+  return (
+    modeBeforeAction === 'workspace' &&
+    mode === 'workspace' &&
+    tabBeforeAction === 'apps' &&
+    activeTabId === 'apps'
+  );
+}
+
 function isWorkspaceLogsMounted() {
   if (mode !== 'workspace' || activeTabId !== 'logs') {
     return false;
   }
 
   return appElement.querySelector('.app-logs-panel') instanceof HTMLElement;
+}
+
+function isWorkspaceAppsMounted() {
+  if (mode !== 'workspace' || activeTabId !== 'apps') {
+    return false;
+  }
+
+  return appElement.querySelector('.service-export-tab') instanceof HTMLElement;
 }
 
 function refreshWorkspaceLogsView() {
@@ -664,9 +694,85 @@ function refreshWorkspaceLogsView() {
   }
 }
 
+function refreshWorkspaceAppsView() {
+  const exportTab = appElement.querySelector('.service-export-tab');
+  if (!(exportTab instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+
+  const availableApps = resolveCurrentSpaceApps();
+  const mappingRows = resolveServiceExportRows(availableApps);
+  const selectedMapping = mappingRows.find(
+    (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
+  );
+  const selectedSpaceLabel =
+    selectedSpaceId.length > 0 ? selectedSpaceId : 'Select a space first';
+  const selectedServiceLabel =
+    selectedMapping === undefined ? 'No service selected' : selectedMapping.appName;
+  const canExport = selectedMapping !== undefined && !serviceExportInProgress;
+  const rootFolderLabel =
+    localServiceRootFolderPath.length > 0 ? localServiceRootFolderPath : 'Not selected';
+
+  const sublineElement = exportTab.querySelector('[data-role="service-export-subline"]');
+  if (!(sublineElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  sublineElement.innerHTML = `Scope: <strong>${escapeHtml(selectedSpaceLabel)}</strong>`;
+
+  const rootPathElement = exportTab.querySelector('[data-role="service-export-path"]');
+  if (!(rootPathElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  rootPathElement.textContent = `Root: ${rootFolderLabel}`;
+  rootPathElement.setAttribute('title', rootFolderLabel);
+
+  const rootButtonElement = exportTab.querySelector('[data-action="select-local-root-folder"]');
+  if (rootButtonElement instanceof HTMLButtonElement) {
+    rootButtonElement.disabled = serviceExportInProgress;
+  }
+
+  const mappingListElement = exportTab.querySelector('[data-role="service-mapping-list"]');
+  if (!(mappingListElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  mappingListElement.innerHTML = serviceFolderScanInProgress
+    ? '<p class="stage-loading" aria-live="polite">Scanning local folders&#8230;</p>'
+    : renderServiceExportMappingRows(mappingRows);
+
+  const selectedLabelElement = exportTab.querySelector(
+    '[data-role="service-export-selected-label"]'
+  );
+  if (!(selectedLabelElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  selectedLabelElement.textContent = selectedServiceLabel;
+
+  const exportButton = exportTab.querySelector('[data-action="export-service-artifacts"]');
+  if (exportButton instanceof HTMLButtonElement) {
+    exportButton.disabled = !canExport;
+  }
+
+  const statusElement = exportTab.querySelector('[data-role="service-export-status"]');
+  if (!(statusElement instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  applyServiceExportStatusElement(statusElement);
+}
+
 function refreshUiAfterServiceExportStateChange() {
   if (mode === 'selection' && isSelectionShellMounted()) {
     updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
+    return;
+  }
+
+  if (isWorkspaceAppsMounted()) {
+    refreshWorkspaceAppsView();
     return;
   }
 
@@ -953,16 +1059,15 @@ function handleLogsAction(action, actionElement) {
 
 function handleServiceExportAction(action, actionElement) {
   if (action === 'select-local-root-folder') {
-    serviceExportStatusTone = 'info';
-    serviceExportStatusMessage = '';
     if (vscodeApi !== null) {
-      serviceFolderScanInProgress = true;
       vscodeApi.postMessage({
         type: SELECT_LOCAL_ROOT_FOLDER_MESSAGE_TYPE,
       });
       return true;
     }
 
+    serviceExportStatusTone = 'info';
+    serviceExportStatusMessage = '';
     localServiceRootFolderPath = '/Users/demo/workspaces/sap-services';
     serviceExportStatusMessage = 'Root folder selected. Scan completed with prototype data.';
     serviceExportStatusTone = 'success';
@@ -2307,13 +2412,17 @@ function renderServiceExportTab() {
     <section class="group-card service-export-tab" aria-label="Service artifact export">
       <header class="service-export-header">
         <h2>Export Service Artifacts</h2>
-        <p class="service-export-subline">
+        <p class="service-export-subline" data-role="service-export-subline">
           Scope: <strong>${escapeHtml(selectedSpaceLabel)}</strong>
         </p>
       </header>
 
       <section class="service-export-root-row">
-        <p class="service-export-path" title="${escapeHtml(localServiceRootFolderPath)}">
+        <p
+          class="service-export-path"
+          data-role="service-export-path"
+          title="${escapeHtml(localServiceRootFolderPath)}"
+        >
           Root: ${escapeHtml(localServiceRootFolderPath.length > 0 ? localServiceRootFolderPath : 'Not selected')}
         </p>
         <button
@@ -2326,7 +2435,11 @@ function renderServiceExportTab() {
         </button>
       </section>
 
-      <section class="service-mapping-list" aria-label="Service folder mappings">
+      <section
+        class="service-mapping-list"
+        data-role="service-mapping-list"
+        aria-label="Service folder mappings"
+      >
         ${
           serviceFolderScanInProgress
             ? '<p class="stage-loading" aria-live="polite">Scanning local folders&#8230;</p>'
@@ -2335,7 +2448,7 @@ function renderServiceExportTab() {
       </section>
 
       <p class="service-export-selected">
-        Selected service: <strong>${escapeHtml(selectedServiceLabel)}</strong>
+        Selected service: <strong data-role="service-export-selected-label">${escapeHtml(selectedServiceLabel)}</strong>
       </p>
 
       <div class="toolbar-row service-export-actions" role="group" aria-label="Service export actions">
@@ -2422,13 +2535,31 @@ function renderServiceExportStatus() {
     return '<p class="service-export-status" data-role="service-export-status" hidden></p>';
   }
 
-  const toneClass =
-    serviceExportStatusTone === 'success'
-      ? 'is-success'
-      : serviceExportStatusTone === 'error'
-        ? 'is-error'
-        : 'is-info';
+  const toneClass = resolveServiceExportStatusToneClass();
   return `<p class="service-export-status ${toneClass}" data-role="service-export-status">${escapeHtml(serviceExportStatusMessage)}</p>`;
+}
+
+function applyServiceExportStatusElement(statusElement) {
+  statusElement.className = 'service-export-status';
+  statusElement.hidden = serviceExportStatusMessage.length === 0;
+  statusElement.textContent = serviceExportStatusMessage;
+  if (serviceExportStatusMessage.length === 0) {
+    return;
+  }
+
+  statusElement.classList.add(resolveServiceExportStatusToneClass());
+}
+
+function resolveServiceExportStatusToneClass() {
+  if (serviceExportStatusTone === 'success') {
+    return 'is-success';
+  }
+
+  if (serviceExportStatusTone === 'error') {
+    return 'is-error';
+  }
+
+  return 'is-info';
 }
 
 function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {

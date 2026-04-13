@@ -89,6 +89,7 @@ interface ViewportGutterSnapshot {
 
 interface ExtensionHostLaunchOptions {
   readonly colorTheme?: string;
+  readonly extraEnv?: Readonly<Record<string, string>>;
   /**
    * When true, passes SAP_EMAIL and SAP_PASSWORD so the extension skips the
    * login gate and renders the main region selector immediately.
@@ -98,7 +99,10 @@ interface ExtensionHostLaunchOptions {
   readonly withMockCredentials?: boolean;
 }
 
-function buildExtensionHostEnv(withMockCredentials: boolean): Record<string, string> {
+function buildExtensionHostEnv(
+  withMockCredentials: boolean,
+  extraEnv: Readonly<Record<string, string>>
+): Record<string, string> {
   const env = toLaunchEnv(process.env);
   env['SAP_TOOLS_E2E'] = '1';
 
@@ -107,6 +111,9 @@ function buildExtensionHostEnv(withMockCredentials: boolean): Record<string, str
     env['SAP_PASSWORD'] = 'test-password';
     env['SAP_TOOLS_TEST_MODE'] = '1';
     delete env['SAP_TOOLS_FORCE_LOGIN_GATE'];
+    for (const [key, value] of Object.entries(extraEnv)) {
+      env[key] = value;
+    }
     return env;
   }
 
@@ -114,6 +121,9 @@ function buildExtensionHostEnv(withMockCredentials: boolean): Record<string, str
   delete env['SAP_PASSWORD'];
   delete env['SAP_TOOLS_TEST_MODE'];
   env['SAP_TOOLS_FORCE_LOGIN_GATE'] = '1';
+  for (const [key, value] of Object.entries(extraEnv)) {
+    env[key] = value;
+  }
   return env;
 }
 
@@ -137,6 +147,19 @@ function ensureThemeSettings(userDataDir: string, colorTheme: string): void {
     'workbench.colorTheme': colorTheme,
   };
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+}
+
+function createServiceRootMappingFixture(): string {
+  const fixtureRoot = fs.mkdtempSync(path.join('/tmp', 'sap-tools-e2e-root-'));
+  const folderNames = ['finance_uat_api', 'finance_uat_worker', 'finance_uat_audit'];
+
+  for (const folderName of folderNames) {
+    const serviceFolder = path.join(fixtureRoot, folderName);
+    fs.mkdirSync(serviceFolder, { recursive: true });
+    fs.writeFileSync(path.join(serviceFolder, 'package.json'), '{ "name": "fixture" }\n', 'utf8');
+  }
+
+  return fixtureRoot;
 }
 
 async function dismissAiSignInModalIfNeeded(window: Page): Promise<void> {
@@ -187,7 +210,7 @@ async function launchExtensionHost(
       '--disable-workspace-trust',
       '--new-window',
     ],
-    env: buildExtensionHostEnv(withMockCredentials),
+    env: buildExtensionHostEnv(withMockCredentials, options.extraEnv ?? {}),
     timeout: 180000,
   });
 
@@ -970,6 +993,127 @@ test.describe('SAP Tools region selector', () => {
       ).toHaveCount(3);
     } finally {
       await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can keep mapped services when Select Root Folder is cancelled', async () => {
+    const fixtureRootPath = createServiceRootMappingFixture();
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select,cancel',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATH: fixtureRootPath,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+
+      const selectRootFolderButton = webviewFrame.getByRole('button', {
+        name: 'Select Root Folder',
+      });
+      await clickWithFallback(selectRootFolderButton);
+
+      const mappedStateCells = webviewFrame.locator(
+        '.service-map-row .service-map-state',
+        { hasText: /^Mapped$/i }
+      );
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
+      await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
+
+      // Second open attempt is forced to "cancel" in E2E mode.
+      await clickWithFallback(selectRootFolderButton);
+
+      await expect(webviewFrame.getByText(/Scanning local folders/i)).toHaveCount(0);
+      await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
+      await expect(mappedStateCells).toHaveCount(3);
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(fixtureRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('User keeps current Apps export state when Select Root Folder is cancelled initially', async () => {
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'cancel',
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+
+      const selectRootFolderButton = webviewFrame.getByRole('button', {
+        name: 'Select Root Folder',
+      });
+      await clickWithFallback(selectRootFolderButton);
+
+      await expect(webviewFrame.getByText(/Scanning local folders/i)).toHaveCount(0);
+      await expect(webviewFrame.locator('.service-export-path')).toContainText('Root: Not selected');
+      await expect(webviewFrame.locator('.service-map-row.is-unmapped')).toHaveCount(3);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can remap services after selecting a new root folder', async () => {
+    const firstFixtureRootPath = createServiceRootMappingFixture();
+    const secondFixtureRootPath = createServiceRootMappingFixture();
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select,select',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATHS: `${firstFixtureRootPath}::${secondFixtureRootPath}`,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+
+      const selectRootFolderButton = webviewFrame.getByRole('button', {
+        name: 'Select Root Folder',
+      });
+      const mappedStateCells = webviewFrame.locator(
+        '.service-map-row .service-map-state',
+        { hasText: /^Mapped$/i }
+      );
+      const rootPathLabel = webviewFrame.locator('.service-export-path');
+
+      await clickWithFallback(selectRootFolderButton);
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
+      await expect(rootPathLabel).toContainText(firstFixtureRootPath);
+
+      await clickWithFallback(selectRootFolderButton);
+      await expect(webviewFrame.getByText(/Scanning local folders/i)).toHaveCount(0);
+      await expect(rootPathLabel).toContainText(secondFixtureRootPath);
+      await expect(rootPathLabel).not.toContainText(firstFixtureRootPath);
+      await expect(mappedStateCells).toHaveCount(3);
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(firstFixtureRootPath, { recursive: true, force: true });
+      fs.rmSync(secondFixtureRootPath, { recursive: true, force: true });
     }
   });
 
