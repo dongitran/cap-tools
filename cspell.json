@@ -60,6 +60,7 @@
     "hanacloud",
     "sqltools",
     "upsert",
-    "upserts"
+    "upserts",
+    "nums"
   ]
 }

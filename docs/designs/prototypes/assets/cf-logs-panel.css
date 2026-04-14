@@ -172,6 +172,11 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   min-width: 0;
 }
 
+.filter-item-app {
+  width: 188px;
+  flex: 0 0 auto;
+}
+
 .filter-item-level {
   width: 124px;
   flex: 0 0 auto;
@@ -224,30 +229,31 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table th:nth-child(1) {
-  width: 160px;
+  width: 58px;
 }
 
 .cf-log-table th:nth-child(2) {
-  width: 118px;
+  width: 92px;
 }
 
 .cf-log-table th:nth-child(3),
 .cf-log-table th:nth-child(4) {
-  width: 64px;
+  width: 56px;
 }
 
 .cf-log-table th:nth-child(5) {
-  width: 124px;
-}
-
-.cf-log-table th:nth-child(6) {
-  min-width: 420px;
+  width: 48px;
 }
 
 .cf-log-table tbody td {
   border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 76%, transparent);
   padding: 6px 8px;
   vertical-align: top;
+}
+
+.cf-log-table tbody td:nth-child(1) {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .cf-log-table tbody tr:last-child td {
@@ -266,11 +272,17 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   background: color-mix(in oklab, var(--panel-accent) 18%, transparent);
 }
 
-.cf-log-table .cell-message,
 .cf-log-table .cell-logger {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cf-log-table .cell-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-overflow: clip;
 }
 
 .cf-log-table .empty-row {

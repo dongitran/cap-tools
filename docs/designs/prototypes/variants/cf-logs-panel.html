@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CFLogs Panel Prototype</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260412c" />
+    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260414b" />
   </head>
   <body class="cf-logs-panel-page vscode-dark">
     <main class="panel-prototype-shell">
@@ -29,6 +29,11 @@
           </header>
 
           <section class="filter-inline" aria-label="CF log filters">
+            <div class="filter-item filter-item-app">
+              <select id="filter-app" aria-label="Select app">
+                <option value="">— no apps loaded —</option>
+              </select>
+            </div>
             <div class="filter-item filter-item-search">
               <input
                 id="filter-search"
@@ -65,6 +70,6 @@
       </section>
     </main>
 
-    <script type="module" src="../assets/cf-logs-panel.js?v=20260412c"></script>
+    <script type="module" src="../assets/cf-logs-panel.js?v=20260414b"></script>
   </body>
 </html>

@@ -185,11 +185,13 @@ function parseJsonBody(body) {
 }
 
 function buildTextRow({ id, timestamp, source, stream, body }) {
+  const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = body.length > 0 ? body : '(empty)';
   const level = normalizeLevel('', stream, message);
   const row = {
     id,
-    timestamp,
+    timestamp: formattedTimestamp,
+    timestampRaw: timestamp,
     source,
     stream,
     format: 'text',
@@ -209,11 +211,13 @@ function buildTextRow({ id, timestamp, source, stream, body }) {
 }
 
 function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
+  const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = readString(payload.msg) || body;
   const level = normalizeLevel(readString(payload.level), stream, message);
   const row = {
     id,
-    timestamp,
+    timestamp: formattedTimestamp,
+    timestampRaw: timestamp,
     source,
     stream,
     format: 'json',
@@ -285,6 +289,7 @@ function normalizeLevel(candidateLevel, stream, message) {
 function buildSearchableText(row) {
   const tokens = [
     row.timestamp,
+    row.timestampRaw,
     row.source,
     row.stream,
     row.format,
@@ -300,6 +305,27 @@ function buildSearchableText(row) {
 
 function isObjectRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function formatTimestampToClock(timestamp) {
+  const normalized = timestamp.trim();
+  const withDateMatch = normalized.match(
+    /T(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})/
+  );
+  if (withDateMatch?.groups !== undefined) {
+    const { hour, minute, second } = withDateMatch.groups;
+    return `${hour}:${minute}:${second}`;
+  }
+
+  const clockOnlyMatch = normalized.match(
+    /^(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})(?:[.,]\d+)?$/
+  );
+  if (clockOnlyMatch?.groups !== undefined) {
+    const { hour, minute, second } = clockOnlyMatch.groups;
+    return `${hour}:${minute}:${second}`;
+  }
+
+  return normalized;
 }
 
 // ── Filter controls ──────────────────────────────────────────────────────────
@@ -850,7 +876,7 @@ function renderTable(rows) {
     tr.append(createTextCell(row.stream));
     tr.append(createBadgeCell(row.level, `badge badge-level-${row.level}`));
     tr.append(createTextCell(row.logger, 'cell-logger'));
-    tr.append(createTextCell(compactMessage(row.message), 'cell-message'));
+    tr.append(createTextCell(row.message, 'cell-message'));
 
     elements.tableBody.append(tr);
   }
@@ -872,10 +898,6 @@ function createBadgeCell(value, badgeClass) {
   badge.textContent = value.toUpperCase();
   td.append(badge);
   return td;
-}
-
-function compactMessage(message) {
-  return message.replace(/\s+/g, ' ').trim();
 }
 
 function renderSummary(rows, all) {
