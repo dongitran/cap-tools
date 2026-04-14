@@ -5,6 +5,8 @@ const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
 const COPY_LOG_RESULT_MESSAGE_TYPE = 'sapTools.copyLogResult';
 const SAVE_COLUMN_SETTINGS_MESSAGE_TYPE = 'sapTools.saveColumnSettings';
 const COLUMN_SETTINGS_INIT_MESSAGE_TYPE = 'sapTools.columnSettingsInit';
+const SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE = 'sapTools.saveFontSizeSetting';
+const FONT_SIZE_SETTING_INIT_MESSAGE_TYPE = 'sapTools.fontSizeSettingInit';
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 const MAX_RAW_LOG_TEXT_CHARS = 1_000_000;
@@ -21,6 +23,8 @@ const COLUMN_DEFS = [
   { id: 'message', label: 'Message', cellClass: 'col-message', required: true,  defaultOn: true  },
 ];
 const DEFAULT_VISIBLE_COLUMNS = COLUMN_DEFS.filter((c) => c.defaultOn).map((c) => c.id);
+const FONT_SIZE_PRESETS = ['smaller', 'default', 'large', 'xlarge'];
+const DEFAULT_FONT_SIZE_PRESET = 'default';
 
 /* cspell:disable */
 const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
@@ -50,8 +54,14 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-a
   const savedState = vscodeApi?.getState();
   const saved = Array.isArray(savedState?.visibleColumns) ? savedState.visibleColumns : null;
   const valid = saved !== null && saved.every((id) => COLUMN_DEFS.some((c) => c.id === id));
+  const savedFontSizePreset =
+    typeof savedState?.fontSizePreset === 'string' ? savedState.fontSizePreset : '';
   // eslint-disable-next-line no-var
   var visibleColumns = valid && saved.length > 0 ? saved : [...DEFAULT_VISIBLE_COLUMNS];
+  // eslint-disable-next-line no-var
+  var fontSizePreset = isKnownFontSizePreset(savedFontSizePreset)
+    ? savedFontSizePreset
+    : DEFAULT_FONT_SIZE_PRESET;
 }
 
 const elements = getRequiredElements();
@@ -73,6 +83,8 @@ let nextCopyRequestId = 0;
 /** Maps requestId → callback to invoke when copy result arrives from extension. */
 const pendingCopyCallbacks = new Map();
 let copyToastTimer = null;
+
+applyFontSizePreset();
 
 // Build header from current column config before first render.
 rebuildTableHeader();
@@ -104,6 +116,7 @@ function getRequiredElements() {
   const settingsToggle = document.getElementById('settings-toggle');
   const settingsPanel = document.getElementById('settings-panel');
   const settingsColumnToggles = document.getElementById('settings-column-toggles');
+  const settingsFontSize = document.getElementById('settings-font-size');
   const copyToast = document.getElementById('copy-toast');
 
   if (!(tableHead instanceof HTMLTableSectionElement)) {
@@ -146,6 +159,10 @@ function getRequiredElements() {
     throw new Error('Missing #settings-column-toggles.');
   }
 
+  if (!(settingsFontSize instanceof HTMLSelectElement)) {
+    throw new Error('Missing #settings-font-size.');
+  }
+
   if (!(copyToast instanceof HTMLElement)) {
     throw new Error('Missing #copy-toast.');
   }
@@ -158,6 +175,7 @@ function getRequiredElements() {
     settingsToggle,
     settingsPanel,
     settingsColumnToggles,
+    settingsFontSize,
     copyToast,
     filters: {
       search: filterSearch,
@@ -515,6 +533,10 @@ function bindFilterEvents() {
     }
   });
 
+  elements.settingsFontSize.addEventListener('change', () => {
+    handleFontSizePresetChange(elements.settingsFontSize.value);
+  });
+
   // Close settings panel when clicking outside it.
   document.addEventListener('click', (event) => {
     if (
@@ -707,6 +729,15 @@ function bindExtensionMessages() {
       rebuildTableHeader();
       buildSettingsPanel();
       applyFiltersAndRender();
+    }
+
+    if (msg.type === FONT_SIZE_SETTING_INIT_MESSAGE_TYPE && typeof msg.fontSizePreset === 'string') {
+      if (!isKnownFontSizePreset(msg.fontSizePreset)) {
+        return;
+      }
+      fontSizePreset = msg.fontSizePreset;
+      applyFontSizePreset();
+      syncFontSizeSettingToState();
     }
   });
 }
@@ -1132,6 +1163,32 @@ async function writeTextToClipboard(value) {
 
 // ── Column settings ───────────────────────────────────────────────────────────
 
+function isKnownFontSizePreset(value) {
+  return FONT_SIZE_PRESETS.includes(value);
+}
+
+function applyFontSizePreset() {
+  document.body.classList.remove(
+    'cf-log-font-smaller',
+    'cf-log-font-default',
+    'cf-log-font-large',
+    'cf-log-font-xlarge'
+  );
+  document.body.classList.add(`cf-log-font-${fontSizePreset}`);
+  elements.settingsFontSize.value = fontSizePreset;
+}
+
+function handleFontSizePresetChange(nextPreset) {
+  if (!isKnownFontSizePreset(nextPreset) || nextPreset === fontSizePreset) {
+    return;
+  }
+
+  fontSizePreset = nextPreset;
+  applyFontSizePreset();
+  syncFontSizeSettingToState();
+  saveFontSizeSetting();
+}
+
 /**
  * Rebuild the <thead> row to match the current visibleColumns list.
  */
@@ -1156,6 +1213,7 @@ function rebuildTableHeader() {
  */
 function buildSettingsPanel() {
   elements.settingsColumnToggles.replaceChildren();
+  elements.settingsFontSize.value = fontSizePreset;
 
   for (const colDef of COLUMN_DEFS) {
     const label = document.createElement('label');
@@ -1238,6 +1296,13 @@ function syncColumnSettingsToState() {
   }
 }
 
+function syncFontSizeSettingToState() {
+  if (vscodeApi !== null) {
+    const existing = vscodeApi.getState() ?? {};
+    vscodeApi.setState({ ...existing, fontSizePreset });
+  }
+}
+
 /**
  * Send visibleColumns to the extension host for cross-session persistence (globalState).
  */
@@ -1250,24 +1315,15 @@ function saveColumnSettings() {
   }
 }
 
+function saveFontSizeSetting() {
+  if (vscodeApi !== null) {
+    vscodeApi.postMessage({
+      type: SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE,
+      fontSizePreset,
+    });
+  }
+}
+
 function renderSummary(rows, all) {
-  const activeBits = [];
-  if (elements.filters.level.value !== 'all') {
-    activeBits.push(`level=${elements.filters.level.value}`);
-  }
-
-  const selectedApp = elements.filters.app.value;
-  const streamState = streamStateByApp.get(selectedApp);
-  if (
-    typeof selectedApp === 'string' &&
-    selectedApp.length > 0 &&
-    typeof streamState === 'object' &&
-    streamState !== null &&
-    typeof streamState.status === 'string'
-  ) {
-    activeBits.push(`stream=${streamState.status}`);
-  }
-
-  const activeFilterText = activeBits.length > 0 ? ` (${activeBits.join(', ')})` : '';
-  elements.tableSummary.textContent = `${rows.length} of ${all.length} rows visible${activeFilterText}.`;
+  elements.tableSummary.textContent = `${rows.length} of ${all.length} rows`;
 }

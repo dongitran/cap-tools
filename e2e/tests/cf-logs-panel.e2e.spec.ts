@@ -610,6 +610,112 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
+  test('CF logs panel shows concise row count summary', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const summary = logsFrame.locator('#table-summary');
+      await expect(summary).toHaveText(/^\d+ of \d+ rows$/, { timeout: 10000 });
+      await expect(summary).not.toContainText('visible');
+      await expect(summary).not.toContainText('stream=');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel settings include font size options and update table typography', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const gearButton = logsFrame.getByLabel('Column settings');
+      await clickWithFallback(gearButton);
+      await expect(logsFrame.locator('#settings-panel')).toBeVisible({ timeout: 5000 });
+
+      const fontSizeSelect = logsFrame.getByLabel('Log table font size');
+      await expect(fontSizeSelect).toBeVisible({ timeout: 5000 });
+      await expect(fontSizeSelect).toHaveValue('default');
+
+      const optionLabels = await fontSizeSelect.locator('option').allTextContents();
+      expect(optionLabels).toEqual(['Smaller', 'Default', 'Large', 'Extra Large']);
+
+      const getTableFontSize = async (): Promise<number> => {
+        const size = await logsFrame.locator('.cf-log-table').evaluate((element) => {
+          const parsed = Number.parseFloat(getComputedStyle(element).fontSize);
+          return Number.isFinite(parsed) ? parsed : 0;
+        });
+        return size;
+      };
+
+      const defaultFontSize = await getTableFontSize();
+      await fontSizeSelect.selectOption('large');
+      const largeFontSize = await getTableFontSize();
+      await fontSizeSelect.selectOption('smaller');
+      const smallerFontSize = await getTableFontSize();
+
+      expect(defaultFontSize).toBeGreaterThan(0);
+      expect(largeFontSize).toBeGreaterThan(defaultFontSize);
+      expect(smallerFontSize).toBeLessThan(defaultFontSize);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel table area is not capped to legacy half-height limit', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      const tableShellStyle = await logsFrame.locator('.table-shell').evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          maxHeight: style.maxHeight,
+          overflowY: style.overflowY,
+        };
+      });
+
+      expect(tableShellStyle.maxHeight).toBe('none');
+      expect(tableShellStyle.overflowY).toBe('auto');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('CF logs panel scope updates when sidebar workspace is confirmed', async () => {
     const session = await launchExtensionHost();
 

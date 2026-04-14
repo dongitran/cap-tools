@@ -9,6 +9,9 @@
   --panel-error: #d16969;
   --panel-warning: #d7ba7d;
   --panel-success: #89d185;
+  --cf-log-font-size: 0.64rem;
+  --cf-log-badge-font-size: 0.58rem;
+  --cf-log-summary-font-size: 0.65rem;
 }
 
 * {
@@ -18,6 +21,7 @@
 html,
 body {
   margin: 0;
+  height: 100%;
   min-height: 100%;
 }
 
@@ -25,6 +29,31 @@ body.cf-logs-panel-page {
   font-family: "Segoe UI", "Trebuchet MS", sans-serif;
   background: var(--panel-bg);
   color: var(--panel-text);
+  min-height: 100dvh;
+}
+
+body.cf-logs-panel-page.cf-log-font-smaller {
+  --cf-log-font-size: 0.58rem;
+  --cf-log-badge-font-size: 0.54rem;
+  --cf-log-summary-font-size: 0.61rem;
+}
+
+body.cf-logs-panel-page.cf-log-font-default {
+  --cf-log-font-size: 0.64rem;
+  --cf-log-badge-font-size: 0.58rem;
+  --cf-log-summary-font-size: 0.65rem;
+}
+
+body.cf-logs-panel-page.cf-log-font-large {
+  --cf-log-font-size: 0.72rem;
+  --cf-log-badge-font-size: 0.64rem;
+  --cf-log-summary-font-size: 0.72rem;
+}
+
+body.cf-logs-panel-page.cf-log-font-xlarge {
+  --cf-log-font-size: 0.8rem;
+  --cf-log-badge-font-size: 0.72rem;
+  --cf-log-summary-font-size: 0.8rem;
 }
 
 body.vscode-light.cf-logs-panel-page {
@@ -116,8 +145,10 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 .cf-logs-panel {
   padding: 8px;
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 8px;
-  align-content: start;
+  min-height: 0;
+  height: 100%;
 }
 
 .workspace-head {
@@ -179,7 +210,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 .gear-button:hover {
-  color: var(--panel-fg);
+  color: var(--panel-text);
   background: color-mix(in oklab, var(--panel-accent) 10%, transparent);
   border-color: color-mix(in oklab, var(--panel-accent) 40%, var(--panel-border));
 }
@@ -191,20 +222,31 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 /* ── Column settings panel ──────────────────────────────────────────── */
 .settings-panel {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px 20px;
+  display: grid;
+  gap: 8px;
   padding: 7px 12px;
   background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
   border: 1px solid var(--panel-border);
   border-radius: 6px;
-  font-size: 0.63rem;
+  font-size: 0.62rem;
 }
 .settings-panel[hidden] {
   display: none;
 }
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .settings-panel-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  width: 74px;
+  flex: 0 0 auto;
   font-weight: 700;
   color: var(--panel-muted);
   white-space: nowrap;
@@ -216,13 +258,15 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .settings-column-item {
   display: flex;
   align-items: center;
   gap: 5px;
   cursor: pointer;
-  color: var(--panel-fg);
+  color: var(--panel-text);
   user-select: none;
 }
 .settings-column-item input[type='checkbox'] {
@@ -238,6 +282,23 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 .settings-column-item.is-required input[type='checkbox'] {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.settings-font-size-select {
+  min-height: 26px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--panel-surface);
+  color: var(--panel-text);
+  font: inherit;
+  font-size: 0.64rem;
+  padding: 0 8px;
+  min-width: 148px;
+}
+
+.settings-font-size-select:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--panel-accent) 62%, #ffffff);
+  outline-offset: 0;
 }
 
 .filter-item {
@@ -282,7 +343,9 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   overflow: auto;
-  max-height: min(420px, 56dvh);
+  max-height: none;
+  min-height: 120px;
+  height: 100%;
   background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
 }
 
@@ -294,7 +357,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   min-width: 480px;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 0.64rem;
+  font-size: var(--cf-log-font-size);
 }
 
 .cf-log-table thead th {
@@ -404,7 +467,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   border-radius: 999px;
   min-height: 18px;
   padding: 0 6px;
-  font-size: 0.58rem;
+  font-size: var(--cf-log-badge-font-size);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -424,7 +487,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 .table-summary {
   margin: 0;
-  font-size: 0.65rem;
+  font-size: var(--cf-log-summary-font-size);
   color: var(--panel-muted);
 }
 
@@ -443,7 +506,12 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
     width: 100%;
   }
 
+  .settings-panel-label {
+    width: auto;
+    min-width: 74px;
+  }
+
   .cf-log-table {
-    font-size: 0.6rem;
+    font-size: var(--cf-log-font-size);
   }
 }

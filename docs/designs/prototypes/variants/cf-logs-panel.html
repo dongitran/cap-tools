@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CFLogs Panel Prototype</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260414h" />
+    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260414i" />
   </head>
   <body class="cf-logs-panel-page vscode-dark">
     <main class="panel-prototype-shell">
@@ -50,9 +50,9 @@
               aria-controls="settings-panel"
               aria-expanded="false"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                <path d="M8 5a3 3 0 1 0 0 6A3 3 0 0 0 8 5zm0 1a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
-                <path d="M9.796 1.343a.5.5 0 0 0-.832-.656l-.89 1.126a4.02 4.02 0 0 0-.632-.188l-.258-1.4a.5.5 0 0 0-.984 0l-.258 1.4a4.02 4.02 0 0 0-.633.188L4.22.687a.5.5 0 0 0-.832.656l.818 1.034a4.04 4.04 0 0 0-.396.556l-1.397-.258a.5.5 0 0 0 0 .984l1.397.258c.077.193.173.379.283.555L3.28 5.523a.5.5 0 0 0 .656.832l1.034-.818c.176.11.362.206.555.283l.258 1.397a.5.5 0 0 0 .984 0l.258-1.397a4.04 4.04 0 0 0 .556-.283l1.034.818a.5.5 0 0 0 .832-.656l-.818-1.034c.11-.176.206-.362.283-.555l1.397-.258a.5.5 0 0 0 0-.984l-1.397-.258a4.04 4.04 0 0 0-.283-.556l.818-1.034z"/>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.25"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-.33-1 1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1-.33 1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 .33 1 1.65 1.65 0 0 0 1 .6h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 .6 1 1.65 1.65 0 0 0 1 .33H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1 .33 1.65 1.65 0 0 0-.6 1z"></path>
               </svg>
             </button>
           </section>
@@ -64,9 +64,20 @@
             aria-hidden="true"
             hidden
           >
-            <span class="settings-panel-label">Columns</span>
-            <div class="settings-column-toggles" id="settings-column-toggles">
-              <!-- populated by JS -->
+            <div class="settings-row">
+              <span class="settings-panel-label">Columns</span>
+              <div class="settings-column-toggles" id="settings-column-toggles">
+                <!-- populated by JS -->
+              </div>
+            </div>
+            <div class="settings-row settings-row-font">
+              <label for="settings-font-size" class="settings-panel-label">Font Size</label>
+              <select id="settings-font-size" class="settings-font-size-select" aria-label="Log table font size">
+                <option value="smaller">Smaller</option>
+                <option value="default" selected>Default</option>
+                <option value="large">Large</option>
+                <option value="xlarge">Extra Large</option>
+              </select>
             </div>
           </div>
 
@@ -86,6 +97,6 @@
     <!-- Toast shown briefly when a row is clicked and message is copied -->
     <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
-    <script type="module" src="../assets/cf-logs-panel.js?v=20260414h"></script>
+    <script type="module" src="../assets/cf-logs-panel.js?v=20260414i"></script>
   </body>
 </html>

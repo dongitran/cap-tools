@@ -21,11 +21,16 @@ const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
 const COPY_LOG_RESULT_MESSAGE_TYPE = 'sapTools.copyLogResult';
 const SAVE_COLUMN_SETTINGS_MESSAGE_TYPE = 'sapTools.saveColumnSettings';
 const COLUMN_SETTINGS_INIT_MESSAGE_TYPE = 'sapTools.columnSettingsInit';
+const SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE = 'sapTools.saveFontSizeSetting';
+const FONT_SIZE_SETTING_INIT_MESSAGE_TYPE = 'sapTools.fontSizeSettingInit';
 
 const COLUMN_SETTINGS_GLOBAL_STATE_KEY = 'cfLogsPanel.visibleColumns';
+const FONT_SIZE_SETTING_GLOBAL_STATE_KEY = 'cfLogsPanel.fontSizePreset';
 const ALL_COLUMN_IDS = ['time', 'source', 'stream', 'level', 'logger', 'message'] as const;
 const REQUIRED_COLUMN_IDS = ['time', 'message'] as const;
 const DEFAULT_VISIBLE_COLUMN_IDS = ['time', 'level', 'logger', 'message'] as const;
+const FONT_SIZE_PRESETS = ['smaller', 'default', 'large', 'xlarge'] as const;
+const DEFAULT_FONT_SIZE_PRESET = 'default';
 
 const STREAM_BATCH_FLUSH_MS = 150;
 const STREAM_RETRY_INITIAL_MS = 1_000;
@@ -141,6 +146,18 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     void webviewView.webview.postMessage({
       type: COLUMN_SETTINGS_INIT_MESSAGE_TYPE,
       visibleColumns: normalizedColumns,
+    });
+
+    const savedFontSizePreset = this.extensionContext.globalState.get<unknown>(
+      FONT_SIZE_SETTING_GLOBAL_STATE_KEY
+    );
+    const normalizedFontSizePreset =
+      typeof savedFontSizePreset === 'string' && isKnownFontSizePreset(savedFontSizePreset)
+        ? savedFontSizePreset
+        : DEFAULT_FONT_SIZE_PRESET;
+    void webviewView.webview.postMessage({
+      type: FONT_SIZE_SETTING_INIT_MESSAGE_TYPE,
+      fontSizePreset: normalizedFontSizePreset,
     });
 
     // Replay scope and apps that arrived before this view was initialized.
@@ -672,6 +689,18 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
         COLUMN_SETTINGS_GLOBAL_STATE_KEY,
         normalizedColumns
       );
+      return;
+    }
+
+    if (
+      message['type'] === SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE &&
+      typeof message['fontSizePreset'] === 'string' &&
+      isKnownFontSizePreset(message['fontSizePreset'])
+    ) {
+      await this.extensionContext.globalState.update(
+        FONT_SIZE_SETTING_GLOBAL_STATE_KEY,
+        message['fontSizePreset']
+      );
     }
   }
 
@@ -835,9 +864,9 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
           aria-controls="settings-panel"
           aria-expanded="false"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M8 5a3 3 0 1 0 0 6A3 3 0 0 0 8 5zm0 1a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
-            <path d="M9.796 1.343a.5.5 0 0 0-.832-.656l-.89 1.126a4.02 4.02 0 0 0-.632-.188l-.258-1.4a.5.5 0 0 0-.984 0l-.258 1.4a4.02 4.02 0 0 0-.633.188L4.22.687a.5.5 0 0 0-.832.656l.818 1.034a4.04 4.04 0 0 0-.396.556l-1.397-.258a.5.5 0 0 0 0 .984l1.397.258c.077.193.173.379.283.555L3.28 5.523a.5.5 0 0 0 .656.832l1.034-.818c.176.11.362.206.555.283l.258 1.397a.5.5 0 0 0 .984 0l.258-1.397a4.04 4.04 0 0 0 .556-.283l1.034.818a.5.5 0 0 0 .832-.656l-.818-1.034c.11-.176.206-.362.283-.555l1.397-.258a.5.5 0 0 0 0-.984l-1.397-.258a4.04 4.04 0 0 0-.283-.556l.818-1.034z"/>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.25"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-.33-1 1.65 1.65 0 0 0-1-.6 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1-.33H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1-.33 1.65 1.65 0 0 0 .6-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 .33 1 1.65 1.65 0 0 0 1 .6h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 .6 1 1.65 1.65 0 0 0 1 .33H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1 .33 1.65 1.65 0 0 0-.6 1z"></path>
           </svg>
         </button>
       </section>
@@ -848,8 +877,19 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
         aria-hidden="true"
         hidden
       >
-        <span class="settings-panel-label">Columns</span>
-        <div class="settings-column-toggles" id="settings-column-toggles">
+        <div class="settings-row">
+          <span class="settings-panel-label">Columns</span>
+          <div class="settings-column-toggles" id="settings-column-toggles">
+          </div>
+        </div>
+        <div class="settings-row settings-row-font">
+          <label for="settings-font-size" class="settings-panel-label">Font Size</label>
+          <select id="settings-font-size" class="settings-font-size-select" aria-label="Log table font size">
+            <option value="smaller">Smaller</option>
+            <option value="default" selected>Default</option>
+            <option value="large">Large</option>
+            <option value="xlarge">Extra Large</option>
+          </select>
         </div>
       </div>
 
@@ -924,6 +964,10 @@ function normalizeVisibleColumns(columnIds: readonly string[]): string[] {
 
 function isKnownColumnId(value: string): value is (typeof ALL_COLUMN_IDS)[number] {
   return (ALL_COLUMN_IDS as readonly string[]).includes(value);
+}
+
+function isKnownFontSizePreset(value: string): value is (typeof FONT_SIZE_PRESETS)[number] {
+  return (FONT_SIZE_PRESETS as readonly string[]).includes(value);
 }
 
 function createNonce(): string {
