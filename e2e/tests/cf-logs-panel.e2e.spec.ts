@@ -127,7 +127,7 @@ test.describe('SAP Tools CF logs panel', () => {
         timeout: 10000,
       });
 
-      const messageCell = logsFrame.locator('#log-table-body td.cell-message').first();
+      const messageCell = logsFrame.locator('#log-table-body td.cell-message .cell-message-text').first();
       await expect(messageCell).toBeVisible({ timeout: 10000 });
 
       const messageCellStyle = await messageCell.evaluate((element) => {
@@ -173,6 +173,52 @@ test.describe('SAP Tools CF logs panel', () => {
       const firstTimeCell = logsFrame.locator('#log-table-body tr td').first();
       await expect(firstTimeCell).toBeVisible({ timeout: 10000 });
       await expect(firstTimeCell).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel lets user copy a log message without changing selected row', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const rowCount = await logsFrame.locator('#log-table-body tr').count();
+      expect(rowCount).toBeGreaterThan(0);
+      const copyButtons = logsFrame.locator('#log-table-body .copy-message-button');
+      await expect(copyButtons.first()).toBeVisible({ timeout: 10000 });
+      await expect(copyButtons).toHaveCount(rowCount);
+
+      const selectedRowIndexBefore = await logsFrame.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#log-table-body tr'));
+        return rows.findIndex((row) => row.classList.contains('is-selected'));
+      });
+
+      const targetCopyButton = copyButtons.nth(1);
+      await clickWithFallback(targetCopyButton);
+      await expect(targetCopyButton).toHaveText('Copied', { timeout: 5000 });
+
+      const selectedRowIndexAfter = await logsFrame.evaluate(() => {
+        const rows = Array.from(document.querySelectorAll('#log-table-body tr'));
+        return rows.findIndex((row) => row.classList.contains('is-selected'));
+      });
+      expect(selectedRowIndexAfter).toBe(selectedRowIndexBefore);
     } finally {
       await cleanupExtensionHost(session);
     }

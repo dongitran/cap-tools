@@ -1,10 +1,13 @@
-// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate guid
+// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate copylog guid
 const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
+const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
+const COPY_LOG_RESULT_MESSAGE_TYPE = 'sapTools.copyLogResult';
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 const MAX_RAW_LOG_TEXT_CHARS = 1_000_000;
 const MAX_PARSED_LOG_ROWS = 5_000;
+const COPY_BUTTON_RESET_MS = 1_600;
 
 /* cspell:disable */
 const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
@@ -42,6 +45,8 @@ let parsedRowsByApp = new Map();
 let streamStateByApp = new Map();
 let isLogsRequestInFlight = false;
 let pendingRequestAppName = '';
+let nextCopyRequestId = 0;
+const pendingCopyButtons = new Map();
 
 if (vscodeApi === null) {
   // Browser prototype mode: render sample data and populate app selector.
@@ -534,6 +539,21 @@ function handleLogsStreamState(appName, status, message) {
   }
 }
 
+function handleCopyLogResult(requestId, success) {
+  const copyButton = pendingCopyButtons.get(requestId);
+  if (!(copyButton instanceof HTMLButtonElement)) {
+    return;
+  }
+  pendingCopyButtons.delete(requestId);
+
+  if (success) {
+    setCopyButtonState(copyButton, 'Copied', true);
+    return;
+  }
+
+  setCopyButtonState(copyButton, 'Failed', false);
+}
+
 /**
  * Listen for messages from the VS Code extension host.
  */
@@ -582,6 +602,14 @@ function bindExtensionMessages() {
       const errorMsg = typeof msg.message === 'string' ? msg.message : 'Unknown error.';
       const requestId = typeof msg.requestId === 'number' ? msg.requestId : -1;
       handleLogsError(msg.appName, errorMsg, requestId);
+    }
+
+    if (
+      msg.type === COPY_LOG_RESULT_MESSAGE_TYPE &&
+      typeof msg.requestId === 'number' &&
+      typeof msg.success === 'boolean'
+    ) {
+      handleCopyLogResult(msg.requestId, msg.success);
     }
   });
 }
@@ -846,6 +874,7 @@ function applyFiltersAndRender() {
 
 function renderTable(rows) {
   elements.tableBody.replaceChildren();
+  pendingCopyButtons.clear();
 
   if (rows.length === 0) {
     const emptyRow = document.createElement('tr');
@@ -876,7 +905,7 @@ function renderTable(rows) {
     tr.append(createTextCell(row.stream));
     tr.append(createBadgeCell(row.level, `badge badge-level-${row.level}`));
     tr.append(createTextCell(row.logger, 'cell-logger'));
-    tr.append(createTextCell(row.message, 'cell-message'));
+    tr.append(createMessageCell(row.message, row.id));
 
     elements.tableBody.append(tr);
   }
@@ -898,6 +927,109 @@ function createBadgeCell(value, badgeClass) {
   badge.textContent = value.toUpperCase();
   td.append(badge);
   return td;
+}
+
+function createMessageCell(message, rowId) {
+  const td = document.createElement('td');
+  td.className = 'cell-message';
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'cell-message-wrap';
+
+  const textValue = message.length > 0 ? message : '-';
+  const messageText = document.createElement('div');
+  messageText.className = 'cell-message-text';
+  messageText.textContent = textValue;
+
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.className = 'copy-message-button';
+  copyButton.textContent = 'Copy';
+  copyButton.setAttribute('aria-label', `Copy log message row ${String(rowId)}`);
+
+  copyButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void copyLogMessage(textValue, copyButton);
+  });
+
+  wrapper.append(messageText, copyButton);
+  td.append(wrapper);
+  return td;
+}
+
+async function copyLogMessage(value, copyButton) {
+  setCopyButtonState(copyButton, 'Copying', null);
+
+  if (vscodeApi !== null) {
+    nextCopyRequestId += 1;
+    const requestId = nextCopyRequestId;
+    pendingCopyButtons.set(requestId, copyButton);
+    vscodeApi.postMessage({
+      type: COPY_LOG_MESSAGE_TYPE,
+      requestId,
+      text: value,
+    });
+    return;
+  }
+
+  const copied = await writeTextToClipboard(value);
+  if (copied) {
+    setCopyButtonState(copyButton, 'Copied', true);
+    return;
+  }
+  setCopyButtonState(copyButton, 'Failed', false);
+}
+
+function setCopyButtonState(copyButton, label, copied) {
+  copyButton.textContent = label;
+  copyButton.disabled = copied === null;
+  copyButton.classList.toggle('is-copied', copied === true);
+  copyButton.classList.toggle('is-error', copied === false);
+
+  if (copied === null) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    copyButton.textContent = 'Copy';
+    copyButton.disabled = false;
+    copyButton.classList.remove('is-copied');
+    copyButton.classList.remove('is-error');
+  }, COPY_BUTTON_RESET_MS);
+}
+
+async function writeTextToClipboard(value) {
+  if (
+    typeof navigator === 'object' &&
+    navigator !== null &&
+    typeof navigator.clipboard?.writeText === 'function'
+  ) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Continue with fallback below.
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.append(textarea);
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  }
+
+  textarea.remove();
+  return copied;
 }
 
 function renderSummary(rows, all) {

@@ -295,10 +295,54 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table .cell-message {
+  padding-right: 6px;
+}
+
+.cf-log-table .cell-message-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.cf-log-table .cell-message-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
   text-overflow: clip;
+}
+
+.copy-message-button {
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  min-height: 22px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--panel-text);
+  background: color-mix(in oklab, var(--panel-surface) 82%, var(--panel-bg));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copy-message-button:hover {
+  background: color-mix(in oklab, var(--panel-accent-soft) 72%, var(--panel-surface));
+}
+
+.copy-message-button:disabled {
+  cursor: wait;
+  opacity: 0.8;
+}
+
+.copy-message-button.is-copied {
+  border-color: color-mix(in oklab, var(--panel-success) 56%, var(--panel-border));
+  color: var(--panel-success);
+}
+
+.copy-message-button.is-error {
+  border-color: color-mix(in oklab, var(--panel-error) 56%, var(--panel-border));
+  color: var(--panel-error);
 }
 
 .cf-log-table .empty-row {

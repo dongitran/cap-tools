@@ -1,4 +1,4 @@
-// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate
+// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate copylog
 import * as vscode from 'vscode';
 import {
   fetchRecentAppLogsFromTarget,
@@ -17,6 +17,8 @@ const LOGS_APPEND_MESSAGE_TYPE = 'sapTools.logsAppend';
 const LOGS_STREAM_STATE_MESSAGE_TYPE = 'sapTools.logsStreamState';
 const LOGS_ERROR_MESSAGE_TYPE = 'sapTools.logsError';
 const FETCH_LOGS_MESSAGE_TYPE = 'sapTools.fetchLogs';
+const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
+const COPY_LOG_RESULT_MESSAGE_TYPE = 'sapTools.copyLogResult';
 
 const STREAM_BATCH_FLUSH_MS = 150;
 const STREAM_RETRY_INITIAL_MS = 1_000;
@@ -619,6 +621,19 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
 
     if (
+      message['type'] === COPY_LOG_MESSAGE_TYPE &&
+      typeof message['requestId'] === 'number' &&
+      Number.isInteger(message['requestId']) &&
+      message['requestId'] > 0 &&
+      typeof message['text'] === 'string' &&
+      message['text'].length > 0 &&
+      message['text'].length <= 500_000
+    ) {
+      await this.copyLogMessageToClipboard(message['requestId'], message['text']);
+      return;
+    }
+
+    if (
       message['type'] === FETCH_LOGS_MESSAGE_TYPE &&
       typeof message['appName'] === 'string' &&
       message['appName'].trim().length > 0 &&
@@ -627,6 +642,25 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     ) {
       await this.fetchAndSendLogs(message['appName'].trim(), message['requestId']);
     }
+  }
+
+  private async copyLogMessageToClipboard(requestId: number, text: string): Promise<void> {
+    try {
+      await vscode.env.clipboard.writeText(text);
+      this.postCopyLogResult(requestId, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to copy log message.';
+      this.postCopyLogResult(requestId, false, message);
+    }
+  }
+
+  private postCopyLogResult(requestId: number, success: boolean, message?: string): void {
+    void this.webviewView?.webview.postMessage({
+      type: COPY_LOG_RESULT_MESSAGE_TYPE,
+      requestId,
+      success,
+      message,
+    });
   }
 
   private async fetchAndSendLogs(appName: string, requestId: number): Promise<void> {
