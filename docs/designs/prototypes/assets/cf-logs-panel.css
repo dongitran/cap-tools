@@ -210,6 +210,10 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 .cf-log-table {
   width: 100%;
+  /* Prevent horizontal squish: when the panel is narrower than the sum of
+     column min-widths the container (overflow:auto) will scroll instead of
+     crushing the columns into unreadable widths. */
+  min-width: 480px;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 0.64rem;
@@ -228,21 +232,33 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   white-space: nowrap;
 }
 
-.cf-log-table th:nth-child(1) {
+/* ── Column widths & minimum widths ─────────────────────────────────────
+   width   = preferred size when there is enough room
+   min-width = absolute floor; columns never shrink below this           */
+
+.cf-log-table th:nth-child(1) {     /* Time   e.g. "12:34:56" */
   width: 58px;
+  min-width: 58px;
 }
 
-.cf-log-table th:nth-child(2) {
+.cf-log-table th:nth-child(2) {     /* Source e.g. "CELL/0"   */
   width: 92px;
+  min-width: 70px;
 }
 
-.cf-log-table th:nth-child(3),
-.cf-log-table th:nth-child(4) {
+.cf-log-table th:nth-child(3),      /* Stream: OUT / ERR       */
+.cf-log-table th:nth-child(4) {     /* Level:  INFO / WARN …   */
   width: 56px;
+  min-width: 44px;
 }
 
-.cf-log-table th:nth-child(5) {
+.cf-log-table th:nth-child(5) {     /* Logger (truncated)      */
   width: 48px;
+  min-width: 48px;
+}
+
+.cf-log-table th:nth-child(6) {     /* Message – must stay readable */
+  min-width: 160px;
 }
 
 .cf-log-table tbody td {

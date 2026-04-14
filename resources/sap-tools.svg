@@ -1,6 +1,37 @@
-<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" fill="none">
-  <rect x="12" y="18" width="104" height="92" rx="12" stroke="#4DA3FF" stroke-width="10"/>
-  <path d="M28 46H100" stroke="#4DA3FF" stroke-width="10" stroke-linecap="round"/>
-  <path d="M28 64H84" stroke="#4DA3FF" stroke-width="10" stroke-linecap="round"/>
-  <path d="M28 82H72" stroke="#4DA3FF" stroke-width="10" stroke-linecap="round"/>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    SAP Tools – Activity Bar Icon (monochrome)
+    Open-end wrench silhouette, rotated -45°.
+    VSCode applies theme colour; only the SHAPE matters here.
+    Bold 18 px handle for legibility at 16 px rendered size.
+  -->
+  <g transform="rotate(-45, 64, 64)">
+    <path
+      fill-rule="evenodd"
+      fill="currentColor"
+      d="
+        M 37,22
+        Q 37,18 41,18
+        L 87,18
+        Q 91,18 91,22
+        L 91,52
+        L 73,52
+        L 73,110
+        Q 73,114 69,114
+        L 59,114
+        Q 55,114 55,110
+        L 55,52
+        L 37,52
+        Z
+
+        M 50,8
+        L 78,8
+        L 78,36
+        Q 78,40 74,40
+        L 54,40
+        Q 50,40 50,36
+        Z
+      "
+    />
+  </g>
 </svg>
