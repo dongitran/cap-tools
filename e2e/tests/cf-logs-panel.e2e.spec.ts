@@ -178,7 +178,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel lets user copy a log message without changing selected row', async () => {
+  test('CF logs panel copies row message on click and shows Copied toast', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -199,26 +199,20 @@ test.describe('SAP Tools CF logs panel', () => {
         timeout: 10000,
       });
 
-      const rowCount = await logsFrame.locator('#log-table-body tr').count();
-      expect(rowCount).toBeGreaterThan(0);
-      const copyButtons = logsFrame.locator('#log-table-body .copy-message-button');
-      await expect(copyButtons.first()).toBeVisible({ timeout: 10000 });
-      await expect(copyButtons).toHaveCount(rowCount);
+      // There should be no copy buttons — row-click-to-copy replaced them.
+      await expect(logsFrame.locator('#log-table-body .copy-message-button')).toHaveCount(0);
 
-      const selectedRowIndexBefore = await logsFrame.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll('#log-table-body tr'));
-        return rows.findIndex((row) => row.classList.contains('is-selected'));
-      });
+      // Click the second row — it should select that row and show the toast.
+      const secondRow = logsFrame.locator('#log-table-body tr').nth(1);
+      await expect(secondRow).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(secondRow);
 
-      const targetCopyButton = copyButtons.nth(1);
-      await clickWithFallback(targetCopyButton);
-      await expect(targetCopyButton).toHaveText('Copied', { timeout: 5000 });
+      // The clicked row should become selected.
+      await expect(secondRow).toHaveClass(/is-selected/);
 
-      const selectedRowIndexAfter = await logsFrame.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll('#log-table-body tr'));
-        return rows.findIndex((row) => row.classList.contains('is-selected'));
-      });
-      expect(selectedRowIndexAfter).toBe(selectedRowIndexBefore);
+      // The copy toast should appear briefly.
+      const toast = logsFrame.locator('#copy-toast');
+      await expect(toast).toHaveClass(/is-visible/, { timeout: 5000 });
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -245,26 +239,77 @@ test.describe('SAP Tools CF logs panel', () => {
         timeout: 10000,
       });
 
+      const gearButton = logsFrame.getByLabel('Column settings');
+      await clickWithFallback(gearButton);
+
+      const sourceCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Source' })
+        .locator('input[type="checkbox"]');
+      const streamCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Stream' })
+        .locator('input[type="checkbox"]');
+      const levelCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Level' })
+        .locator('input[type="checkbox"]');
+      const loggerCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Logger' })
+        .locator('input[type="checkbox"]');
+
+      if (await sourceCheckbox.isChecked()) {
+        await clickWithFallback(sourceCheckbox);
+      }
+      if (await streamCheckbox.isChecked()) {
+        await clickWithFallback(streamCheckbox);
+      }
+      if (!(await levelCheckbox.isChecked())) {
+        await clickWithFallback(levelCheckbox);
+      }
+      if (!(await loggerCheckbox.isChecked())) {
+        await clickWithFallback(loggerCheckbox);
+      }
+
+      await expect(sourceCheckbox).not.toBeChecked();
+      await expect(streamCheckbox).not.toBeChecked();
+      await expect(levelCheckbox).toBeChecked();
+      await expect(loggerCheckbox).toBeChecked();
+
       const widthSnapshot = await logsFrame.evaluate(() => {
         const headers = Array.from(document.querySelectorAll('.cf-log-table thead th'));
         const widths = headers.map((header) => Math.round(header.getBoundingClientRect().width));
         const total = widths.reduce((sum, width) => sum + width, 0);
+        const getHeaderWidth = (selector: string): number => {
+          const header = document.querySelector(selector);
+          return header instanceof HTMLElement ? header.getBoundingClientRect().width : 0;
+        };
+        const messageWidth = getHeaderWidth('.cf-log-table thead th.col-message');
+        const loggerWidth = getHeaderWidth('.cf-log-table thead th.col-logger');
+        const timeWidth = getHeaderWidth('.cf-log-table thead th.col-time');
+        const nonMessageWidths = headers
+          .filter((header) => !header.classList.contains('col-message'))
+          .map((header) => Math.round(header.getBoundingClientRect().width));
         return {
           widths,
           total,
-          messageWidth: widths[5] ?? 0,
-          loggerWidth: widths[4] ?? 0,
-          timeWidth: widths[0] ?? 0,
+          messageWidth: Math.round(messageWidth),
+          loggerWidth: Math.round(loggerWidth),
+          timeWidth: Math.round(timeWidth),
+          widestNonMessageColumn: nonMessageWidths.length > 0 ? Math.max(...nonMessageWidths) : 0,
         };
       });
 
       const messageRatio = widthSnapshot.total > 0
         ? widthSnapshot.messageWidth / widthSnapshot.total
         : 0;
-      const widestNonMessageColumn = Math.max(...widthSnapshot.widths.slice(0, 5));
 
+      expect(widthSnapshot.messageWidth).toBeGreaterThan(0);
+      expect(widthSnapshot.loggerWidth).toBeGreaterThan(0);
+      expect(widthSnapshot.timeWidth).toBeGreaterThan(0);
       expect(messageRatio).toBeGreaterThan(0.4);
-      expect(widthSnapshot.messageWidth).toBeGreaterThan(widestNonMessageColumn);
+      expect(widthSnapshot.messageWidth).toBeGreaterThan(widthSnapshot.widestNonMessageColumn);
       expect(widthSnapshot.loggerWidth).toBeLessThan(widthSnapshot.timeWidth);
       expect(widthSnapshot.timeWidth).toBeLessThan(70);
     } finally {
@@ -297,7 +342,7 @@ test.describe('SAP Tools CF logs panel', () => {
       await levelFilter.selectOption('error');
       await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0);
 
-      const levelBadges = logsFrame.locator('#log-table-body tr td:nth-child(4) .badge');
+      const levelBadges = logsFrame.locator('#log-table-body tr td.col-level .badge');
       const levelBadgeCount = await levelBadges.count();
       expect(levelBadgeCount).toBeGreaterThan(0);
 
@@ -445,6 +490,121 @@ test.describe('SAP Tools CF logs panel', () => {
         .locator('#log-table-body tr td:not(.empty-row)')
         .count();
       expect(dataRowCount).toBe(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel gear button opens settings panel with correct default column state', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      // Settings panel is hidden by default.
+      await expect(logsFrame.locator('#settings-panel')).toBeHidden({ timeout: 10000 });
+
+      // Gear button should be visible.
+      const gearButton = logsFrame.getByLabel('Column settings');
+      await expect(gearButton).toBeVisible({ timeout: 10000 });
+
+      // Click gear to open settings panel.
+      await clickWithFallback(gearButton);
+      await expect(logsFrame.locator('#settings-panel')).toBeVisible({ timeout: 5000 });
+      await expect(gearButton).toHaveClass(/is-active/);
+
+      // Default checked: Time, Level, Logger, Message.
+      // Default unchecked: Source, Stream.
+      const checkboxState = await logsFrame.evaluate(() => {
+        const items = Array.from(
+          document.querySelectorAll('#settings-column-toggles .settings-column-item')
+        );
+        return items.map((item) => {
+          const cb = item.querySelector('input[type="checkbox"]');
+          const span = item.querySelector('span');
+          return {
+            label: span?.textContent ?? '',
+            checked: cb instanceof HTMLInputElement ? cb.checked : false,
+          };
+        });
+      });
+
+      const byLabel = Object.fromEntries(checkboxState.map((s) => [s.label, s.checked]));
+      expect(byLabel['Time']).toBe(true);
+      expect(byLabel['Level']).toBe(true);
+      expect(byLabel['Logger']).toBe(true);
+      expect(byLabel['Message']).toBe(true);
+      expect(byLabel['Source']).toBe(false);
+      expect(byLabel['Stream']).toBe(false);
+
+      // Clicking gear again should close the panel.
+      await clickWithFallback(gearButton);
+      await expect(logsFrame.locator('#settings-panel')).toBeHidden({ timeout: 5000 });
+      await expect(gearButton).not.toHaveClass(/is-active/);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel settings toggle Source and Stream columns in table header', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      const gearButton = logsFrame.getByLabel('Column settings');
+      await clickWithFallback(gearButton);
+
+      const sourceCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Source' })
+        .locator('input[type="checkbox"]');
+      const streamCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Stream' })
+        .locator('input[type="checkbox"]');
+
+      if (await sourceCheckbox.isChecked()) {
+        await clickWithFallback(sourceCheckbox);
+      }
+      if (await streamCheckbox.isChecked()) {
+        await clickWithFallback(streamCheckbox);
+      }
+
+      await expect(sourceCheckbox).not.toBeChecked();
+      await expect(streamCheckbox).not.toBeChecked();
+      const baselineHeaders = await logsFrame
+        .locator('#log-table-head th')
+        .allTextContents();
+      expect(baselineHeaders.includes('Source')).toBe(false);
+      expect(baselineHeaders.includes('Stream')).toBe(false);
+
+      await clickWithFallback(sourceCheckbox);
+      await expect(sourceCheckbox).toBeChecked();
+      const withSourceHeaders = await logsFrame.locator('#log-table-head th').allTextContents();
+      expect(withSourceHeaders.includes('Source')).toBe(true);
+      expect(withSourceHeaders.length).toBe(baselineHeaders.length + 1);
+
+      await clickWithFallback(streamCheckbox);
+      await expect(streamCheckbox).toBeChecked();
+      const withSourceAndStreamHeaders = await logsFrame
+        .locator('#log-table-head th')
+        .allTextContents();
+      expect(withSourceAndStreamHeaders.includes('Source')).toBe(true);
+      expect(withSourceAndStreamHeaders.includes('Stream')).toBe(true);
+      expect(withSourceAndStreamHeaders.length).toBe(baselineHeaders.length + 2);
+
+      await clickWithFallback(sourceCheckbox);
+      await clickWithFallback(streamCheckbox);
+      await expect(sourceCheckbox).not.toBeChecked();
+      await expect(streamCheckbox).not.toBeChecked();
+      const restoredHeaders = await logsFrame.locator('#log-table-head th').allTextContents();
+      const restoredSorted = [...restoredHeaders].sort();
+      const baselineSorted = [...baselineHeaders].sort();
+      expect(restoredSorted).toEqual(baselineSorted);
+      expect(restoredHeaders.includes('Source')).toBe(false);
+      expect(restoredHeaders.includes('Stream')).toBe(false);
     } finally {
       await cleanupExtensionHost(session);
     }

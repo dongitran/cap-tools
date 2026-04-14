@@ -27,7 +27,7 @@ const PROTOTYPE_VARIANTS = [
     id: 'cf-logs-panel',
     hash: 'cf-logs-panel',
     label: 'Prototype: CFLogs Panel',
-    framePath: './variants/cf-logs-panel.html?v=20260414d',
+    framePath: './variants/cf-logs-panel.html?v=20260414h',
   },
 ];
 

@@ -162,6 +162,84 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   gap: 8px;
 }
 
+/* ── Gear / settings toggle button ─────────────────────────────────── */
+.gear-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--panel-muted);
+  border-radius: 6px;
+  padding: 0 7px;
+  min-height: 28px;
+  min-width: 28px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.gear-button:hover {
+  color: var(--panel-fg);
+  background: color-mix(in oklab, var(--panel-accent) 10%, transparent);
+  border-color: color-mix(in oklab, var(--panel-accent) 40%, var(--panel-border));
+}
+.gear-button.is-active {
+  color: var(--panel-accent);
+  border-color: color-mix(in oklab, var(--panel-accent) 55%, transparent);
+  background: color-mix(in oklab, var(--panel-accent) 10%, transparent);
+}
+
+/* ── Column settings panel ──────────────────────────────────────────── */
+.settings-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding: 7px 12px;
+  background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-size: 0.63rem;
+}
+.settings-panel[hidden] {
+  display: none;
+}
+.settings-panel-label {
+  font-weight: 700;
+  color: var(--panel-muted);
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.6rem;
+}
+.settings-column-toggles {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.settings-column-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--panel-fg);
+  user-select: none;
+}
+.settings-column-item input[type='checkbox'] {
+  accent-color: var(--panel-accent);
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+}
+.settings-column-item.is-required {
+  color: var(--panel-muted);
+  cursor: default;
+}
+.settings-column-item.is-required input[type='checkbox'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .filter-item {
   display: grid;
   gap: 0;
@@ -232,34 +310,17 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   white-space: nowrap;
 }
 
-/* ── Column widths & minimum widths ─────────────────────────────────────
-   width   = preferred size when there is enough room
-   min-width = absolute floor; columns never shrink below this           */
+/* ── Column widths & minimum widths ────────────────────────────────────
+   Class-based (not nth-child) so layout is independent of which columns
+   are currently visible. width = preferred; min-width = absolute floor.
+   The message column has no fixed width — it takes all remaining space.  */
 
-.cf-log-table th:nth-child(1) {     /* Time   e.g. "12:34:56" */
-  width: 58px;
-  min-width: 58px;
-}
-
-.cf-log-table th:nth-child(2) {     /* Source e.g. "CELL/0"   */
-  width: 92px;
-  min-width: 70px;
-}
-
-.cf-log-table th:nth-child(3),      /* Stream: OUT / ERR       */
-.cf-log-table th:nth-child(4) {     /* Level:  INFO / WARN …   */
-  width: 56px;
-  min-width: 44px;
-}
-
-.cf-log-table th:nth-child(5) {     /* Logger (truncated)      */
-  width: 48px;
-  min-width: 48px;
-}
-
-.cf-log-table th:nth-child(6) {     /* Message – must stay readable */
-  min-width: 160px;
-}
+.cf-log-table .col-time   { width: 58px;  min-width: 58px; }
+.cf-log-table .col-source { width: 88px;  min-width: 70px; }
+.cf-log-table .col-stream { width: 52px;  min-width: 44px; }
+.cf-log-table .col-level  { width: 52px;  min-width: 44px; }
+.cf-log-table .col-logger { width: 46px;  min-width: 46px; }
+.cf-log-table .col-message { min-width: 160px; }
 
 .cf-log-table tbody td {
   border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 76%, transparent);
@@ -295,16 +356,10 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table .cell-message {
-  padding-right: 6px;
+  /* no extra padding — message gets all available column space */
 }
 
-.cf-log-table .cell-message-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-}
-
+/* Message text: preserve formatting, wrap at any char to avoid overflow */
 .cf-log-table .cell-message-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -312,37 +367,29 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   text-overflow: clip;
 }
 
-.copy-message-button {
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  min-height: 22px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: 0.58rem;
+/* ── Copy toast notification ────────────────────────────────────────── */
+.copy-toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: color-mix(in oklab, var(--panel-accent) 88%, #000000 12%);
+  color: #ffffff;
+  padding: 5px 16px;
+  border-radius: 20px;
+  font-size: 0.7rem;
   font-weight: 700;
-  color: var(--panel-text);
-  background: color-mix(in oklab, var(--panel-surface) 82%, var(--panel-bg));
-  cursor: pointer;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 500;
   white-space: nowrap;
+  user-select: none;
 }
-
-.copy-message-button:hover {
-  background: color-mix(in oklab, var(--panel-accent-soft) 72%, var(--panel-surface));
-}
-
-.copy-message-button:disabled {
-  cursor: wait;
-  opacity: 0.8;
-}
-
-.copy-message-button.is-copied {
-  border-color: color-mix(in oklab, var(--panel-success) 56%, var(--panel-border));
-  color: var(--panel-success);
-}
-
-.copy-message-button.is-error {
-  border-color: color-mix(in oklab, var(--panel-error) 56%, var(--panel-border));
-  color: var(--panel-error);
+.copy-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .cf-log-table .empty-row {

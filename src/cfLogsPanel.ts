@@ -19,6 +19,13 @@ const LOGS_ERROR_MESSAGE_TYPE = 'sapTools.logsError';
 const FETCH_LOGS_MESSAGE_TYPE = 'sapTools.fetchLogs';
 const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
 const COPY_LOG_RESULT_MESSAGE_TYPE = 'sapTools.copyLogResult';
+const SAVE_COLUMN_SETTINGS_MESSAGE_TYPE = 'sapTools.saveColumnSettings';
+const COLUMN_SETTINGS_INIT_MESSAGE_TYPE = 'sapTools.columnSettingsInit';
+
+const COLUMN_SETTINGS_GLOBAL_STATE_KEY = 'cfLogsPanel.visibleColumns';
+const ALL_COLUMN_IDS = ['time', 'source', 'stream', 'level', 'logger', 'message'] as const;
+const REQUIRED_COLUMN_IDS = ['time', 'message'] as const;
+const DEFAULT_VISIBLE_COLUMN_IDS = ['time', 'level', 'logger', 'message'] as const;
 
 const STREAM_BATCH_FLUSH_MS = 150;
 const STREAM_RETRY_INITIAL_MS = 1_000;
@@ -94,13 +101,13 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private fetchToken = 0;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(private readonly extensionContext: vscode.ExtensionContext) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.webviewView = webviewView;
 
     const assetsRoot = vscode.Uri.joinPath(
-      this.extensionUri,
+      this.extensionContext.extensionUri,
       'docs',
       'designs',
       'prototypes',
@@ -124,6 +131,17 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
     );
     this.disposables.push(messageSubscription);
+
+    const savedColumns = this.extensionContext.globalState.get<unknown>(
+      COLUMN_SETTINGS_GLOBAL_STATE_KEY
+    );
+    const normalizedColumns = Array.isArray(savedColumns)
+      ? normalizeVisibleColumns(extractStringColumns(savedColumns))
+      : [...DEFAULT_VISIBLE_COLUMN_IDS];
+    void webviewView.webview.postMessage({
+      type: COLUMN_SETTINGS_INIT_MESSAGE_TYPE,
+      visibleColumns: normalizedColumns,
+    });
 
     // Replay scope and apps that arrived before this view was initialized.
     if (this.pendingScope !== null) {
@@ -641,6 +659,19 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       typeof message['requestId'] === 'number'
     ) {
       await this.fetchAndSendLogs(message['appName'].trim(), message['requestId']);
+      return;
+    }
+
+    if (
+      message['type'] === SAVE_COLUMN_SETTINGS_MESSAGE_TYPE &&
+      Array.isArray(message['visibleColumns'])
+    ) {
+      const columns = extractStringColumns(message['visibleColumns']);
+      const normalizedColumns = normalizeVisibleColumns(columns);
+      await this.extensionContext.globalState.update(
+        COLUMN_SETTINGS_GLOBAL_STATE_KEY,
+        normalizedColumns
+      );
     }
   }
 
@@ -787,7 +818,7 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
           <input
             id="filter-search"
             type="search"
-            placeholder="message, source, logger"
+            placeholder="message, logger"
             aria-label="Search logs"
           />
         </div>
@@ -796,26 +827,43 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
             <option value="all">All</option>
           </select>
         </div>
+        <button
+          type="button"
+          class="gear-button"
+          id="settings-toggle"
+          aria-label="Column settings"
+          aria-controls="settings-panel"
+          aria-expanded="false"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 5a3 3 0 1 0 0 6A3 3 0 0 0 8 5zm0 1a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
+            <path d="M9.796 1.343a.5.5 0 0 0-.832-.656l-.89 1.126a4.02 4.02 0 0 0-.632-.188l-.258-1.4a.5.5 0 0 0-.984 0l-.258 1.4a4.02 4.02 0 0 0-.633.188L4.22.687a.5.5 0 0 0-.832.656l.818 1.034a4.04 4.04 0 0 0-.396.556l-1.397-.258a.5.5 0 0 0 0 .984l1.397.258c.077.193.173.379.283.555L3.28 5.523a.5.5 0 0 0 .656.832l1.034-.818c.176.11.362.206.555.283l.258 1.397a.5.5 0 0 0 .984 0l.258-1.397a4.04 4.04 0 0 0 .556-.283l1.034.818a.5.5 0 0 0 .832-.656l-.818-1.034c.11-.176.206-.362.283-.555l1.397-.258a.5.5 0 0 0 0-.984l-1.397-.258a4.04 4.04 0 0 0-.283-.556l.818-1.034z"/>
+          </svg>
+        </button>
       </section>
+
+      <div
+        class="settings-panel"
+        id="settings-panel"
+        aria-hidden="true"
+        hidden
+      >
+        <span class="settings-panel-label">Columns</span>
+        <div class="settings-column-toggles" id="settings-column-toggles">
+        </div>
+      </div>
 
       <div class="table-shell" role="region" aria-label="Filtered logs table">
         <table class="cf-log-table" aria-describedby="table-summary">
-          <thead>
-            <tr>
-              <th scope="col">Time</th>
-              <th scope="col">Source</th>
-              <th scope="col">Stream</th>
-              <th scope="col">Level</th>
-              <th scope="col">Logger</th>
-              <th scope="col">Message</th>
-            </tr>
-          </thead>
+          <thead id="log-table-head"><tr></tr></thead>
           <tbody id="log-table-body"></tbody>
         </table>
       </div>
 
       <p id="table-summary" class="table-summary" role="status" aria-live="polite"></p>
     </section>
+
+    <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
     <script nonce="${nonce}" type="module" src="${scriptSrc}"></script>
   </body>
@@ -850,6 +898,32 @@ function splitLinesWithRemainder(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function extractStringColumns(values: readonly unknown[]): string[] {
+  return values.filter(
+    (item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 32
+  );
+}
+
+function normalizeVisibleColumns(columnIds: readonly string[]): string[] {
+  const selected = new Set<string>();
+
+  for (const columnId of columnIds) {
+    if (isKnownColumnId(columnId)) {
+      selected.add(columnId);
+    }
+  }
+
+  for (const requiredColumnId of REQUIRED_COLUMN_IDS) {
+    selected.add(requiredColumnId);
+  }
+
+  return ALL_COLUMN_IDS.filter((columnId) => selected.has(columnId));
+}
+
+function isKnownColumnId(value: string): value is (typeof ALL_COLUMN_IDS)[number] {
+  return (ALL_COLUMN_IDS as readonly string[]).includes(value);
 }
 
 function createNonce(): string {

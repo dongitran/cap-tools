@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const cacheStore = new CacheStore(context);
   const cacheSyncService = new CacheSyncService(cacheStore, context, outputChannel);
 
-  const cfLogsPanel = new CfLogsPanelProvider(context.extensionUri);
+  const cfLogsPanel = new CfLogsPanelProvider(context);
 
   const regionSidebarProvider = new RegionSidebarProvider(
     context.extensionUri,

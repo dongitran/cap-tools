@@ -3,11 +3,24 @@ const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : 
 
 const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
 const COPY_LOG_RESULT_MESSAGE_TYPE = 'sapTools.copyLogResult';
+const SAVE_COLUMN_SETTINGS_MESSAGE_TYPE = 'sapTools.saveColumnSettings';
+const COLUMN_SETTINGS_INIT_MESSAGE_TYPE = 'sapTools.columnSettingsInit';
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 const MAX_RAW_LOG_TEXT_CHARS = 1_000_000;
 const MAX_PARSED_LOG_ROWS = 5_000;
-const COPY_BUTTON_RESET_MS = 1_600;
+const COPY_TOAST_VISIBLE_MS = 1_600;
+
+/** All columns in canonical display order. */
+const COLUMN_DEFS = [
+  { id: 'time',    label: 'Time',    cellClass: 'col-time',    required: true,  defaultOn: true  },
+  { id: 'source',  label: 'Source',  cellClass: 'col-source',  required: false, defaultOn: false },
+  { id: 'stream',  label: 'Stream',  cellClass: 'col-stream',  required: false, defaultOn: false },
+  { id: 'level',   label: 'Level',   cellClass: 'col-level',   required: false, defaultOn: true  },
+  { id: 'logger',  label: 'Logger',  cellClass: 'col-logger',  required: false, defaultOn: true  },
+  { id: 'message', label: 'Message', cellClass: 'col-message', required: true,  defaultOn: true  },
+];
+const DEFAULT_VISIBLE_COLUMNS = COLUMN_DEFS.filter((c) => c.defaultOn).map((c) => c.id);
 
 /* cspell:disable */
 const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
@@ -30,6 +43,17 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-a
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}`;
 /* cspell:enable */
 
+// ── Column visibility state ───────────────────────────────────────────────────
+// Restored from webview state (persists within a VS Code session).
+// Will be overridden by sapTools.columnSettingsInit once the extension sends it.
+{
+  const savedState = vscodeApi?.getState();
+  const saved = Array.isArray(savedState?.visibleColumns) ? savedState.visibleColumns : null;
+  const valid = saved !== null && saved.every((id) => COLUMN_DEFS.some((c) => c.id === id));
+  // eslint-disable-next-line no-var
+  var visibleColumns = valid && saved.length > 0 ? saved : [...DEFAULT_VISIBLE_COLUMNS];
+}
+
 const elements = getRequiredElements();
 
 // Module-level mutable state.
@@ -46,7 +70,12 @@ let streamStateByApp = new Map();
 let isLogsRequestInFlight = false;
 let pendingRequestAppName = '';
 let nextCopyRequestId = 0;
-const pendingCopyButtons = new Map();
+/** Maps requestId → callback to invoke when copy result arrives from extension. */
+const pendingCopyCallbacks = new Map();
+let copyToastTimer = null;
+
+// Build header from current column config before first render.
+rebuildTableHeader();
 
 if (vscodeApi === null) {
   // Browser prototype mode: render sample data and populate app selector.
@@ -65,12 +94,21 @@ bindExtensionMessages();
 // ── DOM helpers ──────────────────────────────────────────────────────────────
 
 function getRequiredElements() {
+  const tableHead = document.getElementById('log-table-head');
   const tableBody = document.getElementById('log-table-body');
   const tableSummary = document.getElementById('table-summary');
   const workspaceScope = document.getElementById('workspace-scope');
   const filterSearch = document.getElementById('filter-search');
   const filterLevel = document.getElementById('filter-level');
   const filterApp = document.getElementById('filter-app');
+  const settingsToggle = document.getElementById('settings-toggle');
+  const settingsPanel = document.getElementById('settings-panel');
+  const settingsColumnToggles = document.getElementById('settings-column-toggles');
+  const copyToast = document.getElementById('copy-toast');
+
+  if (!(tableHead instanceof HTMLTableSectionElement)) {
+    throw new Error('Missing #log-table-head.');
+  }
 
   if (!(tableBody instanceof HTMLTableSectionElement)) {
     throw new Error('Missing #log-table-body.');
@@ -96,10 +134,31 @@ function getRequiredElements() {
     throw new Error('Missing #filter-app.');
   }
 
+  if (!(settingsToggle instanceof HTMLButtonElement)) {
+    throw new Error('Missing #settings-toggle.');
+  }
+
+  if (!(settingsPanel instanceof HTMLElement)) {
+    throw new Error('Missing #settings-panel.');
+  }
+
+  if (!(settingsColumnToggles instanceof HTMLElement)) {
+    throw new Error('Missing #settings-column-toggles.');
+  }
+
+  if (!(copyToast instanceof HTMLElement)) {
+    throw new Error('Missing #copy-toast.');
+  }
+
   return {
+    tableHead,
     tableBody,
     tableSummary,
     workspaceScope,
+    settingsToggle,
+    settingsPanel,
+    settingsColumnToggles,
+    copyToast,
     filters: {
       search: filterSearch,
       level: filterLevel,
@@ -444,6 +503,30 @@ function bindFilterEvents() {
       showSelectedAppLogs(selectedApp, true);
     }
   });
+
+  elements.settingsToggle.addEventListener('click', () => {
+    toggleSettingsPanel();
+  });
+
+  // Column checkbox toggles — delegated from the toggles container.
+  elements.settingsColumnToggles.addEventListener('change', (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === 'checkbox') {
+      handleColumnToggle(event.target.dataset.columnId ?? '', event.target.checked);
+    }
+  });
+
+  // Close settings panel when clicking outside it.
+  document.addEventListener('click', (event) => {
+    if (
+      !elements.settingsPanel.hidden &&
+      !elements.settingsPanel.contains(/** @type {Node} */ (event.target)) &&
+      !elements.settingsToggle.contains(/** @type {Node} */ (event.target))
+    ) {
+      closeSettingsPanel();
+    }
+  });
+
+  buildSettingsPanel();
 }
 
 // ── Extension messaging ──────────────────────────────────────────────────────
@@ -540,18 +623,11 @@ function handleLogsStreamState(appName, status, message) {
 }
 
 function handleCopyLogResult(requestId, success) {
-  const copyButton = pendingCopyButtons.get(requestId);
-  if (!(copyButton instanceof HTMLButtonElement)) {
-    return;
+  const callback = pendingCopyCallbacks.get(requestId);
+  pendingCopyCallbacks.delete(requestId);
+  if (typeof callback === 'function') {
+    callback(success);
   }
-  pendingCopyButtons.delete(requestId);
-
-  if (success) {
-    setCopyButtonState(copyButton, 'Copied', true);
-    return;
-  }
-
-  setCopyButtonState(copyButton, 'Failed', false);
 }
 
 /**
@@ -610,6 +686,27 @@ function bindExtensionMessages() {
       typeof msg.success === 'boolean'
     ) {
       handleCopyLogResult(msg.requestId, msg.success);
+    }
+
+    if (
+      msg.type === COLUMN_SETTINGS_INIT_MESSAGE_TYPE &&
+      Array.isArray(msg.visibleColumns)
+    ) {
+      const incoming = msg.visibleColumns.filter(
+        (id) => typeof id === 'string' && COLUMN_DEFS.some((c) => c.id === id)
+      );
+      // Always ensure required columns are present.
+      const merged = [
+        ...new Set([
+          ...COLUMN_DEFS.filter((c) => c.required).map((c) => c.id),
+          ...incoming,
+        ]),
+      ].filter((id) => COLUMN_DEFS.some((c) => c.id === id));
+      visibleColumns = merged.length > 0 ? merged : [...DEFAULT_VISIBLE_COLUMNS];
+      syncColumnSettingsToState();
+      rebuildTableHeader();
+      buildSettingsPanel();
+      applyFiltersAndRender();
     }
   });
 }
@@ -874,12 +971,12 @@ function applyFiltersAndRender() {
 
 function renderTable(rows) {
   elements.tableBody.replaceChildren();
-  pendingCopyButtons.clear();
+  pendingCopyCallbacks.clear();
 
   if (rows.length === 0) {
     const emptyRow = document.createElement('tr');
     const emptyCell = document.createElement('td');
-    emptyCell.colSpan = 6;
+    emptyCell.colSpan = visibleColumns.length;
     emptyCell.className = 'empty-row';
     emptyCell.textContent =
       allRows.length > 0 ? 'No rows match the current filters.' : emptyStateMessage;
@@ -898,14 +995,38 @@ function renderTable(rows) {
     tr.addEventListener('click', () => {
       selectedRowId = row.id;
       renderTable(filteredRows);
+      copyRowMessage(row.message);
     });
 
-    tr.append(createTextCell(row.timestamp));
-    tr.append(createTextCell(row.source));
-    tr.append(createTextCell(row.stream));
-    tr.append(createBadgeCell(row.level, `badge badge-level-${row.level}`));
-    tr.append(createTextCell(row.logger, 'cell-logger'));
-    tr.append(createMessageCell(row.message, row.id));
+    for (const colId of visibleColumns) {
+      const colDef = COLUMN_DEFS.find((c) => c.id === colId);
+      if (colDef === undefined) {
+        continue;
+      }
+
+      switch (colId) {
+        case 'time':
+          tr.append(createTextCell(row.timestamp, colDef.cellClass));
+          break;
+        case 'source':
+          tr.append(createTextCell(row.source, colDef.cellClass));
+          break;
+        case 'stream':
+          tr.append(createTextCell(row.stream, colDef.cellClass));
+          break;
+        case 'level':
+          tr.append(createBadgeCell(row.level, `badge badge-level-${row.level}`, colDef.cellClass));
+          break;
+        case 'logger':
+          tr.append(createTextCell(row.logger, `cell-logger ${colDef.cellClass}`));
+          break;
+        case 'message':
+          tr.append(createMessageCell(row.message));
+          break;
+        default:
+          break;
+      }
+    }
 
     elements.tableBody.append(tr);
   }
@@ -920,8 +1041,11 @@ function createTextCell(value, className) {
   return td;
 }
 
-function createBadgeCell(value, badgeClass) {
+function createBadgeCell(value, badgeClass, cellClass) {
   const td = document.createElement('td');
+  if (cellClass !== undefined) {
+    td.className = cellClass;
+  }
   const badge = document.createElement('span');
   badge.className = badgeClass;
   badge.textContent = value.toUpperCase();
@@ -929,42 +1053,26 @@ function createBadgeCell(value, badgeClass) {
   return td;
 }
 
-function createMessageCell(message, rowId) {
+function createMessageCell(message) {
   const td = document.createElement('td');
   td.className = 'cell-message';
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'cell-message-wrap';
-
   const textValue = message.length > 0 ? message : '-';
   const messageText = document.createElement('div');
   messageText.className = 'cell-message-text';
   messageText.textContent = textValue;
-
-  const copyButton = document.createElement('button');
-  copyButton.type = 'button';
-  copyButton.className = 'copy-message-button';
-  copyButton.textContent = 'Copy';
-  copyButton.setAttribute('aria-label', `Copy log message row ${String(rowId)}`);
-
-  copyButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void copyLogMessage(textValue, copyButton);
-  });
-
-  wrapper.append(messageText, copyButton);
-  td.append(wrapper);
+  td.append(messageText);
   return td;
 }
 
-async function copyLogMessage(value, copyButton) {
-  setCopyButtonState(copyButton, 'Copying', null);
-
+function copyRowMessage(value) {
   if (vscodeApi !== null) {
     nextCopyRequestId += 1;
     const requestId = nextCopyRequestId;
-    pendingCopyButtons.set(requestId, copyButton);
+    pendingCopyCallbacks.set(requestId, (success) => {
+      if (success) {
+        showCopyToast();
+      }
+    });
     vscodeApi.postMessage({
       type: COPY_LOG_MESSAGE_TYPE,
       requestId,
@@ -973,30 +1081,20 @@ async function copyLogMessage(value, copyButton) {
     return;
   }
 
-  const copied = await writeTextToClipboard(value);
-  if (copied) {
-    setCopyButtonState(copyButton, 'Copied', true);
-    return;
-  }
-  setCopyButtonState(copyButton, 'Failed', false);
+  void writeTextToClipboard(value).finally(() => {
+    showCopyToast();
+  });
 }
 
-function setCopyButtonState(copyButton, label, copied) {
-  copyButton.textContent = label;
-  copyButton.disabled = copied === null;
-  copyButton.classList.toggle('is-copied', copied === true);
-  copyButton.classList.toggle('is-error', copied === false);
-
-  if (copied === null) {
-    return;
+function showCopyToast() {
+  elements.copyToast.classList.add('is-visible');
+  if (copyToastTimer !== null) {
+    clearTimeout(copyToastTimer);
   }
-
-  window.setTimeout(() => {
-    copyButton.textContent = 'Copy';
-    copyButton.disabled = false;
-    copyButton.classList.remove('is-copied');
-    copyButton.classList.remove('is-error');
-  }, COPY_BUTTON_RESET_MS);
+  copyToastTimer = window.setTimeout(() => {
+    elements.copyToast.classList.remove('is-visible');
+    copyToastTimer = null;
+  }, COPY_TOAST_VISIBLE_MS);
 }
 
 async function writeTextToClipboard(value) {
@@ -1030,6 +1128,126 @@ async function writeTextToClipboard(value) {
 
   textarea.remove();
   return copied;
+}
+
+// ── Column settings ───────────────────────────────────────────────────────────
+
+/**
+ * Rebuild the <thead> row to match the current visibleColumns list.
+ */
+function rebuildTableHeader() {
+  const tr = elements.tableHead.rows[0] ?? elements.tableHead.insertRow();
+  tr.replaceChildren();
+
+  for (const colId of visibleColumns) {
+    const colDef = COLUMN_DEFS.find((c) => c.id === colId);
+    if (colDef === undefined) {
+      continue;
+    }
+    const th = document.createElement('th');
+    th.className = colDef.cellClass;
+    th.textContent = colDef.label;
+    tr.append(th);
+  }
+}
+
+/**
+ * Populate the settings panel checkboxes based on COLUMN_DEFS and visibleColumns.
+ */
+function buildSettingsPanel() {
+  elements.settingsColumnToggles.replaceChildren();
+
+  for (const colDef of COLUMN_DEFS) {
+    const label = document.createElement('label');
+    label.className = 'settings-column-item' + (colDef.required ? ' is-required' : '');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.columnId = colDef.id;
+    checkbox.checked = visibleColumns.includes(colDef.id);
+    checkbox.disabled = colDef.required;
+
+    const span = document.createElement('span');
+    span.textContent = colDef.label;
+
+    label.append(checkbox, span);
+    elements.settingsColumnToggles.append(label);
+  }
+}
+
+function openSettingsPanel() {
+  elements.settingsPanel.hidden = false;
+  elements.settingsPanel.setAttribute('aria-hidden', 'false');
+  elements.settingsToggle.classList.add('is-active');
+  elements.settingsToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeSettingsPanel() {
+  elements.settingsPanel.hidden = true;
+  elements.settingsPanel.setAttribute('aria-hidden', 'true');
+  elements.settingsToggle.classList.remove('is-active');
+  elements.settingsToggle.setAttribute('aria-expanded', 'false');
+}
+
+function toggleSettingsPanel() {
+  if (elements.settingsPanel.hidden) {
+    openSettingsPanel();
+  } else {
+    closeSettingsPanel();
+  }
+}
+
+/**
+ * Called when a column checkbox changes. Updates visibleColumns, persists, and re-renders.
+ * @param {string} colId
+ * @param {boolean} checked
+ */
+function handleColumnToggle(colId, checked) {
+  const colDef = COLUMN_DEFS.find((c) => c.id === colId);
+  if (colDef === undefined || colDef.required) {
+    return;
+  }
+
+  if (checked && !visibleColumns.includes(colId)) {
+    // Insert at canonical position.
+    const canonicalOrder = COLUMN_DEFS.map((c) => c.id);
+    const next = [];
+    for (const id of canonicalOrder) {
+      if (visibleColumns.includes(id) || id === colId) {
+        next.push(id);
+      }
+    }
+    visibleColumns = next;
+  } else if (!checked) {
+    visibleColumns = visibleColumns.filter((id) => id !== colId);
+  }
+
+  syncColumnSettingsToState();
+  saveColumnSettings();
+  rebuildTableHeader();
+  applyFiltersAndRender();
+}
+
+/**
+ * Persist visibleColumns to vscode webview state (fast, session-scoped cache).
+ */
+function syncColumnSettingsToState() {
+  if (vscodeApi !== null) {
+    const existing = vscodeApi.getState() ?? {};
+    vscodeApi.setState({ ...existing, visibleColumns });
+  }
+}
+
+/**
+ * Send visibleColumns to the extension host for cross-session persistence (globalState).
+ */
+function saveColumnSettings() {
+  if (vscodeApi !== null) {
+    vscodeApi.postMessage({
+      type: SAVE_COLUMN_SETTINGS_MESSAGE_TYPE,
+      visibleColumns,
+    });
+  }
 }
 
 function renderSummary(rows, all) {
