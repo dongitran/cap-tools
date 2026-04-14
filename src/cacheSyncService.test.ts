@@ -82,6 +82,37 @@ function createTokenResponse() {
   };
 }
 
+function createDeferred<T>() {
+  let resolvePromise: ((value: T | PromiseLike<T>) => void) | null = null;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  return {
+    promise,
+    resolve(value: T): void {
+      resolvePromise?.(value);
+    },
+  };
+}
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 2_000
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await predicate()) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+
+  throw new Error('Timed out waiting for asynchronous condition.');
+}
+
 describe('CacheSyncService', () => {
   beforeEach(() => {
     fetchCfLoginInfoMock.mockReset();
@@ -405,11 +436,16 @@ describe('CacheSyncService', () => {
     const snapshot = await service.triggerSyncNow();
     expect(snapshot.regionAccessById['br10']).toBe('error');
 
+    const storedUser = await cacheStore.getUser('dev@example.com');
+    const storedRegion = storedUser?.regions.find((region) => region.regionId === 'br10');
+    expect(storedRegion?.orgs).toHaveLength(1);
+    expect(storedRegion?.orgs[0]?.name).toBe('tax-engineering-prod');
+
     const orgs = await service.getCachedOrgs('br10');
-    expect(orgs).toEqual([{ guid: 'org-guid-br10', name: 'tax-engineering-prod' }]);
+    expect(orgs).toBeNull();
 
     const apps = await service.getCachedApps('br10', 'org-guid-br10', 'prod');
-    expect(apps).toEqual([{ id: 'app-br10-1', name: 'tax-api', runningInstances: 2 }]);
+    expect(apps).toBeNull();
   });
 
   it('clears cached orgs when region becomes inaccessible due to invalid credentials', async () => {
@@ -472,9 +508,106 @@ describe('CacheSyncService', () => {
     expect(snapshot.regionAccessById['br10']).toBe('inaccessible');
 
     const orgs = await service.getCachedOrgs('br10');
-    expect(orgs).toEqual([]);
+    expect(orgs).toBeNull();
 
     const apps = await service.getCachedApps('br10', 'org-guid-br10', 'prod');
     expect(apps).toBeNull();
+  });
+
+  it('cancels in-flight sync when credentials are cleared via logout', async () => {
+    const deferredLoginInfo = createDeferred<{ authorizationEndpoint: string }>();
+    fetchCfLoginInfoMock.mockImplementation(() => deferredLoginInfo.promise);
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const context = createMockContext();
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    await waitFor(async () => {
+      const user = await cacheStore.getUser('dev@example.com');
+      return user?.syncInProgress === true;
+    });
+
+    await service.setCredentials(null);
+    deferredLoginInfo.resolve({ authorizationEndpoint: 'https://uaa.example.com' });
+
+    await waitFor(async () => {
+      const user = await cacheStore.getUser('dev@example.com');
+      return user?.syncInProgress === false;
+    });
+
+    const user = await cacheStore.getUser('dev@example.com');
+    expect(user).not.toBeNull();
+    expect(user?.lastSyncCompletedAt).toBeNull();
+    expect(user?.lastSyncError.toLowerCase()).toContain('cancel');
+  });
+
+  it('cancels in-flight sync when service is disposed', async () => {
+    const deferredLoginInfo = createDeferred<{ authorizationEndpoint: string }>();
+    fetchCfLoginInfoMock.mockImplementation(() => deferredLoginInfo.promise);
+    ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+
+    const context = createMockContext();
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+
+    await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    await waitFor(async () => {
+      const user = await cacheStore.getUser('dev@example.com');
+      return user?.syncInProgress === true;
+    });
+
+    service.dispose();
+    deferredLoginInfo.resolve({ authorizationEndpoint: 'https://uaa.example.com' });
+
+    await waitFor(async () => {
+      const user = await cacheStore.getUser('dev@example.com');
+      return user?.syncInProgress === false;
+    });
+
+    const user = await cacheStore.getUser('dev@example.com');
+    expect(user).not.toBeNull();
+    expect(user?.lastSyncCompletedAt).toBeNull();
+    expect(user?.lastSyncError.toLowerCase()).toContain('cancel');
+  });
+
+  it('reconciles stale in-progress sync state during initialization', async () => {
+    const now = Date.now();
+    const staleStartedAt = new Date(now - 60 * 60 * 1000).toISOString();
+    const recentCompletedAt = new Date(now).toISOString();
+    const context = createMockContext({
+      version: 1,
+      settings: { syncIntervalHours: 24 },
+      users: {
+        'dev@example.com': {
+          email: 'dev@example.com',
+          syncInProgress: true,
+          lastSyncStartedAt: staleStartedAt,
+          lastSyncCompletedAt: recentCompletedAt,
+          lastSyncError: '',
+          regions: [],
+        },
+      },
+      exportRootFolders: {},
+    });
+
+    const cacheStore = new CacheStore(context);
+    const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+    const snapshot = await service.initialize({
+      email: 'dev@example.com',
+      password: 'secret',
+    });
+
+    expect(snapshot.syncInProgress).toBe(false);
+    expect(snapshot.lastSyncError.toLowerCase()).toContain('interrupted');
   });
 });

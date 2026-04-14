@@ -1,30 +1,35 @@
 import type * as vscode from 'vscode';
 
-import {
-  cfLogin,
-  fetchCfLoginInfo,
-  fetchOrgs,
-  fetchSpaces,
-  fetchStartedAppsViaCfCli,
-  getCfApiEndpoint,
-} from './cfClient';
-import type { CfSession } from './cfClient';
 import { ensureCfHomeDir } from './cfHome';
+import {
+  resolveDelayUntilNextSync,
+  syncAllRegions,
+  SyncCancelledError,
+} from './cacheSyncRunner';
 import { normalizeUserEmail } from './cacheStore';
 import type { CacheStore } from './cacheStore';
+import {
+  buildRegionAccessMap,
+  buildRegionByIdMap,
+  maskEmail,
+  toSafeErrorMessage,
+} from './cacheSyncServiceSupport';
 import type { CfCredentials } from './credentialStore';
 import { SAP_BTP_REGIONS, toHyphenatedRegionCode } from './regions';
 import type {
-  CachedAppEntry,
-  CachedOrgEntry,
   CachedRegionEntry,
-  CachedSpaceEntry,
   CachedUserEntry,
-  RegionAccessState,
   SyncIntervalHours,
 } from './cacheModels';
-
-const HOURS_TO_MS = 60 * 60 * 1000;
+import type { RegionAccessState } from './cacheModels';
+const STALE_SYNC_ERROR =
+  'Previous cache synchronization was interrupted before completion.';
+const SYNC_CANCELLED_AFTER_LOGOUT =
+  'Cache synchronization cancelled because credentials were cleared.';
+const SYNC_CANCELLED_BY_DISPOSE =
+  'Cache synchronization cancelled because the extension is shutting down.';
+const SYNC_CANCELLED_BY_CREDENTIAL_CHANGE =
+  'Cache synchronization cancelled because credentials changed.';
 
 export interface CacheRuntimeSnapshot {
   readonly activeUserEmail: string | null;
@@ -61,6 +66,10 @@ export class CacheSyncService implements vscode.Disposable {
   private timer: NodeJS.Timeout | null = null;
   private nextSyncAt: string | null = null;
   private syncPromise: Promise<void> | null = null;
+  private syncRunSequence = 0;
+  private activeSyncRunId: number | null = null;
+  private readonly cancelledSyncRuns = new Map<number, string>();
+  private readonly latestSyncRunByUser = new Map<string, number>();
   private readonly listeners = new Set<SnapshotListener>();
   private disposed = false;
   private readonly testMode = process.env['SAP_TOOLS_TEST_MODE'] === '1';
@@ -72,6 +81,7 @@ export class CacheSyncService implements vscode.Disposable {
   ) {}
 
   dispose(): void {
+    this.cancelInFlightSync(SYNC_CANCELLED_BY_DISPOSE);
     this.disposed = true;
     this.clearTimer();
     this.listeners.clear();
@@ -91,11 +101,22 @@ export class CacheSyncService implements vscode.Disposable {
   async setCredentials(
     credentials: CfCredentials | null
   ): Promise<CacheRuntimeSnapshot> {
+    if (credentials === null) {
+      this.cancelInFlightSync(SYNC_CANCELLED_AFTER_LOGOUT);
+    } else if (this.credentials !== null) {
+      const previousEmail = normalizeUserEmail(this.credentials.email);
+      const nextEmail = normalizeUserEmail(credentials.email);
+      if (previousEmail !== nextEmail || this.credentials.password !== credentials.password) {
+        this.cancelInFlightSync(SYNC_CANCELLED_BY_CREDENTIAL_CHANGE);
+      }
+    }
+
     this.credentials = credentials;
     this.activeUserKey =
       credentials === null ? null : normalizeUserEmail(credentials.email);
     this.clearTimer();
     this.nextSyncAt = null;
+    await this.seedE2eStaleSyncIfEnabled(credentials);
 
     if (this.testMode) {
       await this.seedTestModeCache(credentials);
@@ -104,6 +125,7 @@ export class CacheSyncService implements vscode.Disposable {
       return snapshot;
     }
 
+    await this.reconcileInterruptedSyncForActiveUser();
     await this.rescheduleForActiveUser(true);
     const snapshot = await this.getRuntimeSnapshot();
     this.emitSnapshot(snapshot);
@@ -158,6 +180,9 @@ export class CacheSyncService implements vscode.Disposable {
     if (cachedRegion === null) {
       return null;
     }
+    if (cachedRegion.accessState !== 'accessible') {
+      return null;
+    }
 
     return cachedRegion.orgs.map((org) => ({ guid: org.guid, name: org.name }));
   }
@@ -168,6 +193,9 @@ export class CacheSyncService implements vscode.Disposable {
   ): Promise<readonly CachedSpaceSummary[] | null> {
     const cachedRegion = await this.getCachedRegion(regionId);
     if (cachedRegion === null) {
+      return null;
+    }
+    if (cachedRegion.accessState !== 'accessible') {
       return null;
     }
 
@@ -186,6 +214,9 @@ export class CacheSyncService implements vscode.Disposable {
   ): Promise<readonly CachedAppSummary[] | null> {
     const cachedRegion = await this.getCachedRegion(regionId);
     if (cachedRegion === null) {
+      return null;
+    }
+    if (cachedRegion.accessState !== 'accessible') {
       return null;
     }
 
@@ -228,6 +259,91 @@ export class CacheSyncService implements vscode.Disposable {
       return null;
     }
     return this.cacheStore.getUser(this.activeUserKey);
+  }
+
+  private beginSyncRun(email: string): number {
+    const runId = this.syncRunSequence + 1;
+    this.syncRunSequence = runId;
+    this.activeSyncRunId = runId;
+    this.latestSyncRunByUser.set(normalizeUserEmail(email), runId);
+    return runId;
+  }
+
+  private finishSyncRun(runId: number): void {
+    this.cancelledSyncRuns.delete(runId);
+    if (this.activeSyncRunId === runId) {
+      this.activeSyncRunId = null;
+    }
+  }
+
+  private cancelInFlightSync(reason: string): void {
+    if (this.activeSyncRunId !== null) {
+      this.cancelledSyncRuns.set(this.activeSyncRunId, reason);
+    }
+  }
+
+  private resolveRunCancellationReason(runId: number): string | null {
+    return this.cancelledSyncRuns.get(runId) ?? null;
+  }
+
+  private throwIfRunCancelled(runId: number): void {
+    const reason = this.resolveRunCancellationReason(runId);
+    if (reason !== null) {
+      throw new SyncCancelledError(reason);
+    }
+  }
+
+  private shouldPersistRunUpdate(email: string, runId: number): boolean {
+    const userKey = normalizeUserEmail(email);
+    const latestRunId = this.latestSyncRunByUser.get(userKey);
+    return latestRunId === runId;
+  }
+
+  private async reconcileInterruptedSyncForActiveUser(): Promise<void> {
+    const activeUser = await this.getActiveUserEntry();
+    if (activeUser === null) {
+      return;
+    }
+    if (!activeUser.syncInProgress) {
+      return;
+    }
+
+    await this.cacheStore.upsertUser(activeUser.email, (currentUser) => {
+      const current = currentUser ?? activeUser;
+      const previousError = current.lastSyncError.trim();
+      return {
+        email: current.email,
+        syncInProgress: false,
+        lastSyncStartedAt: current.lastSyncStartedAt,
+        lastSyncCompletedAt: current.lastSyncCompletedAt,
+        lastSyncError: previousError.length > 0 ? previousError : STALE_SYNC_ERROR,
+        regions: current.regions,
+      };
+    });
+  }
+
+  private async seedE2eStaleSyncIfEnabled(
+    credentials: CfCredentials | null
+  ): Promise<void> {
+    if (
+      credentials === null ||
+      process.env['SAP_TOOLS_E2E'] !== '1' ||
+      process.env['SAP_TOOLS_E2E_SEED_STALE_SYNC'] !== '1'
+    ) {
+      return;
+    }
+
+    const now = Date.now();
+    await this.cacheStore.upsertUser(credentials.email, (currentUser) => {
+      return {
+        email: credentials.email,
+        syncInProgress: true,
+        lastSyncStartedAt: new Date(now - 60_000).toISOString(),
+        lastSyncCompletedAt: new Date(now).toISOString(),
+        lastSyncError: '',
+        regions: currentUser?.regions ?? [],
+      };
+    });
   }
 
   private async rescheduleForActiveUser(
@@ -317,23 +433,34 @@ export class CacheSyncService implements vscode.Disposable {
     }
 
     const credentials = this.credentials;
+    const runId = this.beginSyncRun(credentials.email);
     const previousUser = await this.cacheStore.getUser(credentials.email);
     const previousRegionsById = buildRegionByIdMap(previousUser?.regions ?? []);
     const syncStartedAt = new Date().toISOString();
-    await this.markUserSyncStarted(credentials.email, syncStartedAt);
+    await this.markUserSyncStarted(credentials.email, syncStartedAt, runId);
 
     try {
+      this.throwIfRunCancelled(runId);
       const cfHomeDir = await ensureCfHomeDir(this.context);
+      this.throwIfRunCancelled(runId);
       const regions = await syncAllRegions(
         credentials,
         cfHomeDir,
-        previousRegionsById
+        previousRegionsById,
+        () => this.resolveRunCancellationReason(runId)
       );
-      await this.markUserSyncCompleted(credentials.email, syncStartedAt, regions);
+      this.throwIfRunCancelled(runId);
+      await this.markUserSyncCompleted(credentials.email, syncStartedAt, regions, runId);
     } catch (error) {
       const errorMessage = toSafeErrorMessage(error);
-      await this.markUserSyncFailed(credentials.email, syncStartedAt, errorMessage);
-      this.outputChannel.appendLine(`[cache] Sync failed: ${errorMessage}`);
+      await this.markUserSyncFailed(credentials.email, syncStartedAt, errorMessage, runId);
+      if (error instanceof SyncCancelledError) {
+        this.outputChannel.appendLine(`[cache] Sync cancelled: ${errorMessage}`);
+      } else {
+        this.outputChannel.appendLine(`[cache] Sync failed: ${errorMessage}`);
+      }
+    } finally {
+      this.finishSyncRun(runId);
     }
 
     await this.rescheduleForActiveUser(false);
@@ -343,8 +470,13 @@ export class CacheSyncService implements vscode.Disposable {
 
   private async markUserSyncStarted(
     email: string,
-    syncStartedAt: string
+    syncStartedAt: string,
+    runId: number
   ): Promise<void> {
+    if (!this.shouldPersistRunUpdate(email, runId)) {
+      return;
+    }
+
     await this.cacheStore.upsertUser(email, (currentUser) => {
       return {
         email,
@@ -362,8 +494,13 @@ export class CacheSyncService implements vscode.Disposable {
   private async markUserSyncCompleted(
     email: string,
     syncStartedAt: string,
-    regions: readonly CachedRegionEntry[]
+    regions: readonly CachedRegionEntry[],
+    runId: number
   ): Promise<void> {
+    if (!this.shouldPersistRunUpdate(email, runId)) {
+      return;
+    }
+
     const completedAt = new Date().toISOString();
     await this.cacheStore.upsertUser(email, () => {
       return {
@@ -384,8 +521,13 @@ export class CacheSyncService implements vscode.Disposable {
   private async markUserSyncFailed(
     email: string,
     syncStartedAt: string,
-    errorMessage: string
+    errorMessage: string,
+    runId: number
   ): Promise<void> {
+    if (!this.shouldPersistRunUpdate(email, runId)) {
+      return;
+    }
+
     await this.cacheStore.upsertUser(email, (currentUser) => {
       return {
         email,
@@ -442,259 +584,4 @@ class ListenerDisposable implements vscode.Disposable {
   dispose(): void {
     this.onDispose();
   }
-}
-
-async function syncAllRegions(
-  credentials: CfCredentials,
-  cfHomeDir: string,
-  previousRegionsById: ReadonlyMap<string, CachedRegionEntry>
-): Promise<readonly CachedRegionEntry[]> {
-  const regions: CachedRegionEntry[] = [];
-  for (const region of SAP_BTP_REGIONS) {
-    const syncedRegion = await syncSingleRegion(
-      credentials,
-      cfHomeDir,
-      region,
-      previousRegionsById.get(region.id) ?? null
-    );
-    regions.push(syncedRegion);
-  }
-  return regions;
-}
-
-async function syncSingleRegion(
-  credentials: CfCredentials,
-  cfHomeDir: string,
-  region: (typeof SAP_BTP_REGIONS)[number],
-  previousRegion: CachedRegionEntry | null
-): Promise<CachedRegionEntry> {
-  const regionCode = toHyphenatedRegionCode(region.id);
-  const apiEndpoint = getCfApiEndpoint(regionCode);
-  const updatedAt = new Date().toISOString();
-
-  try {
-    const loginInfo = await fetchCfLoginInfo(apiEndpoint);
-    const token = await cfLogin(
-      loginInfo.authorizationEndpoint,
-      credentials.email,
-      credentials.password
-    );
-    const session = { token, apiEndpoint };
-    const orgs = await syncOrgsForRegion(
-      session,
-      credentials,
-      regionCode,
-      cfHomeDir,
-      previousRegion
-    );
-    return {
-      regionId: region.id,
-      regionCode,
-      area: region.area,
-      displayName: region.displayName,
-      accessState: 'accessible',
-      accessMessage: '',
-      orgs,
-      updatedAt,
-    };
-  } catch (error) {
-    const message = toSafeErrorMessage(error);
-    const accessState = resolveAccessStateFromMessage(message);
-    const fallbackOrgs = accessState === 'error' ? previousRegion?.orgs ?? [] : [];
-    return {
-      regionId: region.id,
-      regionCode,
-      area: region.area,
-      displayName: region.displayName,
-      accessState,
-      accessMessage: message,
-      orgs: fallbackOrgs,
-      updatedAt,
-    };
-  }
-}
-
-async function syncOrgsForRegion(
-  session: CfSession,
-  credentials: CfCredentials,
-  regionCode: string,
-  cfHomeDir: string,
-  previousRegion: CachedRegionEntry | null
-): Promise<readonly CachedOrgEntry[]> {
-  const orgs = await fetchOrgs(session);
-  const syncedOrgs: CachedOrgEntry[] = [];
-  const previousOrgsByGuid = buildOrgByGuidMap(previousRegion?.orgs ?? []);
-  for (const org of orgs) {
-    const spaces = await syncSpacesForOrg(
-      session,
-      credentials,
-      regionCode,
-      org,
-      cfHomeDir,
-      previousOrgsByGuid.get(org.guid) ?? null
-    );
-    syncedOrgs.push({
-      guid: org.guid,
-      name: org.name,
-      spaces,
-    });
-  }
-  return syncedOrgs;
-}
-
-async function syncSpacesForOrg(
-  session: CfSession,
-  credentials: CfCredentials,
-  regionCode: string,
-  org: { readonly guid: string; readonly name: string },
-  cfHomeDir: string,
-  previousOrg: CachedOrgEntry | null
-): Promise<readonly CachedSpaceEntry[]> {
-  const spaces = await fetchSpaces(session, org.guid);
-  const syncedSpaces: CachedSpaceEntry[] = [];
-  const previousSpacesByName = buildSpaceByNameMap(previousOrg?.spaces ?? []);
-
-  for (const space of spaces) {
-    const apps = await syncAppsForSpace(
-      credentials,
-      regionCode,
-      org.name,
-      space,
-      cfHomeDir,
-      previousSpacesByName.get(space.name)?.apps ?? null
-    );
-    syncedSpaces.push({
-      guid: space.guid,
-      name: space.name,
-      apps,
-    });
-  }
-
-  return syncedSpaces;
-}
-
-async function syncAppsForSpace(
-  credentials: CfCredentials,
-  regionCode: string,
-  orgName: string,
-  space: { readonly guid: string; readonly name: string },
-  cfHomeDir: string,
-  previousApps: readonly CachedAppEntry[] | null
-): Promise<readonly CachedAppEntry[]> {
-  try {
-    const runningApps = await fetchStartedAppsViaCfCli({
-      apiEndpoint: getCfApiEndpoint(regionCode),
-      email: credentials.email,
-      password: credentials.password,
-      orgName,
-      spaceName: space.name,
-      cfHomeDir,
-    });
-
-    return runningApps.map((app) => ({
-      id: app.name,
-      name: app.name,
-      runningInstances: app.runningInstances,
-    }));
-  } catch (error) {
-    if (previousApps !== null) {
-      return previousApps;
-    }
-
-    throw error;
-  }
-}
-
-function resolveDelayUntilNextSync(
-  syncIntervalHours: SyncIntervalHours,
-  userEntry: CachedUserEntry | null
-): number {
-  const intervalMs = syncIntervalHours * HOURS_TO_MS;
-  const lastCompletedAt = userEntry?.lastSyncCompletedAt ?? null;
-  if (lastCompletedAt === null) {
-    return 0;
-  }
-
-  const lastCompletedAtMs = Date.parse(lastCompletedAt);
-  if (Number.isNaN(lastCompletedAtMs)) {
-    return 0;
-  }
-
-  const dueAtMs = lastCompletedAtMs + intervalMs;
-  return dueAtMs - Date.now();
-}
-
-function resolveAccessStateFromMessage(message: string): RegionAccessState {
-  const normalized = message.toLowerCase();
-  const statusMatch = /\bstatus\s+(\d{3})\b/.exec(normalized);
-  if (statusMatch !== null) {
-    const statusCode = Number.parseInt(statusMatch[1] ?? '0', 10);
-    if (statusCode === 401 || statusCode === 403 || statusCode === 404) {
-      return 'inaccessible';
-    }
-    return 'error';
-  }
-
-  if (normalized.includes('invalid sap credentials')) {
-    return 'inaccessible';
-  }
-
-  if (normalized.includes('authentication failed')) {
-    return 'inaccessible';
-  }
-
-  return 'error';
-}
-
-function buildRegionAccessMap(
-  regions: readonly CachedRegionEntry[]
-): Record<string, RegionAccessState> {
-  const map: Record<string, RegionAccessState> = {};
-  for (const region of regions) {
-    map[region.regionId] = region.accessState;
-  }
-  return map;
-}
-
-function buildRegionByIdMap(
-  regions: readonly CachedRegionEntry[]
-): ReadonlyMap<string, CachedRegionEntry> {
-  const entries = regions.map((region) => [region.regionId, region] as const);
-  return new Map(entries);
-}
-
-function buildOrgByGuidMap(
-  orgs: readonly CachedOrgEntry[]
-): ReadonlyMap<string, CachedOrgEntry> {
-  const entries = orgs.map((org) => [org.guid, org] as const);
-  return new Map(entries);
-}
-
-function buildSpaceByNameMap(
-  spaces: readonly CachedSpaceEntry[]
-): ReadonlyMap<string, CachedSpaceEntry> {
-  const entries = spaces.map((space) => [space.name, space] as const);
-  return new Map(entries);
-}
-
-function toSafeErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const normalizedMessage = error.message.trim();
-    if (normalizedMessage.length > 0) {
-      return normalizedMessage;
-    }
-  }
-  return 'Unknown cache synchronization error.';
-}
-
-function maskEmail(email: string): string {
-  const normalized = email.trim();
-  const atIndex = normalized.indexOf('@');
-  if (atIndex <= 1) {
-    return '***';
-  }
-
-  const userPrefix = normalized.slice(0, 1);
-  const domain = normalized.slice(atIndex);
-  return `${userPrefix}***${domain}`;
 }

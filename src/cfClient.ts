@@ -9,6 +9,8 @@ const CF_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const CF_COMMAND_TIMEOUT_MS = 30_000;
 const CF_API_REQUEST_TIMEOUT_MS = 20_000;
 const CF_V3_PAGE_SIZE = 200;
+const CF_RETRY_MAX_ATTEMPTS = 3;
+const CF_RETRY_BASE_DELAY_MS = 120;
 
 interface CfCliExecutionOptions {
   readonly cfHomeDir?: string;
@@ -404,19 +406,29 @@ async function runCfCommand(
   options: CfCliExecutionOptions
 ): Promise<string> {
   const env = buildCfCliEnv(options.cfHomeDir, options.envOverrides);
+  const maxAttempts = CF_RETRY_MAX_ATTEMPTS;
 
-  try {
-    const { stdout } = await execFileAsync('cf', args, {
-      env,
-      maxBuffer: CF_MAX_BUFFER_BYTES,
-      timeout: options.timeoutMs ?? CF_COMMAND_TIMEOUT_MS,
-    });
-    return stdout;
-  } catch (error) {
-    const safeDetail = extractSafeCliDetail(error);
-    const detailSuffix = safeDetail.length > 0 ? ` ${safeDetail}` : '';
-    throw new Error(`${options.failureMessage}${detailSuffix}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const { stdout } = await execFileAsync('cf', args, {
+        env,
+        maxBuffer: CF_MAX_BUFFER_BYTES,
+        timeout: options.timeoutMs ?? CF_COMMAND_TIMEOUT_MS,
+      });
+      return stdout;
+    } catch (error) {
+      const safeDetail = extractSafeCliDetail(error);
+      const detailSuffix = safeDetail.length > 0 ? ` ${safeDetail}` : '';
+      const retryable = shouldRetryCfCliError(error);
+      if (retryable && attempt < maxAttempts) {
+        await sleep(resolveRetryDelayMs(attempt));
+        continue;
+      }
+      throw new Error(`${options.failureMessage}${detailSuffix}`);
+    }
   }
+
+  throw new Error(options.failureMessage);
 }
 
 function buildCfCliEnv(
@@ -603,21 +615,39 @@ function mergeRecordIntoPayload(
 }
 
 async function fetchCfApi(url: string, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, CF_API_REQUEST_TIMEOUT_MS);
+  const maxAttempts = CF_RETRY_MAX_ATTEMPTS;
 
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error(`CF API request timed out after ${String(CF_API_REQUEST_TIMEOUT_MS)}ms.`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, CF_API_REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const retryableStatus = shouldRetryHttpStatus(response.status);
+      if (retryableStatus && attempt < maxAttempts) {
+        await sleep(resolveRetryDelayMs(attempt));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      const requestError = isAbortError(error)
+        ? new Error(`CF API request timed out after ${String(CF_API_REQUEST_TIMEOUT_MS)}ms.`)
+        : error;
+
+      if (shouldRetryCfApiError(requestError) && attempt < maxAttempts) {
+        await sleep(resolveRetryDelayMs(attempt));
+        continue;
+      }
+
+      throw requestError;
+    } finally {
+      clearTimeout(timeout);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error('CF API request failed after retry attempts.');
 }
 
 function isAbortError(error: unknown): boolean {
@@ -626,4 +656,68 @@ function isAbortError(error: unknown): boolean {
     typeof error['name'] === 'string' &&
     error['name'].toLowerCase() === 'aborterror'
   );
+}
+
+function shouldRetryHttpStatus(statusCode: number): boolean {
+  return statusCode === 429 || statusCode >= 500;
+}
+
+function shouldRetryCfApiError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('timed out') ||
+    message.includes('fetch failed') ||
+    message.includes('network') ||
+    message.includes('econnreset') ||
+    message.includes('econnrefused') ||
+    message.includes('temporarily unavailable')
+  );
+}
+
+function shouldRetryCfCliError(error: unknown): boolean {
+  if (!(error instanceof Error) && !isRecord(error)) {
+    return false;
+  }
+
+  const stderr =
+    typeof (isRecord(error) ? error['stderr'] : undefined) === 'string'
+      ? String((error as Record<string, unknown>)['stderr'])
+      : '';
+  const message =
+    `${stderr} ${error instanceof Error ? error.message : ''}`.toLowerCase();
+
+  if (
+    message.includes('invalid') ||
+    message.includes('credentials were rejected') ||
+    message.includes('authentication failed') ||
+    message.includes('not authorized') ||
+    message.includes('forbidden')
+  ) {
+    return false;
+  }
+
+  return (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('connection reset') ||
+    message.includes('temporarily unavailable') ||
+    message.includes('network') ||
+    message.includes('econnreset') ||
+    message.includes('econnrefused')
+  );
+}
+
+function resolveRetryDelayMs(attempt: number): number {
+  const jitter = Math.floor(Math.random() * CF_RETRY_BASE_DELAY_MS);
+  return CF_RETRY_BASE_DELAY_MS * attempt + jitter;
+}
+
+async function sleep(delayMs: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }

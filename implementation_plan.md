@@ -1,104 +1,92 @@
-# Implementation Plan — UI Refinement + Cache Access Reliability + Export Safety
+# Implementation Plan — Cache Lifecycle Hardening + CF Retry Strategy via TDD
 
 ## 1) Goal
-Implement and verify all requested changes with root-cause fixes:
-1. Fix UX/UI details in `Choose Region` and `Settings`.
-2. Investigate and fix cache-sync logic where `br-10` can become disabled after sync despite valid org access.
-3. Fix previously identified issues 2→5:
-   - stale app list from cache-only flow,
-   - wrong theme CSS path in extension webview,
-   - forced Output panel focus on region selection,
-   - missing safety guard before exporting sensitive artifacts.
-4. Update tests and run full quality gates.
+Fix cache synchronization lifecycle issues around logout and VS Code shutdown/crash, and improve CF call resilience with controlled retries. Deliver with strict test-first workflow.
 
-## 2) Context Reviewed
-Files and flows to inspect end-to-end:
+Target outcomes:
+1. In-flight cache sync is cancelled when user logs out.
+2. In-flight cache sync is cancelled when extension is disposed (VS Code close/reload).
+3. No stale `syncInProgress=true` persists indefinitely after abrupt shutdown.
+4. Scheduler/snapshot state remains coherent across restart/login/logout transitions.
+5. CF transient failures are retried with bounded backoff; permanent failures still fail fast.
+6. Regression coverage exists in unit tests and E2E tests.
+
+## 2) Scope & Files Reviewed
+Core cache lifecycle and integration:
+- `src/cacheSyncService.ts`
+- `src/cacheStore.ts`
+- `src/cacheModels.ts`
+- `src/extension.ts`
 - `src/sidebarProvider.ts`
-- `src/cacheSyncService.ts`, `src/cacheSyncService.test.ts`
 - `src/cfClient.ts`
-- `docs/designs/prototypes/assets/prototype.js`
-- `docs/designs/prototypes/assets/prototype.css`
-- `docs/designs/prototypes/assets/design-catalog.js`
+- `src/cacheSyncService.test.ts`
+- `src/cfClient.test.ts`
 - `e2e/tests/region-selector.e2e.spec.ts`
-- `package.json`
+- `e2e/src/launchVscode.ts`
 
-## 3) Root-Cause Hypotheses
-### H1 — Region disable regression after sync
-- Region access state classification can mark transient auth/server/network failures as inaccessible.
-- UI disables regions for inaccessible/error states.
-- Sync fallback behavior may erase org/space data on transient failures.
+## 3) Root-Cause Summary
+1. `setCredentials(null)` currently clears timer but does not abort already-running sync work.
+2. `dispose()` clears timer/listeners but does not abort running sync work.
+3. Sync marks `syncInProgress=true` at start and only flips false in completed/failed handlers. Abrupt stop can leave stale state.
+4. Startup path does not reconcile stale in-progress state from previous interrupted run.
+5. CF HTTP and CLI paths mostly fail-fast; transient network/server issues are not retried centrally.
 
-### H2 — Stale apps in workspace
-- On space selection, cached apps are returned and flow exits before live CF fetch.
-- If cache is stale, UI and logs panel remain stale until next sync.
+## 4) TDD Strategy (Mandatory)
+### Step A — Add failing tests first (no production fix yet)
+1. Unit: `logout` while sync in progress.
+   - Expect in-flight sync to be cancelled/ignored.
+   - Expect no stale completion write after logout.
+2. Unit: `dispose` while sync in progress.
+   - Expect in-flight sync cancellation and no post-dispose state mutation side effects.
+3. Unit: stale recovery on initialization.
+   - Seed user cache with `syncInProgress=true` and old `lastSyncStartedAt`.
+   - Expect service to reconcile to `syncInProgress=false` with interruption marker.
+4. Unit: CF retry behavior in `cfClient`.
+   - Retry transient HTTP errors (network timeout/abort, 429, 5xx).
+   - Do not retry permanent auth/client errors (400/401/403/404 where appropriate).
+   - Retry transient CLI failures (connection/reset/timeout hints), capped attempts.
+5. E2E: deterministic reproduction flow.
+   - Add controlled E2E sync delay hooks (strictly gated by E2E env only).
+   - Reproduce logout/shutdown-during-sync and assert UI/cache status remains coherent after relaunch.
 
-### H3 — Export safety
-- Export operations write sensitive content (`default-env.json`, SQLTools credentials) without explicit user confirmation.
+### Step B — Implement production fixes
+1. Add explicit cancellation token/versioning for each sync run.
+2. Abort on `setCredentials(null)` and `dispose()`.
+3. Guard post-sync writes so cancelled runs cannot overwrite newer state.
+4. Add startup reconciliation for stale `syncInProgress` using timeout threshold.
+5. Ensure schedule/nextSync state is updated safely after cancellation.
+6. Add shared retry utility for CF calls:
+   - bounded attempts,
+   - exponential backoff with jitter,
+   - retry filters for transient-only conditions,
+   - safe error propagation without secret leakage.
 
-## 4) Implementation Steps
-### Step A — Fix UI requirements
-1. `Choose Region`:
-   - remove cloud vendor suffix (`- AWS`, `- Azure`, etc.) from region labels (already partially changed in catalog; verify complete).
-   - render region name smaller and non-bold.
-   - render region code (`br-10`) larger and bold.
-2. `Settings`:
-   - make `Sync now` and `Logout` equal height.
-   - remove `Last start` line under `Sync Status`.
+### Step C — Review and hardening
+1. Re-read modified flow end-to-end for race conditions.
+2. Validate no credential leakage and no insecure logging added.
+3. Validate backward compatibility for existing cache schema.
+4. Validate retry policy does not cause runaway latency.
 
-### Step B — Fix cache-sync access reliability
-1. Review `resolveAccessStateFromMessage()` to avoid classifying transient backend failures as inaccessible.
-2. Preserve cached org/space/apps only for transient `error` state, not for true `inaccessible` state.
-3. Ensure `br-10` remains selectable when latest sync error is transient and cached data exists.
+## 5) Verification Gates
+Run and fix until green:
+1. `npm run test:unit -- src/cacheSyncService.test.ts src/cfClient.test.ts`
+2. `npm --prefix e2e test -- --grep "logout|sync|shutdown|cache"`
+3. `npm run typecheck`
+4. `npm run lint`
+5. `npm run cspell`
+6. `npm run test:unit`
+7. `npm --prefix e2e run validate`
+8. `npm --prefix e2e test`
 
-### Step C — Fix stale app list (issue #2)
-1. In space selection flow:
-   - if cached apps exist, render immediately for responsiveness.
-   - continue a non-blocking live CF fetch and refresh apps when live data returns.
-   - only show fatal UI error when both cache and live fetch are unavailable.
-2. Keep request-id guards to prevent out-of-order updates.
+## 6) Release/Delivery
+1. Bump patch version in `package.json` (extension code changes).
+2. Re-run quick validation (`typecheck`, `lint`, `unit`) post-version-bump.
+3. Commit with clear scope.
+4. Push and monitor GitHub Actions; if red, fix-forward until green.
 
-### Step D — Fix issue #3 and #4
-1. Fix main webview theme CSS path to existing file.
-2. Remove forced Output panel focus from region selection logging.
-
-### Step E — Fix issue #5 (export safety guardrail)
-1. Add explicit confirmation dialog before sensitive exports.
-2. Include clear warning that files may contain secrets and should not be committed.
-3. Keep E2E mode non-blocking by bypassing confirmation in test mode.
-
-### Step F — Tests
-1. Update/add unit tests in `cacheSyncService.test.ts` for:
-   - transient auth/server failure mapping,
-   - fallback org preservation behavior.
-2. Update/add E2E tests in `region-selector.e2e.spec.ts` for:
-   - region label format (code first, vendor removed),
-   - settings sync-status content and button sizing behavior,
-   - no regression in scope selection flow.
-3. Validate naming quality for test titles (behavior-driven, no “bug”).
-
-### Step G — Prototype + visual check
-1. Keep prototype aligned with extension webview UI.
-2. Use MCP Playwright to verify updated prototype interactions and visuals.
-
-### Step H — Verification gates
-Run in order, fix until all green:
-1. `npm run typecheck`
-2. `npm run lint`
-3. `npm run cspell`
-4. `npm run test:unit`
-5. `npm --prefix e2e run validate`
-6. `npm --prefix e2e test`
-
-### Step I — Release hygiene
-1. If extension code changed, bump patch version in `package.json`.
-2. Re-run validation after version bump.
-3. Commit and push.
-4. Re-check CI/GitHub Actions; if failed, root-cause and fix-forward until green.
-
-## 5) Done Criteria
-1. UI changes match requested typography/layout exactly.
-2. `br-10` is not incorrectly disabled by transient sync failures.
-3. Space app list is refreshed live even when cached data is present.
-4. Sensitive exports require explicit confirmation.
-5. All lint/typecheck/cspell/unit/e2e checks pass.
-6. Version bump + commit + push completed after successful verification.
+## 7) Done Criteria
+1. Logout/dispose during sync no longer leaves stale or contradictory state.
+2. Interrupted sync is represented consistently and recoverably.
+3. CF transient errors recover better thanks to retry while permanent errors remain fast-fail.
+4. Added tests catch regression for lifecycle and retry behavior.
+5. All requested checks pass.

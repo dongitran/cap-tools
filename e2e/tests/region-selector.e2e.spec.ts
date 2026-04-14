@@ -1362,6 +1362,27 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
+  test('User sees interrupted sync status after stale cache sync recovery on launch', async () => {
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_TEST_MODE: '0',
+        SAP_TOOLS_E2E_SEED_STALE_SYNC: '1',
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
+      await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
+
+      const syncStatusMessage = webviewFrame.locator('.settings-status-message');
+      await expect(syncStatusMessage).toContainText(/interrupted/i);
+      await expect(syncStatusMessage).not.toContainText(/sync in progress/i);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can logout from settings and return to login gate', async () => {
     const session = await launchExtensionHost();
 

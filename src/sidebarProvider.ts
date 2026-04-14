@@ -1049,16 +1049,17 @@ export class RegionSidebarProvider
       return;
     }
 
-    if (cachedOrgs !== null) {
+    if (cachedOrgs !== null && cachedOrgs.length > 0) {
       this.postMessage({
         type: MSG_ORGS_LOADED,
         orgs: cachedOrgs,
       });
       const warmupRequestId = requestId;
-      void this.establishRegionSession(
+      void this.refreshOrgsFromLiveAfterCachedRender(
         credentials,
         region.code,
-        warmupRequestId
+        warmupRequestId,
+        cachedOrgs
       ).catch((error: unknown) => {
         if (!this.isCurrentRegionRequest(warmupRequestId)) {
           return;
@@ -1324,6 +1325,35 @@ export class RegionSidebarProvider
     }
     this.cfSession = { token, apiEndpoint };
     this.cfSessionRegionCode = regionCode;
+  }
+
+  private async refreshOrgsFromLiveAfterCachedRender(
+    credentials: { readonly email: string; readonly password: string },
+    regionCode: string,
+    requestId: number,
+    cachedOrgs: readonly { readonly guid: string; readonly name: string }[]
+  ): Promise<void> {
+    await this.establishRegionSession(credentials, regionCode, requestId);
+    if (!this.isCurrentRegionRequest(requestId)) {
+      return;
+    }
+
+    const session = await this.ensureRegionSession(credentials);
+    if (!this.isCurrentRegionRequest(requestId)) {
+      return;
+    }
+
+    const liveOrgs = await fetchOrgs(session);
+    if (!this.isCurrentRegionRequest(requestId)) {
+      return;
+    }
+
+    if (!haveSameOrgEntries(cachedOrgs, liveOrgs)) {
+      this.postMessage({
+        type: MSG_ORGS_LOADED,
+        orgs: liveOrgs,
+      });
+    }
   }
 
   private postAppsLoaded(
@@ -1647,6 +1677,30 @@ function areSidebarAppsEqual(
       return false;
     }
   }
+  return true;
+}
+
+function haveSameOrgEntries(
+  leftOrgs: readonly { readonly guid: string; readonly name: string }[],
+  rightOrgs: readonly { readonly guid: string; readonly name: string }[]
+): boolean {
+  if (leftOrgs.length !== rightOrgs.length) {
+    return false;
+  }
+
+  const rightByGuid = new Map(
+    rightOrgs.map((org) => {
+      return [org.guid, org.name] as const;
+    })
+  );
+
+  for (const leftOrg of leftOrgs) {
+    const rightName = rightByGuid.get(leftOrg.guid);
+    if (rightName === undefined || rightName !== leftOrg.name) {
+      return false;
+    }
+  }
+
   return true;
 }
 

@@ -177,6 +177,36 @@ describe('fetchStartedAppsViaCfCli', () => {
     expect(errorMessage).toContain('Credentials were rejected by UAA');
     expect(errorMessage).not.toContain('super-secret-password');
   });
+
+  it('retries cf apps command once when CLI fails with transient connection error', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '' }) // cf api
+      .mockResolvedValueOnce({ stdout: '' }) // cf auth
+      .mockResolvedValueOnce({ stdout: '' }) // cf target
+      .mockRejectedValueOnce({
+        stderr: 'connection reset by peer',
+        message: 'Command failed',
+      }) // cf apps attempt 1
+      .mockResolvedValueOnce({
+        stdout: [
+          'name  requested state  processes  routes',
+          'orders-api  started  web:2/2  orders-api.cfapps.example.com',
+        ].join('\n'),
+      }); // cf apps attempt 2
+
+    const apps = await fetchStartedAppsViaCfCli({
+      apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+      email: 'test@example.com',
+      password: 'super-secret-password',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(apps).toEqual([{ name: 'orders-api', runningInstances: 2 }]);
+    expect(execFileAsyncMock).toHaveBeenCalledTimes(5);
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(4, 'cf', ['apps'], expect.any(Object));
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(5, 'cf', ['apps'], expect.any(Object));
+  });
 });
 
 describe('fetchRecentAppLogs', () => {
@@ -439,6 +469,46 @@ describe('CF API v3 resources', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain('/v3/organizations');
   });
 
+  it('retries organizations request when first response is transient 503', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 503))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          resources: [{ guid: 'org-alpha', name: 'alpha-org' }],
+          pagination: { next: null },
+        })
+      );
+
+    const orgs = await fetchOrgs({
+      apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+      token: {
+        accessToken: 'token-value',
+        refreshToken: '',
+        expiresAt: Date.now() + 60_000,
+      },
+    });
+
+    expect(orgs).toEqual([{ guid: 'org-alpha', name: 'alpha-org' }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry organizations request on 401 authentication failure', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 401));
+
+    await expect(
+      fetchOrgs({
+        apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+        token: {
+          accessToken: 'token-value',
+          refreshToken: '',
+          expiresAt: Date.now() + 60_000,
+        },
+      })
+    ).rejects.toThrow('Failed to fetch CF organizations (status 401).');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('fetches spaces from v3 endpoint when available', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -509,8 +579,11 @@ describe('CF API v3 resources', () => {
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/v3/spaces?page=2&per_page=200');
   });
 
-  it('fails fast when v3 spaces endpoint returns an error', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+  it('fails after retrying when v3 spaces endpoint keeps returning 500', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 500))
+      .mockResolvedValueOnce(jsonResponse({}, 500))
+      .mockResolvedValueOnce(jsonResponse({}, 500));
 
     await expect(
       fetchSpaces(
@@ -526,7 +599,7 @@ describe('CF API v3 resources', () => {
       )
     ).rejects.toThrow('Failed to fetch CF spaces (status 500).');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0]?.[0]).toContain('/v3/spaces?organization_guids=org-guid-2');
   });
 });
