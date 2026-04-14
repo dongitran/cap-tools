@@ -23,14 +23,19 @@ const SAVE_COLUMN_SETTINGS_MESSAGE_TYPE = 'sapTools.saveColumnSettings';
 const COLUMN_SETTINGS_INIT_MESSAGE_TYPE = 'sapTools.columnSettingsInit';
 const SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE = 'sapTools.saveFontSizeSetting';
 const FONT_SIZE_SETTING_INIT_MESSAGE_TYPE = 'sapTools.fontSizeSettingInit';
+const SAVE_LOG_LIMIT_SETTING_MESSAGE_TYPE = 'sapTools.saveLogLimitSetting';
+const LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.logLimitSettingInit';
 
 const COLUMN_SETTINGS_GLOBAL_STATE_KEY = 'cfLogsPanel.visibleColumns';
 const FONT_SIZE_SETTING_GLOBAL_STATE_KEY = 'cfLogsPanel.fontSizePreset';
+const LOG_LIMIT_SETTING_GLOBAL_STATE_KEY = 'cfLogsPanel.logLimit';
 const ALL_COLUMN_IDS = ['time', 'source', 'stream', 'level', 'logger', 'message'] as const;
 const REQUIRED_COLUMN_IDS = ['time', 'message'] as const;
 const DEFAULT_VISIBLE_COLUMN_IDS = ['time', 'level', 'logger', 'message'] as const;
 const FONT_SIZE_PRESETS = ['smaller', 'default', 'large', 'xlarge'] as const;
 const DEFAULT_FONT_SIZE_PRESET = 'default';
+const LOG_LIMIT_PRESETS = [300, 500, 1000, 3000] as const;
+const DEFAULT_LOG_LIMIT = 300;
 
 const STREAM_BATCH_FLUSH_MS = 150;
 const STREAM_RETRY_INITIAL_MS = 1_000;
@@ -158,6 +163,18 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     void webviewView.webview.postMessage({
       type: FONT_SIZE_SETTING_INIT_MESSAGE_TYPE,
       fontSizePreset: normalizedFontSizePreset,
+    });
+
+    const savedLogLimit = this.extensionContext.globalState.get<unknown>(
+      LOG_LIMIT_SETTING_GLOBAL_STATE_KEY
+    );
+    const normalizedLogLimit =
+      typeof savedLogLimit === 'number' && isKnownLogLimit(savedLogLimit)
+        ? savedLogLimit
+        : DEFAULT_LOG_LIMIT;
+    void webviewView.webview.postMessage({
+      type: LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE,
+      logLimit: normalizedLogLimit,
     });
 
     // Replay scope and apps that arrived before this view was initialized.
@@ -701,6 +718,18 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
         FONT_SIZE_SETTING_GLOBAL_STATE_KEY,
         message['fontSizePreset']
       );
+      return;
+    }
+
+    if (
+      message['type'] === SAVE_LOG_LIMIT_SETTING_MESSAGE_TYPE &&
+      typeof message['logLimit'] === 'number' &&
+      isKnownLogLimit(message['logLimit'])
+    ) {
+      await this.extensionContext.globalState.update(
+        LOG_LIMIT_SETTING_GLOBAL_STATE_KEY,
+        message['logLimit']
+      );
     }
   }
 
@@ -833,8 +862,15 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     <title>CF Logs</title>
     <link rel="stylesheet" href="${cssSrc}" />
   </head>
-  <body class="cf-logs-panel-page">
-    <section class="cf-logs-panel" aria-label="CFLogs panel content">
+  <body
+    class="cf-logs-panel-page"
+    style="margin:0;padding:0;height:100vh;min-height:100vh;display:flex;flex-direction:column;overflow:hidden;"
+  >
+    <section
+      class="cf-logs-panel"
+      aria-label="CFLogs panel content"
+      style="flex:1 1 auto;min-height:0;height:100%;"
+    >
       <p id="workspace-scope" class="workspace-scope" hidden></p>
 
       <section class="filter-inline" aria-label="CF log filters">
@@ -891,9 +927,27 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
             <option value="xlarge">Extra Large</option>
           </select>
         </div>
+        <div class="settings-row settings-row-limit">
+          <label for="settings-log-limit" class="settings-panel-label">Log Limit</label>
+          <select
+            id="settings-log-limit"
+            class="settings-font-size-select settings-log-limit-select"
+            aria-label="Log row limit"
+          >
+            <option value="300" selected>300</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="3000">3000</option>
+          </select>
+        </div>
       </div>
 
-      <div class="table-shell" role="region" aria-label="Filtered logs table">
+      <div
+        class="table-shell"
+        role="region"
+        aria-label="Filtered logs table"
+        style="flex:1 1 auto;min-height:0;"
+      >
         <table class="cf-log-table" aria-describedby="table-summary">
           <thead id="log-table-head"><tr></tr></thead>
           <tbody id="log-table-body"></tbody>
@@ -968,6 +1022,10 @@ function isKnownColumnId(value: string): value is (typeof ALL_COLUMN_IDS)[number
 
 function isKnownFontSizePreset(value: string): value is (typeof FONT_SIZE_PRESETS)[number] {
   return (FONT_SIZE_PRESETS as readonly string[]).includes(value);
+}
+
+function isKnownLogLimit(value: number): value is (typeof LOG_LIMIT_PRESETS)[number] {
+  return (LOG_LIMIT_PRESETS as readonly number[]).includes(value);
 }
 
 function createNonce(): string {

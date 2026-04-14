@@ -117,6 +117,7 @@ const LOG_SEED = [
 const appElement = document.getElementById('app');
 const REQUEST_INITIAL_STATE_MESSAGE_TYPE = 'sapTools.requestInitialState';
 const REGION_SELECTED_MESSAGE_TYPE = 'sapTools.regionSelected';
+const CONFIRM_SCOPE_MESSAGE_TYPE = 'sapTools.confirmScope';
 const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
 const SPACE_SELECTED_MESSAGE_TYPE = 'sapTools.spaceSelected';
@@ -130,6 +131,7 @@ const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
 const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
+const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -268,6 +270,15 @@ window.addEventListener('message', (event) => {
       return;
     }
     renderPrototype();
+    return;
+  }
+
+  if (msg.type === RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE) {
+    const scope = msg.scope;
+    if (!isRecord(scope)) {
+      return;
+    }
+    applyRestoredConfirmedScope(scope);
     return;
   }
 
@@ -1051,6 +1062,7 @@ function handleSelectionFlowAction(action) {
     mode = 'workspace';
     activeTabId = 'logs';
     statusMessage = '';
+    postConfirmScope();
     return true;
   }
 
@@ -1701,6 +1713,39 @@ function requestInitialState() {
   });
 }
 
+function postConfirmScope() {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  const selectedRegion = resolveSelectedRegion();
+  const selectedOrg = resolveSelectedOrg();
+  const selectedGroup = groupLookup.get(selectedGroupId);
+  const normalizedSpaceName = selectedSpaceId.trim();
+
+  if (
+    selectedRegion === undefined ||
+    selectedOrg === undefined ||
+    selectedGroup === undefined ||
+    normalizedSpaceName.length === 0
+  ) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: CONFIRM_SCOPE_MESSAGE_TYPE,
+    scope: {
+      regionId: selectedRegion.id,
+      regionCode: selectedRegion.code,
+      regionName: selectedRegion.name,
+      regionArea: selectedGroup.label,
+      orgGuid: selectedOrgId,
+      orgName: selectedOrg.name,
+      spaceName: normalizedSpaceName,
+    },
+  });
+}
+
 function postRegionSelection(region, areaLabel) {
   if (vscodeApi === null) {
     return;
@@ -1823,6 +1868,44 @@ function postLogout() {
   vscodeApi.postMessage({
     type: LOGOUT_MESSAGE_TYPE,
   });
+}
+
+function applyRestoredConfirmedScope(scope) {
+  const regionId =
+    typeof scope.regionId === 'string' ? scope.regionId.trim() : '';
+  const orgGuid = typeof scope.orgGuid === 'string' ? scope.orgGuid.trim() : '';
+  const spaceName =
+    typeof scope.spaceName === 'string' ? scope.spaceName.trim() : '';
+
+  if (regionId.length === 0 || orgGuid.length === 0 || spaceName.length === 0) {
+    return;
+  }
+
+  const selectedRegion = regionLookup.get(regionId);
+  const selectedGroupIdFromRegion = regionGroupLookup.get(regionId);
+  if (selectedRegion === undefined || selectedGroupIdFromRegion === undefined) {
+    return;
+  }
+
+  selectedGroupId = selectedGroupIdFromRegion;
+  selectedRegionId = selectedRegion.id;
+  selectedOrgId = orgGuid;
+  selectedSpaceId = spaceName;
+  mode = 'workspace';
+  activeTabId = 'logs';
+  statusMessage = '';
+
+  if (isWorkspaceLogsMounted()) {
+    refreshWorkspaceLogsView();
+    return;
+  }
+
+  if (isWorkspaceAppsMounted()) {
+    refreshWorkspaceAppsView();
+    return;
+  }
+
+  renderPrototype();
 }
 
 function renderSelectionScreen() {

@@ -521,6 +521,7 @@ body.pattern-dots::before {
   overflow-x: hidden;
   overscroll-behavior: contain;
   align-content: start;
+  padding-top: 2px;
   padding-right: 2px;
 }
 
@@ -551,6 +552,7 @@ body.pattern-dots::before {
   background: var(--frame-bg);
   border-radius: 10px;
   color: var(--text-color);
+  position: relative;
   display: grid;
   gap: 2px;
   text-align: left;
@@ -576,6 +578,7 @@ body.pattern-dots::before {
 .region-option:hover {
   transform: translateY(-1px);
   border-color: color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
+  z-index: 1;
 }
 
 .region-layout .region-option.is-hidden {

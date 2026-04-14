@@ -21,15 +21,23 @@
 html,
 body {
   margin: 0;
+  padding: 0;
+  width: 100%;
   height: 100%;
   min-height: 100%;
+  overflow: hidden;
 }
 
 body.cf-logs-panel-page {
   font-family: "Segoe UI", "Trebuchet MS", sans-serif;
   background: var(--panel-bg);
   color: var(--panel-text);
-  min-height: 100dvh;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 body.cf-logs-panel-page.cf-log-font-smaller {
@@ -85,6 +93,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 .panel-prototype-shell {
   min-height: 100dvh;
+  flex: 1 1 auto;
   display: grid;
   grid-template-rows: minmax(0, 1fr) minmax(260px, 44dvh);
 }
@@ -115,6 +124,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   background: var(--panel-surface);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .panel-tabs {
@@ -143,10 +153,11 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-logs-panel {
-  padding: 8px;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
 }
@@ -188,8 +199,10 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .filter-inline {
-  display: flex;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) 106px auto;
+  grid-template-areas: 'app search level settings';
+  align-items: end;
   gap: 8px;
 }
 
@@ -301,24 +314,33 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   outline-offset: 0;
 }
 
+.settings-log-limit-select {
+  min-width: 120px;
+}
+
 .filter-item {
   display: grid;
   gap: 0;
 }
 
 .filter-item-search {
-  flex: 1;
+  grid-area: search;
   min-width: 0;
 }
 
 .filter-item-app {
-  width: 188px;
-  flex: 0 0 auto;
+  grid-area: app;
+  min-width: 0;
 }
 
 .filter-item-level {
-  width: 124px;
-  flex: 0 0 auto;
+  grid-area: level;
+  min-width: 0;
+}
+
+.gear-button {
+  grid-area: settings;
+  align-self: end;
 }
 
 .filter-item input,
@@ -344,7 +366,8 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   border-radius: 8px;
   overflow: auto;
   max-height: none;
-  min-height: 120px;
+  flex: 1 1 auto;
+  min-height: 0;
   height: 100%;
   background: color-mix(in oklab, var(--panel-surface) 88%, var(--panel-bg));
 }
@@ -493,7 +516,11 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 @media (max-width: 900px) {
   .filter-inline {
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr) 96px auto;
+    grid-template-areas:
+      'app level settings'
+      'search search search';
+    row-gap: 6px;
   }
 }
 
@@ -502,8 +529,8 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
     grid-template-rows: minmax(0, 1fr) minmax(300px, 52dvh);
   }
 
-  .filter-item-level {
-    width: 100%;
+  .filter-inline {
+    grid-template-columns: minmax(0, 1fr) 84px auto;
   }
 
   .settings-panel-label {

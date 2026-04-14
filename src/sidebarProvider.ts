@@ -12,7 +12,7 @@ import {
 import type { CfSession } from './cfClient';
 import { ensureCfHomeDir } from './cfHome';
 import type { CacheRuntimeSnapshot, CacheSyncService } from './cacheSyncService';
-import type { CacheStore } from './cacheStore';
+import { normalizeUserEmail, type CacheStore } from './cacheStore';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
 import { clearCredentials, getEffectiveCredentials, storeCredentials } from './credentialStore';
 import { isSyncIntervalHours } from './cacheModels';
@@ -31,6 +31,7 @@ import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } fr
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
 const PROTOTYPE_DESIGN_ID = '34';
+const CONFIRMED_SCOPE_BY_EMAIL_GLOBAL_STATE_KEY = 'sapTools.confirmedScopeByEmail.v1';
 
 // ── Inbound message types (webview → extension) ─────────────────────────────
 
@@ -39,6 +40,7 @@ const MSG_LOGIN_SUBMIT = 'sapTools.loginSubmit';
 const MSG_REGION_SELECTED = 'sapTools.regionSelected';
 const MSG_ORG_SELECTED = 'sapTools.orgSelected';
 const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
+const MSG_CONFIRM_SCOPE = 'sapTools.confirmScope';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
 const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
 const MSG_UPDATE_SYNC_INTERVAL = 'sapTools.updateSyncInterval';
@@ -68,6 +70,7 @@ const MSG_EXPORT_ARTIFACT_PROGRESS = 'sapTools.exportArtifactProgress';
 const MSG_EXPORT_ARTIFACT_RESULT = 'sapTools.exportArtifactResult';
 const MSG_EXPORT_SQLTOOLS_PROGRESS = 'sapTools.exportSqlToolsProgress';
 const MSG_EXPORT_SQLTOOLS_RESULT = 'sapTools.exportSqlToolsResult';
+const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -87,6 +90,16 @@ interface SpaceSelectionPayload {
   readonly spaceName: string;
   readonly orgGuid: string;
   readonly orgName: string;
+}
+
+interface ConfirmScopePayload {
+  readonly regionId: string;
+  readonly regionCode: string;
+  readonly regionName: string;
+  readonly regionArea: string;
+  readonly orgGuid: string;
+  readonly orgName: string;
+  readonly spaceName: string;
 }
 
 interface ActiveAppsChangedPayload {
@@ -154,6 +167,23 @@ interface SidebarAppEntry {
   readonly runningInstances: number;
 }
 
+interface PersistedConfirmedScopeEntry {
+  readonly regionId: string;
+  readonly regionCode: string;
+  readonly regionName: string;
+  readonly regionArea: string;
+  readonly orgGuid: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+  readonly confirmedAt: string;
+}
+
+interface LoadedScopeState {
+  readonly regionId: string;
+  readonly orgGuid: string;
+  readonly spaceName: string;
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export class RegionSidebarProvider
@@ -175,6 +205,8 @@ export class RegionSidebarProvider
   private readonly serviceFolderSelections = new Map<string, string>();
   private e2eRootDialogStepIndex = 0;
   private exportInProgress = false;
+  private hasAttemptedConfirmedScopeRestore = false;
+  private lastLoadedScope: LoadedScopeState | null = null;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -205,6 +237,8 @@ export class RegionSidebarProvider
     this.serviceFolderSelections.clear();
     this.e2eRootDialogStepIndex = 0;
     this.exportInProgress = false;
+    this.hasAttemptedConfirmedScopeRestore = false;
+    this.lastLoadedScope = null;
 
     const assetsRoot = vscode.Uri.joinPath(
       this.extensionUri,
@@ -278,6 +312,12 @@ export class RegionSidebarProvider
     if (type === MSG_SPACE_SELECTED && isSpaceSelectedMessage(message)) {
       const payload = readSpaceSelectionPayload(message);
       await this.handleSpaceSelected(payload);
+      return;
+    }
+
+    if (type === MSG_CONFIRM_SCOPE && isConfirmScopeMessage(message)) {
+      const payload = readConfirmScopePayload(message);
+      await this.handleConfirmScope(payload);
       return;
     }
 
@@ -361,6 +401,198 @@ export class RegionSidebarProvider
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
     });
+
+    if (!this.hasAttemptedConfirmedScopeRestore) {
+      this.hasAttemptedConfirmedScopeRestore = true;
+      await this.restoreConfirmedScopeForCurrentUser();
+    }
+  }
+
+  private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
+    await this.persistConfirmedScopeForCurrentUser(payload);
+  }
+
+  private async restoreConfirmedScopeForCurrentUser(): Promise<void> {
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return;
+    }
+
+    const persistedScope = this.readPersistedConfirmedScopeForEmail(credentials.email);
+    if (persistedScope === null) {
+      return;
+    }
+
+    try {
+      await this.handleRegionSelected({
+        id: persistedScope.regionId,
+        name: persistedScope.regionName,
+        code: persistedScope.regionCode,
+        area: persistedScope.regionArea,
+      });
+
+      if (this.selectedRegionId !== persistedScope.regionId) {
+        return;
+      }
+
+      await this.handleOrgSelected({
+        guid: persistedScope.orgGuid,
+        name: persistedScope.orgName,
+      });
+
+      if (this.selectedOrgGuid !== persistedScope.orgGuid) {
+        return;
+      }
+
+      await this.handleSpaceSelected({
+        spaceName: persistedScope.spaceName,
+        orgGuid: persistedScope.orgGuid,
+        orgName: persistedScope.orgName,
+      });
+
+      if (!this.matchesLoadedScope(persistedScope)) {
+        return;
+      }
+
+      this.postMessage({
+        type: MSG_RESTORE_CONFIRMED_SCOPE,
+        scope: {
+          regionId: persistedScope.regionId,
+          orgGuid: persistedScope.orgGuid,
+          spaceName: persistedScope.spaceName,
+        },
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to restore confirmed scope.';
+      this.outputChannel.appendLine(
+        `[scope] Restore confirmed scope failed: ${sanitizeForLog(errorMessage)}`
+      );
+    }
+  }
+
+  private async persistConfirmedScopeForCurrentUser(
+    payload: ConfirmScopePayload
+  ): Promise<void> {
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return;
+    }
+
+    const emailKey = normalizeUserEmail(credentials.email);
+    if (emailKey.length === 0) {
+      return;
+    }
+
+    const normalizedScope: PersistedConfirmedScopeEntry = {
+      regionId: payload.regionId.trim(),
+      regionCode: payload.regionCode.trim().toLowerCase(),
+      regionName: payload.regionName.trim(),
+      regionArea: payload.regionArea.trim(),
+      orgGuid: payload.orgGuid.trim(),
+      orgName: payload.orgName.trim(),
+      spaceName: payload.spaceName.trim(),
+      confirmedAt: new Date().toISOString(),
+    };
+
+    if (
+      normalizedScope.regionId.length === 0 ||
+      normalizedScope.regionCode.length === 0 ||
+      normalizedScope.regionName.length === 0 ||
+      normalizedScope.regionArea.length === 0 ||
+      normalizedScope.orgGuid.length === 0 ||
+      normalizedScope.orgName.length === 0 ||
+      normalizedScope.spaceName.length === 0
+    ) {
+      return;
+    }
+
+    const currentByEmail = this.readConfirmedScopeMap();
+    currentByEmail[emailKey] = normalizedScope;
+    await this.context.globalState.update(
+      CONFIRMED_SCOPE_BY_EMAIL_GLOBAL_STATE_KEY,
+      currentByEmail
+    );
+  }
+
+  private readPersistedConfirmedScopeForEmail(email: string): PersistedConfirmedScopeEntry | null {
+    const emailKey = normalizeUserEmail(email);
+    if (emailKey.length === 0) {
+      return null;
+    }
+
+    const confirmedScopeByEmail = this.readConfirmedScopeMap();
+    const entry = confirmedScopeByEmail[emailKey];
+    return entry ?? null;
+  }
+
+  private readConfirmedScopeMap(): Record<string, PersistedConfirmedScopeEntry> {
+    const rawValue = this.context.globalState.get<unknown>(
+      CONFIRMED_SCOPE_BY_EMAIL_GLOBAL_STATE_KEY
+    );
+    if (!isRecord(rawValue)) {
+      return {};
+    }
+
+    const normalizedEntries: Record<string, PersistedConfirmedScopeEntry> = {};
+    for (const [emailKeyRaw, scopeRaw] of Object.entries(rawValue)) {
+      const normalizedEmailKey = normalizeUserEmail(emailKeyRaw);
+      if (normalizedEmailKey.length === 0 || !isRecord(scopeRaw)) {
+        continue;
+      }
+
+      const regionId = readOptionalString(scopeRaw['regionId'], 64);
+      const regionCode = readOptionalString(scopeRaw['regionCode'], 32).toLowerCase();
+      const regionName = readOptionalString(scopeRaw['regionName'], 96);
+      const regionArea = readOptionalString(scopeRaw['regionArea'], 96);
+      const orgGuid = readOptionalString(scopeRaw['orgGuid'], 128);
+      const orgName = readOptionalString(scopeRaw['orgName'], 128);
+      const spaceName = readOptionalString(scopeRaw['spaceName'], 128);
+      const confirmedAt = readOptionalString(scopeRaw['confirmedAt'], 64);
+
+      if (
+        regionId.length === 0 ||
+        regionCode.length === 0 ||
+        regionName.length === 0 ||
+        regionArea.length === 0 ||
+        orgGuid.length === 0 ||
+        orgName.length === 0 ||
+        spaceName.length === 0 ||
+        confirmedAt.length === 0
+      ) {
+        continue;
+      }
+
+      normalizedEntries[normalizedEmailKey] = {
+        regionId,
+        regionCode,
+        regionName,
+        regionArea,
+        orgGuid,
+        orgName,
+        spaceName,
+        confirmedAt,
+      };
+    }
+
+    return normalizedEntries;
+  }
+
+  private matchesLoadedScope(scope: {
+    readonly regionId: string;
+    readonly orgGuid: string;
+    readonly spaceName: string;
+  }): boolean {
+    const loadedScope = this.lastLoadedScope;
+    if (loadedScope === null) {
+      return false;
+    }
+
+    return (
+      loadedScope.regionId === scope.regionId &&
+      loadedScope.orgGuid === scope.orgGuid &&
+      loadedScope.spaceName === scope.spaceName
+    );
   }
 
   private async handleSelectLocalRootFolder(): Promise<void> {
@@ -928,6 +1160,7 @@ export class RegionSidebarProvider
     try {
       await storeCredentials(this.context, { email, password });
       await this.cacheSyncService.setCredentials({ email, password });
+      this.hasAttemptedConfirmedScopeRestore = false;
       this.reloadToMainView();
     } catch (error) {
       const errorMessage =
@@ -951,6 +1184,8 @@ export class RegionSidebarProvider
       this.serviceFolderMappings = [];
       this.serviceFolderSelections.clear();
       this.exportInProgress = false;
+      this.hasAttemptedConfirmedScopeRestore = false;
+      this.lastLoadedScope = null;
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
       this.reloadToLoginView();
@@ -1023,6 +1258,7 @@ export class RegionSidebarProvider
     this.serviceFolderMappings = [];
     this.serviceFolderSelections.clear();
     this.exportInProgress = false;
+    this.lastLoadedScope = null;
     this.cfLogsPanel.updateApps([], null);
     this.cfLogsPanel.updateScope(buildScopeLabel(region.code, 'select-org', 'select-space'));
     this.postMessage({
@@ -1108,6 +1344,7 @@ export class RegionSidebarProvider
     this.serviceFolderMappings = [];
     this.serviceFolderSelections.clear();
     this.exportInProgress = false;
+    this.lastLoadedScope = null;
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
@@ -1166,6 +1403,7 @@ export class RegionSidebarProvider
   private async handleSpaceSelected(payload: SpaceSelectionPayload): Promise<void> {
     const requestId = this.bumpSpaceSelectionRequestId();
     const regionCode = this.selectedRegionCode;
+    this.lastLoadedScope = null;
 
     if (isTestMode()) {
       this.handleTestModeSpaceSelection(payload);
@@ -1266,6 +1504,11 @@ export class RegionSidebarProvider
     this.cfLogsPanel.updateApps(apps, null);
     this.currentApps = apps;
     this.currentLogSessionSeed = null;
+    this.lastLoadedScope = {
+      regionId: this.selectedRegionId,
+      orgGuid: payload.orgGuid,
+      spaceName: payload.spaceName,
+    };
     this.serviceFolderMappings = [];
     this.serviceFolderSelections.clear();
     this.exportInProgress = false;
@@ -1384,6 +1627,11 @@ export class RegionSidebarProvider
       spaceName: payload.spaceName,
       cfHomeDir,
     };
+    this.lastLoadedScope = {
+      regionId: this.selectedRegionId,
+      orgGuid: payload.orgGuid,
+      spaceName: payload.spaceName,
+    };
     this.serviceFolderMappings = [];
     this.serviceFolderSelections.clear();
     this.exportInProgress = false;
@@ -1399,6 +1647,7 @@ export class RegionSidebarProvider
   private postOrgsError(message: string): void {
     this.postMessage({ type: MSG_ORGS_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+    this.lastLoadedScope = null;
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
@@ -1413,6 +1662,7 @@ export class RegionSidebarProvider
   private postSpacesError(message: string): void {
     this.postMessage({ type: MSG_SPACES_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+    this.lastLoadedScope = null;
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
@@ -1427,6 +1677,7 @@ export class RegionSidebarProvider
   private postAppsError(message: string): void {
     this.postMessage({ type: MSG_APPS_ERROR, message });
     this.cfLogsPanel.updateApps([], null);
+    this.lastLoadedScope = null;
     this.currentApps = [];
     this.currentLogSessionSeed = null;
     this.serviceFolderMappings = [];
@@ -1652,6 +1903,19 @@ function sanitizeForLog(value: string): string {
   return value.replaceAll(/\s+/g, ' ').trim();
 }
 
+function readOptionalString(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalized = value.trim();
+  if (normalized.length === 0 || normalized.length > maxLength) {
+    return '';
+  }
+
+  return normalized;
+}
+
 function areSidebarAppsEqual(
   leftApps: readonly SidebarAppEntry[],
   rightApps: readonly SidebarAppEntry[]
@@ -1808,6 +2072,36 @@ function readSpaceSelectionPayload(value: Record<string, unknown>): SpaceSelecti
     spaceName: String(scope['spaceName']),
     orgGuid: String(scope['orgGuid']),
     orgName: String(scope['orgName']),
+  };
+}
+
+function isConfirmScopeMessage(value: Record<string, unknown>): boolean {
+  const scope = value['scope'];
+  if (!isRecord(scope)) {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(scope['regionId'], 64) &&
+    isNonEmptyString(scope['regionCode'], 32) &&
+    isNonEmptyString(scope['regionName'], 96) &&
+    isNonEmptyString(scope['regionArea'], 96) &&
+    isNonEmptyString(scope['orgGuid'], 128) &&
+    isNonEmptyString(scope['orgName'], 128) &&
+    isNonEmptyString(scope['spaceName'], 128)
+  );
+}
+
+function readConfirmScopePayload(value: Record<string, unknown>): ConfirmScopePayload {
+  const scope = value['scope'] as Record<string, unknown>;
+  return {
+    regionId: String(scope['regionId']).trim(),
+    regionCode: String(scope['regionCode']).trim(),
+    regionName: String(scope['regionName']).trim(),
+    regionArea: String(scope['regionArea']).trim(),
+    orgGuid: String(scope['orgGuid']).trim(),
+    orgName: String(scope['orgName']).trim(),
+    spaceName: String(scope['spaceName']).trim(),
   };
 }
 

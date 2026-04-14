@@ -7,11 +7,15 @@ const SAVE_COLUMN_SETTINGS_MESSAGE_TYPE = 'sapTools.saveColumnSettings';
 const COLUMN_SETTINGS_INIT_MESSAGE_TYPE = 'sapTools.columnSettingsInit';
 const SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE = 'sapTools.saveFontSizeSetting';
 const FONT_SIZE_SETTING_INIT_MESSAGE_TYPE = 'sapTools.fontSizeSettingInit';
+const SAVE_LOG_LIMIT_SETTING_MESSAGE_TYPE = 'sapTools.saveLogLimitSetting';
+const LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.logLimitSettingInit';
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const LOG_LEVEL_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 const MAX_RAW_LOG_TEXT_CHARS = 1_000_000;
 const MAX_PARSED_LOG_ROWS = 5_000;
 const COPY_TOAST_VISIBLE_MS = 1_600;
+const MIN_RAW_LOG_TEXT_CHARS = 120_000;
+const RAW_LOG_TEXT_CHARS_PER_LIMIT_ROW = 1_200;
 
 /** All columns in canonical display order. */
 const COLUMN_DEFS = [
@@ -25,6 +29,8 @@ const COLUMN_DEFS = [
 const DEFAULT_VISIBLE_COLUMNS = COLUMN_DEFS.filter((c) => c.defaultOn).map((c) => c.id);
 const FONT_SIZE_PRESETS = ['smaller', 'default', 'large', 'xlarge'];
 const DEFAULT_FONT_SIZE_PRESET = 'default';
+const LOG_LIMIT_PRESETS = [300, 500, 1000, 3000];
+const DEFAULT_LOG_LIMIT = 300;
 
 /* cspell:disable */
 const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
@@ -56,12 +62,18 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-a
   const valid = saved !== null && saved.every((id) => COLUMN_DEFS.some((c) => c.id === id));
   const savedFontSizePreset =
     typeof savedState?.fontSizePreset === 'string' ? savedState.fontSizePreset : '';
+  const savedLogLimitCandidate =
+    typeof savedState?.logLimit === 'number' ? savedState.logLimit : Number.NaN;
   // eslint-disable-next-line no-var
   var visibleColumns = valid && saved.length > 0 ? saved : [...DEFAULT_VISIBLE_COLUMNS];
   // eslint-disable-next-line no-var
   var fontSizePreset = isKnownFontSizePreset(savedFontSizePreset)
     ? savedFontSizePreset
     : DEFAULT_FONT_SIZE_PRESET;
+  // eslint-disable-next-line no-var
+  var logLimit = isKnownLogLimit(savedLogLimitCandidate)
+    ? savedLogLimitCandidate
+    : DEFAULT_LOG_LIMIT;
 }
 
 const elements = getRequiredElements();
@@ -85,13 +97,14 @@ const pendingCopyCallbacks = new Map();
 let copyToastTimer = null;
 
 applyFontSizePreset();
+applyLogLimitSetting();
 
 // Build header from current column config before first render.
 rebuildTableHeader();
 
 if (vscodeApi === null) {
   // Browser prototype mode: render sample data and populate app selector.
-  allRows = parseCfRecentLog(PROTOTYPE_SAMPLE_LOG);
+  allRows = trimRowsForMemory(parseCfRecentLog(PROTOTYPE_SAMPLE_LOG));
   rawLogTextByApp.set('finance-config-admin', PROTOTYPE_SAMPLE_LOG);
   parsedRowsByApp.set('finance-config-admin', allRows);
   elements.workspaceScope.textContent = 'za-10 \u2192 data-foundation-prod \u2192 observability';
@@ -117,6 +130,7 @@ function getRequiredElements() {
   const settingsPanel = document.getElementById('settings-panel');
   const settingsColumnToggles = document.getElementById('settings-column-toggles');
   const settingsFontSize = document.getElementById('settings-font-size');
+  const settingsLogLimit = document.getElementById('settings-log-limit');
   const copyToast = document.getElementById('copy-toast');
 
   if (!(tableHead instanceof HTMLTableSectionElement)) {
@@ -163,6 +177,10 @@ function getRequiredElements() {
     throw new Error('Missing #settings-font-size.');
   }
 
+  if (!(settingsLogLimit instanceof HTMLSelectElement)) {
+    throw new Error('Missing #settings-log-limit.');
+  }
+
   if (!(copyToast instanceof HTMLElement)) {
     throw new Error('Missing #copy-toast.');
   }
@@ -176,6 +194,7 @@ function getRequiredElements() {
     settingsPanel,
     settingsColumnToggles,
     settingsFontSize,
+    settingsLogLimit,
     copyToast,
     filters: {
       search: filterSearch,
@@ -537,6 +556,10 @@ function bindFilterEvents() {
     handleFontSizePresetChange(elements.settingsFontSize.value);
   });
 
+  elements.settingsLogLimit.addEventListener('change', () => {
+    handleLogLimitChange(elements.settingsLogLimit.value);
+  });
+
   // Close settings panel when clicking outside it.
   document.addEventListener('click', (event) => {
     if (
@@ -739,6 +762,16 @@ function bindExtensionMessages() {
       applyFontSizePreset();
       syncFontSizeSettingToState();
     }
+
+    if (msg.type === LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE && typeof msg.logLimit === 'number') {
+      if (!isKnownLogLimit(msg.logLimit)) {
+        return;
+      }
+      logLimit = msg.logLimit;
+      applyLogLimitSetting();
+      syncLogLimitSettingToState();
+      reconcileRowsToCurrentLogLimit();
+    }
   });
 }
 
@@ -863,11 +896,12 @@ function showSelectedAppLogs(appName, requestSnapshotIfMissing) {
 
 function appendRawLogText(existingText, appendedText) {
   const mergedText = existingText.length > 0 ? `${existingText}\n${appendedText}` : appendedText;
-  if (mergedText.length <= MAX_RAW_LOG_TEXT_CHARS) {
+  const charCap = resolveRawLogTextCharCap();
+  if (mergedText.length <= charCap) {
     return mergedText;
   }
 
-  return mergedText.slice(mergedText.length - MAX_RAW_LOG_TEXT_CHARS);
+  return mergedText.slice(mergedText.length - charCap);
 }
 
 function showRowsForSelectedApp(appName, rows) {
@@ -959,15 +993,40 @@ function pruneMapByKeys(map, allowedKeys) {
 }
 
 function trimRowsForMemory(rows) {
-  if (rows.length <= MAX_PARSED_LOG_ROWS) {
+  const maxRows = Math.min(logLimit, MAX_PARSED_LOG_ROWS);
+  if (rows.length <= maxRows) {
     return rows;
   }
 
-  const trimmed = rows.slice(rows.length - MAX_PARSED_LOG_ROWS);
+  const trimmed = rows.slice(rows.length - maxRows);
   for (let index = 0; index < trimmed.length; index += 1) {
     trimmed[index].id = index + 1;
   }
   return trimmed;
+}
+
+function reconcileRowsToCurrentLogLimit() {
+  const charCap = resolveRawLogTextCharCap();
+  for (const [appName, rawLogText] of rawLogTextByApp.entries()) {
+    const normalizedRaw =
+      rawLogText.length > charCap ? rawLogText.slice(rawLogText.length - charCap) : rawLogText;
+    if (normalizedRaw !== rawLogText) {
+      rawLogTextByApp.set(appName, normalizedRaw);
+    }
+    parsedRowsByApp.set(appName, trimRowsForMemory(parseCfRecentLog(normalizedRaw)));
+  }
+
+  const selectedApp = elements.filters.app.value;
+  if (selectedApp.length > 0) {
+    const selectedRows = resolveParsedRowsForApp(selectedApp);
+    if (Array.isArray(selectedRows)) {
+      showRowsForSelectedApp(selectedApp, selectedRows);
+      return;
+    }
+  }
+
+  allRows = trimRowsForMemory(allRows.slice());
+  applyFiltersAndRender();
 }
 
 
@@ -1167,6 +1226,15 @@ function isKnownFontSizePreset(value) {
   return FONT_SIZE_PRESETS.includes(value);
 }
 
+function isKnownLogLimit(value) {
+  return Number.isInteger(value) && LOG_LIMIT_PRESETS.includes(value);
+}
+
+function resolveRawLogTextCharCap() {
+  const capByLimit = logLimit * RAW_LOG_TEXT_CHARS_PER_LIMIT_ROW;
+  return Math.min(MAX_RAW_LOG_TEXT_CHARS, Math.max(MIN_RAW_LOG_TEXT_CHARS, capByLimit));
+}
+
 function applyFontSizePreset() {
   document.body.classList.remove(
     'cf-log-font-smaller',
@@ -1187,6 +1255,24 @@ function handleFontSizePresetChange(nextPreset) {
   applyFontSizePreset();
   syncFontSizeSettingToState();
   saveFontSizeSetting();
+}
+
+function applyLogLimitSetting() {
+  elements.settingsLogLimit.value = String(logLimit);
+}
+
+function handleLogLimitChange(nextLimitRaw) {
+  const nextLimit = Number.parseInt(nextLimitRaw, 10);
+  if (!isKnownLogLimit(nextLimit) || nextLimit === logLimit) {
+    applyLogLimitSetting();
+    return;
+  }
+
+  logLimit = nextLimit;
+  applyLogLimitSetting();
+  syncLogLimitSettingToState();
+  saveLogLimitSetting();
+  reconcileRowsToCurrentLogLimit();
 }
 
 /**
@@ -1214,6 +1300,7 @@ function rebuildTableHeader() {
 function buildSettingsPanel() {
   elements.settingsColumnToggles.replaceChildren();
   elements.settingsFontSize.value = fontSizePreset;
+  elements.settingsLogLimit.value = String(logLimit);
 
   for (const colDef of COLUMN_DEFS) {
     const label = document.createElement('label');
@@ -1303,6 +1390,13 @@ function syncFontSizeSettingToState() {
   }
 }
 
+function syncLogLimitSettingToState() {
+  if (vscodeApi !== null) {
+    const existing = vscodeApi.getState() ?? {};
+    vscodeApi.setState({ ...existing, logLimit });
+  }
+}
+
 /**
  * Send visibleColumns to the extension host for cross-session persistence (globalState).
  */
@@ -1320,6 +1414,15 @@ function saveFontSizeSetting() {
     vscodeApi.postMessage({
       type: SAVE_FONT_SIZE_SETTING_MESSAGE_TYPE,
       fontSizePreset,
+    });
+  }
+}
+
+function saveLogLimitSetting() {
+  if (vscodeApi !== null) {
+    vscodeApi.postMessage({
+      type: SAVE_LOG_LIMIT_SETTING_MESSAGE_TYPE,
+      logLimit,
     });
   }
 }

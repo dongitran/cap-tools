@@ -29,8 +29,8 @@ body.theme-34 .area-picker {
 
 body.theme-34 .area-option {
   border-radius: 8px;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
-  padding-right: 16px;
+  clip-path: none;
+  padding-right: 10px;
 }
 
 body.theme-34 .region-option {

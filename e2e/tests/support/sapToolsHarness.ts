@@ -226,6 +226,45 @@ export async function launchExtensionHost(
   };
 }
 
+export async function relaunchExtensionHost(
+  previousSession: ExtensionHostSession,
+  options: ExtensionHostLaunchOptions = {}
+): Promise<ExtensionHostSession> {
+  await previousSession.electronApp.close();
+
+  const extensionPath = getExtensionRootDir();
+  const workspaceDir = previousSession.workspaceDir;
+  const userDataDir = previousSession.userDataDir;
+  ensureThemeSettings(userDataDir, options.colorTheme ?? DEFAULT_THEME_NAME);
+
+  const withMockCredentials = options.withMockCredentials !== false;
+  const electronApp = await electron.launch({
+    executablePath: resolveVscodeExecutablePath(),
+    args: [
+      workspaceDir,
+      `--extensionDevelopmentPath=${extensionPath}`,
+      `--user-data-dir=${userDataDir}`,
+      '--skip-welcome',
+      '--skip-release-notes',
+      '--disable-workspace-trust',
+      '--new-window',
+    ],
+    env: buildExtensionHostEnv(withMockCredentials, options.extraEnv ?? {}),
+    timeout: 180000,
+  });
+
+  const window = await electronApp.firstWindow();
+  await window.waitForLoadState('domcontentloaded');
+  await dismissAiSignInModalIfNeeded(window);
+
+  return {
+    electronApp,
+    window,
+    workspaceDir,
+    userDataDir,
+  };
+}
+
 export async function cleanupExtensionHost(session: ExtensionHostSession): Promise<void> {
   await session.electronApp.close();
   fs.rmSync(session.workspaceDir, { recursive: true, force: true });
@@ -238,12 +277,14 @@ export async function findSapToolsWebviewFrame(window: Page): Promise<Frame | un
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
   for (const frame of candidateFrames) {
-    // Match either the main region selector or the login gate heading.
+    // Match the main selector, login gate, or confirmed workspace heading.
     const regionTitle = frame.getByRole('heading', { name: 'Select SAP BTP Region' });
     const loginTitle = frame.getByRole('heading', { name: 'SAP Tools Login' });
+    const workspaceTitle = frame.getByRole('heading', { name: 'Monitoring Workspace' });
     const isRegionVisible = await regionTitle.isVisible().catch(() => false);
     const isLoginVisible = await loginTitle.isVisible().catch(() => false);
-    if (isRegionVisible || isLoginVisible) {
+    const isWorkspaceVisible = await workspaceTitle.isVisible().catch(() => false);
+    if (isRegionVisible || isLoginVisible || isWorkspaceVisible) {
       return frame;
     }
   }

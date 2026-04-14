@@ -19,6 +19,7 @@ import {
   readPaletteSnapshot,
   readViewportGutterSnapshot,
   readWebviewBodyClasses,
+  relaunchExtensionHost,
   resolveSapToolsLoginFrame,
   selectDefaultScope,
   type ShellNodeStabilitySnapshot,
@@ -511,6 +512,129 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
       ).toBeVisible();
       await expect(confirmButton).toBeEnabled();
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User keeps confirmed scope after closing and reopening extension host', async () => {
+    let session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+
+      session = await relaunchExtensionHost(session);
+
+      const reopenedFrame = await openSapToolsSidebar(session.window);
+      await expect(
+        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 20000 });
+      await expect(reopenedFrame.locator('.workspace-context')).toContainText(
+        'Region: us-10. Org: finance-services-prod. Space: uat'
+      );
+      await expect(
+        reopenedFrame.getByRole('button', { name: 'Confirm Scope' })
+      ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User restores confirmed scope after logging out and logging in again in same session', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
+      await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Logout' }));
+
+      const loginFrame = await resolveSapToolsLoginFrame(session.window);
+      await expect(loginFrame.getByRole('heading', { name: 'SAP Tools Login' })).toBeVisible({
+        timeout: 15000,
+      });
+      await loginFrame.getByLabel('SAP Email').fill('test@example.com');
+      await loginFrame.getByLabel('SAP Password').fill('test-password');
+      await clickWithFallback(loginFrame.getByRole('button', { name: 'Save and Continue' }));
+
+      const reloadedFrame = await openSapToolsSidebar(session.window);
+      await expect(
+        reloadedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 20000 });
+      await expect(reloadedFrame.locator('.workspace-context')).toContainText(
+        'Region: us-10. Org: finance-services-prod. Space: uat'
+      );
+      await expect(
+        reloadedFrame.getByRole('button', { name: 'Confirm Scope' })
+      ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees smooth region hover without notch clipping artifacts', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+
+      const styleSnapshot = await webviewFrame.evaluate(() => {
+        const areaOption = document.querySelector('.area-option');
+        const regionLayout = document.querySelector('.region-layout');
+        const regionOption = regionLayout?.querySelector('.region-option');
+        if (
+          !(areaOption instanceof HTMLElement) ||
+          !(regionLayout instanceof HTMLElement) ||
+          !(regionOption instanceof HTMLElement)
+        ) {
+          return null;
+        }
+
+        const areaStyle = getComputedStyle(areaOption);
+        const regionStyle = getComputedStyle(regionOption);
+        regionOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+
+        const layoutRect = regionLayout.getBoundingClientRect();
+        const optionRect = regionOption.getBoundingClientRect();
+        return {
+          areaClipPath: areaStyle.clipPath,
+          regionBorderTopColor: regionStyle.borderTopColor,
+          regionTopDelta: optionRect.top - layoutRect.top,
+        };
+      });
+
+      expect(styleSnapshot).not.toBeNull();
+      if (styleSnapshot === null) {
+        return;
+      }
+
+      expect(styleSnapshot.areaClipPath).toBe('none');
+      expect(styleSnapshot.regionBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.regionTopDelta).toBeGreaterThanOrEqual(0.4);
     } finally {
       await cleanupExtensionHost(session);
     }

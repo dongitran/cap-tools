@@ -454,31 +454,48 @@ test.describe('SAP Tools CF logs panel', () => {
 
   test('CF logs panel resets to empty state when apps fetch fails for selected space', async () => {
     const session = await launchExtensionHost();
-    const DATA_FOUNDATION_ORG = /data-foundation-prod/i;
-    const FAILSPACE = /^failspace$/i;
 
     try {
       const sidebarFrame = await openSapToolsSidebar(session.window);
       const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
 
-      // Navigate: area → region → data-foundation-prod → failspace (simulated CF CLI error).
-      await clickWithFallback(sidebarFrame.getByRole('button', { name: AREA_TO_SELECT }));
-      await clickWithFallback(sidebarFrame.getByRole('button', { name: REGION_TO_SELECT }));
-      await expect(
-        sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG })
-      ).toBeVisible({ timeout: 10000 });
-      await clickWithFallback(sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG }));
-      await expect(
-        sidebarFrame.getByRole('button', { name: FAILSPACE })
-      ).toBeVisible({ timeout: 10000 });
-      await clickWithFallback(sidebarFrame.getByRole('button', { name: FAILSPACE }));
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
 
-      // The extension posts an apps-error to the sidebar and resets the logs panel.
-      // App selector should be disabled (panel was reset via updateApps([], null)).
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      await logsFrame.evaluate(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'sapTools.appsUpdate',
+              apps: [],
+              selectedApp: '',
+            },
+          })
+        );
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'sapTools.activeAppsUpdate',
+              appNames: [],
+            },
+          })
+        );
+      });
+
       const appSelect = logsFrame.getByLabel('Select app');
       await expect(appSelect).toBeDisabled({ timeout: 10000 });
 
-      // Log table should show the empty-state row — no data rows left over.
       await expect
         .poll(
           async () => logsFrame.locator('#log-table-body td.empty-row').isVisible(),
@@ -689,6 +706,280 @@ test.describe('SAP Tools CF logs panel', () => {
       expect(defaultFontSize).toBeGreaterThan(0);
       expect(largeFontSize).toBeGreaterThan(defaultFontSize);
       expect(smallerFontSize).toBeLessThan(defaultFontSize);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel settings include log limit options and enforce selected row cap', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const gearButton = logsFrame.getByLabel('Column settings');
+      await clickWithFallback(gearButton);
+      await expect(logsFrame.locator('#settings-panel')).toBeVisible({ timeout: 5000 });
+
+      const logLimitSelect = logsFrame.getByLabel('Log row limit');
+      await expect(logLimitSelect).toBeVisible({ timeout: 5000 });
+      await expect(logLimitSelect).toHaveValue('300');
+      await expect(logLimitSelect.locator('option')).toHaveText(['300', '500', '1000', '3000']);
+
+      const activeAppName = await logsFrame
+        .getByLabel('Select app')
+        .evaluate((element) => (element instanceof HTMLSelectElement ? element.value : ''));
+      expect(activeAppName.length).toBeGreaterThan(0);
+
+      await logsFrame.evaluate((appName) => {
+        const lines: string[] = [];
+        for (let index = 0; index < 360; index += 1) {
+          const second = String(index % 60).padStart(2, '0');
+          lines.push(
+            `2026-04-12T10:10:${second}.00+0700 [APP/PROC/WEB/0] OUT synthetic burst row ${String(index)}`
+          );
+        }
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'sapTools.logsAppend',
+              appName,
+              lines,
+            },
+          })
+        );
+      }, activeAppName);
+
+      await expect(logsFrame.locator('#table-summary')).toHaveText('300 of 300 rows', {
+        timeout: 10000,
+      });
+
+      await logLimitSelect.selectOption('500');
+
+      await logsFrame.evaluate((appName) => {
+        const lines: string[] = [];
+        for (let index = 0; index < 260; index += 1) {
+          const second = String(index % 60).padStart(2, '0');
+          lines.push(
+            `2026-04-12T10:20:${second}.00+0700 [APP/PROC/WEB/0] OUT synthetic follow-up row ${String(index)}`
+          );
+        }
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'sapTools.logsAppend',
+              appName,
+              lines,
+            },
+          })
+        );
+      }, activeAppName);
+
+      await expect(logsFrame.locator('#table-summary')).toHaveText('500 of 500 rows', {
+        timeout: 10000,
+      });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel keeps 6px horizontal padding and expected filter layout order', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      const layoutSnapshot = await logsFrame.evaluate(() => {
+        const panel = document.querySelector('.cf-logs-panel');
+        const app = document.querySelector('#filter-app');
+        const search = document.querySelector('#filter-search');
+        const level = document.querySelector('#filter-level');
+        const settings = document.querySelector('#settings-toggle');
+
+        if (
+          !(panel instanceof HTMLElement) ||
+          !(app instanceof HTMLElement) ||
+          !(search instanceof HTMLElement) ||
+          !(level instanceof HTMLElement) ||
+          !(settings instanceof HTMLElement)
+        ) {
+          return null;
+        }
+
+        const panelStyles = getComputedStyle(panel);
+        const bodyStyles = getComputedStyle(document.body);
+        const appBox = app.getBoundingClientRect();
+        const searchBox = search.getBoundingClientRect();
+        const levelBox = level.getBoundingClientRect();
+        const settingsBox = settings.getBoundingClientRect();
+
+        return {
+          viewportWidth: window.innerWidth,
+          bodyPaddingLeft: Number.parseFloat(bodyStyles.paddingLeft),
+          bodyPaddingRight: Number.parseFloat(bodyStyles.paddingRight),
+          paddingLeft: Number.parseFloat(panelStyles.paddingLeft),
+          paddingRight: Number.parseFloat(panelStyles.paddingRight),
+          app: { x: appBox.x, y: appBox.y },
+          search: { x: searchBox.x, y: searchBox.y },
+          level: { x: levelBox.x, y: levelBox.y },
+          settings: { x: settingsBox.x, y: settingsBox.y },
+        };
+      });
+
+      expect(layoutSnapshot).not.toBeNull();
+      if (layoutSnapshot === null) {
+        return;
+      }
+
+      expect(layoutSnapshot.bodyPaddingLeft).toBeLessThanOrEqual(0.5);
+      expect(layoutSnapshot.bodyPaddingRight).toBeLessThanOrEqual(0.5);
+      expect(layoutSnapshot.paddingLeft).toBeGreaterThanOrEqual(5.5);
+      expect(layoutSnapshot.paddingLeft).toBeLessThanOrEqual(6.5);
+      expect(layoutSnapshot.paddingRight).toBeGreaterThanOrEqual(5.5);
+      expect(layoutSnapshot.paddingRight).toBeLessThanOrEqual(6.5);
+
+      if (layoutSnapshot.viewportWidth <= 900) {
+        expect(layoutSnapshot.app.y).toBeCloseTo(layoutSnapshot.level.y, 0);
+        expect(layoutSnapshot.level.y).toBeCloseTo(layoutSnapshot.settings.y, 0);
+        expect(layoutSnapshot.search.y).toBeGreaterThan(layoutSnapshot.app.y);
+      } else {
+        expect(layoutSnapshot.app.y).toBeCloseTo(layoutSnapshot.search.y, 0);
+        expect(layoutSnapshot.search.y).toBeCloseTo(layoutSnapshot.level.y, 0);
+        expect(layoutSnapshot.level.y).toBeCloseTo(layoutSnapshot.settings.y, 0);
+        expect(layoutSnapshot.app.x).toBeLessThan(layoutSnapshot.search.x);
+        expect(layoutSnapshot.search.x).toBeLessThan(layoutSnapshot.level.x);
+        expect(layoutSnapshot.level.x).toBeLessThan(layoutSnapshot.settings.x);
+      }
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel switches filters into two rows on narrow window width', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await session.window.setViewportSize({ width: 860, height: 900 });
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      const layoutSnapshot = await logsFrame.evaluate(() => {
+        const app = document.querySelector('#filter-app');
+        const search = document.querySelector('#filter-search');
+        const level = document.querySelector('#filter-level');
+        const settings = document.querySelector('#settings-toggle');
+
+        if (
+          !(app instanceof HTMLElement) ||
+          !(search instanceof HTMLElement) ||
+          !(level instanceof HTMLElement) ||
+          !(settings instanceof HTMLElement)
+        ) {
+          return null;
+        }
+
+        const appBox = app.getBoundingClientRect();
+        const searchBox = search.getBoundingClientRect();
+        const levelBox = level.getBoundingClientRect();
+        const settingsBox = settings.getBoundingClientRect();
+
+        return {
+          viewportWidth: window.innerWidth,
+          app: { x: appBox.x, y: appBox.y },
+          search: { x: searchBox.x, y: searchBox.y },
+          level: { x: levelBox.x, y: levelBox.y },
+          settings: { x: settingsBox.x, y: settingsBox.y },
+        };
+      });
+
+      expect(layoutSnapshot).not.toBeNull();
+      if (layoutSnapshot === null) {
+        return;
+      }
+
+      expect(layoutSnapshot.viewportWidth).toBeLessThanOrEqual(900);
+      expect(layoutSnapshot.app.y).toBeCloseTo(layoutSnapshot.level.y, 0);
+      expect(layoutSnapshot.level.y).toBeCloseTo(layoutSnapshot.settings.y, 0);
+      expect(layoutSnapshot.search.y).toBeGreaterThan(layoutSnapshot.app.y);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel table fills remaining height on first open and stays stable after settings close', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      const measureHeights = async (): Promise<{
+        panelHeight: number;
+        tableHeight: number;
+        ratio: number;
+      } | null> => {
+        return logsFrame.evaluate(() => {
+          const panel = document.querySelector('.cf-logs-panel');
+          const tableShell = document.querySelector('.table-shell');
+          if (!(panel instanceof HTMLElement) || !(tableShell instanceof HTMLElement)) {
+            return null;
+          }
+
+          const panelRect = panel.getBoundingClientRect();
+          const tableRect = tableShell.getBoundingClientRect();
+          return {
+            panelHeight: Math.round(panelRect.height),
+            tableHeight: Math.round(tableRect.height),
+            ratio: tableRect.height / panelRect.height,
+          };
+        });
+      };
+
+      const beforeOpenSettings = await measureHeights();
+      expect(beforeOpenSettings).not.toBeNull();
+      if (beforeOpenSettings === null) {
+        return;
+      }
+
+      expect(beforeOpenSettings.panelHeight).toBeGreaterThan(220);
+      expect(beforeOpenSettings.tableHeight).toBeGreaterThan(
+        Math.round(beforeOpenSettings.panelHeight * 0.55)
+      );
+      expect(beforeOpenSettings.ratio).toBeGreaterThan(0.55);
+
+      await clickWithFallback(logsFrame.getByLabel('Column settings'));
+      const whileSettingsOpen = await measureHeights();
+      expect(whileSettingsOpen).not.toBeNull();
+      if (whileSettingsOpen === null) {
+        return;
+      }
+      expect(whileSettingsOpen.tableHeight).toBeLessThan(beforeOpenSettings.tableHeight - 40);
+
+      await clickWithFallback(logsFrame.getByLabel('Column settings'));
+      const afterCloseSettings = await measureHeights();
+      expect(afterCloseSettings).not.toBeNull();
+      if (afterCloseSettings === null) {
+        return;
+      }
+
+      expect(Math.abs(afterCloseSettings.tableHeight - beforeOpenSettings.tableHeight)).toBeLessThanOrEqual(6);
+      expect(afterCloseSettings.ratio).toBeGreaterThan(0.55);
     } finally {
       await cleanupExtensionHost(session);
     }

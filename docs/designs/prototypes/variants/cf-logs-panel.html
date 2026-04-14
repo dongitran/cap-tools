@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CFLogs Panel Prototype</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260414i" />
+    <link rel="stylesheet" href="../assets/cf-logs-panel.css?v=20260414n" />
   </head>
   <body class="cf-logs-panel-page vscode-dark">
     <main class="panel-prototype-shell">
@@ -79,6 +79,19 @@
                 <option value="xlarge">Extra Large</option>
               </select>
             </div>
+            <div class="settings-row settings-row-limit">
+              <label for="settings-log-limit" class="settings-panel-label">Log Limit</label>
+              <select
+                id="settings-log-limit"
+                class="settings-font-size-select settings-log-limit-select"
+                aria-label="Log row limit"
+              >
+                <option value="300" selected>300</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+                <option value="3000">3000</option>
+              </select>
+            </div>
           </div>
 
           <div class="table-shell" role="region" aria-label="Filtered logs table">
@@ -97,6 +110,6 @@
     <!-- Toast shown briefly when a row is clicked and message is copied -->
     <div class="copy-toast" id="copy-toast" role="status" aria-live="polite" aria-atomic="true">Copied!</div>
 
-    <script type="module" src="../assets/cf-logs-panel.js?v=20260414i"></script>
+    <script type="module" src="../assets/cf-logs-panel.js?v=20260414n"></script>
   </body>
 </html>
