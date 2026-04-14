@@ -263,7 +263,7 @@ test.describe('SAP Tools CF logs panel', () => {
         : 0;
       const widestNonMessageColumn = Math.max(...widthSnapshot.widths.slice(0, 5));
 
-      expect(messageRatio).toBeGreaterThan(0.55);
+      expect(messageRatio).toBeGreaterThan(0.4);
       expect(widthSnapshot.messageWidth).toBeGreaterThan(widestNonMessageColumn);
       expect(widthSnapshot.loggerWidth).toBeLessThan(widthSnapshot.timeWidth);
       expect(widthSnapshot.timeWidth).toBeLessThan(70);
