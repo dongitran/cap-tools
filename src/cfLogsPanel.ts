@@ -741,12 +741,7 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
   </head>
   <body class="cf-logs-panel-page">
     <section class="cf-logs-panel" aria-label="CFLogs panel content">
-      <header class="workspace-head">
-        <div class="workspace-title-row">
-          <h1>Monitoring Workspace</h1>
-          <p id="workspace-scope" class="workspace-scope">No scope selected</p>
-        </div>
-      </header>
+      <p id="workspace-scope" class="workspace-scope" hidden></p>
 
       <section class="filter-inline" aria-label="CF log filters">
         <div class="filter-item filter-item-app">
