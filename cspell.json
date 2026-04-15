@@ -59,6 +59,8 @@
     "noapps",
     "failspace",
     "hanacloud",
+    "gorouter",
+    "isco",
     "sqltools",
     "upsert",
     "upserts",

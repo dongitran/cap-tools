@@ -1,4 +1,4 @@
-// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate copylog
+// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate copylog gorouter routererror
 import * as vscode from 'vscode';
 import {
   fetchRecentAppLogsFromTarget,
@@ -56,7 +56,10 @@ const TEST_MODE_SAMPLE_LOGS = `Retrieving logs for app finance-uat-api in org fi
 2026-04-12T09:14:47.26+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.260Z","component_name":"finance-uat-api","organization_name":"finance-services-prod","space_name":"uat","msg":"loaded model from 1 file(s)","type":"log"}
 2026-04-12T09:14:47.90+0700 [APP/PROC/WEB/0] OUT {"level":"warn","logger":"cds","timestamp":"2026-04-12T02:14:47.904Z","component_name":"finance-uat-api","organization_name":"finance-services-prod","space_name":"uat","msg":"using auth strategy jwt with fallback mode","type":"log"}
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-uat-api","organization_name":"finance-services-prod","space_name":"uat","msg":"server listening on http://localhost:8080","type":"log"}
-2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-uat-api","organization_name":"finance-services-prod","space_name":"uat","msg":"database retry exhausted on startup","type":"log"}`;
+2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-uat-api","organization_name":"finance-services-prod","space_name":"uat","msg":"database retry exhausted on startup","type":"log"}
+2026-04-12T09:14:48.20+0700 [RTR/0] OUT finance-uat-api.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.200Z] "GET /rtr-health-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" x_forwarded_for:"1.2.3.4" x_forwarded_proto:"https" vcap_request_id:"rtr-req-001" response_time:0.001 gorouter_time:0.000010 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"aabbccdd" x_b3_spanid:"aabbccdd" b3:"aabbccdd-aabbccdd"
+2026-04-12T09:14:48.25+0700 [RTR/0] OUT finance-uat-api.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.250Z] "GET /rtr-not-found HTTP/1.1" 404 80 10 "-" "curl/7.88.1" "10.0.1.2:1002" "10.0.2.2:2002" x_forwarded_for:"1.2.3.5" x_forwarded_proto:"https" vcap_request_id:"rtr-req-002" response_time:0.000 gorouter_time:0.000009 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"bbccddee" x_b3_spanid:"bbccddee" b3:"bbccddee-bbccddee"
+2026-04-12T09:14:48.30+0700 [RTR/0] OUT finance-uat-api.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.300Z] "POST /rtr-upstream-fail HTTP/1.1" 500 120 10 "-" "axios/1.0.0" "10.0.1.3:1003" "10.0.2.3:2003" x_forwarded_for:"1.2.3.6" x_forwarded_proto:"https" vcap_request_id:"rtr-req-003" response_time:0.123 gorouter_time:0.000011 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"ccddeeff" x_b3_spanid:"ccddeeff" b3:"ccddeeff-ccddeeff"`;
 /* cspell:enable */
 
 /**

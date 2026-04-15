@@ -1,4 +1,4 @@
-// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate copylog guid
+// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate copylog guid gorouter routererror
 const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
 const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
@@ -78,7 +78,10 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-a
 2026-04-12T09:14:47.90+0700 [APP/PROC/WEB/0] OUT {"level":"warn","logger":"cds","timestamp":"2026-04-12T02:14:47.904Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"using auth strategy jwt with fallback mode","type":"log"}
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT Server is listening at http://localhost:8080
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"server listening on { url: 'http://localhost:8080' }","type":"log"}
-2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}`;
+2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}
+2026-04-12T09:14:48.20+0700 [RTR/0] OUT finance-config-admin.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.200Z] "GET /rtr-health-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" x_forwarded_for:"1.2.3.4" x_forwarded_proto:"https" vcap_request_id:"rtr-req-001" response_time:0.001 gorouter_time:0.000010 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"aabbccdd" x_b3_spanid:"aabbccdd" b3:"aabbccdd-aabbccdd"
+2026-04-12T09:14:48.25+0700 [RTR/0] OUT finance-config-admin.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.250Z] "GET /rtr-not-found HTTP/1.1" 404 80 10 "-" "curl/7.88.1" "10.0.1.2:1002" "10.0.2.2:2002" x_forwarded_for:"1.2.3.5" x_forwarded_proto:"https" vcap_request_id:"rtr-req-002" response_time:0.000 gorouter_time:0.000009 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"bbccddee" x_b3_spanid:"bbccddee" b3:"bbccddee-bbccddee"
+2026-04-12T09:14:48.30+0700 [RTR/0] OUT finance-config-admin.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.300Z] "POST /rtr-upstream-fail HTTP/1.1" 500 120 10 "-" "axios/1.0.0" "10.0.1.3:1003" "10.0.2.3:2003" x_forwarded_for:"1.2.3.6" x_forwarded_proto:"https" vcap_request_id:"rtr-req-003" response_time:0.123 gorouter_time:0.000011 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"ccddeeff" x_b3_spanid:"ccddeeff" b3:"ccddeeff-ccddeeff"`;
 /* cspell:enable */
 
 // ── Column visibility state ───────────────────────────────────────────────────
@@ -118,6 +121,8 @@ let latestApps = [];
 let rawLogTextByApp = new Map();
 let parsedRowsByApp = new Map();
 let streamStateByApp = new Map();
+let scheduledRenderFrame = null;
+let hasPendingLevelHydration = false;
 let isLogsRequestInFlight = false;
 let pendingRequestAppName = '';
 let nextCopyRequestId = 0;
@@ -261,6 +266,12 @@ function parseCfRecentLog(rawText) {
     if (previousRow !== null) {
       previousRow.message = `${previousRow.message}\n${trimmedLine}`;
       previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
+      previousRow.level = normalizeLevel(
+        resolveCandidateLevel(previousRow),
+        previousRow.stream,
+        previousRow.message,
+        previousRow.source
+      );
       previousRow.searchableText = buildSearchableText(previousRow);
       continue;
     }
@@ -317,7 +328,7 @@ function parseJsonBody(body) {
 function buildTextRow({ id, timestamp, source, stream, body }) {
   const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = body.length > 0 ? body : '(empty)';
-  const level = normalizeLevel('', stream, message);
+  const level = normalizeLevel('', stream, message, source);
   const row = {
     id,
     timestamp: formattedTimestamp,
@@ -343,7 +354,7 @@ function buildTextRow({ id, timestamp, source, stream, body }) {
 function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
   const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = readString(payload.msg) || body;
-  const level = normalizeLevel(readString(payload.level), stream, message);
+  const level = normalizeLevel(readString(payload.level), stream, message, source);
   const row = {
     id,
     timestamp: formattedTimestamp,
@@ -366,6 +377,14 @@ function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
   return row;
 }
 
+function resolveCandidateLevel(row) {
+  if (row.format !== 'json' || row.jsonPayload === null || !isObjectRecord(row.jsonPayload)) {
+    return '';
+  }
+
+  return readString(row.jsonPayload.level);
+}
+
 function readString(value) {
   if (typeof value !== 'string') {
     return '';
@@ -380,7 +399,7 @@ function deriveLoggerFromSource(source) {
   return firstToken.length > 0 ? firstToken.toLowerCase() : 'source';
 }
 
-function normalizeLevel(candidateLevel, stream, message) {
+function normalizeLevel(candidateLevel, stream, message, source) {
   const normalizedCandidate = candidateLevel.trim().toLowerCase();
 
   if (normalizedCandidate === 'warning') {
@@ -391,21 +410,22 @@ function normalizeLevel(candidateLevel, stream, message) {
     return normalizedCandidate;
   }
 
-  const normalizedMessage = message.toLowerCase();
+  // RTR (gorouter) access logs contain metadata field names like x_cf_routererror
+  // and failed_attempts that would falsely trigger keyword-based level detection.
+  // Classify by HTTP status code instead.
+  if (typeof source === 'string' && /^rtr\b/i.test(source)) {
+    return classifyRtrLog(message);
+  }
 
-  if (normalizedMessage.includes('fatal')) {
+  if (/\bfatal\b/i.test(message)) {
     return 'fatal';
   }
 
-  if (
-    normalizedMessage.includes('error') ||
-    normalizedMessage.includes('exception') ||
-    normalizedMessage.includes('failed')
-  ) {
+  if (/\b(?:error|exception|failed)\b/i.test(message)) {
     return 'error';
   }
 
-  if (normalizedMessage.includes('warn')) {
+  if (/\bwarn(?:ing)?\b/i.test(message)) {
     return 'warn';
   }
 
@@ -413,6 +433,16 @@ function normalizeLevel(candidateLevel, stream, message) {
     return 'error';
   }
 
+  return 'info';
+}
+
+function classifyRtrLog(message) {
+  const match = /"[A-Z]+ [^ ]+ HTTP\/[\d.]+" (\d{3})/.exec(message);
+  if (match !== null) {
+    const status = parseInt(match[1], 10);
+    if (status >= 500) return 'error';
+    if (status >= 400) return 'warn';
+  }
   return 'info';
 }
 
@@ -556,11 +586,11 @@ function rebuildAppSelect(apps, selectedApp) {
 
 function bindFilterEvents() {
   elements.filters.search.addEventListener('input', () => {
-    applyFiltersAndRender();
+    runFiltersRenderNow();
   });
 
   elements.filters.level.addEventListener('change', () => {
-    applyFiltersAndRender();
+    runFiltersRenderNow();
   });
 
   elements.filters.app.addEventListener('change', () => {
@@ -659,7 +689,7 @@ function handleLogsError(appName, message, requestId) {
   emptyStateMessage = `Failed to load logs for ${appName}: ${message}`;
   // Reset level filter so stale options from a previous successful load are cleared.
   hydrateDynamicFilterOptions([]);
-  applyFiltersAndRender();
+  runFiltersRenderNow();
 }
 
 function handleLogsAppend(appName, lines) {
@@ -681,18 +711,18 @@ function handleLogsAppend(appName, lines) {
 
   if (elements.filters.app.value === appName) {
     const parsedRows = appendParsedLinesForApp(appName, textLines);
-    showRowsForSelectedApp(appName, parsedRows);
+    showRowsForSelectedApp(appName, parsedRows, true);
     return;
   }
 
-  // Defer parsing for non-selected apps to reduce UI CPU load under multi-app streams.
-  parsedRowsByApp.delete(appName);
+  // Keep parsed cache warm for faster service switching from the app dropdown.
+  appendParsedLinesForApp(appName, textLines);
 }
 
 function handleLogsStreamState(appName, status, message) {
   streamStateByApp.set(appName, { status, message: typeof message === 'string' ? message : '' });
   if (elements.filters.app.value === appName) {
-    applyFiltersAndRender();
+    runFiltersRenderNow();
   }
 }
 
@@ -870,7 +900,7 @@ function clearTableToMessage(message) {
   pendingRequestAppName = '';
   emptyStateMessage = message;
   hydrateDynamicFilterOptions([]);
-  applyFiltersAndRender();
+  runFiltersRenderNow();
 }
 
 function refreshAppSelectorAndLogs(preferredAppName) {
@@ -926,13 +956,18 @@ function appendRawLogText(existingText, appendedText) {
   return mergedText.slice(mergedText.length - charCap);
 }
 
-function showRowsForSelectedApp(appName, rows) {
+function showRowsForSelectedApp(appName, rows, deferRender = false) {
   allRows = rows.slice();
   filteredRows = [];
   selectedRowId = null;
   emptyStateMessage = `No log entries found for ${appName}.`;
+  if (deferRender) {
+    hasPendingLevelHydration = true;
+    scheduleFiltersRender();
+    return;
+  }
   hydrateDynamicFilterOptions(allRows);
-  applyFiltersAndRender();
+  runFiltersRenderNow();
 }
 
 function resolveParsedRowsForApp(appName) {
@@ -979,6 +1014,12 @@ function appendParsedLinesForApp(appName, textLines) {
     if (previousRow !== null) {
       previousRow.message = `${previousRow.message}\n${trimmedLine}`;
       previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
+      previousRow.level = normalizeLevel(
+        resolveCandidateLevel(previousRow),
+        previousRow.stream,
+        previousRow.message,
+        previousRow.source
+      );
       previousRow.searchableText = buildSearchableText(previousRow);
       continue;
     }
@@ -1048,11 +1089,40 @@ function reconcileRowsToCurrentLogLimit() {
   }
 
   allRows = trimRowsForMemory(allRows.slice());
-  applyFiltersAndRender();
+  runFiltersRenderNow();
 }
 
 
 // ── Render ───────────────────────────────────────────────────────────────────
+
+function scheduleFiltersRender() {
+  if (scheduledRenderFrame !== null) {
+    return;
+  }
+
+  scheduledRenderFrame = window.requestAnimationFrame(() => {
+    scheduledRenderFrame = null;
+    if (hasPendingLevelHydration) {
+      hydrateDynamicFilterOptions(allRows);
+      hasPendingLevelHydration = false;
+    }
+    applyFiltersAndRender();
+  });
+}
+
+function runFiltersRenderNow() {
+  if (scheduledRenderFrame !== null) {
+    window.cancelAnimationFrame(scheduledRenderFrame);
+    scheduledRenderFrame = null;
+  }
+
+  if (hasPendingLevelHydration) {
+    hydrateDynamicFilterOptions(allRows);
+    hasPendingLevelHydration = false;
+  }
+
+  applyFiltersAndRender();
+}
 
 function applyFiltersAndRender() {
   const searchTerm = elements.filters.search.value.trim().toLowerCase();

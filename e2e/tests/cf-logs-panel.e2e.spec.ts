@@ -366,6 +366,106 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
+  test('CF logs panel classifies RTR access logs by HTTP status code', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const searchBox = logsFrame.getByLabel('Search logs');
+
+      await searchBox.fill('rtr-health-check');
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.col-level .badge')
+      ).toHaveText('INFO');
+
+      await searchBox.fill('rtr-not-found');
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.col-level .badge')
+      ).toHaveText('WARN');
+
+      await searchBox.fill('rtr-upstream-fail');
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.col-level .badge')
+      ).toHaveText('ERROR');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel escalates multiline stack traces to error level', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const activeAppName = await logsFrame
+        .getByLabel('Select app')
+        .evaluate((element) => (element instanceof HTMLSelectElement ? element.value : ''));
+      expect(activeAppName.length).toBeGreaterThan(0);
+
+      await logsFrame.evaluate((appName) => {
+        const lines = [
+          '2026-04-15T19:12:40.00+0700 [APP/PROC/WEB/0] OUT Warning while calling MainService/getMaterialMulesoftData',
+          '400 - Error: No Valid Data Found. Please check key combination Material and/or Base UoM',
+          '    at ActionGetMaterialMulesoftDataHandler.getMaterialMulesoftData (/srv/functions/Main/ActionGetMaterialMulesoftDataHandler.ts:41:20)',
+        ];
+
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'sapTools.logsAppend',
+              appName,
+              lines,
+            },
+          })
+        );
+      }, activeAppName);
+
+      const searchBox = logsFrame.getByLabel('Search logs');
+      await searchBox.fill('No Valid Data Found');
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.col-level .badge')
+      ).toHaveText('ERROR');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('CF logs panel dropdown removes app after stop logging from sidebar', async () => {
     const session = await launchExtensionHost();
 
@@ -960,6 +1060,86 @@ test.describe('SAP Tools CF logs panel', () => {
       expect(layoutSnapshot.app.y).toBeCloseTo(layoutSnapshot.level.y, 0);
       expect(layoutSnapshot.level.y).toBeCloseTo(layoutSnapshot.settings.y, 0);
       expect(layoutSnapshot.search.y).toBeGreaterThan(layoutSnapshot.app.y);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel coalesces stream burst rerenders during live updates', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const rerenderCount = await logsFrame.evaluate(async () => {
+        const tableBody = document.querySelector('#log-table-body');
+        const appSelect = document.querySelector('#filter-app');
+
+        if (!(tableBody instanceof HTMLTableSectionElement)) {
+          return -1;
+        }
+        if (!(appSelect instanceof HTMLSelectElement) || appSelect.value.length === 0) {
+          return -2;
+        }
+
+        const targetApp = appSelect.value;
+        const originalReplaceChildren = tableBody.replaceChildren.bind(tableBody);
+        let replaceCount = 0;
+
+        tableBody.replaceChildren = (
+          ...args: Parameters<typeof tableBody.replaceChildren>
+        ): void => {
+          replaceCount += 1;
+          originalReplaceChildren(...args);
+        };
+
+        for (let index = 0; index < 80; index += 1) {
+          const second = String(index % 60).padStart(2, '0');
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              data: {
+                type: 'sapTools.logsAppend',
+                appName: targetApp,
+                lines: [
+                  `2026-04-12T10:45:${second}.00+0700 [APP/PROC/WEB/0] OUT synthetic burst row ${String(index)}`,
+                ],
+              },
+            })
+          );
+        }
+
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+
+        tableBody.replaceChildren = originalReplaceChildren;
+        return replaceCount;
+      });
+
+      expect(rerenderCount).toBeGreaterThan(0);
+      expect(rerenderCount).toBeLessThanOrEqual(20);
     } finally {
       await cleanupExtensionHost(session);
     }

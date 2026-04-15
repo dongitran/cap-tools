@@ -1,120 +1,68 @@
-# Implementation Plan — CFLogs Full-Height + Confirm Scope Persistence + Region Tile Visual Fixes
+# Implementation Plan — CFLogs Level Classification Accuracy
 
 ## Goals
-1. Fix CFLogs initial layout so the log table area always fills remaining panel height immediately on first open (without requiring settings toggle or incoming logs).
-2. Persist the last **confirmed** scope (area/region/org/space) and restore it after VS Code reload/reopen.
-3. Fix region tile visuals in selector UI:
-   - remove/avoid right-edge cut visual artifact (white corner look),
-   - keep top border visible during hover lift animation for first-row tiles.
-
-## Scope (files expected)
-- Prototype (must update first)
-  - `docs/designs/prototypes/assets/cf-logs-panel.css`
-  - `docs/designs/prototypes/assets/prototype.css`
-  - `docs/designs/prototypes/assets/themes/design.css` (if needed for theme-34 overrides)
-  - `docs/designs/prototypes/assets/prototype.js` (if behavior/state flow preview changes)
-  - `docs/designs/prototypes/variants/cf-logs-panel.html` (if structure changes)
-  - `docs/designs/prototypes/variants/design.html` (cache-bust only if needed)
-- Extension implementation
-  - `src/cfLogsPanel.ts`
-  - `src/sidebarProvider.ts`
-  - `docs/designs/prototypes/assets/prototype.js` (shared webview logic used by extension)
-  - `docs/designs/prototypes/assets/prototype.css` (shared webview styles used by extension)
-- Tests
-  - `e2e/tests/cf-logs-panel.e2e.spec.ts`
-  - `e2e/tests/region-selector-ui.e2e.spec.ts`
-  - unit tests if needed for persistence helpers in `src/**/*.test.ts`
-- Release metadata
-  - `package.json` (version bump after all validations pass)
-
-## Deep Analysis Notes
-- `RegionSidebarProvider.resolveWebviewView()` currently resets selection fields (`selectedRegionCode`, `selectedOrgGuid`, etc.) on every webview resolve; no persisted confirmed scope is replayed.
-- Webview selection mode in `prototype.js` is runtime-only state (`selectedRegionId`, `selectedOrgId`, `selectedSpaceId`, `mode`) and is lost after reload.
-- CFLogs layout relies on CSS grid with `.cf-logs-panel { grid-template-rows: auto auto minmax(0,1fr) auto; height: 100%; }`; initial short table behavior indicates missing/unstable definite parent height on first paint in extension context.
-- Region hover clipping is consistent with upward transform inside a scroll container (`.region-layout` with overflow), where first-row upward movement can be clipped.
+1. Fix false-positive `ERROR` for gorouter access logs (`[RTR/*]`) with HTTP `200`.
+2. Fix false-negative multiline stacktrace rows that stay at `WARN` after continuation lines contain `Error`.
+3. Keep prototype and extension runtime behavior identical.
+4. Validate deeply with E2E and full quality gates before release.
 
 ## Mandatory Order
-1. Prototype-first changes.
-2. Verify prototype with MCP Playwright.
-3. TDD: add/update tests first, run and confirm failing expectations for new requirements.
-4. Implement extension code.
-5. Re-run tests/validation and fix regressions.
-6. Final review, bump version, commit, push, monitor Actions.
+1. Review current uncommitted diff and trace parsing/level flow end-to-end.
+2. Update prototype assets first (`docs/designs/prototypes/assets/*`).
+3. Verify prototype behavior with MCP Playwright.
+4. Add/update E2E tests first for real failure modes.
+5. Implement/finalize runtime fix in shared webview asset.
+6. Run full validation and only then release steps.
 
-## Detailed Steps
+## Scope
+- `docs/designs/prototypes/assets/cf-logs-panel.js`
+- `docs/designs/prototypes/variants/cf-logs-panel.html` (cache-bust sync)
+- `e2e/tests/cf-logs-panel.e2e.spec.ts`
+- `src/cfLogsPanel.ts` (sample parity only if needed)
 
-### Step A — Prototype update (UI-first)
-1. CFLogs prototype full-height behavior
-- Ensure root containers (`html`, `body`, panel wrapper, `.cf-logs-panel`) establish definite height chain.
-- Ensure `.table-shell` consumes the `1fr` track immediately on first render.
-- Ensure no overflow pushes content outside panel; scrolling must stay inside table shell.
+## Root Cause Analysis Focus
+1. Keyword-only detection (`error`, `failed`) can misclassify RTR metadata fields like `x_cf_routererror`, `failed_attempts`.
+2. Continuation lines (without timestamp/source prefix) are appended to previous row but level was not recomputed.
+3. Under continuation, row severity can remain stale (`warn`) even when appended stacktrace clearly includes `Error`.
 
-2. Region tile visual fixes
-- Remove notch/cut artifact for region/area tiles where needed.
-- Keep hover motion but prevent top border clipping in first row (padding/overflow strategy or hover strategy refinement).
-- Preserve current selected/collapsed behavior.
+## Implementation Steps
 
-3. (If needed) small behavior updates in prototype JS
-- Keep existing stage rerender optimization intact.
-- No regressions for collapsed flows and Change buttons.
+### Step A — Prototype Fix First
+1. Keep RTR special handling by HTTP status extraction:
+- `2xx/3xx -> info`
+- `4xx -> warn`
+- `5xx -> error`
+2. Recompute row level every time a continuation line is appended:
+- in `parseCfRecentLog(...)`
+- in `appendParsedLinesForApp(...)`
+3. Preserve JSON-provided level candidate when available; otherwise fallback to message/stream heuristics.
 
-### Step B — Prototype verification via MCP Playwright
-1. Open `docs/designs/prototypes/index.html`.
-2. Verify main menu variant:
-- region tiles show full border (no right-edge white cut),
-- first-row hover keeps top border visible,
-- selection flow still works.
-3. Verify CFLogs variant:
-- on first load, table shell fills remaining panel height,
-- opening/closing settings does not cause drastic height jump.
+### Step B — Prototype Verification (MCP Playwright)
+1. Validate RTR `200` line no longer maps to `ERROR`.
+2. Validate multiline stacktrace line containing `Error` maps to `ERROR`.
+3. Re-check filter/app dropdown interactions after changes.
 
-### Step C — TDD updates before extension fix
-1. Add/update E2E tests for CFLogs full-height on initial load:
-- assert `table-shell` height occupies expected proportion of panel immediately before toggling settings and before log streaming.
-- assert settings toggle does not significantly change layout height baseline.
+### Step C — E2E (TDD)
+1. Add/keep tests:
+- RTR classification by status code.
+- Multiline continuation severity escalation to `ERROR`.
+- Burst rerender coalescing responsiveness guard.
+2. Run targeted E2E tests first, then full E2E suite.
 
-2. Add/update E2E tests for confirmed scope persistence:
-- select area/region/org/space + confirm,
-- reload window (or reopen session preserving user data),
-- assert workspace screen remains on confirmed scope and does not force re-selection.
-
-3. Add/update E2E tests for region visual stability (DOM-based where possible):
-- check style constraints relevant to notch/clip/hover container behavior.
-
-### Step D — Extension implementation
-1. Persist confirmed scope (host side)
-- Add a persisted key in extension storage, scoped by active user email.
-- Save scope only when user performs Confirm Scope action (not just partial selections).
-- On webview startup, restore scope by replaying region/org/space flow and sending UI restore signal.
-- Keep safe guards for missing/deleted org/space and stale cache.
-
-2. Webview message contract
-- Add new message type for Confirm Scope from webview → extension.
-- Add new message type(s) for restore state from extension → webview.
-- Preserve strict payload validation/type guards.
-
-3. CFLogs full-height in extension
-- Apply same proven prototype CSS layout chain fixes to extension webview assets.
-- Confirm no regressions on filters/settings/table scrolling.
-
-4. Region visual fixes in extension
-- Apply same prototype style updates used by extension webview.
-
-### Step E — Validation and hardening
+### Step D — Full Validation
 - `npm run validate:root`
 - `npm --prefix e2e run validate`
 - `npm --prefix e2e test`
-- If failures appear: analyze root cause (code vs test), fix, and rerun all required commands.
+- If any failure appears: analyze root cause, fix, and rerun all commands.
 
-### Step F — Release steps
-1. Bump `package.json` patch version after all checks pass.
-2. Rerun required validations if any post-bump files changed.
-3. Commit with clear scope.
-4. Push and monitor GitHub Actions; fix-forward until green.
+### Step E — Release Steps
+1. Increase `package.json` version (if extension runtime changed).
+2. Re-run validation after final changes.
+3. Commit and push.
+4. Review again after push and fix-forward if needed.
 
 ## Done Criteria
-- CFLogs table uses full remaining height at first open (no settings-toggle workaround needed).
-- Last confirmed scope is restored after reload/reopen for the same account.
-- Region tiles no longer show right-edge white-cut artifact; top border stays visually intact on hover.
-- Prototype, extension UI, and E2E tests are aligned.
-- Lint/typecheck/unit/cspell/E2E all pass.
+1. RTR `HTTP 200` logs no longer appear as `ERROR`.
+2. Multiline stacktrace rows with `Error` are shown as `ERROR`.
+3. No regression in dropdown responsiveness and rendering behavior.
+4. Lint/typecheck/test/cspell/E2E all pass.
