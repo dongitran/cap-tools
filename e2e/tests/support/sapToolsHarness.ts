@@ -340,14 +340,17 @@ export async function findCfLogsPanelFrame(window: Page): Promise<Frame | undefi
   return undefined;
 }
 
-export async function resolveSapToolsWebviewFrame(window: Page): Promise<Frame> {
+export async function resolveSapToolsWebviewFrame(
+  window: Page,
+  timeoutMs = 20000
+): Promise<Frame> {
   await expect
     .poll(
       async () => {
         const frame = await findSapToolsWebviewFrame(window);
         return frame?.url() ?? '';
       },
-      { timeout: 20000 }
+      { timeout: timeoutMs }
     )
     .toContain('vscode-webview://');
 
@@ -404,7 +407,12 @@ export async function openSapToolsSidebar(window: Page): Promise<Frame> {
   await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
   await clickWithFallback(sapToolsTab);
 
-  return resolveSapToolsWebviewFrame(window);
+  try {
+    return await resolveSapToolsWebviewFrame(window);
+  } catch {
+    await clickWithFallback(sapToolsTab);
+    return await resolveSapToolsWebviewFrame(window, 30000);
+  }
 }
 
 export async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
