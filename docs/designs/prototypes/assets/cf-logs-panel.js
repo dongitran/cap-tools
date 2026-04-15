@@ -32,6 +32,34 @@ const DEFAULT_FONT_SIZE_PRESET = 'default';
 const LOG_LIMIT_PRESETS = [300, 500, 1000, 3000];
 const DEFAULT_LOG_LIMIT = 300;
 
+function isKnownColumnId(value) {
+  return typeof value === 'string' && COLUMN_DEFS.some((column) => column.id === value);
+}
+
+function normalizeVisibleColumns(columnIds) {
+  const selected = new Set();
+  for (const columnId of columnIds) {
+    if (isKnownColumnId(columnId)) {
+      selected.add(columnId);
+    }
+  }
+
+  for (const column of COLUMN_DEFS) {
+    if (column.required) {
+      selected.add(column.id);
+    }
+  }
+
+  const normalized = [];
+  for (const column of COLUMN_DEFS) {
+    if (selected.has(column.id)) {
+      normalized.push(column.id);
+    }
+  }
+
+  return normalized.length > 0 ? normalized : [...DEFAULT_VISIBLE_COLUMNS];
+}
+
 /* cspell:disable */
 const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
 
@@ -59,13 +87,14 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-a
 {
   const savedState = vscodeApi?.getState();
   const saved = Array.isArray(savedState?.visibleColumns) ? savedState.visibleColumns : null;
-  const valid = saved !== null && saved.every((id) => COLUMN_DEFS.some((c) => c.id === id));
   const savedFontSizePreset =
     typeof savedState?.fontSizePreset === 'string' ? savedState.fontSizePreset : '';
   const savedLogLimitCandidate =
     typeof savedState?.logLimit === 'number' ? savedState.logLimit : Number.NaN;
+  const normalizedSavedColumns =
+    saved !== null ? normalizeVisibleColumns(saved) : [...DEFAULT_VISIBLE_COLUMNS];
   // eslint-disable-next-line no-var
-  var visibleColumns = valid && saved.length > 0 ? saved : [...DEFAULT_VISIBLE_COLUMNS];
+  var visibleColumns = normalizedSavedColumns;
   // eslint-disable-next-line no-var
   var fontSizePreset = isKnownFontSizePreset(savedFontSizePreset)
     ? savedFontSizePreset
@@ -738,16 +767,9 @@ function bindExtensionMessages() {
       Array.isArray(msg.visibleColumns)
     ) {
       const incoming = msg.visibleColumns.filter(
-        (id) => typeof id === 'string' && COLUMN_DEFS.some((c) => c.id === id)
+        (id) => typeof id === 'string'
       );
-      // Always ensure required columns are present.
-      const merged = [
-        ...new Set([
-          ...COLUMN_DEFS.filter((c) => c.required).map((c) => c.id),
-          ...incoming,
-        ]),
-      ].filter((id) => COLUMN_DEFS.some((c) => c.id === id));
-      visibleColumns = merged.length > 0 ? merged : [...DEFAULT_VISIBLE_COLUMNS];
+      visibleColumns = normalizeVisibleColumns(incoming);
       syncColumnSettingsToState();
       rebuildTableHeader();
       buildSettingsPanel();
@@ -1354,17 +1376,11 @@ function handleColumnToggle(colId, checked) {
   }
 
   if (checked && !visibleColumns.includes(colId)) {
-    // Insert at canonical position.
-    const canonicalOrder = COLUMN_DEFS.map((c) => c.id);
-    const next = [];
-    for (const id of canonicalOrder) {
-      if (visibleColumns.includes(id) || id === colId) {
-        next.push(id);
-      }
-    }
-    visibleColumns = next;
+    visibleColumns = normalizeVisibleColumns([...visibleColumns, colId]);
   } else if (!checked) {
-    visibleColumns = visibleColumns.filter((id) => id !== colId);
+    visibleColumns = normalizeVisibleColumns(
+      visibleColumns.filter((id) => id !== colId)
+    );
   }
 
   syncColumnSettingsToState();

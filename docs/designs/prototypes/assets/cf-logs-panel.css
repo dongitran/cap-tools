@@ -405,7 +405,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 .cf-log-table .col-source { width: 88px;  min-width: 70px; }
 .cf-log-table .col-stream { width: 52px;  min-width: 44px; }
 .cf-log-table .col-level  { width: 52px;  min-width: 44px; }
-.cf-log-table .col-logger { width: 46px;  min-width: 46px; }
+.cf-log-table .col-logger { width: 54px;  min-width: 54px; }
 .cf-log-table .col-message { min-width: 160px; }
 
 .cf-log-table tbody td {

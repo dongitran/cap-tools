@@ -310,6 +310,7 @@ test.describe('SAP Tools CF logs panel', () => {
       expect(widthSnapshot.timeWidth).toBeGreaterThan(0);
       expect(messageRatio).toBeGreaterThan(0.4);
       expect(widthSnapshot.messageWidth).toBeGreaterThan(widthSnapshot.widestNonMessageColumn);
+      expect(widthSnapshot.loggerWidth).toBeGreaterThanOrEqual(52);
       expect(widthSnapshot.loggerWidth).toBeLessThan(widthSnapshot.timeWidth);
       expect(widthSnapshot.timeWidth).toBeLessThan(70);
     } finally {
@@ -559,6 +560,48 @@ test.describe('SAP Tools CF logs panel', () => {
       await clickWithFallback(gearButton);
       await expect(logsFrame.locator('#settings-panel')).toBeHidden({ timeout: 5000 });
       await expect(gearButton).not.toHaveClass(/is-active/);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('CF logs panel keeps canonical header order when Level column is toggled', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+
+      const readHeaderOrder = async (): Promise<string[]> => {
+        const texts = await logsFrame.locator('#log-table-head th').allTextContents();
+        return texts.map((text) => text.trim()).filter((text) => text.length > 0);
+      };
+
+      await expect
+        .poll(readHeaderOrder, { timeout: 10000 })
+        .toEqual(['Time', 'Level', 'Logger', 'Message']);
+
+      const gearButton = logsFrame.getByLabel('Column settings');
+      await clickWithFallback(gearButton);
+
+      const levelCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Level' })
+        .locator('input[type="checkbox"]');
+
+      await expect(levelCheckbox).toBeChecked();
+
+      await clickWithFallback(levelCheckbox);
+      await expect(levelCheckbox).not.toBeChecked();
+      await expect
+        .poll(readHeaderOrder, { timeout: 5000 })
+        .toEqual(['Time', 'Logger', 'Message']);
+
+      await clickWithFallback(levelCheckbox);
+      await expect(levelCheckbox).toBeChecked();
+      await expect
+        .poll(readHeaderOrder, { timeout: 5000 })
+        .toEqual(['Time', 'Level', 'Logger', 'Message']);
     } finally {
       await cleanupExtensionHost(session);
     }
