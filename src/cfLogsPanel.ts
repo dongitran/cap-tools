@@ -29,9 +29,23 @@ const LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.logLimitSettingInit';
 const COLUMN_SETTINGS_GLOBAL_STATE_KEY = 'cfLogsPanel.visibleColumns';
 const FONT_SIZE_SETTING_GLOBAL_STATE_KEY = 'cfLogsPanel.fontSizePreset';
 const LOG_LIMIT_SETTING_GLOBAL_STATE_KEY = 'cfLogsPanel.logLimit';
-const ALL_COLUMN_IDS = ['time', 'source', 'stream', 'level', 'logger', 'message'] as const;
-const REQUIRED_COLUMN_IDS = ['time', 'message'] as const;
-const DEFAULT_VISIBLE_COLUMN_IDS = ['time', 'level', 'logger', 'message'] as const;
+const ALL_COLUMN_IDS = [
+  'time',
+  'level',
+  'method',
+  'request',
+  'status',
+  'latency',
+  'tenant',
+  'clientIp',
+  'requestId',
+  'logger',
+  'source',
+  'stream',
+  'message',
+] as const;
+const REQUIRED_COLUMN_IDS = ['time', 'request'] as const;
+const DEFAULT_VISIBLE_COLUMN_IDS = ['time', 'level', 'method', 'request', 'status', 'latency'] as const;
 const FONT_SIZE_PRESETS = ['smaller', 'default', 'large', 'xlarge'] as const;
 const DEFAULT_FONT_SIZE_PRESET = 'default';
 const LOG_LIMIT_PRESETS = [300, 500, 1000, 3000] as const;

@@ -106,7 +106,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel message column uses wrapped text layout', async () => {
+  test('CF logs panel endpoint and event column uses wrapped text layout while raw message stays hidden by default', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -127,10 +127,12 @@ test.describe('SAP Tools CF logs panel', () => {
         timeout: 10000,
       });
 
-      const messageCell = logsFrame.locator('#log-table-body td.cell-message .cell-message-text').first();
-      await expect(messageCell).toBeVisible({ timeout: 10000 });
+      await expect(logsFrame.locator('#log-table-head th.col-message')).toHaveCount(0);
 
-      const messageCellStyle = await messageCell.evaluate((element) => {
+      const requestCell = logsFrame.locator('#log-table-body td.cell-request .cell-request-text').first();
+      await expect(requestCell).toBeVisible({ timeout: 10000 });
+
+      const requestCellStyle = await requestCell.evaluate((element) => {
         const style = getComputedStyle(element);
         return {
           whiteSpace: style.whiteSpace,
@@ -140,10 +142,10 @@ test.describe('SAP Tools CF logs panel', () => {
         };
       });
 
-      expect(messageCellStyle.whiteSpace).toBe('pre-wrap');
-      expect(messageCellStyle.textOverflow).toBe('clip');
-      expect(messageCellStyle.overflowWrap).toBe('anywhere');
-      expect(messageCellStyle.wordBreak).toBe('break-word');
+      expect(requestCellStyle.whiteSpace).toBe('pre-wrap');
+      expect(requestCellStyle.textOverflow).toBe('clip');
+      expect(requestCellStyle.overflowWrap).toBe('anywhere');
+      expect(requestCellStyle.wordBreak).toBe('break-word');
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -218,7 +220,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel keeps message column dominant and logger narrower than time', async () => {
+  test('CF logs panel keeps endpoint and event column dominant while HTTP detail columns remain compact', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -250,13 +252,21 @@ test.describe('SAP Tools CF logs panel', () => {
         .locator('#settings-column-toggles .settings-column-item')
         .filter({ hasText: 'Stream' })
         .locator('input[type="checkbox"]');
-      const levelCheckbox = logsFrame
+      const methodCheckbox = logsFrame
         .locator('#settings-column-toggles .settings-column-item')
-        .filter({ hasText: 'Level' })
+        .filter({ hasText: 'Method' })
         .locator('input[type="checkbox"]');
-      const loggerCheckbox = logsFrame
+      const statusCheckbox = logsFrame
         .locator('#settings-column-toggles .settings-column-item')
-        .filter({ hasText: 'Logger' })
+        .filter({ hasText: 'Status' })
+        .locator('input[type="checkbox"]');
+      const latencyCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Latency' })
+        .locator('input[type="checkbox"]');
+      const messageCheckbox = logsFrame
+        .locator('#settings-column-toggles .settings-column-item')
+        .filter({ hasText: 'Message' })
         .locator('input[type="checkbox"]');
 
       if (await sourceCheckbox.isChecked()) {
@@ -265,17 +275,25 @@ test.describe('SAP Tools CF logs panel', () => {
       if (await streamCheckbox.isChecked()) {
         await clickWithFallback(streamCheckbox);
       }
-      if (!(await levelCheckbox.isChecked())) {
-        await clickWithFallback(levelCheckbox);
+      if (!(await methodCheckbox.isChecked())) {
+        await clickWithFallback(methodCheckbox);
       }
-      if (!(await loggerCheckbox.isChecked())) {
-        await clickWithFallback(loggerCheckbox);
+      if (!(await statusCheckbox.isChecked())) {
+        await clickWithFallback(statusCheckbox);
+      }
+      if (!(await latencyCheckbox.isChecked())) {
+        await clickWithFallback(latencyCheckbox);
+      }
+      if (await messageCheckbox.isChecked()) {
+        await clickWithFallback(messageCheckbox);
       }
 
       await expect(sourceCheckbox).not.toBeChecked();
       await expect(streamCheckbox).not.toBeChecked();
-      await expect(levelCheckbox).toBeChecked();
-      await expect(loggerCheckbox).toBeChecked();
+      await expect(methodCheckbox).toBeChecked();
+      await expect(statusCheckbox).toBeChecked();
+      await expect(latencyCheckbox).toBeChecked();
+      await expect(messageCheckbox).not.toBeChecked();
 
       const widthSnapshot = await logsFrame.evaluate(() => {
         const headers = Array.from(document.querySelectorAll('.cf-log-table thead th'));
@@ -285,33 +303,40 @@ test.describe('SAP Tools CF logs panel', () => {
           const header = document.querySelector(selector);
           return header instanceof HTMLElement ? header.getBoundingClientRect().width : 0;
         };
-        const messageWidth = getHeaderWidth('.cf-log-table thead th.col-message');
-        const loggerWidth = getHeaderWidth('.cf-log-table thead th.col-logger');
+        const requestWidth = getHeaderWidth('.cf-log-table thead th.col-request');
+        const methodWidth = getHeaderWidth('.cf-log-table thead th.col-method');
+        const statusWidth = getHeaderWidth('.cf-log-table thead th.col-status');
+        const latencyWidth = getHeaderWidth('.cf-log-table thead th.col-latency');
         const timeWidth = getHeaderWidth('.cf-log-table thead th.col-time');
-        const nonMessageWidths = headers
-          .filter((header) => !header.classList.contains('col-message'))
+        const nonRequestWidths = headers
+          .filter((header) => !header.classList.contains('col-request'))
           .map((header) => Math.round(header.getBoundingClientRect().width));
         return {
           widths,
           total,
-          messageWidth: Math.round(messageWidth),
-          loggerWidth: Math.round(loggerWidth),
+          requestWidth: Math.round(requestWidth),
+          methodWidth: Math.round(methodWidth),
+          statusWidth: Math.round(statusWidth),
+          latencyWidth: Math.round(latencyWidth),
           timeWidth: Math.round(timeWidth),
-          widestNonMessageColumn: nonMessageWidths.length > 0 ? Math.max(...nonMessageWidths) : 0,
+          widestNonRequestColumn: nonRequestWidths.length > 0 ? Math.max(...nonRequestWidths) : 0,
         };
       });
 
-      const messageRatio = widthSnapshot.total > 0
-        ? widthSnapshot.messageWidth / widthSnapshot.total
+      const requestRatio = widthSnapshot.total > 0
+        ? widthSnapshot.requestWidth / widthSnapshot.total
         : 0;
 
-      expect(widthSnapshot.messageWidth).toBeGreaterThan(0);
-      expect(widthSnapshot.loggerWidth).toBeGreaterThan(0);
+      expect(widthSnapshot.requestWidth).toBeGreaterThan(0);
+      expect(widthSnapshot.methodWidth).toBeGreaterThan(0);
+      expect(widthSnapshot.statusWidth).toBeGreaterThan(0);
+      expect(widthSnapshot.latencyWidth).toBeGreaterThan(0);
       expect(widthSnapshot.timeWidth).toBeGreaterThan(0);
-      expect(messageRatio).toBeGreaterThan(0.4);
-      expect(widthSnapshot.messageWidth).toBeGreaterThan(widthSnapshot.widestNonMessageColumn);
-      expect(widthSnapshot.loggerWidth).toBeGreaterThanOrEqual(52);
-      expect(widthSnapshot.loggerWidth).toBeLessThan(widthSnapshot.timeWidth);
+      expect(requestRatio).toBeGreaterThan(0.34);
+      expect(widthSnapshot.requestWidth).toBeGreaterThan(widthSnapshot.widestNonRequestColumn);
+      expect(widthSnapshot.methodWidth).toBeLessThanOrEqual(80);
+      expect(widthSnapshot.statusWidth).toBeLessThanOrEqual(80);
+      expect(widthSnapshot.latencyWidth).toBeLessThanOrEqual(100);
       expect(widthSnapshot.timeWidth).toBeLessThan(70);
     } finally {
       await cleanupExtensionHost(session);
@@ -358,7 +383,7 @@ test.describe('SAP Tools CF logs panel', () => {
 
       const visibleRows = logsFrame.locator('#log-table-body tr');
       await expect(visibleRows).toHaveCount(1);
-      await expect(logsFrame.locator('#log-table-body td.cell-message').first()).toContainText(
+      await expect(logsFrame.locator('#log-table-body td.cell-request').first()).toContainText(
         'database retry exhausted'
       );
     } finally {
@@ -663,8 +688,8 @@ test.describe('SAP Tools CF logs panel', () => {
       await expect(logsFrame.locator('#settings-panel')).toBeVisible({ timeout: 5000 });
       await expect(gearButton).toHaveClass(/is-active/);
 
-      // Default checked: Time, Level, Logger, Message.
-      // Default unchecked: Source, Stream.
+      // Default checked: Time, Level, Method, Endpoint / Event, Status, Latency.
+      // Default unchecked: Tenant, Client IP, Request ID, Logger, Source, Stream, Message.
       const checkboxState = await logsFrame.evaluate(() => {
         const items = Array.from(
           document.querySelectorAll('#settings-column-toggles .settings-column-item')
@@ -682,10 +707,17 @@ test.describe('SAP Tools CF logs panel', () => {
       const byLabel = Object.fromEntries(checkboxState.map((s) => [s.label, s.checked]));
       expect(byLabel['Time']).toBe(true);
       expect(byLabel['Level']).toBe(true);
-      expect(byLabel['Logger']).toBe(true);
-      expect(byLabel['Message']).toBe(true);
+      expect(byLabel['Method']).toBe(true);
+      expect(byLabel['Endpoint / Event']).toBe(true);
+      expect(byLabel['Status']).toBe(true);
+      expect(byLabel['Latency']).toBe(true);
+      expect(byLabel['Tenant']).toBe(false);
+      expect(byLabel['Client IP']).toBe(false);
+      expect(byLabel['Request ID']).toBe(false);
+      expect(byLabel['Logger']).toBe(false);
       expect(byLabel['Source']).toBe(false);
       expect(byLabel['Stream']).toBe(false);
+      expect(byLabel['Message']).toBe(false);
 
       // Clicking gear again should close the panel.
       await clickWithFallback(gearButton);
@@ -710,7 +742,7 @@ test.describe('SAP Tools CF logs panel', () => {
 
       await expect
         .poll(readHeaderOrder, { timeout: 10000 })
-        .toEqual(['Time', 'Level', 'Logger', 'Message']);
+        .toEqual(['Time', 'Level', 'Method', 'Endpoint / Event', 'Status', 'Latency']);
 
       const gearButton = logsFrame.getByLabel('Column settings');
       await clickWithFallback(gearButton);
@@ -726,13 +758,13 @@ test.describe('SAP Tools CF logs panel', () => {
       await expect(levelCheckbox).not.toBeChecked();
       await expect
         .poll(readHeaderOrder, { timeout: 5000 })
-        .toEqual(['Time', 'Logger', 'Message']);
+        .toEqual(['Time', 'Method', 'Endpoint / Event', 'Status', 'Latency']);
 
       await clickWithFallback(levelCheckbox);
       await expect(levelCheckbox).toBeChecked();
       await expect
         .poll(readHeaderOrder, { timeout: 5000 })
-        .toEqual(['Time', 'Level', 'Logger', 'Message']);
+        .toEqual(['Time', 'Level', 'Method', 'Endpoint / Event', 'Status', 'Latency']);
     } finally {
       await cleanupExtensionHost(session);
     }

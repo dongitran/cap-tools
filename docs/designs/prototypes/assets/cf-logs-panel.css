@@ -399,14 +399,21 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 /* ── Column widths & minimum widths ────────────────────────────────────
    Class-based (not nth-child) so layout is independent of which columns
    are currently visible. width = preferred; min-width = absolute floor.
-   The message column has no fixed width — it takes all remaining space.  */
+   Request takes remaining space in default view.  */
 
 .cf-log-table .col-time   { width: 58px;  min-width: 58px; }
+.cf-log-table .col-level  { width: 52px;  min-width: 44px; }
+.cf-log-table .col-method { width: 66px; min-width: 60px; }
+.cf-log-table .col-request { min-width: 220px; }
+.cf-log-table .col-status { width: 64px; min-width: 58px; }
+.cf-log-table .col-latency { width: 84px; min-width: 72px; }
+.cf-log-table .col-tenant { width: 104px; min-width: 92px; }
+.cf-log-table .col-client-ip { width: 120px; min-width: 108px; }
+.cf-log-table .col-request-id { width: 150px; min-width: 130px; }
+.cf-log-table .col-logger { width: 74px;  min-width: 64px; }
 .cf-log-table .col-source { width: 88px;  min-width: 70px; }
 .cf-log-table .col-stream { width: 52px;  min-width: 44px; }
-.cf-log-table .col-level  { width: 52px;  min-width: 44px; }
-.cf-log-table .col-logger { width: 54px;  min-width: 54px; }
-.cf-log-table .col-message { min-width: 160px; }
+.cf-log-table .col-message { min-width: 180px; }
 
 .cf-log-table tbody td {
   border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 76%, transparent);
@@ -439,6 +446,51 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cf-log-table .cell-request-id {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cf-log-table .cell-method {
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cf-log-table .cell-tenant {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cf-log-table .cell-client-ip {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-log-table .cell-status {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.cf-log-table .cell-latency {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.cf-log-table .cell-request {
+  min-width: 0;
+}
+
+.cf-log-table .cell-request-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-overflow: clip;
 }
 
 .cf-log-table .cell-message {
@@ -503,8 +555,24 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   color: var(--panel-warning);
 }
 
-.badge-level-err,
+.badge-level-error,
 .badge-level-fatal {
+  color: var(--panel-error);
+}
+
+.badge-http-2xx {
+  color: var(--panel-success);
+}
+
+.badge-http-3xx {
+  color: var(--panel-accent);
+}
+
+.badge-http-4xx {
+  color: var(--panel-warning);
+}
+
+.badge-http-5xx {
   color: var(--panel-error);
 }
 

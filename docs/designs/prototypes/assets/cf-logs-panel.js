@@ -1,4 +1,4 @@
-// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate copylog guid gorouter routererror
+// cspell:words appname logsloaded logserror fetchlogs appsupdate activeappsupdate logsappend logsstreamstate copylog guid gorouter routererror tenantid correlationid btenantid
 const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
 const COPY_LOG_MESSAGE_TYPE = 'sapTools.copyLogMessage';
@@ -22,15 +22,33 @@ const MAX_PARSED_LOG_ROWS = 5_000;
 const COPY_TOAST_VISIBLE_MS = 1_600;
 const MIN_RAW_LOG_TEXT_CHARS = 120_000;
 const RAW_LOG_TEXT_CHARS_PER_LIMIT_ROW = 1_200;
+const RTR_REQUEST_PATTERN =
+  /"(?<method>[A-Z]+)\s+(?<target>\S+)\s+HTTP\/[\d.]+"\s+(?<status>\d{3}|-)/;
+const RTR_HOST_PATTERN = /^(?<host>[^ ]+)\s+-\s+\[/;
+const RTR_RESPONSE_TIME_PATTERN = /\bresponse_time:(?<responseTime>-|\d+(?:\.\d+)?)(?=\s|$|,)/;
+const RTR_TENANT_ID_PATTERN = /\btenantid:"(?<tenantId>[^"]*)"/;
+const RTR_CORRELATION_ID_PATTERN = /\bx_correlationid:"(?<correlationId>[^"]*)"/;
+const RTR_VCAP_REQUEST_ID_PATTERN = /\bvcap_request_id:"(?<vcapRequestId>[^"]*)"/;
+const RTR_TRUE_CLIENT_IP_PATTERN = /\bx_cf_true_client_ip:"(?<clientIp>[^"]*)"/;
+const RTR_LEGACY_TRUE_CLIENT_IP_PATTERN = /\btrue_client_ip:"(?<clientIp>[^"]*)"/;
+const RTR_X_FORWARDED_FOR_PATTERN = /\bx_forwarded_for:"(?<forwardedFor>[^"]*)"/;
+const MAX_REQUEST_SUMMARY_CHARS = 120;
 
 /** All columns in canonical display order. */
 const COLUMN_DEFS = [
-  { id: 'time',    label: 'Time',    cellClass: 'col-time',    required: true,  defaultOn: true  },
+  { id: 'time',      label: 'Time',      cellClass: 'col-time',      required: true,  defaultOn: true  },
+  { id: 'level',     label: 'Level',     cellClass: 'col-level',     required: false, defaultOn: true  },
+  { id: 'method',    label: 'Method',    cellClass: 'col-method',    required: false, defaultOn: true  },
+  { id: 'request',   label: 'Endpoint / Event', cellClass: 'col-request', required: true, defaultOn: true },
+  { id: 'status',    label: 'Status',    cellClass: 'col-status',    required: false, defaultOn: true  },
+  { id: 'latency',   label: 'Latency',   cellClass: 'col-latency',   required: false, defaultOn: true  },
+  { id: 'tenant',    label: 'Tenant',    cellClass: 'col-tenant',    required: false, defaultOn: false },
+  { id: 'clientIp',  label: 'Client IP', cellClass: 'col-client-ip', required: false, defaultOn: false },
+  { id: 'requestId', label: 'Request ID', cellClass: 'col-request-id', required: false, defaultOn: false },
+  { id: 'logger',    label: 'Logger',    cellClass: 'col-logger',    required: false, defaultOn: false },
   { id: 'source',  label: 'Source',  cellClass: 'col-source',  required: false, defaultOn: false },
   { id: 'stream',  label: 'Stream',  cellClass: 'col-stream',  required: false, defaultOn: false },
-  { id: 'level',   label: 'Level',   cellClass: 'col-level',   required: false, defaultOn: true  },
-  { id: 'logger',  label: 'Logger',  cellClass: 'col-logger',  required: false, defaultOn: true  },
-  { id: 'message', label: 'Message', cellClass: 'col-message', required: true,  defaultOn: true  },
+  { id: 'message', label: 'Message', cellClass: 'col-message', required: false, defaultOn: false },
 ];
 const DEFAULT_VISIBLE_COLUMNS = COLUMN_DEFS.filter((c) => c.defaultOn).map((c) => c.id);
 const FONT_SIZE_PRESETS = ['smaller', 'default', 'large', 'xlarge'];
@@ -67,7 +85,7 @@ function normalizeVisibleColumns(columnIds) {
 }
 
 /* cspell:disable */
-const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-admin in org finance-platform / space app as developer@example.com...
+const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app app-demo in org finance-platform / space app as developer@example.com...
 
 2026-04-12T09:14:31.73+0700 [CELL/0] OUT Cell 91130a14 stopping instance 13af001e
 2026-04-12T09:14:32.19+0700 [API/2] OUT Restarted app with guid 8a45de1d
@@ -75,19 +93,19 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app finance-config-a
 2026-04-12T09:14:43.98+0700 [CELL/0] OUT Cell d436706e successfully created container for instance 6eb35470
 2026-04-12T09:14:44.55+0700 [APP/PROC/WEB/0] ERR npm warn Unknown project config "always-auth".
 2026-04-12T09:14:44.55+0700 [APP/PROC/WEB/0] ERR npm warn Unknown project config "scripts-prepend-node-path".
-2026-04-12T09:14:44.73+0700 [APP/PROC/WEB/0] OUT > finance-config-admin@0.0.0 start
+2026-04-12T09:14:44.73+0700 [APP/PROC/WEB/0] OUT > app-demo@0.0.0 start
 2026-04-12T09:14:44.73+0700 [APP/PROC/WEB/0] OUT > cds-serve -p gen/srv
-2026-04-12T09:14:45.25+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"NodeCacheStrategy","timestamp":"2026-04-12T02:14:45.255Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"NodeCacheStrategy initialized","type":"log"}
-2026-04-12T09:14:45.25+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"CacheService","timestamp":"2026-04-12T02:14:45.256Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"CacheService initialized with strategy: NodeCacheStrategy","type":"log"}
-2026-04-12T09:14:47.26+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.260Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"loaded model from 1 file(s):\\n ","type":"log"}
+2026-04-12T09:14:45.25+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"NodeCacheStrategy","timestamp":"2026-04-12T02:14:45.255Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"NodeCacheStrategy initialized","type":"log"}
+2026-04-12T09:14:45.25+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"CacheService","timestamp":"2026-04-12T02:14:45.256Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"CacheService initialized with strategy: NodeCacheStrategy","type":"log"}
+2026-04-12T09:14:47.26+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.260Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"loaded model from 1 file(s):\\n ","type":"log"}
 2026-04-12T09:14:47.26+0700 [APP/PROC/WEB/0] OUT gen/srv/srv/csn.json
-2026-04-12T09:14:47.90+0700 [APP/PROC/WEB/0] OUT {"level":"warn","logger":"cds","timestamp":"2026-04-12T02:14:47.904Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"using auth strategy jwt with fallback mode","type":"log"}
+2026-04-12T09:14:47.90+0700 [APP/PROC/WEB/0] OUT {"level":"warn","logger":"cds","timestamp":"2026-04-12T02:14:47.904Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"using auth strategy jwt with fallback mode","type":"log"}
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT Server is listening at http://localhost:8080
-2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"server listening on { url: 'http://localhost:8080' }","type":"log"}
-2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"finance-config-admin","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}
-2026-04-12T09:14:48.20+0700 [RTR/0] OUT finance-config-admin.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.200Z] "GET /rtr-health-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" x_forwarded_for:"1.2.3.4" x_forwarded_proto:"https" vcap_request_id:"rtr-req-001" response_time:0.001 gorouter_time:0.000010 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"aabbccdd" x_b3_spanid:"aabbccdd" b3:"aabbccdd-aabbccdd"
-2026-04-12T09:14:48.25+0700 [RTR/0] OUT finance-config-admin.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.250Z] "GET /rtr-not-found HTTP/1.1" 404 80 10 "-" "curl/7.88.1" "10.0.1.2:1002" "10.0.2.2:2002" x_forwarded_for:"1.2.3.5" x_forwarded_proto:"https" vcap_request_id:"rtr-req-002" response_time:0.000 gorouter_time:0.000009 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"bbccddee" x_b3_spanid:"bbccddee" b3:"bbccddee-bbccddee"
-2026-04-12T09:14:48.30+0700 [RTR/0] OUT finance-config-admin.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.300Z] "POST /rtr-upstream-fail HTTP/1.1" 500 120 10 "-" "axios/1.0.0" "10.0.1.3:1003" "10.0.2.3:2003" x_forwarded_for:"1.2.3.6" x_forwarded_proto:"https" vcap_request_id:"rtr-req-003" response_time:0.123 gorouter_time:0.000011 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_b3_traceid:"ccddeeff" x_b3_spanid:"ccddeeff" b3:"ccddeeff-ccddeeff"
+2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"server listening on { url: 'http://localhost:8080' }","type":"log"}
+2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}
+2026-04-12T09:14:48.20+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.200Z] "GET /rtr-health-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" x_forwarded_for:"1.2.3.4, 10.0.1.1" x_forwarded_proto:"https" vcap_request_id:"rtr-req-001" response_time:0.001 gorouter_time:0.000010 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-001" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"aabbccdd" x_b3_spanid:"aabbccdd" b3:"aabbccdd-aabbccdd"
+2026-04-12T09:14:48.25+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.250Z] "GET /rtr-not-found HTTP/1.1" 404 80 10 "-" "curl/7.88.1" "10.0.1.2:1002" "10.0.2.2:2002" x_forwarded_for:"1.2.3.5, 10.0.1.2" x_forwarded_proto:"https" vcap_request_id:"rtr-req-002" response_time:0.000 gorouter_time:0.000009 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-002" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"bbccddee" x_b3_spanid:"bbccddee" b3:"bbccddee-bbccddee"
+2026-04-12T09:14:48.30+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.300Z] "POST /rtr-upstream-fail HTTP/1.1" 500 120 10 "-" "axios/1.0.0" "10.0.1.3:1003" "10.0.2.3:2003" x_forwarded_for:"1.2.3.6, 10.0.1.3" x_forwarded_proto:"https" vcap_request_id:"rtr-req-003" response_time:0.123 gorouter_time:0.000011 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-003" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"ccddeeff" x_b3_spanid:"ccddeeff" b3:"ccddeeff-ccddeeff"
 Failed to retrieve logs from Log Cache: unexpected status code 404
 Failed to retrieve logs from Log Cache: unexpected status code 404
 Failed to retrieve logs from Log Cache: unexpected status code 404`;
@@ -148,10 +166,10 @@ rebuildTableHeader();
 if (vscodeApi === null) {
   // Browser prototype mode: render sample data and populate app selector.
   allRows = trimRowsForMemory(parseCfRecentLog(PROTOTYPE_SAMPLE_LOG));
-  rawLogTextByApp.set('finance-config-admin', PROTOTYPE_SAMPLE_LOG);
-  parsedRowsByApp.set('finance-config-admin', allRows);
+  rawLogTextByApp.set('app-demo', PROTOTYPE_SAMPLE_LOG);
+  parsedRowsByApp.set('app-demo', allRows);
   elements.workspaceScope.textContent = 'za-10 \u2192 data-foundation-prod \u2192 observability';
-  rebuildAppSelect([{ name: 'finance-config-admin', runningInstances: 1 }], 'finance-config-admin');
+  rebuildAppSelect([{ name: 'app-demo', runningInstances: 1 }], 'app-demo');
 }
 
 hydrateDynamicFilterOptions(allRows);
@@ -268,7 +286,7 @@ function parseCfRecentLog(rawText) {
       continue;
     }
 
-    const parsedRow = parseCfLine(trimmedLine, rows.length + 1);
+    const parsedRow = safeParseCfLine(trimmedLine, rows.length + 1);
 
     if (parsedRow !== null) {
       rows.push(parsedRow);
@@ -277,15 +295,7 @@ function parseCfRecentLog(rawText) {
     }
 
     if (previousRow !== null) {
-      previousRow.message = `${previousRow.message}\n${trimmedLine}`;
-      previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
-      previousRow.level = normalizeLevel(
-        resolveCandidateLevel(previousRow),
-        previousRow.stream,
-        previousRow.message,
-        previousRow.source
-      );
-      previousRow.searchableText = buildSearchableText(previousRow);
+      appendContinuationLine(previousRow, trimmedLine);
       continue;
     }
 
@@ -301,6 +311,23 @@ function parseCfRecentLog(rawText) {
   }
 
   return rows;
+}
+
+function appendContinuationLine(previousRow, trimmedLine) {
+  const requestTracksMessage = previousRow.request === previousRow.message;
+  previousRow.message = `${previousRow.message}\n${trimmedLine}`;
+  previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
+  if (requestTracksMessage) {
+    previousRow.request = previousRow.message;
+  }
+  previousRow.level = normalizeLevel(
+    resolveCandidateLevel(previousRow),
+    previousRow.stream,
+    previousRow.message,
+    previousRow.source,
+    previousRow.status
+  );
+  previousRow.searchableText = buildSearchableText(previousRow);
 }
 
 function parseCfLine(line, id) {
@@ -322,6 +349,14 @@ function parseCfLine(line, id) {
   return buildTextRow({ id, timestamp, source, stream, body });
 }
 
+function safeParseCfLine(line, id) {
+  try {
+    return parseCfLine(line, id);
+  } catch {
+    return null;
+  }
+}
+
 function parseJsonBody(body) {
   if (!body.startsWith('{') || !body.endsWith('}')) {
     return null;
@@ -341,7 +376,8 @@ function parseJsonBody(body) {
 function buildTextRow({ id, timestamp, source, stream, body }) {
   const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = body.length > 0 ? body : '(empty)';
-  const level = normalizeLevel('', stream, message, source);
+  const routerInfo = extractRouterAccessInfo(source, message);
+  const level = normalizeLevel('', stream, message, source, routerInfo?.statusCode ?? '');
   const row = {
     id,
     timestamp: formattedTimestamp,
@@ -354,6 +390,14 @@ function buildTextRow({ id, timestamp, source, stream, body }) {
     component: '',
     org: '',
     space: '',
+    host: routerInfo?.host ?? deriveLoggerFromSource(source),
+    method: routerInfo?.method ?? '',
+    request: routerInfo?.request ?? message,
+    status: routerInfo?.statusCode ?? '',
+    latency: routerInfo?.latency ?? '',
+    tenant: routerInfo?.tenantId ?? '',
+    clientIp: routerInfo?.clientIp ?? '',
+    requestId: routerInfo?.requestId ?? '',
     message,
     rawBody: body,
     jsonPayload: null,
@@ -367,7 +411,7 @@ function buildTextRow({ id, timestamp, source, stream, body }) {
 function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
   const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = readString(payload.msg) || body;
-  const level = normalizeLevel(readString(payload.level), stream, message, source);
+  const level = normalizeLevel(readString(payload.level), stream, message, source, '');
   const row = {
     id,
     timestamp: formattedTimestamp,
@@ -380,6 +424,14 @@ function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
     component: readString(payload.component_name),
     org: readString(payload.organization_name),
     space: readString(payload.space_name),
+    host: deriveLoggerFromSource(source),
+    method: '',
+    request: message,
+    status: '',
+    latency: '',
+    tenant: '',
+    clientIp: '',
+    requestId: '',
     message,
     rawBody: body,
     jsonPayload: payload,
@@ -412,7 +464,7 @@ function deriveLoggerFromSource(source) {
   return firstToken.length > 0 ? firstToken.toLowerCase() : 'source';
 }
 
-function normalizeLevel(candidateLevel, stream, message, source) {
+function normalizeLevel(candidateLevel, stream, message, source, routerStatusCode = '') {
   const normalizedCandidate = candidateLevel.trim().toLowerCase();
 
   if (normalizedCandidate === 'warning') {
@@ -427,7 +479,7 @@ function normalizeLevel(candidateLevel, stream, message, source) {
   // and failed_attempts that would falsely trigger keyword-based level detection.
   // Classify by HTTP status code instead.
   if (typeof source === 'string' && /^rtr\b/i.test(source)) {
-    return classifyRtrLog(message);
+    return classifyRtrLog(message, routerStatusCode);
   }
 
   if (/\bfatal\b/i.test(message)) {
@@ -449,14 +501,160 @@ function normalizeLevel(candidateLevel, stream, message, source) {
   return 'info';
 }
 
-function classifyRtrLog(message) {
-  const match = /"[A-Z]+ [^ ]+ HTTP\/[\d.]+" (\d{3})/.exec(message);
-  if (match !== null) {
-    const status = parseInt(match[1], 10);
-    if (status >= 500) return 'error';
-    if (status >= 400) return 'warn';
+function classifyRtrLog(message, statusCodeCandidate = '') {
+  const statusCode = resolveStatusCode(statusCodeCandidate, message);
+  if (statusCode === null) {
+    return 'info';
+  }
+  if (statusCode >= 500) {
+    return 'error';
+  }
+  if (statusCode >= 400) {
+    return 'warn';
   }
   return 'info';
+}
+
+function resolveStatusCode(statusCodeCandidate, message) {
+  if (/^\d{3}$/.test(statusCodeCandidate)) {
+    return Number.parseInt(statusCodeCandidate, 10);
+  }
+  const match = message.match(RTR_REQUEST_PATTERN);
+  if (match?.groups === undefined || !/^\d{3}$/.test(match.groups.status)) {
+    return null;
+  }
+  return Number.parseInt(match.groups.status, 10);
+}
+
+function extractRouterAccessInfo(source, message) {
+  if (!/^rtr\b/i.test(source)) {
+    return null;
+  }
+
+  const requestMatch = message.match(RTR_REQUEST_PATTERN);
+  const method = requestMatch?.groups?.method ?? '';
+  const targetRaw = requestMatch?.groups?.target ?? '';
+  const target = decodeRequestTarget(targetRaw);
+  const statusCode =
+    requestMatch?.groups !== undefined && /^\d{3}$/.test(requestMatch.groups.status)
+      ? requestMatch.groups.status
+      : '';
+  const request = buildRequestSummary(method, target);
+  const responseTimeRaw = message.match(RTR_RESPONSE_TIME_PATTERN)?.groups?.responseTime ?? '';
+  const latency = formatLatency(responseTimeRaw);
+  const host = normalizeMetadataValue(message.match(RTR_HOST_PATTERN)?.groups?.host ?? '');
+  const tenantId = normalizeMetadataValue(message.match(RTR_TENANT_ID_PATTERN)?.groups?.tenantId ?? '');
+  const requestId = resolveRequestId(message);
+  const clientIp = resolveClientIp(message);
+
+  return { host, method, request, statusCode, latency, tenantId, clientIp, requestId };
+}
+
+function buildRequestSummary(method, target) {
+  if (method.length === 0 || target.length === 0) {
+    return '';
+  }
+
+  const request = `${method} ${target}`;
+  if (request.length <= MAX_REQUEST_SUMMARY_CHARS) {
+    return request;
+  }
+
+  const compactTargetBudget = Math.max(16, MAX_REQUEST_SUMMARY_CHARS - method.length - 6);
+  const compactTarget = `${target.slice(0, compactTargetBudget)}...`;
+  return `${method} ${compactTarget}`;
+}
+
+function decodeRequestTarget(target) {
+  if (target.length === 0) {
+    return target;
+  }
+
+  const questionMarkIndex = target.indexOf('?');
+  if (questionMarkIndex < 0) {
+    return decodeUriComponentSafely(target);
+  }
+
+  const pathPart = target.slice(0, questionMarkIndex);
+  const queryPart = target.slice(questionMarkIndex + 1);
+  return `${decodeUriComponentSafely(pathPart)}?${decodeUriComponentSafely(queryPart)}`;
+}
+
+function decodeUriComponentSafely(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeMetadataValue(value) {
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed === '-') {
+    return '';
+  }
+  return trimmed;
+}
+
+function resolveRequestId(message) {
+  const correlationId = normalizeMetadataValue(
+    message.match(RTR_CORRELATION_ID_PATTERN)?.groups?.correlationId ?? ''
+  );
+  if (correlationId.length > 0) {
+    return correlationId;
+  }
+
+  return normalizeMetadataValue(
+    message.match(RTR_VCAP_REQUEST_ID_PATTERN)?.groups?.vcapRequestId ?? ''
+  );
+}
+
+function resolveClientIp(message) {
+  const trueClient = normalizeMetadataValue(
+    message.match(RTR_TRUE_CLIENT_IP_PATTERN)?.groups?.clientIp ?? ''
+  );
+  if (trueClient.length > 0) {
+    return trueClient;
+  }
+
+  const legacyTrueClient = normalizeMetadataValue(
+    message.match(RTR_LEGACY_TRUE_CLIENT_IP_PATTERN)?.groups?.clientIp ?? ''
+  );
+  if (legacyTrueClient.length > 0) {
+    return legacyTrueClient;
+  }
+
+  const forwardedFor = normalizeMetadataValue(
+    message.match(RTR_X_FORWARDED_FOR_PATTERN)?.groups?.forwardedFor ?? ''
+  );
+  if (forwardedFor.length === 0) {
+    return '';
+  }
+  const firstForwardedIp = forwardedFor.split(',')[0]?.trim() ?? '';
+  return normalizeMetadataValue(firstForwardedIp);
+}
+
+function formatLatency(responseTimeRaw) {
+  if (responseTimeRaw === '-' || responseTimeRaw.length === 0) {
+    return '';
+  }
+
+  const seconds = Number.parseFloat(responseTimeRaw);
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '';
+  }
+
+  if (seconds < 1) {
+    const millis = trimTrailingZeros((seconds * 1000).toFixed(1));
+    return `${millis} ms`;
+  }
+
+  const secondsText = trimTrailingZeros(seconds.toFixed(3));
+  return `${secondsText} s`;
+}
+
+function trimTrailingZeros(value) {
+  return value.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
 function buildSearchableText(row) {
@@ -471,6 +669,14 @@ function buildSearchableText(row) {
     row.component,
     row.org,
     row.space,
+    row.host,
+    row.method,
+    row.request,
+    row.status,
+    row.latency,
+    row.tenant,
+    row.clientIp,
+    row.requestId,
     row.message,
   ];
   return tokens.join(' ').toLowerCase();
@@ -1020,7 +1226,7 @@ function appendParsedLinesForApp(appName, textLines) {
       continue;
     }
 
-    const parsedRow = parseCfLine(trimmedLine, nextId);
+    const parsedRow = safeParseCfLine(trimmedLine, nextId);
     if (parsedRow !== null) {
       nextRows.push(parsedRow);
       previousRow = parsedRow;
@@ -1029,15 +1235,7 @@ function appendParsedLinesForApp(appName, textLines) {
     }
 
     if (previousRow !== null) {
-      previousRow.message = `${previousRow.message}\n${trimmedLine}`;
-      previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
-      previousRow.level = normalizeLevel(
-        resolveCandidateLevel(previousRow),
-        previousRow.stream,
-        previousRow.message,
-        previousRow.source
-      );
-      previousRow.searchableText = buildSearchableText(previousRow);
+      appendContinuationLine(previousRow, trimmedLine);
       continue;
     }
 
@@ -1215,8 +1413,29 @@ function renderTable(rows) {
         case 'level':
           tr.append(createBadgeCell(row.level, `badge badge-level-${row.level}`, colDef.cellClass));
           break;
+        case 'method':
+          tr.append(createMethodCell(row.method, colDef.cellClass));
+          break;
         case 'logger':
           tr.append(createTextCell(row.logger, `cell-logger ${colDef.cellClass}`));
+          break;
+        case 'request':
+          tr.append(createRequestCell(row.request, colDef.cellClass));
+          break;
+        case 'status':
+          tr.append(createStatusCell(row.status, colDef.cellClass));
+          break;
+        case 'latency':
+          tr.append(createLatencyCell(row.latency, colDef.cellClass));
+          break;
+        case 'tenant':
+          tr.append(createTextCell(row.tenant, `cell-tenant ${colDef.cellClass}`));
+          break;
+        case 'clientIp':
+          tr.append(createTextCell(row.clientIp, `cell-client-ip ${colDef.cellClass}`));
+          break;
+        case 'requestId':
+          tr.append(createTextCell(row.requestId, `cell-request-id ${colDef.cellClass}`));
           break;
         case 'message':
           tr.append(createMessageCell(row.message));
@@ -1251,15 +1470,67 @@ function createBadgeCell(value, badgeClass, cellClass) {
   return td;
 }
 
+function createMethodCell(method, cellClass) {
+  const td = document.createElement('td');
+  td.className = `cell-method ${cellClass}`;
+  td.textContent = method.length > 0 ? method : '-';
+  return td;
+}
+
 function createMessageCell(message) {
   const td = document.createElement('td');
-  td.className = 'cell-message';
+  td.className = 'cell-message col-message';
   const textValue = message.length > 0 ? message : '-';
   const messageText = document.createElement('div');
   messageText.className = 'cell-message-text';
   messageText.textContent = textValue;
   td.append(messageText);
   return td;
+}
+
+function createRequestCell(request, cellClass) {
+  const td = document.createElement('td');
+  td.className = `cell-request ${cellClass}`;
+  const textValue = request.length > 0 ? request : '-';
+  const requestText = document.createElement('div');
+  requestText.className = 'cell-request-text';
+  requestText.textContent = textValue;
+  td.append(requestText);
+  return td;
+}
+
+function createStatusCell(status, cellClass) {
+  const td = document.createElement('td');
+  td.className = `cell-status ${cellClass}`;
+  if (!/^\d{3}$/.test(status)) {
+    return td;
+  }
+
+  const badge = document.createElement('span');
+  badge.className = `badge ${resolveStatusBadgeClass(status)}`;
+  badge.textContent = status;
+  td.append(badge);
+  return td;
+}
+
+function createLatencyCell(latency, cellClass) {
+  const td = document.createElement('td');
+  td.className = `cell-latency ${cellClass}`;
+  td.textContent = latency;
+  return td;
+}
+
+function resolveStatusBadgeClass(status) {
+  if (status.startsWith('5')) {
+    return 'badge-http-5xx';
+  }
+  if (status.startsWith('4')) {
+    return 'badge-http-4xx';
+  }
+  if (status.startsWith('3')) {
+    return 'badge-http-3xx';
+  }
+  return 'badge-http-2xx';
 }
 
 function copyRowMessage(value) {
