@@ -466,6 +466,37 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
+  test('CF logs panel silently drops CF CLI infrastructure messages from the log table', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const searchBox = logsFrame.getByLabel('Search logs');
+      await searchBox.fill('Failed to retrieve logs from Log Cache');
+      await expect(logsFrame.locator('#log-table-body tr td.empty-row')).toBeVisible({
+        timeout: 5000,
+      });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('CF logs panel dropdown removes app after stop logging from sidebar', async () => {
     const session = await launchExtensionHost();
 
