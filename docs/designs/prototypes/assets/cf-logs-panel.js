@@ -959,7 +959,11 @@ function appendRawLogText(existingText, appendedText) {
 function showRowsForSelectedApp(appName, rows, deferRender = false) {
   allRows = rows.slice();
   filteredRows = [];
-  selectedRowId = null;
+  // Preserve selection during streaming appends so the user's chosen row stays
+  // highlighted when new lines arrive. Only reset on a full reload (deferRender=false).
+  if (!deferRender) {
+    selectedRowId = null;
+  }
   emptyStateMessage = `No log entries found for ${appName}.`;
   if (deferRender) {
     hasPendingLevelHydration = true;
@@ -1060,12 +1064,9 @@ function trimRowsForMemory(rows) {
   if (rows.length <= maxRows) {
     return rows;
   }
-
-  const trimmed = rows.slice(rows.length - maxRows);
-  for (let index = 0; index < trimmed.length; index += 1) {
-    trimmed[index].id = index + 1;
-  }
-  return trimmed;
+  // Keep only the newest rows. Do not renumber IDs — stable IDs are required so
+  // that selectedRowId remains valid across trims.
+  return rows.slice(rows.length - maxRows);
 }
 
 function reconcileRowsToCurrentLogLimit() {
@@ -1143,8 +1144,10 @@ function applyFiltersAndRender() {
   // Newest log lines should appear first in the table.
   filteredRows = matchingRows.slice().reverse();
 
-  if (!filteredRows.some((row) => row.id === selectedRowId)) {
-    selectedRowId = filteredRows.length > 0 ? filteredRows[0].id : null;
+  // Clear stale selection when the selected row is no longer in the filtered view.
+  // Never auto-select a row — only explicit user clicks should establish a selection.
+  if (selectedRowId !== null && !filteredRows.some((row) => row.id === selectedRowId)) {
+    selectedRowId = null;
   }
 
   renderTable(filteredRows);

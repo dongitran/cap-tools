@@ -1230,6 +1230,76 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
+  test('CF logs panel preserves row selection when streaming append does not affect the active filtered view', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const sidebarFrame = await openSapToolsSidebar(session.window);
+      const logsFrame = await openCfLogsPanel(session.window);
+      await selectDefaultScope(sidebarFrame);
+
+      const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+      await clickWithFallback(confirmButton);
+
+      await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        sidebarFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 10000,
+      });
+
+      const levelFilter = logsFrame.getByLabel('Filter by level');
+      await levelFilter.selectOption('error');
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(2, { timeout: 5000 });
+
+      const firstRow = logsFrame.locator('#log-table-body tr').first();
+      const secondRow = logsFrame.locator('#log-table-body tr').nth(1);
+
+      await clickWithFallback(secondRow);
+      await expect(secondRow).toHaveClass(/is-selected/);
+      await expect(firstRow).not.toHaveClass(/is-selected/);
+
+      const activeAppName = await logsFrame
+        .getByLabel('Select app')
+        .evaluate((element) => (element instanceof HTMLSelectElement ? element.value : ''));
+      expect(activeAppName.length).toBeGreaterThan(0);
+
+      await logsFrame.evaluate((appName) => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'sapTools.logsAppend',
+              appName,
+              lines: [
+                '2026-04-12T10:00:01.00+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","msg":"routine ping","type":"log"}',
+                '2026-04-12T10:00:02.00+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","msg":"routine ping","type":"log"}',
+              ],
+            },
+          })
+        );
+      }, activeAppName);
+
+      await logsFrame.evaluate(
+        () => new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        })
+      );
+
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(2);
+      await expect(secondRow).toHaveClass(/is-selected/);
+      await expect(firstRow).not.toHaveClass(/is-selected/);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('CF logs panel scope updates when sidebar workspace is confirmed', async () => {
     const session = await launchExtensionHost();
 

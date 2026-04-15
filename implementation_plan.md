@@ -1,68 +1,66 @@
-# Implementation Plan — CFLogs Level Classification Accuracy
+# Implementation Plan — CFLogs Stable Row Selection Under Active Filters
 
 ## Goals
-1. Fix false-positive `ERROR` for gorouter access logs (`[RTR/*]`) with HTTP `200`.
-2. Fix false-negative multiline stacktrace rows that stay at `WARN` after continuation lines contain `Error`.
-3. Keep prototype and extension runtime behavior identical.
-4. Validate deeply with E2E and full quality gates before release.
+1. Fix the selection-jump behavior in CFLogs when new streaming logs arrive while filters are active.
+2. Ensure user-selected row remains selected unless that row truly disappears from the filtered dataset.
+3. Avoid auto-selecting newest/top row during background updates to reduce UX confusion.
+4. Validate prototype, E2E, and full quality gates before release.
 
 ## Mandatory Order
-1. Review current uncommitted diff and trace parsing/level flow end-to-end.
-2. Update prototype assets first (`docs/designs/prototypes/assets/*`).
-3. Verify prototype behavior with MCP Playwright.
-4. Add/update E2E tests first for real failure modes.
-5. Implement/finalize runtime fix in shared webview asset.
-6. Run full validation and only then release steps.
+1. Review uncommitted diff and trace selection flow end-to-end.
+2. Update prototype asset first (`docs/designs/prototypes/assets/cf-logs-panel.js`).
+3. Verify behavior in prototype via MCP Playwright.
+4. Add/update E2E tests to lock behavior.
+5. Run lint/typecheck/unit/cspell and full E2E.
+6. Bump extension version, commit, push, then review.
 
 ## Scope
 - `docs/designs/prototypes/assets/cf-logs-panel.js`
-- `docs/designs/prototypes/variants/cf-logs-panel.html` (cache-bust sync)
 - `e2e/tests/cf-logs-panel.e2e.spec.ts`
-- `src/cfLogsPanel.ts` (sample parity only if needed)
+- `package.json` (version bump)
 
-## Root Cause Analysis Focus
-1. Keyword-only detection (`error`, `failed`) can misclassify RTR metadata fields like `x_cf_routererror`, `failed_attempts`.
-2. Continuation lines (without timestamp/source prefix) are appended to previous row but level was not recomputed.
-3. Under continuation, row severity can remain stale (`warn`) even when appended stacktrace clearly includes `Error`.
+## Root Cause Hypothesis
+1. `applyFiltersAndRender()` previously auto-selected first visible row whenever `selectedRowId` no longer matched.
+2. Stream append updates can invalidate row IDs or selection state, then fallback logic picks top row unexpectedly.
+3. Under active filters, appended rows that do not match filter should not alter current selected row.
 
 ## Implementation Steps
 
-### Step A — Prototype Fix First
-1. Keep RTR special handling by HTTP status extraction:
-- `2xx/3xx -> info`
-- `4xx -> warn`
-- `5xx -> error`
-2. Recompute row level every time a continuation line is appended:
-- in `parseCfRecentLog(...)`
-- in `appendParsedLinesForApp(...)`
-3. Preserve JSON-provided level candidate when available; otherwise fallback to message/stream heuristics.
+### Step A — Diff Review and Logic Hardening
+1. Verify current changes:
+- preserve `selectedRowId` across deferred stream appends,
+- remove automatic first-row fallback selection,
+- keep row IDs stable when trimming.
+2. Confirm no side effect for:
+- app switch,
+- filter switch,
+- selection after no-match states,
+- log-limit trimming.
 
 ### Step B — Prototype Verification (MCP Playwright)
-1. Validate RTR `200` line no longer maps to `ERROR`.
-2. Validate multiline stacktrace line containing `Error` maps to `ERROR`.
-3. Re-check filter/app dropdown interactions after changes.
+1. Open CFLogs prototype.
+2. Select a filtered row (not first row).
+3. Inject new logs that do not match current filter and verify selection remains unchanged.
+4. Inject matching logs and verify selection still does not jump to top row automatically.
 
-### Step C — E2E (TDD)
-1. Add/keep tests:
-- RTR classification by status code.
-- Multiline continuation severity escalation to `ERROR`.
-- Burst rerender coalescing responsiveness guard.
-2. Run targeted E2E tests first, then full E2E suite.
+### Step C — E2E Coverage
+1. Review/update E2E test(s) for selection stability under append.
+2. Ensure test title is behavior-oriented and precise.
+3. Run targeted E2E first, then full E2E suite.
 
-### Step D — Full Validation
+### Step D — Required Validation
 - `npm run validate:root`
 - `npm --prefix e2e run validate`
 - `npm --prefix e2e test`
-- If any failure appears: analyze root cause, fix, and rerun all commands.
+- If any failure appears: fix root cause and rerun all required checks.
 
-### Step E — Release Steps
-1. Increase `package.json` version (if extension runtime changed).
-2. Re-run validation after final changes.
-3. Commit and push.
-4. Review again after push and fix-forward if needed.
+### Step E — Release
+1. Increase patch version in `package.json` if extension runtime changed.
+2. Commit only task-relevant files.
+3. Push and review final git state.
 
 ## Done Criteria
-1. RTR `HTTP 200` logs no longer appear as `ERROR`.
-2. Multiline stacktrace rows with `Error` are shown as `ERROR`.
-3. No regression in dropdown responsiveness and rendering behavior.
-4. Lint/typecheck/test/cspell/E2E all pass.
+1. Selection no longer jumps to first row during background streaming updates.
+2. User-selected row remains stable while filtered view still contains that row.
+3. No regression in CFLogs rendering/filter interactions.
+4. All checks (lint/typecheck/unit/cspell/E2E) pass.
