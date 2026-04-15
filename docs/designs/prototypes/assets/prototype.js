@@ -209,7 +209,10 @@ window.addEventListener('message', (event) => {
       .map((s) => s.name);
     spacesLoadingState = 'loaded';
     appsLoadingState = 'idle';
-    selectedSpaceId = '';
+    const preserveSelectedSpace = mode === 'workspace' && selectedSpaceId.length > 0;
+    if (!preserveSelectedSpace) {
+      selectedSpaceId = '';
+    }
     liveAppOptions = null;
     appsErrorMessage = '';
     // Auto-select when there is only one space.

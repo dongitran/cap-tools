@@ -763,6 +763,7 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   overflow-x: hidden;
   overscroll-behavior: contain;
   align-content: start;
+  padding-top: 2px;
   padding-right: 2px;
 }
 

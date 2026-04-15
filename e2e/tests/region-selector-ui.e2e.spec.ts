@@ -551,6 +551,47 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
+  test(
+    'User reopens extension and reaches monitoring workspace before delayed app hydration completes',
+    async () => {
+      let session = await launchExtensionHost();
+
+      try {
+        const webviewFrame = await openSapToolsSidebar(session.window);
+        await selectDefaultScope(webviewFrame);
+
+        const confirmButton = webviewFrame.getByRole('button', {
+          name: 'Confirm Scope',
+        });
+        await expect(confirmButton).toBeEnabled();
+        await clickWithFallback(confirmButton);
+        await expect(
+          webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        ).toBeVisible({ timeout: 10000 });
+
+        session = await relaunchExtensionHost(session, {
+          extraEnv: {
+            SAP_TOOLS_E2E_TESTMODE_APPS_DELAY_MS: '5000',
+          },
+        });
+
+        const reopenedFrame = await openSapToolsSidebar(session.window);
+        const restoreStartedAt = Date.now();
+        await expect(
+          reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        ).toBeVisible({ timeout: 2500 });
+        const restoreDurationMs = Date.now() - restoreStartedAt;
+        expect(restoreDurationMs).toBeLessThan(2500);
+
+        await expect(
+          reopenedFrame.locator('.app-log-catalog').getByText(/Loading apps/i)
+        ).toBeVisible({ timeout: 2000 });
+      } finally {
+        await cleanupExtensionHost(session);
+      }
+    }
+  );
+
   test('User restores confirmed scope after logging out and logging in again in same session', async () => {
     const session = await launchExtensionHost();
 
@@ -635,6 +676,68 @@ test.describe('SAP Tools region selector', () => {
       expect(styleSnapshot.areaClipPath).toBe('none');
       expect(styleSnapshot.regionBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
       expect(styleSnapshot.regionTopDelta).toBeGreaterThanOrEqual(0.4);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees smooth organization and space hover without top border clipping', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: ORG_TO_SELECT }));
+      await expect(
+        webviewFrame.locator('.org-picker .org-option:not(.is-hidden)').first()
+      ).toBeVisible();
+      await expect(
+        webviewFrame.locator('.space-picker .space-option:not(.is-hidden)').first()
+      ).toBeVisible();
+
+      const styleSnapshot = await webviewFrame.evaluate(() => {
+        const orgPicker = document.querySelector('.org-picker');
+        const orgOption = orgPicker?.querySelector('.org-option:not(.is-hidden)');
+        const spacePicker = document.querySelector('.space-picker');
+        const spaceOption = spacePicker?.querySelector('.space-option:not(.is-hidden)');
+
+        if (
+          !(orgPicker instanceof HTMLElement) ||
+          !(orgOption instanceof HTMLElement) ||
+          !(spacePicker instanceof HTMLElement) ||
+          !(spaceOption instanceof HTMLElement)
+        ) {
+          return null;
+        }
+
+        orgOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+        spaceOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+
+        const orgPickerRect = orgPicker.getBoundingClientRect();
+        const orgOptionRect = orgOption.getBoundingClientRect();
+        const spacePickerRect = spacePicker.getBoundingClientRect();
+        const spaceOptionRect = spaceOption.getBoundingClientRect();
+        const orgStyle = getComputedStyle(orgOption);
+        const spaceStyle = getComputedStyle(spaceOption);
+
+        return {
+          orgBorderTopColor: orgStyle.borderTopColor,
+          orgTopDelta: orgOptionRect.top - orgPickerRect.top,
+          spaceBorderTopColor: spaceStyle.borderTopColor,
+          spaceTopDelta: spaceOptionRect.top - spacePickerRect.top,
+        };
+      });
+
+      expect(styleSnapshot).not.toBeNull();
+      if (styleSnapshot === null) {
+        return;
+      }
+
+      expect(styleSnapshot.orgBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.spaceBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.orgTopDelta).toBeGreaterThanOrEqual(0.4);
+      expect(styleSnapshot.spaceTopDelta).toBeGreaterThanOrEqual(0.4);
     } finally {
       await cleanupExtensionHost(session);
     }

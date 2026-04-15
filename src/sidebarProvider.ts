@@ -27,6 +27,7 @@ import {
 } from './serviceArtifactExporter';
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
 import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } from './testModeData';
+import { SAP_BTP_REGIONS } from './regions';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
@@ -423,44 +424,36 @@ export class RegionSidebarProvider
       return;
     }
 
-    try {
-      await this.handleRegionSelected({
-        id: persistedScope.regionId,
-        name: persistedScope.regionName,
-        code: persistedScope.regionCode,
-        area: persistedScope.regionArea,
-      });
+    const hasKnownRegion = SAP_BTP_REGIONS.some((region) => {
+      return region.id === persistedScope.regionId;
+    });
+    if (!hasKnownRegion) {
+      return;
+    }
 
-      if (this.selectedRegionId !== persistedScope.regionId) {
-        return;
-      }
-
-      await this.handleOrgSelected({
-        guid: persistedScope.orgGuid,
-        name: persistedScope.orgName,
-      });
-
-      if (this.selectedOrgGuid !== persistedScope.orgGuid) {
-        return;
-      }
-
-      await this.handleSpaceSelected({
-        spaceName: persistedScope.spaceName,
+    this.cfLogsPanel.updateScope(
+      buildScopeLabel(
+        persistedScope.regionCode,
+        persistedScope.orgName,
+        persistedScope.spaceName
+      )
+    );
+    this.postMessage({
+      type: MSG_RESTORE_CONFIRMED_SCOPE,
+      scope: {
+        regionId: persistedScope.regionId,
         orgGuid: persistedScope.orgGuid,
-        orgName: persistedScope.orgName,
-      });
+        spaceName: persistedScope.spaceName,
+      },
+    });
 
-      if (!this.matchesLoadedScope(persistedScope)) {
-        return;
-      }
-
-      this.postMessage({
-        type: MSG_RESTORE_CONFIRMED_SCOPE,
-        scope: {
-          regionId: persistedScope.regionId,
-          orgGuid: persistedScope.orgGuid,
-          spaceName: persistedScope.spaceName,
-        },
+    try {
+      void this.hydrateRestoredScope(persistedScope).catch((error: unknown) => {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to hydrate restored scope.';
+        this.outputChannel.appendLine(
+          `[scope] Restored scope hydration failed: ${sanitizeForLog(errorMessage)}`
+        );
       });
     } catch (error) {
       const errorMessage =
@@ -469,6 +462,34 @@ export class RegionSidebarProvider
         `[scope] Restore confirmed scope failed: ${sanitizeForLog(errorMessage)}`
       );
     }
+  }
+
+  private async hydrateRestoredScope(
+    persistedScope: PersistedConfirmedScopeEntry
+  ): Promise<void> {
+    await this.handleRegionSelected({
+      id: persistedScope.regionId,
+      name: persistedScope.regionName,
+      code: persistedScope.regionCode,
+      area: persistedScope.regionArea,
+    });
+    if (this.selectedRegionId !== persistedScope.regionId) {
+      return;
+    }
+
+    await this.handleOrgSelected({
+      guid: persistedScope.orgGuid,
+      name: persistedScope.orgName,
+    });
+    if (this.selectedOrgGuid !== persistedScope.orgGuid) {
+      return;
+    }
+
+    await this.handleSpaceSelected({
+      spaceName: persistedScope.spaceName,
+      orgGuid: persistedScope.orgGuid,
+      orgName: persistedScope.orgName,
+    });
   }
 
   private async persistConfirmedScopeForCurrentUser(
@@ -576,23 +597,6 @@ export class RegionSidebarProvider
     }
 
     return normalizedEntries;
-  }
-
-  private matchesLoadedScope(scope: {
-    readonly regionId: string;
-    readonly orgGuid: string;
-    readonly spaceName: string;
-  }): boolean {
-    const loadedScope = this.lastLoadedScope;
-    if (loadedScope === null) {
-      return false;
-    }
-
-    return (
-      loadedScope.regionId === scope.regionId &&
-      loadedScope.orgGuid === scope.orgGuid &&
-      loadedScope.spaceName === scope.spaceName
-    );
   }
 
   private async handleSelectLocalRootFolder(): Promise<void> {
@@ -1406,7 +1410,7 @@ export class RegionSidebarProvider
     this.lastLoadedScope = null;
 
     if (isTestMode()) {
-      this.handleTestModeSpaceSelection(payload);
+      await this.handleTestModeSpaceSelection(payload);
       return;
     }
 
@@ -1484,7 +1488,12 @@ export class RegionSidebarProvider
     }
   }
 
-  private handleTestModeSpaceSelection(payload: SpaceSelectionPayload): void {
+  private async handleTestModeSpaceSelection(payload: SpaceSelectionPayload): Promise<void> {
+    const appsDelayMs = resolveE2eTestModeAppsDelayMs();
+    if (appsDelayMs > 0) {
+      await sleep(appsDelayMs);
+    }
+
     if (payload.spaceName === 'failspace') {
       this.postAppsError(
         'Simulated CF CLI failure: could not reach API endpoint for failspace.'
@@ -1868,6 +1877,26 @@ export class RegionSidebarProvider
 
 function isTestMode(): boolean {
   return process.env['SAP_TOOLS_TEST_MODE'] === '1';
+}
+
+function resolveE2eTestModeAppsDelayMs(): number {
+  if (process.env['SAP_TOOLS_E2E'] !== '1') {
+    return 0;
+  }
+
+  const rawDelay = process.env['SAP_TOOLS_E2E_TESTMODE_APPS_DELAY_MS'] ?? '';
+  const parsedDelay = Number.parseInt(rawDelay, 10);
+  if (!Number.isFinite(parsedDelay) || parsedDelay <= 0) {
+    return 0;
+  }
+
+  return Math.min(parsedDelay, 30_000);
+}
+
+async function sleep(delayMs: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
