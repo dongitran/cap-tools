@@ -12,6 +12,7 @@ import {
   THEME_SCENARIOS,
   cleanupExtensionHost,
   clickWithFallback,
+  createHeavyServiceRootMappingFixture,
   createLongServiceRootMappingFixture,
   createServiceRootMappingFixture,
   expectNoOuterGutter,
@@ -1103,6 +1104,132 @@ test.describe('SAP Tools region selector', () => {
       });
       await expect(reopenedMappedStateCells).toHaveCount(3, { timeout: 10000 });
       await expect(reopenedFrame.locator('.service-map-row.is-unmapped')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(fixtureRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('User reopens extension and sees mapped services immediately in Apps export table', async () => {
+    const fixtureRootPath = createHeavyServiceRootMappingFixture();
+    let session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATH: fixtureRootPath,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Select Root Folder' }));
+
+      const mappedStateCells = webviewFrame.locator('.service-map-row .service-map-state', {
+        hasText: /^Mapped$/i,
+      });
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 15000 });
+      await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
+
+      session = await relaunchExtensionHost(session);
+      const reopenedFrame = await openSapToolsSidebar(session.window, 60000);
+      await expect(
+        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 20000 });
+      await reopenedFrame
+        .locator('.workspace-tabs .tab-button[data-tab-id="apps"]')
+        .first()
+        .evaluate((button) => {
+          if (button instanceof HTMLElement) {
+            button.click();
+          }
+        });
+
+      await expect(reopenedFrame.locator('.service-map-row')).toHaveCount(3, { timeout: 15000 });
+
+      const immediateMappingSnapshot = await reopenedFrame.evaluate(() => {
+        const stateElements = Array.from(
+          document.querySelectorAll('.service-map-row .service-map-state')
+        );
+        const states = stateElements.map((element) => {
+          return element.textContent.trim();
+        });
+        return {
+          mappedCount: states.filter((state) => /^mapped$/i.test(state)).length,
+          unmappedCount: states.filter((state) => /^unmapped$/i.test(state)).length,
+        };
+      });
+
+      expect(immediateMappingSnapshot.mappedCount).toBe(3);
+      expect(immediateMappingSnapshot.unmappedCount).toBe(0);
+      await expect(reopenedFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(fixtureRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('User confirms same scope after Change Region and keeps mapped services', async () => {
+    const fixtureRootPath = createHeavyServiceRootMappingFixture();
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATH: fixtureRootPath,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Select Root Folder' }));
+
+      const mappedStateCells = webviewFrame.locator('.service-map-row .service-map-state', {
+        hasText: /^Mapped$/i,
+      });
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 15000 });
+      await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
+
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Change Region' }));
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
+      ).toBeVisible({ timeout: 10000 });
+
+      await selectDefaultScope(webviewFrame);
+      const reConfirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(reConfirmButton).toBeEnabled();
+      await clickWithFallback(reConfirmButton);
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      await expect(webviewFrame.locator('.service-map-row')).toHaveCount(3, { timeout: 15000 });
+
+      const immediateMappingSnapshot = await webviewFrame.evaluate(() => {
+        const stateElements = Array.from(
+          document.querySelectorAll('.service-map-row .service-map-state')
+        );
+        const states = stateElements.map((element) => {
+          return element.textContent.trim();
+        });
+        return {
+          mappedCount: states.filter((state) => /^mapped$/i.test(state)).length,
+          unmappedCount: states.filter((state) => /^unmapped$/i.test(state)).length,
+        };
+      });
+
+      expect(immediateMappingSnapshot.mappedCount).toBe(3);
+      expect(immediateMappingSnapshot.unmappedCount).toBe(0);
+      await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
     } finally {
       await cleanupExtensionHost(session);
       fs.rmSync(fixtureRootPath, { recursive: true, force: true });

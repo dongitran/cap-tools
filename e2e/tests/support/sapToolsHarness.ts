@@ -185,6 +185,41 @@ export function createLongServiceRootMappingFixture(): string {
   return longRootPath;
 }
 
+export function createHeavyServiceRootMappingFixture(): string {
+  const fixtureRoot = createServiceRootMappingFixture();
+  const noiseRoot = path.join(fixtureRoot, 'noise-tree');
+
+  for (let branchIndex = 0; branchIndex < 60; branchIndex += 1) {
+    const branchRoot = path.join(noiseRoot, `branch-${String(branchIndex)}`);
+    fs.mkdirSync(path.join(branchRoot, 'level-a', 'level-b', 'level-c'), {
+      recursive: true,
+    });
+
+    for (let leafIndex = 0; leafIndex < 8; leafIndex += 1) {
+      fs.mkdirSync(path.join(branchRoot, 'level-a', `leaf-a-${String(leafIndex)}`), {
+        recursive: true,
+      });
+      fs.mkdirSync(path.join(branchRoot, 'level-a', 'level-b', `leaf-b-${String(leafIndex)}`), {
+        recursive: true,
+      });
+      fs.mkdirSync(
+        path.join(
+          branchRoot,
+          'level-a',
+          'level-b',
+          'level-c',
+          `leaf-c-${String(leafIndex)}`
+        ),
+        {
+          recursive: true,
+        }
+      );
+    }
+  }
+
+  return fixtureRoot;
+}
+
 export async function dismissAiSignInModalIfNeeded(window: Page): Promise<void> {
   const signInPrompt = window.getByText('Sign in to use AI Features');
   const appeared = await signInPrompt

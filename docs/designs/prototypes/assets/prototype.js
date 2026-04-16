@@ -1112,7 +1112,7 @@ function handleSelectionFlowAction(action) {
   if (action === 'change-region') {
     mode = 'selection';
     isLiveMode = false;
-    resetWorkspaceLoggingState();
+    resetActiveAppLoggingState();
     return true;
   }
 
@@ -3180,15 +3180,17 @@ function pruneSelectedServiceExportAppId() {
 
 function refreshServiceMappingsAfterAppsLoaded() {
   const availableApps = resolveCurrentSpaceApps();
-  clearServiceMappingsForScope();
 
   if (localServiceRootFolderPath.length === 0) {
+    clearServiceMappingsForScope();
     serviceExportStatusTone = 'error';
     serviceExportStatusMessage = 'Select a local root folder before scanning service mappings.';
     return;
   }
 
   if (availableApps.length === 0) {
+    serviceFolderScanInProgress = false;
+    serviceExportInProgress = false;
     serviceExportStatusTone = 'info';
     serviceExportStatusMessage = 'No running services available in this space.';
     return;
@@ -3313,11 +3315,15 @@ function buildFallbackAppNames(spaceKey) {
 }
 
 function resetWorkspaceLoggingState() {
+  resetActiveAppLoggingState();
+  clearServiceMappingsForScope();
+}
+
+function resetActiveAppLoggingState() {
   const hadActiveApps = activeAppLogIds.length > 0;
   selectedAppLogIds = [];
   activeAppLogIds = [];
   statusMessage = '';
-  clearServiceMappingsForScope();
   if (hadActiveApps) {
     postActiveAppsChanged([]);
   }

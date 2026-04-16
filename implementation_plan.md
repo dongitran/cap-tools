@@ -1,123 +1,108 @@
-# Implementation Plan — SAP Tools: Workspace UI/UX + Mapping Persistence + Searchability
+# Implementation Plan — SAP Tools: Export Mapping Restore + Change Region Remap Stability
 
 ## 1) Objective
-1. Align Apps tab action button sizing so **Export SQLTools Config** has the same visual height as **Export Artifacts**.
-2. Fix persisted mapping hydration so, after VS Code window reload with previously confirmed scope and cached root folder, service rows remain correctly mapped without forcing **Select Root Folder** again.
-3. Align typography so **Active Apps Log** heading size matches **Apps Log Control** heading size.
-4. Add fast search inputs to:
-   - **Apps Log Control** (service list in Logs tab)
-   - **Export Service Artifacts** (service mapping list in Apps tab)
-5. Change service mapping path truncation behavior to prioritize tail visibility (ellipsis at the beginning) when width is constrained.
+1. Remove transient **Unmapped** flash in `Export Service Artifacts` right after VS Code reload when root folder was already selected previously.
+2. Improve perceived load speed by showing previously known mapped services immediately (then refresh in background) instead of waiting several seconds.
+3. Fix flow where `Change Region` -> `Confirm Scope` (same scope) leads to all services staying **Unmapped**.
+4. Preserve current architecture and avoid broad regressions.
+5. Deliver as version `0.5.1` and publish with pre-release channel flow.
 
 ## 2) Full Context Researched
-1. Main extension runtime/UI bridge:
-   - `src/sidebarProvider.ts` handles restore flow, scope hydration, root-folder cache restore, mapping scan trigger, and postMessage events.
-   - `docs/designs/prototypes/assets/prototype.js` renders entire sidebar webview UI (selection/workspace/settings, logs/apps tabs).
-   - `docs/designs/prototypes/assets/prototype.css` controls all sidebar styles (buttons, headings, service map rows).
-2. Mapping persistence flow traced end-to-end:
-   - Root folder cache persisted via `CacheStore.setExportRootFolder(email, regionCode, orgGuid, rootFolderPath)`.
-   - Restored during org selection in `restoreRootFolderForCurrentOrg`.
-   - Mapping scan performed via `refreshServiceFolderMappings` in extension and consumed by webview through `sapTools.serviceFolderMappingsLoaded`.
-3. Existing e2e coverage reviewed:
-   - `e2e/tests/region-selector-ui.e2e.spec.ts` already verifies Apps tab export controls and some mapping workflows.
-   - No test currently guarantees mapped-state restoration after extension host relaunch with cached root folder.
-   - No test currently verifies new search inputs in Apps Log Control + Export Service Artifacts.
-4. Existing prototype behavior reviewed:
-   - Logs tab already has generic log search input (`data-role="log-search"`) for log lines, but not service-catalog search in Apps Log Control.
-   - Apps tab currently has no dedicated mapping search input.
-   - Service path column currently uses end truncation (`text-overflow: ellipsis`).
+1. Extension runtime (`src/sidebarProvider.ts`):
+   - Root folder cache restore currently happens in `restoreRootFolderForCurrentOrg`.
+   - Mappings are repeatedly reset to `[]` on scope transitions (`handleRegionSelected`, `handleOrgSelected`, `postAppsLoaded`).
+   - Mapping scan uses `buildServiceFolderMappings(...)` and can be expensive on large trees.
+2. Webview runtime (`docs/designs/prototypes/assets/prototype.js`):
+   - `appsLoaded` + `localRootFolderUpdated` call `refreshServiceMappingsAfterAppsLoaded`.
+   - `refreshServiceMappingsAfterAppsLoaded` currently clears mappings first (`clearServiceMappingsForScope`), which causes visible unmapped transitions.
+   - `change-region` action clears workspace mapping state, but reconfirming same scope does not always trigger fresh scope fetch path, causing stale/unmapped state.
+3. Scan performance (`src/serviceFolderMapping.ts`):
+   - Full directory walk up to depth 6 with package.json detection; expensive enough to create visible delay.
+4. Existing e2e:
+   - Has tests for eventual mapped restoration after relaunch.
+   - Does not assert “no transient unmapped while refreshing”.
+   - Does not assert mapped persistence after `Change Region` -> reconfirm same scope path.
 
 ## 3) Files In Scope
 1. `implementation_plan.md`
 2. `docs/designs/prototypes/assets/prototype.js`
-3. `docs/designs/prototypes/assets/prototype.css`
-4. `e2e/tests/region-selector-ui.e2e.spec.ts`
-5. `src/sidebarProvider.ts`
-6. `package.json` (version bump after all checks pass)
-7. `CHANGELOG.md` (if needed to reflect release semantics)
+3. `docs/designs/prototypes/variants/design.html` (cache-busting if needed)
+4. `docs/designs/prototypes/assets/gallery.js` (cache-busting if needed)
+5. `docs/designs/prototypes/index.html` (cache-busting if needed)
+6. `src/sidebarProvider.ts`
+7. `e2e/tests/region-selector-ui.e2e.spec.ts`
+8. `package.json`
+9. `package-lock.json`
+10. `CHANGELOG.md` (if release notes require update)
 
 ## 4) Mandatory Order (per AGENTS.md)
-1. Update prototype files first.
-2. Verify prototype via MCP Playwright.
-3. Then execute TDD for extension/runtime changes.
-4. Implement extension code changes.
-5. Re-run all required validations.
-6. Bump extension version only after validations pass.
+1. Update prototype behavior first.
+2. Verify prototype with MCP Playwright + snapshot images.
+3. Add/update failing e2e tests first (TDD).
+4. Implement extension runtime fix.
+5. Re-run targeted e2e, then full required validations.
+6. Bump version `0.5.1`, commit, push.
+7. Execute pre-release publish flow (or report exact auth blocker).
 
 ## 5) Detailed Design
 
-### A. UI/UX updates (prototype + extension-rendered webview assets)
-1. Button-height parity:
-   - Ensure `.service-export-sqltools-button` and `.service-export-button` share identical min-height/padding/line-height tokens.
-2. Heading typography parity:
-   - Align `.active-apps-log h3` typography scale with Logs section primary heading style used for **Apps Log Control**.
-3. Apps Log Control search:
-   - Add controlled state for app catalog search term.
-   - Add input in Logs tab UI.
-   - Filter `renderAppLogCatalogMarkup` list by app name substring (case-insensitive) while preserving selected/active state behaviors.
-4. Export Service Artifacts search:
-   - Add controlled state for mapping search term.
-   - Add input in Apps tab UI above mapping list.
-   - Filter rows from `resolveServiceExportRows` + `serviceFolderMappings` using app name and folder path text.
-5. Path truncation from front (left ellipsis style):
-   - Replace standard right-ellipsis behavior for `.service-map-path` with directionality/layout approach that preserves right-side path segments.
-   - Keep readable tooltip/title for full path.
+### A. Prototype behavior alignment
+1. Adjust `refreshServiceMappingsAfterAppsLoaded` so it does not blindly clear current mappings before refresh request.
+2. Keep mapped rows visible while refresh is in progress whenever prior mappings exist.
+3. Ensure `confirm-region` path triggers mapping refresh for current scope when root folder + app list are already present (fixes reconfirm path).
 
-### B. Mapping persistence after reload
-1. Strengthen restored-scope hydration sequence in `src/sidebarProvider.ts` to guarantee scan trigger after root-folder restore and app catalog readiness.
-2. Eliminate race where stale/early mapping clear events can overwrite restored mapping state.
-3. Ensure restored root path and mapping state are posted deterministically after reload using existing cache scope (email + regionCode + orgGuid).
-4. Preserve current error safety (missing path cleanup, request-id stale guard, secure error messaging).
+### B. Extension runtime fix
+1. Preload cached root folder earlier in `handleRequestInitialState` using persisted confirmed scope (email + region + org) so webview receives root path sooner.
+2. Add persisted service-mapping snapshot cache per scope in sidebar provider global state:
+   - Key dimensions: user + region + org + space + root folder.
+   - Payload: normalized `ServiceFolderMapping[]` + timestamp.
+3. On `postAppsLoaded`, restore cached mappings immediately when key matches.
+4. Still run `refreshServiceFolderMappings` to revalidate in background and overwrite cache with latest scan result.
+5. Keep all request-id guards and error handling unchanged; no secret/sensitive payload logging.
+
+### C. Change Region -> Confirm Scope fix
+1. Ensure reconfirming same scope forces mapping refresh path even if region/org/space values are unchanged in webview state.
+2. Avoid mapping reset that leaves table stuck in unmapped when no new scope events are emitted.
 
 ## 6) TDD Plan
-1. Add/extend e2e tests first (before extension code edits):
-   - `User can restore mapped services automatically after reopening with cached root folder`
-   - `User can search services in Apps Log Control`
-   - `User can search services in Export Service Artifacts`
-   - `User sees front-truncated folder path in service mapping list`
-   - `User sees matching height between Export Artifacts and Export SQLTools Config`
-   - `User sees matching heading font size between Active Apps Log and Apps Log Control`
-2. Run targeted e2e to confirm failing behavior before fix.
-3. Implement code changes.
-4. Re-run targeted e2e and then full e2e.
+1. Add/adjust e2e tests first:
+   - `User reopens workspace and keeps mapped services visible while mapping refresh runs`
+   - `User can return from Change Region and keep mapped services for same confirmed scope`
+2. Run targeted tests and confirm failing state before fix.
+3. Implement prototype/runtime changes.
+4. Re-run targeted tests to pass.
+5. Run full e2e suite and root validations.
 
 ## 7) Prototype Verification (MCP Playwright)
-1. Start prototype server:
+1. Serve prototype:
    - `python3 -m http.server 4173 --bind 0.0.0.0 --directory docs/designs/prototypes`
-2. Validate in browser automation:
-   - Logs tab service search behavior.
-   - Apps tab mapping search behavior.
-   - Button/heading visual parity.
-   - Front-side truncation behavior under constrained width.
-3. Capture screenshots for confirmation.
+2. Validate via `http://127.0.0.1:4173/index.html`:
+   - Reconfirm same scope path does not degrade to unmapped.
+   - Mapping list stays stable while refresh happens.
+3. Capture before/after screenshots for evidence.
 
 ## 8) Required Validation Checklist
-1. Root:
-   - `npm run typecheck`
-   - `npm run lint`
-   - `npm run cspell`
-   - `npm run test:unit`
+1. Root checks:
    - `npm run validate:root`
-2. E2E:
-   - `npm --prefix e2e run typecheck`
-   - `npm --prefix e2e run lint`
-   - `npm --prefix e2e run cspell`
+2. E2E checks:
    - `npm --prefix e2e run validate`
    - `npm --prefix e2e test`
-3. If any step fails:
-   - analyze exact failure,
-   - fix root cause,
-   - rerun failed step,
-   - rerun full required validations.
+3. If failure occurs:
+   - inspect root cause,
+   - fix,
+   - rerun failed command,
+   - rerun full checklist.
 
 ## 9) Versioning and Delivery
-1. After all checks pass, bump extension version in `package.json` (patch bump).
-2. Research and use VS Code extension **pre-release** publishing flow so users on stable release channel do not auto-upgrade to pre-release unless they opt in.
-3. Commit changes with valid hooks (no bypass flags).
-4. Push and publish pre-release build command path (subject to repository permissions/auth availability).
+1. Bump extension version strictly to `0.5.1`.
+2. Commit with hooks enabled (no bypass).
+3. Push branch `main`.
+4. Run pre-release publish flow (`vsce publish --pre-release`) so stable-channel auto update does not pull this build by default.
+5. If marketplace auth/token missing, report exact blocker and ready-to-run command.
 
 ## 10) Done Criteria
-1. All five requested UI/runtime issues are fixed in prototype and extension behavior.
-2. New/updated tests cover restored mapping + search + visual parity + truncation behavior.
-3. Required validations pass fully.
-4. Version bumped and pre-release delivery guidance/steps executed or clearly reported with blocker details.
+1. No transient unmapped regression on reload for previously mapped scope.
+2. `Change Region` reconfirm path preserves/recovers mapped state correctly.
+3. New e2e tests cover both behaviors and pass.
+4. Full validation checklist passes.
+5. Version `0.5.1` committed and pushed; pre-release publish attempted/completed.

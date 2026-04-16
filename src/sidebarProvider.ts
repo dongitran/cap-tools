@@ -33,6 +33,7 @@ export const REGION_VIEW_ID = 'sapTools.regionView';
 
 const PROTOTYPE_DESIGN_ID = '34';
 const CONFIRMED_SCOPE_BY_EMAIL_GLOBAL_STATE_KEY = 'sapTools.confirmedScopeByEmail.v1';
+const SERVICE_MAPPINGS_BY_SCOPE_GLOBAL_STATE_KEY = 'sapTools.serviceMappingsByScope.v1';
 
 // ── Inbound message types (webview → extension) ─────────────────────────────
 
@@ -183,6 +184,12 @@ interface LoadedScopeState {
   readonly regionId: string;
   readonly orgGuid: string;
   readonly spaceName: string;
+}
+
+interface PersistedServiceMappingScopeEntry {
+  readonly rootFolderPath: string;
+  readonly mappings: readonly ServiceFolderMapping[];
+  readonly updatedAt: string;
 }
 
 // ── Provider ─────────────────────────────────────────────────────────────────
@@ -394,6 +401,11 @@ export class RegionSidebarProvider
   private async handleRequestInitialState(): Promise<void> {
     const snapshot = await this.cacheSyncService.getRuntimeSnapshot();
     this.postCacheState(snapshot);
+
+    if (!this.hasAttemptedConfirmedScopeRestore) {
+      await this.preloadRootFolderForPersistedScope();
+    }
+
     this.postMessage({
       type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
       path: this.selectedLocalRootFolderPath,
@@ -411,6 +423,39 @@ export class RegionSidebarProvider
 
   private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
     await this.persistConfirmedScopeForCurrentUser(payload);
+  }
+
+  private async preloadRootFolderForPersistedScope(): Promise<void> {
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return;
+    }
+
+    const persistedScope = this.readPersistedConfirmedScopeForEmail(credentials.email);
+    if (persistedScope === null) {
+      return;
+    }
+
+    const cachedEntry = await this.cacheStore.getExportRootFolder(
+      credentials.email,
+      persistedScope.regionCode,
+      persistedScope.orgGuid
+    );
+    if (cachedEntry === null) {
+      return;
+    }
+
+    const folderExists = await pathExists(cachedEntry.rootFolderPath);
+    if (!folderExists) {
+      await this.cacheStore.deleteExportRootFolder(
+        credentials.email,
+        persistedScope.regionCode,
+        persistedScope.orgGuid
+      );
+      return;
+    }
+
+    this.selectedLocalRootFolderPath = cachedEntry.rootFolderPath;
   }
 
   private async restoreConfirmedScopeForCurrentUser(): Promise<void> {
@@ -727,6 +772,7 @@ export class RegionSidebarProvider
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
     });
+    void this.persistServiceFolderMappingsForCurrentScope(this.serviceFolderMappings);
   }
 
   private async refreshServiceFolderMappings(): Promise<void> {
@@ -757,6 +803,7 @@ export class RegionSidebarProvider
         type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
         mappings: this.serviceFolderMappings,
       });
+      await this.persistServiceFolderMappingsForCurrentScope(this.serviceFolderMappings);
     } catch (error) {
       this.serviceFolderMappings = [];
       this.serviceFolderSelections.clear();
@@ -915,6 +962,158 @@ export class RegionSidebarProvider
         folderPath: selectedFolderPath,
       };
     });
+  }
+
+  private async restoreServiceFolderMappingsForCurrentScope(): Promise<boolean> {
+    if (this.currentApps.length === 0) {
+      return false;
+    }
+
+    const cacheScope = await this.resolveCurrentServiceMappingCacheScope();
+    if (cacheScope === null) {
+      return false;
+    }
+
+    const mappingCacheByScope = this.readServiceMappingCacheByScope();
+    const cachedEntry = mappingCacheByScope[cacheScope.scopeKey];
+    if (cachedEntry === undefined || cachedEntry.mappings.length === 0) {
+      return false;
+    }
+
+    const cachedMappingById = new Map(
+      cachedEntry.mappings.map((mapping) => [mapping.appId, mapping])
+    );
+    const cachedMappingByName = new Map(
+      cachedEntry.mappings.map((mapping) => [mapping.appName, mapping])
+    );
+
+    const restoredMappings = this.currentApps.map((app) => {
+      const cachedMapping = cachedMappingById.get(app.id) ?? cachedMappingByName.get(app.name);
+      if (cachedMapping === undefined) {
+        return {
+          appId: app.id,
+          appName: app.name,
+          folderPath: '',
+          matchType: 'none',
+          candidateFolderPaths: [],
+          hasConflict: false,
+        } satisfies ServiceFolderMapping;
+      }
+
+      return {
+        ...cachedMapping,
+        appId: app.id,
+        appName: app.name,
+      } satisfies ServiceFolderMapping;
+    });
+
+    this.serviceFolderSelections.clear();
+    for (const mapping of restoredMappings) {
+      if (
+        mapping.hasConflict &&
+        mapping.folderPath.length > 0 &&
+        mapping.candidateFolderPaths.includes(mapping.folderPath)
+      ) {
+        this.serviceFolderSelections.set(mapping.appId, mapping.folderPath);
+      }
+    }
+
+    this.serviceFolderMappings = this.applyServiceFolderSelections(restoredMappings);
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
+    });
+    return true;
+  }
+
+  private async persistServiceFolderMappingsForCurrentScope(
+    mappings: readonly ServiceFolderMapping[]
+  ): Promise<void> {
+    if (mappings.length === 0) {
+      return;
+    }
+
+    const cacheScope = await this.resolveCurrentServiceMappingCacheScope();
+    if (cacheScope === null) {
+      return;
+    }
+
+    const normalizedMappings = mappings
+      .map((mapping) => normalizeServiceMappingForPersistence(mapping))
+      .filter((mapping): mapping is ServiceFolderMapping => mapping !== null);
+    if (normalizedMappings.length === 0) {
+      return;
+    }
+
+    const mappingCacheByScope = this.readServiceMappingCacheByScope();
+    mappingCacheByScope[cacheScope.scopeKey] = {
+      rootFolderPath: cacheScope.rootFolderPath,
+      mappings: normalizedMappings,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      await this.context.globalState.update(
+        SERVICE_MAPPINGS_BY_SCOPE_GLOBAL_STATE_KEY,
+        mappingCacheByScope
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unable to persist service mapping cache.';
+      this.outputChannel.appendLine(
+        `[cache] Failed to persist service mapping cache: ${sanitizeForLog(errorMessage)}`
+      );
+    }
+  }
+
+  private async resolveCurrentServiceMappingCacheScope(): Promise<{
+    readonly scopeKey: string;
+    readonly rootFolderPath: string;
+  } | null> {
+    const loadedScope = this.lastLoadedScope;
+    const regionCode = this.selectedRegionCode.trim();
+    const rootFolderPath = this.selectedLocalRootFolderPath.trim();
+    if (
+      loadedScope === null ||
+      regionCode.length === 0 ||
+      rootFolderPath.length === 0
+    ) {
+      return null;
+    }
+
+    const spaceName = loadedScope.spaceName.trim();
+    const orgGuid = loadedScope.orgGuid.trim();
+    if (spaceName.length === 0 || orgGuid.length === 0) {
+      return null;
+    }
+
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return null;
+    }
+
+    const scopeKey = buildServiceMappingsScopeKey(
+      credentials.email,
+      regionCode,
+      orgGuid,
+      spaceName,
+      rootFolderPath
+    );
+    if (scopeKey.length === 0) {
+      return null;
+    }
+
+    return {
+      scopeKey,
+      rootFolderPath,
+    };
+  }
+
+  private readServiceMappingCacheByScope(): Record<string, PersistedServiceMappingScopeEntry> {
+    const rawValue = this.context.globalState.get<unknown>(
+      SERVICE_MAPPINGS_BY_SCOPE_GLOBAL_STATE_KEY
+    );
+    return normalizePersistedServiceMappingsByScope(rawValue);
   }
 
   private async handleExportServiceArtifacts(
@@ -1456,7 +1655,7 @@ export class RegionSidebarProvider
           }));
 
     if (cachedSidebarApps !== null) {
-      this.postAppsLoaded(cachedSidebarApps, payload, credentials, cfHomeDir, regionCode);
+      await this.postAppsLoaded(cachedSidebarApps, payload, credentials, cfHomeDir, regionCode);
     }
 
     try {
@@ -1481,7 +1680,7 @@ export class RegionSidebarProvider
         return;
       }
       if (cachedSidebarApps === null || !areSidebarAppsEqual(cachedSidebarApps, apps)) {
-        this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
+        await this.postAppsLoaded(apps, payload, credentials, cfHomeDir, regionCode);
       }
     } catch (error) {
       if (!this.isCurrentSpaceRequest(requestId)) {
@@ -1531,13 +1730,17 @@ export class RegionSidebarProvider
       orgGuid: payload.orgGuid,
       spaceName: payload.spaceName,
     };
-    this.serviceFolderMappings = [];
-    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
-    this.postMessage({
-      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
-      mappings: this.serviceFolderMappings,
-    });
+    const restoredMappings = await this.restoreServiceFolderMappingsForCurrentScope();
+    if (!restoredMappings) {
+      this.serviceFolderMappings = [];
+      this.serviceFolderSelections.clear();
+      this.postMessage({
+        type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+        mappings: this.serviceFolderMappings,
+      });
+    }
+
     if (this.selectedLocalRootFolderPath.length > 0) {
       void this.refreshServiceFolderMappings();
     }
@@ -1621,13 +1824,13 @@ export class RegionSidebarProvider
     }
   }
 
-  private postAppsLoaded(
+  private async postAppsLoaded(
     apps: SidebarAppEntry[],
     payload: SpaceSelectionPayload,
     credentials: { readonly email: string; readonly password: string },
     cfHomeDir: string,
     regionCode: string
-  ): void {
+  ): Promise<void> {
     this.postMessage({ type: MSG_APPS_LOADED, apps });
     this.cfLogsPanel.updateScope(
       buildScopeLabel(regionCode, payload.orgName, payload.spaceName)
@@ -1654,13 +1857,17 @@ export class RegionSidebarProvider
       orgGuid: payload.orgGuid,
       spaceName: payload.spaceName,
     };
-    this.serviceFolderMappings = [];
-    this.serviceFolderSelections.clear();
     this.exportInProgress = false;
-    this.postMessage({
-      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
-      mappings: this.serviceFolderMappings,
-    });
+    const restoredMappings = await this.restoreServiceFolderMappingsForCurrentScope();
+    if (!restoredMappings) {
+      this.serviceFolderMappings = [];
+      this.serviceFolderSelections.clear();
+      this.postMessage({
+        type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+        mappings: this.serviceFolderMappings,
+      });
+    }
+
     if (this.selectedLocalRootFolderPath.length > 0) {
       void this.refreshServiceFolderMappings();
     }
@@ -1956,6 +2163,132 @@ function readOptionalString(value: unknown, maxLength: number): string {
   }
 
   return normalized;
+}
+
+function buildServiceMappingsScopeKey(
+  email: string,
+  regionCode: string,
+  orgGuid: string,
+  spaceName: string,
+  rootFolderPath: string
+): string {
+  const normalizedEmail = normalizeUserEmail(email);
+  const normalizedRegionCode = regionCode.trim().toLowerCase();
+  const normalizedOrgGuid = orgGuid.trim().toLowerCase();
+  const normalizedSpaceName = spaceName.trim().toLowerCase();
+  const normalizedRootFolderPath = rootFolderPath.trim();
+
+  if (
+    normalizedEmail.length === 0 ||
+    normalizedRegionCode.length === 0 ||
+    normalizedOrgGuid.length === 0 ||
+    normalizedSpaceName.length === 0 ||
+    normalizedRootFolderPath.length === 0
+  ) {
+    return '';
+  }
+
+  return JSON.stringify([
+    normalizedEmail,
+    normalizedRegionCode,
+    normalizedOrgGuid,
+    normalizedSpaceName,
+    normalizedRootFolderPath,
+  ]);
+}
+
+function normalizePersistedServiceMappingsByScope(
+  rawValue: unknown
+): Record<string, PersistedServiceMappingScopeEntry> {
+  if (!isRecord(rawValue)) {
+    return {};
+  }
+
+  const normalizedEntries: Record<string, PersistedServiceMappingScopeEntry> = {};
+  for (const [scopeKeyRaw, entryRaw] of Object.entries(rawValue)) {
+    const scopeKey = scopeKeyRaw.trim();
+    if (scopeKey.length === 0) {
+      continue;
+    }
+
+    const entry = normalizePersistedServiceMappingScopeEntry(entryRaw);
+    if (entry === null) {
+      continue;
+    }
+
+    normalizedEntries[scopeKey] = entry;
+  }
+
+  return normalizedEntries;
+}
+
+function normalizePersistedServiceMappingScopeEntry(
+  rawValue: unknown
+): PersistedServiceMappingScopeEntry | null {
+  if (!isRecord(rawValue)) {
+    return null;
+  }
+
+  const rootFolderPath = readOptionalString(rawValue['rootFolderPath'], 4096);
+  const updatedAt = readOptionalString(rawValue['updatedAt'], 96);
+  const rawMappings = rawValue['mappings'];
+  if (rootFolderPath.length === 0 || updatedAt.length === 0 || !Array.isArray(rawMappings)) {
+    return null;
+  }
+
+  const mappings = rawMappings
+    .map((mapping) => normalizeServiceMappingForPersistence(mapping))
+    .filter((mapping): mapping is ServiceFolderMapping => mapping !== null);
+
+  return {
+    rootFolderPath,
+    updatedAt,
+    mappings,
+  };
+}
+
+function normalizeServiceMappingForPersistence(rawValue: unknown): ServiceFolderMapping | null {
+  if (!isRecord(rawValue)) {
+    return null;
+  }
+
+  const appId = readOptionalString(rawValue['appId'], 128);
+  const appName = readOptionalString(rawValue['appName'], 128);
+  const folderPath = readOptionalString(rawValue['folderPath'], 4096);
+  const matchTypeRaw = readOptionalString(rawValue['matchType'], 16);
+  const matchType =
+    matchTypeRaw === 'exact' ||
+    matchTypeRaw === 'underscore' ||
+    matchTypeRaw === 'none' ||
+    matchTypeRaw === 'ambiguous'
+      ? matchTypeRaw
+      : 'none';
+
+  if (appId.length === 0 || appName.length === 0) {
+    return null;
+  }
+
+  const rawCandidateFolderPaths = Array.isArray(rawValue['candidateFolderPaths'])
+    ? rawValue['candidateFolderPaths']
+    : [];
+  const candidateFolderPaths = rawCandidateFolderPaths
+    .map((candidatePath) => readOptionalString(candidatePath, 4096))
+    .filter((candidatePath) => candidatePath.length > 0);
+
+  const hasConflict = rawValue['hasConflict'] === true;
+  const effectiveFolderPath =
+    hasConflict && folderPath.length > 0 && !candidateFolderPaths.includes(folderPath)
+      ? ''
+      : folderPath;
+
+  return {
+    appId,
+    appName,
+    folderPath: effectiveFolderPath,
+    matchType,
+    candidateFolderPaths,
+    hasConflict,
+  };
 }
 
 function areSidebarAppsEqual(
