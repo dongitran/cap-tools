@@ -1,95 +1,123 @@
-# Implementation Plan — CFLogs Readability Upgrade With Safe Raw Fallback
+# Implementation Plan — SAP Tools: Workspace UI/UX + Mapping Persistence + Searchability
 
-## Objectives
-1. Make CFLogs easier to scan for HTTP traffic by adding concise router-focused columns.
-2. Keep existing `Message` data available but hidden by default for deep debugging.
-3. Guarantee no log loss: if beautification/parsing is not possible, row still renders from raw log text.
-4. Preserve existing stream/filter behavior and avoid regressions.
+## 1) Objective
+1. Align Apps tab action button sizing so **Export SQLTools Config** has the same visual height as **Export Artifacts**.
+2. Fix persisted mapping hydration so, after VS Code window reload with previously confirmed scope and cached root folder, service rows remain correctly mapped without forcing **Select Root Folder** again.
+3. Align typography so **Active Apps Log** heading size matches **Apps Log Control** heading size.
+4. Add fast search inputs to:
+   - **Apps Log Control** (service list in Logs tab)
+   - **Export Service Artifacts** (service mapping list in Apps tab)
+5. Change service mapping path truncation behavior to prioritize tail visibility (ellipsis at the beginning) when width is constrained.
 
-## Research Summary
-1. Current table is centered on a wide `Message` column (`time/level/logger/message` default), so Gorouter access logs become hard to read.
-2. Parser already classifies RTR rows by status code but does not extract request/status/latency fields.
-3. Cloud Foundry docs define Gorouter access log shape as:
-   `<host> - [<date>] "<METHOD> <URL> <HTTP>" <status> ... response_time:<seconds> ...` plus optional extra fields.
-4. Existing logic already has safe fallback rows for unparsable lines; this behavior must be preserved and strengthened.
+## 2) Full Context Researched
+1. Main extension runtime/UI bridge:
+   - `src/sidebarProvider.ts` handles restore flow, scope hydration, root-folder cache restore, mapping scan trigger, and postMessage events.
+   - `docs/designs/prototypes/assets/prototype.js` renders entire sidebar webview UI (selection/workspace/settings, logs/apps tabs).
+   - `docs/designs/prototypes/assets/prototype.css` controls all sidebar styles (buttons, headings, service map rows).
+2. Mapping persistence flow traced end-to-end:
+   - Root folder cache persisted via `CacheStore.setExportRootFolder(email, regionCode, orgGuid, rootFolderPath)`.
+   - Restored during org selection in `restoreRootFolderForCurrentOrg`.
+   - Mapping scan performed via `refreshServiceFolderMappings` in extension and consumed by webview through `sapTools.serviceFolderMappingsLoaded`.
+3. Existing e2e coverage reviewed:
+   - `e2e/tests/region-selector-ui.e2e.spec.ts` already verifies Apps tab export controls and some mapping workflows.
+   - No test currently guarantees mapped-state restoration after extension host relaunch with cached root folder.
+   - No test currently verifies new search inputs in Apps Log Control + Export Service Artifacts.
+4. Existing prototype behavior reviewed:
+   - Logs tab already has generic log search input (`data-role="log-search"`) for log lines, but not service-catalog search in Apps Log Control.
+   - Apps tab currently has no dedicated mapping search input.
+   - Service path column currently uses end truncation (`text-overflow: ellipsis`).
 
-## Brainstorm Rounds (Selected Direction)
-1. Round 1 (rejected): Keep current columns and only shorten `Message` text.
-   - Too little improvement; still mixes signal and metadata.
-2. Round 2 (partially accepted): Add a compact `Request` summary column while keeping `Message` visible by default.
-   - Better, but still noisy in default view.
-3. Round 3 (selected):
-   - Add `Request`, `Status`, `Latency` columns.
-   - Hide `Message` by default but keep it toggleable in settings.
-   - For non-RTR or parse-failure rows, `Request` falls back to original message text.
-   - Result: readable defaults + zero data loss.
+## 3) Files In Scope
+1. `implementation_plan.md`
+2. `docs/designs/prototypes/assets/prototype.js`
+3. `docs/designs/prototypes/assets/prototype.css`
+4. `e2e/tests/region-selector-ui.e2e.spec.ts`
+5. `src/sidebarProvider.ts`
+6. `package.json` (version bump after all checks pass)
+7. `CHANGELOG.md` (if needed to reflect release semantics)
 
-## Non-Negotiable Safety Rules
-1. Never drop a log row because parser cannot beautify it.
-2. Never throw from parser/render path for malformed lines; use guarded parsing and fallback values.
-3. Keep full raw message in row model and in `Message` column when enabled.
-4. Do not change fetch/stream transport behavior (only client-side presentation + safe parsing helpers).
+## 4) Mandatory Order (per AGENTS.md)
+1. Update prototype files first.
+2. Verify prototype via MCP Playwright.
+3. Then execute TDD for extension/runtime changes.
+4. Implement extension code changes.
+5. Re-run all required validations.
+6. Bump extension version only after validations pass.
 
-## Files In Scope
-1. Prototype/UI first:
-   - `docs/designs/prototypes/assets/cf-logs-panel.js`
-   - `docs/designs/prototypes/assets/cf-logs-panel.css`
-   - `docs/designs/prototypes/variants/cf-logs-panel.html`
-2. Extension host defaults:
-   - `src/cfLogsPanel.ts`
-3. E2E regression coverage:
-   - `e2e/tests/cf-logs-panel.e2e.spec.ts`
-4. Release metadata (if extension behavior changes):
-   - `package.json`
+## 5) Detailed Design
 
-## Execution Plan
+### A. UI/UX updates (prototype + extension-rendered webview assets)
+1. Button-height parity:
+   - Ensure `.service-export-sqltools-button` and `.service-export-button` share identical min-height/padding/line-height tokens.
+2. Heading typography parity:
+   - Align `.active-apps-log h3` typography scale with Logs section primary heading style used for **Apps Log Control**.
+3. Apps Log Control search:
+   - Add controlled state for app catalog search term.
+   - Add input in Logs tab UI.
+   - Filter `renderAppLogCatalogMarkup` list by app name substring (case-insensitive) while preserving selected/active state behaviors.
+4. Export Service Artifacts search:
+   - Add controlled state for mapping search term.
+   - Add input in Apps tab UI above mapping list.
+   - Filter rows from `resolveServiceExportRows` + `serviceFolderMappings` using app name and folder path text.
+5. Path truncation from front (left ellipsis style):
+   - Replace standard right-ellipsis behavior for `.service-map-path` with directionality/layout approach that preserves right-side path segments.
+   - Keep readable tooltip/title for full path.
 
-### Step 1 — Prototype-first UI/UX update
-1. Add new column definitions (`request`, `status`, `latency`) in prototype script.
-2. Keep `message` column optional and default hidden.
-3. Extend row parsing model:
-   - Extract request line + status + response_time for RTR messages.
-   - Map `response_time` seconds → readable latency text (ms/s).
-   - Fallback to raw message when parsing fails.
-4. Adjust table rendering and CSS widths for new compact columns.
-5. Update prototype cache-busting query string in variant HTML if needed.
+### B. Mapping persistence after reload
+1. Strengthen restored-scope hydration sequence in `src/sidebarProvider.ts` to guarantee scan trigger after root-folder restore and app catalog readiness.
+2. Eliminate race where stale/early mapping clear events can overwrite restored mapping state.
+3. Ensure restored root path and mapping state are posted deterministically after reload using existing cache scope (email + regionCode + orgGuid).
+4. Preserve current error safety (missing path cleanup, request-id stale guard, secure error messaging).
 
-### Step 2 — Verify prototype with MCP Playwright
-1. Start prototype server on `http://127.0.0.1:4173/index.html`.
-2. Validate:
-   - Default header no longer shows `Message`.
-   - New columns render and remain readable at common widths.
-   - Enabling `Message` from settings still shows raw full text.
-   - Malformed/non-RTR lines still appear (fallback request text).
-3. Capture evidence via snapshot/screenshot for UI verification.
+## 6) TDD Plan
+1. Add/extend e2e tests first (before extension code edits):
+   - `User can restore mapped services automatically after reopening with cached root folder`
+   - `User can search services in Apps Log Control`
+   - `User can search services in Export Service Artifacts`
+   - `User sees front-truncated folder path in service mapping list`
+   - `User sees matching height between Export Artifacts and Export SQLTools Config`
+   - `User sees matching heading font size between Active Apps Log and Apps Log Control`
+2. Run targeted e2e to confirm failing behavior before fix.
+3. Implement code changes.
+4. Re-run targeted e2e and then full e2e.
 
-### Step 3 — TDD for extension behavior (tests first)
-1. Update/add E2E tests to assert new default columns and fallback behavior.
-2. Run targeted E2E spec to confirm failure before host-default updates.
-3. Ensure test titles describe behavior clearly (no `bug` wording).
+## 7) Prototype Verification (MCP Playwright)
+1. Start prototype server:
+   - `python3 -m http.server 4173 --bind 0.0.0.0 --directory docs/designs/prototypes`
+2. Validate in browser automation:
+   - Logs tab service search behavior.
+   - Apps tab mapping search behavior.
+   - Button/heading visual parity.
+   - Front-side truncation behavior under constrained width.
+3. Capture screenshots for confirmation.
 
-### Step 4 — Implement extension host default settings
-1. Update `src/cfLogsPanel.ts` column constants to include new IDs.
-2. Set default visible columns to the new readable set with `Message` hidden.
-3. Keep required columns minimal and safe (time remains required).
-
-### Step 5 — Full verification loop
-1. Run root validation:
-   - `npm run validate:root` (typecheck, lint, cspell, unit tests)
-2. Run e2e validation:
+## 8) Required Validation Checklist
+1. Root:
+   - `npm run typecheck`
+   - `npm run lint`
+   - `npm run cspell`
+   - `npm run test:unit`
+   - `npm run validate:root`
+2. E2E:
+   - `npm --prefix e2e run typecheck`
+   - `npm --prefix e2e run lint`
+   - `npm --prefix e2e run cspell`
    - `npm --prefix e2e run validate`
    - `npm --prefix e2e test`
-3. If any check fails, analyze logs, fix root cause, rerun all required checks.
+3. If any step fails:
+   - analyze exact failure,
+   - fix root cause,
+   - rerun failed step,
+   - rerun full required validations.
 
-### Step 6 — Versioning, commit, push, post-review
-1. Bump patch version in `package.json` (extension behavior changed).
-2. Commit with a clear message.
-3. Push branch without bypassing hooks.
-4. Perform final diff review for regressions/security/data-loss risks; fix and repeat validation if needed.
+## 9) Versioning and Delivery
+1. After all checks pass, bump extension version in `package.json` (patch bump).
+2. Research and use VS Code extension **pre-release** publishing flow so users on stable release channel do not auto-upgrade to pre-release unless they opt in.
+3. Commit changes with valid hooks (no bypass flags).
+4. Push and publish pre-release build command path (subject to repository permissions/auth availability).
 
-## Done Criteria
-1. Default CFLogs view is significantly easier to scan for HTTP traffic.
-2. `Message` is available but off by default.
-3. No parsed/unparsed line is silently lost due to beautification logic.
-4. All required validations pass.
-5. Version bump + commit + push completed.
+## 10) Done Criteria
+1. All five requested UI/runtime issues are fixed in prototype and extension behavior.
+2. New/updated tests cover restored mapping + search + visual parity + truncation behavior.
+3. Required validations pass fully.
+4. Version bumped and pre-release delivery guidance/steps executed or clearly reported with blocker details.

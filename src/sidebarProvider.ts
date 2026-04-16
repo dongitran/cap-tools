@@ -490,6 +490,15 @@ export class RegionSidebarProvider
       orgGuid: persistedScope.orgGuid,
       orgName: persistedScope.orgName,
     });
+
+    if (
+      this.selectedRegionId === persistedScope.regionId &&
+      this.selectedOrgGuid === persistedScope.orgGuid &&
+      this.selectedLocalRootFolderPath.length > 0 &&
+      this.currentApps.length > 0
+    ) {
+      await this.refreshServiceFolderMappings();
+    }
   }
 
   private async persistConfirmedScopeForCurrentUser(
@@ -814,6 +823,10 @@ export class RegionSidebarProvider
       type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
       path: this.selectedLocalRootFolderPath,
     });
+
+    if (this.currentApps.length > 0) {
+      await this.refreshServiceFolderMappings();
+    }
   }
 
   private async persistRootFolderForCurrentScope(rootFolderPath: string): Promise<void> {

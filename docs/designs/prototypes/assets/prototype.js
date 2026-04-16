@@ -438,6 +438,8 @@ let isConnected = false;
 let isLiveMode = false;
 let selectedLevel = 'all';
 let searchKeyword = '';
+let appCatalogSearchKeyword = '';
+let serviceExportSearchKeyword = '';
 let selectedLogId = '';
 let statusMessage = '';
 let lastSyncLabel = 'Not synced yet';
@@ -558,12 +560,32 @@ appElement.addEventListener('input', (event) => {
     return;
   }
 
-  if (target.dataset.role !== 'log-search') {
+  const role = target.dataset.role ?? '';
+  if (role === 'log-search') {
+    searchKeyword = target.value;
+    renderPrototype();
     return;
   }
 
-  searchKeyword = target.value;
-  renderPrototype();
+  if (role === 'app-log-search') {
+    appCatalogSearchKeyword = target.value;
+    if (isWorkspaceLogsMounted()) {
+      refreshWorkspaceLogsView();
+      return;
+    }
+    renderPrototype();
+    return;
+  }
+
+  if (role === 'service-export-search') {
+    serviceExportSearchKeyword = target.value;
+    if (isWorkspaceAppsMounted()) {
+      refreshWorkspaceAppsView();
+      return;
+    }
+    renderPrototype();
+    return;
+  }
 });
 
 appElement.addEventListener('change', (event) => {
@@ -734,10 +756,11 @@ function refreshWorkspaceLogsView() {
   }
 
   const availableApps = resolveCurrentSpaceApps();
+  const visibleApps = filterAppCatalogRows(availableApps);
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
   const startableSelectionCount = getStartableSelectionCount(activeApps);
-  const catalogMarkup = renderCatalogByState(availableApps, selectedApps, activeApps);
+  const catalogMarkup = renderCatalogByState(visibleApps, selectedApps, activeApps);
 
   const catalogElement = logsPanel.querySelector('[data-role="app-log-catalog"]');
   if (!(catalogElement instanceof HTMLElement)) {
@@ -745,6 +768,11 @@ function refreshWorkspaceLogsView() {
     return;
   }
   catalogElement.innerHTML = catalogMarkup;
+
+  const appSearchInput = logsPanel.querySelector('[data-role="app-log-search"]');
+  if (appSearchInput instanceof HTMLInputElement) {
+    appSearchInput.value = appCatalogSearchKeyword;
+  }
 
   const activeAppsElement = logsPanel.querySelector('[data-role="active-app-log-list"]');
   if (!(activeAppsElement instanceof HTMLElement)) {
@@ -779,6 +807,7 @@ function refreshWorkspaceAppsView() {
 
   const availableApps = resolveCurrentSpaceApps();
   const mappingRows = resolveServiceExportRows(availableApps);
+  const filteredMappingRows = filterServiceExportRows(mappingRows);
   const selectedMapping = mappingRows.find(
     (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
   );
@@ -815,9 +844,18 @@ function refreshWorkspaceAppsView() {
     renderPrototype();
     return;
   }
+  const hasSearchKeyword = serviceExportSearchKeyword.trim().length > 0;
   mappingListElement.innerHTML = serviceFolderScanInProgress
     ? '<p class="stage-loading" aria-live="polite">Scanning local folders&#8230;</p>'
-    : renderServiceExportMappingRows(mappingRows);
+    : renderServiceExportMappingRows(filteredMappingRows, {
+      hasSearchKeyword,
+      totalRowCount: mappingRows.length,
+    });
+
+  const exportSearchInput = exportTab.querySelector('[data-role="service-export-search"]');
+  if (exportSearchInput instanceof HTMLInputElement) {
+    exportSearchInput.value = serviceExportSearchKeyword;
+  }
 
   const selectedLabelElement = exportTab.querySelector(
     '[data-role="service-export-selected-label"]'
@@ -2444,11 +2482,12 @@ function renderWorkspaceTabContent() {
 
 function renderLogsTab() {
   const availableApps = resolveCurrentSpaceApps();
+  const visibleApps = filterAppCatalogRows(availableApps);
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
   const startableSelectionCount = getStartableSelectionCount(activeApps);
   const spaceLabel = selectedSpaceId.length > 0 ? selectedSpaceId : 'current-space';
-  const catalogMarkup = renderCatalogByState(availableApps, selectedApps, activeApps);
+  const catalogMarkup = renderCatalogByState(visibleApps, selectedApps, activeApps);
   const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps);
   const statusMarkup =
     statusMessage.length === 0
@@ -2463,6 +2502,17 @@ function renderLogsTab() {
       </section>
       <h2>Apps Log Control</h2>
       <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs.</p>
+      <label class="app-log-search-row search-input-with-icon">
+        <span class="search-input-icon" aria-hidden="true">&#128269;</span>
+        <input
+          type="search"
+          class="app-log-search"
+          data-role="app-log-search"
+          value="${escapeHtml(appCatalogSearchKeyword)}"
+          placeholder="Search services by name"
+          aria-label="Search services in Apps Log Control"
+        />
+      </label>
       <section class="app-log-catalog" aria-label="Apps in selected space" data-role="app-log-catalog">
         ${catalogMarkup}
       </section>
@@ -2484,6 +2534,7 @@ function renderLogsTab() {
 function renderServiceExportTab() {
   const availableApps = resolveCurrentSpaceApps();
   const mappingRows = resolveServiceExportRows(availableApps);
+  const filteredMappingRows = filterServiceExportRows(mappingRows);
   const selectedMapping = mappingRows.find(
     (mapping) => mapping.appId === selectedServiceExportAppId && mapping.isMapped
   );
@@ -2492,6 +2543,7 @@ function renderServiceExportTab() {
   const selectedServiceLabel =
     selectedMapping === undefined ? 'No service selected' : selectedMapping.appName;
   const canExport = selectedMapping !== undefined && !serviceExportInProgress;
+  const hasSearchKeyword = serviceExportSearchKeyword.trim().length > 0;
 
   return `
     <section class="group-card service-export-tab" aria-label="Service artifact export">
@@ -2520,6 +2572,18 @@ function renderServiceExportTab() {
         </button>
       </section>
 
+      <label class="service-export-search-row search-input-with-icon">
+        <span class="search-input-icon" aria-hidden="true">&#128269;</span>
+        <input
+          type="search"
+          class="service-export-search"
+          data-role="service-export-search"
+          value="${escapeHtml(serviceExportSearchKeyword)}"
+          placeholder="Search services or mapped paths"
+          aria-label="Search services in Export Service Artifacts"
+        />
+      </label>
+
       <section
         class="service-mapping-list"
         data-role="service-mapping-list"
@@ -2528,7 +2592,10 @@ function renderServiceExportTab() {
         ${
           serviceFolderScanInProgress
             ? '<p class="stage-loading" aria-live="polite">Scanning local folders&#8230;</p>'
-            : renderServiceExportMappingRows(mappingRows)
+            : renderServiceExportMappingRows(filteredMappingRows, {
+              hasSearchKeyword,
+              totalRowCount: mappingRows.length,
+            })
         }
       </section>
 
@@ -2560,8 +2627,14 @@ function renderServiceExportTab() {
   `;
 }
 
-function renderServiceExportMappingRows(mappingRows) {
+function renderServiceExportMappingRows(
+  mappingRows,
+  options = { hasSearchKeyword: false, totalRowCount: 0 }
+) {
   if (mappingRows.length === 0) {
+    if (options.hasSearchKeyword && options.totalRowCount > 0) {
+      return '<p class="logs-empty-message">No services match current search.</p>';
+    }
     if (!isAppsCatalogReady()) {
       return '<p class="stage-loading" aria-live="polite">Loading apps&#8230;</p>';
     }
@@ -2954,6 +3027,18 @@ function resolveCurrentSpaceApps() {
   return appNames.map((appName) => ({ id: appName, name: appName }));
 }
 
+function filterAppCatalogRows(apps) {
+  const keyword = appCatalogSearchKeyword.trim().toLowerCase();
+  if (keyword.length === 0) {
+    return apps;
+  }
+
+  return apps.filter((app) => {
+    const appName = typeof app.name === 'string' ? app.name.toLowerCase() : '';
+    return appName.includes(keyword);
+  });
+}
+
 function resolveServiceExportRows(availableApps) {
   const mappingByAppId = new Map(serviceFolderMappings.map((mapping) => [mapping.appId, mapping]));
   return availableApps.map((app) => {
@@ -2971,6 +3056,19 @@ function resolveServiceExportRows(availableApps) {
       candidateFolderPaths: [],
       matchType: 'none',
     };
+  });
+}
+
+function filterServiceExportRows(mappingRows) {
+  const keyword = serviceExportSearchKeyword.trim().toLowerCase();
+  if (keyword.length === 0) {
+    return mappingRows;
+  }
+
+  return mappingRows.filter((mapping) => {
+    const appName = mapping.appName.toLowerCase();
+    const folderPath = mapping.folderPath.toLowerCase();
+    return appName.includes(keyword) || folderPath.includes(keyword);
   });
 }
 

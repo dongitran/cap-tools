@@ -276,7 +276,7 @@ export async function findSapToolsWebviewFrame(window: Page): Promise<Frame | un
     .frames()
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
-  for (const frame of candidateFrames) {
+  for (const frame of [...candidateFrames].reverse()) {
     // Match the main selector, login gate, or confirmed workspace heading.
     const regionTitle = frame.getByRole('heading', { name: 'Select SAP BTP Region' });
     const loginTitle = frame.getByRole('heading', { name: 'SAP Tools Login' });
@@ -297,7 +297,7 @@ export async function findSapToolsRegionFrame(window: Page): Promise<Frame | und
     .frames()
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
-  for (const frame of candidateFrames) {
+  for (const frame of [...candidateFrames].reverse()) {
     const regionTitle = frame.getByRole('heading', { name: 'Select SAP BTP Region' });
     const isRegionVisible = await regionTitle.isVisible().catch(() => false);
     if (isRegionVisible) {
@@ -313,7 +313,7 @@ export async function findSapToolsLoginFrame(window: Page): Promise<Frame | unde
     .frames()
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
-  for (const frame of candidateFrames) {
+  for (const frame of [...candidateFrames].reverse()) {
     const loginTitle = frame.getByRole('heading', { name: 'SAP Tools Login' });
     const isLoginVisible = await loginTitle.isVisible().catch(() => false);
     if (isLoginVisible) {
@@ -329,7 +329,7 @@ export async function findCfLogsPanelFrame(window: Page): Promise<Frame | undefi
     .frames()
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
-  for (const frame of candidateFrames) {
+  for (const frame of [...candidateFrames].reverse()) {
     const hasLogTable = (await frame.locator('.cf-log-table').count()) > 0;
     const hasSearchFilter = (await frame.getByLabel('Search logs').count()) > 0;
     if (hasLogTable && hasSearchFilter) {
@@ -400,18 +400,21 @@ export async function resolveSapToolsLoginFrame(window: Page): Promise<Frame> {
   return frame;
 }
 
-export async function openSapToolsSidebar(window: Page): Promise<Frame> {
+export async function openSapToolsSidebar(
+  window: Page,
+  timeoutMs = 20000
+): Promise<Frame> {
   const sapToolsTab = window.getByRole('tab', {
     name: new RegExp(ACTIVITY_BAR_TITLE),
   });
-  await expect(sapToolsTab).toBeVisible({ timeout: 20000 });
+  await expect(sapToolsTab).toBeVisible({ timeout: timeoutMs });
   await clickWithFallback(sapToolsTab);
 
   try {
-    return await resolveSapToolsWebviewFrame(window);
+    return await resolveSapToolsWebviewFrame(window, timeoutMs);
   } catch {
     await clickWithFallback(sapToolsTab);
-    return await resolveSapToolsWebviewFrame(window, 30000);
+    return await resolveSapToolsWebviewFrame(window, timeoutMs + 10000);
   }
 }
 

@@ -763,7 +763,9 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   overflow-x: hidden;
   overscroll-behavior: contain;
   align-content: start;
-  padding-top: 2px;
+  /* Keep hover lift fully visible for top-row options inside scroll containers. */
+  padding-top: 6px;
+  scroll-padding-top: 6px;
   padding-right: 2px;
 }
 
@@ -799,13 +801,16 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
-  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+  position: relative;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 .org-option:hover,
 .space-option:hover {
   transform: translateY(-1px);
   border-color: color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
+  box-shadow: 0 4px 10px color-mix(in oklab, var(--accent-color) 20%, transparent);
+  z-index: 1;
 }
 
 .org-option.is-selected,
@@ -1196,7 +1201,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .active-apps-log h3 {
   margin: 0;
-  font-size: 0.73rem;
+  font-size: 0.86rem;
   font-family: var(--title-font);
 }
 
@@ -1251,6 +1256,38 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   margin: 0;
   font-size: 0.7rem;
   color: var(--muted-color);
+}
+
+.service-export-search-row,
+.app-log-search-row {
+  display: block;
+}
+
+.search-input-with-icon {
+  position: relative;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  color: var(--muted-color);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.service-export-search,
+.app-log-search {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));
+  border-radius: 8px;
+  background: var(--frame-bg);
+  color: var(--text-color);
+  font-size: 0.69rem;
+  padding: 0 9px 0 28px;
 }
 
 .service-export-root-row {
@@ -1378,6 +1415,9 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  unicode-bidi: plaintext;
 }
 
 .service-map-state {
@@ -1411,6 +1451,10 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   border-color: #0f7f70;
   background: linear-gradient(180deg, #15a58f, #0f7f70);
   color: #f6fffd;
+}
+
+.service-export-sqltools-button {
+  min-height: 36px;
 }
 
 .service-export-button:hover:not(:disabled) {

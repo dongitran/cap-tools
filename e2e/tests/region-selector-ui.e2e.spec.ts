@@ -536,7 +536,7 @@ test.describe('SAP Tools region selector', () => {
 
       session = await relaunchExtensionHost(session);
 
-      const reopenedFrame = await openSapToolsSidebar(session.window);
+      const reopenedFrame = await openSapToolsSidebar(session.window, 60000);
       await expect(
         reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
       ).toBeVisible({ timeout: 20000 });
@@ -579,9 +579,12 @@ test.describe('SAP Tools region selector', () => {
         const restoreStartedAt = Date.now();
         await expect(
           reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
-        ).toBeVisible({ timeout: 2500 });
+        ).toBeVisible({ timeout: 1500 });
         const restoreDurationMs = Date.now() - restoreStartedAt;
-        expect(restoreDurationMs).toBeLessThan(2500);
+        expect(restoreDurationMs).toBeLessThan(1500);
+        await expect(
+          reopenedFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
+        ).toHaveCount(0);
 
         await expect(
           reopenedFrame.locator('.app-log-catalog').getByText(/Loading apps/i)
@@ -643,28 +646,36 @@ test.describe('SAP Tools region selector', () => {
       const webviewFrame = await openSapToolsSidebar(session.window);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
 
-      const styleSnapshot = await webviewFrame.evaluate(() => {
+      const regionOption = webviewFrame.locator('.region-layout .region-option').first();
+      await expect(regionOption).toBeVisible();
+      await clickWithFallback(regionOption);
+      await regionOption.hover();
+      await expect
+        .poll(async () => {
+          return regionOption.evaluate((element) => element.matches(':hover'));
+        })
+        .toBe(true);
+
+      const styleSnapshot = await regionOption.evaluate((element) => {
         const areaOption = document.querySelector('.area-option');
-        const regionLayout = document.querySelector('.region-layout');
-        const regionOption = regionLayout?.querySelector('.region-option');
+        const regionLayout = element.closest('.region-layout');
         if (
           !(areaOption instanceof HTMLElement) ||
           !(regionLayout instanceof HTMLElement) ||
-          !(regionOption instanceof HTMLElement)
+          !(element instanceof HTMLElement)
         ) {
           return null;
         }
 
         const areaStyle = getComputedStyle(areaOption);
-        const regionStyle = getComputedStyle(regionOption);
-        regionOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-
+        const regionStyle = getComputedStyle(element);
         const layoutRect = regionLayout.getBoundingClientRect();
-        const optionRect = regionOption.getBoundingClientRect();
+        const optionRect = element.getBoundingClientRect();
         return {
           areaClipPath: areaStyle.clipPath,
           regionBorderTopColor: regionStyle.borderTopColor,
           regionTopDelta: optionRect.top - layoutRect.top,
+          regionTransform: regionStyle.transform,
         };
       });
 
@@ -676,6 +687,7 @@ test.describe('SAP Tools region selector', () => {
       expect(styleSnapshot.areaClipPath).toBe('none');
       expect(styleSnapshot.regionBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
       expect(styleSnapshot.regionTopDelta).toBeGreaterThanOrEqual(0.4);
+      expect(styleSnapshot.regionTransform).not.toBe('none');
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -696,38 +708,66 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.locator('.space-picker .space-option:not(.is-hidden)').first()
       ).toBeVisible();
 
-      const styleSnapshot = await webviewFrame.evaluate(() => {
-        const orgPicker = document.querySelector('.org-picker');
-        const orgOption = orgPicker?.querySelector('.org-option:not(.is-hidden)');
-        const spacePicker = document.querySelector('.space-picker');
-        const spaceOption = spacePicker?.querySelector('.space-option:not(.is-hidden)');
+      const orgOption = webviewFrame.locator('.org-picker .org-option:not(.is-hidden)').first();
+      const spaceOption = webviewFrame.locator('.space-picker .space-option:not(.is-hidden)').first();
 
-        if (
-          !(orgPicker instanceof HTMLElement) ||
-          !(orgOption instanceof HTMLElement) ||
-          !(spacePicker instanceof HTMLElement) ||
-          !(spaceOption instanceof HTMLElement)
-        ) {
+      await orgOption.hover();
+      await expect
+        .poll(async () => {
+          return orgOption.evaluate((element) => element.matches(':hover'));
+        })
+        .toBe(true);
+
+      const orgSnapshot = await orgOption.evaluate((element) => {
+        const orgPicker = element.closest('.org-picker');
+        if (!(orgPicker instanceof HTMLElement) || !(element instanceof HTMLElement)) {
           return null;
         }
 
-        orgOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-        spaceOption.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-
         const orgPickerRect = orgPicker.getBoundingClientRect();
-        const orgOptionRect = orgOption.getBoundingClientRect();
-        const spacePickerRect = spacePicker.getBoundingClientRect();
-        const spaceOptionRect = spaceOption.getBoundingClientRect();
-        const orgStyle = getComputedStyle(orgOption);
-        const spaceStyle = getComputedStyle(spaceOption);
-
+        const orgOptionRect = element.getBoundingClientRect();
+        const orgStyle = getComputedStyle(element);
         return {
-          orgBorderTopColor: orgStyle.borderTopColor,
-          orgTopDelta: orgOptionRect.top - orgPickerRect.top,
-          spaceBorderTopColor: spaceStyle.borderTopColor,
-          spaceTopDelta: spaceOptionRect.top - spacePickerRect.top,
+          borderTopColor: orgStyle.borderTopColor,
+          topDelta: orgOptionRect.top - orgPickerRect.top,
+          transform: orgStyle.transform,
         };
       });
+
+      await spaceOption.hover();
+      await expect
+        .poll(async () => {
+          return spaceOption.evaluate((element) => element.matches(':hover'));
+        })
+        .toBe(true);
+
+      const spaceSnapshot = await spaceOption.evaluate((element) => {
+        const spacePicker = element.closest('.space-picker');
+        if (!(spacePicker instanceof HTMLElement) || !(element instanceof HTMLElement)) {
+          return null;
+        }
+
+        const spacePickerRect = spacePicker.getBoundingClientRect();
+        const spaceOptionRect = element.getBoundingClientRect();
+        const spaceStyle = getComputedStyle(element);
+        return {
+          borderTopColor: spaceStyle.borderTopColor,
+          topDelta: spaceOptionRect.top - spacePickerRect.top,
+          transform: spaceStyle.transform,
+        };
+      });
+
+      const styleSnapshot =
+        orgSnapshot === null || spaceSnapshot === null
+          ? null
+          : {
+              orgBorderTopColor: orgSnapshot.borderTopColor,
+              orgTopDelta: orgSnapshot.topDelta,
+              orgTransform: orgSnapshot.transform,
+              spaceBorderTopColor: spaceSnapshot.borderTopColor,
+              spaceTopDelta: spaceSnapshot.topDelta,
+              spaceTransform: spaceSnapshot.transform,
+            };
 
       expect(styleSnapshot).not.toBeNull();
       if (styleSnapshot === null) {
@@ -736,8 +776,10 @@ test.describe('SAP Tools region selector', () => {
 
       expect(styleSnapshot.orgBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
       expect(styleSnapshot.spaceBorderTopColor).not.toBe('rgba(0, 0, 0, 0)');
-      expect(styleSnapshot.orgTopDelta).toBeGreaterThanOrEqual(0.4);
-      expect(styleSnapshot.spaceTopDelta).toBeGreaterThanOrEqual(0.4);
+      expect(styleSnapshot.orgTopDelta).toBeGreaterThanOrEqual(3);
+      expect(styleSnapshot.spaceTopDelta).toBeGreaterThanOrEqual(3);
+      expect(styleSnapshot.orgTransform).not.toBe('none');
+      expect(styleSnapshot.spaceTransform).not.toBe('none');
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -1007,6 +1049,209 @@ test.describe('SAP Tools region selector', () => {
       await cleanupExtensionHost(session);
       fs.rmSync(firstFixtureRootPath, { recursive: true, force: true });
       fs.rmSync(secondFixtureRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('User can reopen extension host and keep mapped services without selecting root folder again', async () => {
+    const fixtureRootPath = createServiceRootMappingFixture();
+    let session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATH: fixtureRootPath,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Select Root Folder' }));
+      const mappedStateCells = webviewFrame.locator('.service-map-row .service-map-state', {
+        hasText: /^Mapped$/i,
+      });
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
+      await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
+
+      session = await relaunchExtensionHost(session);
+      const reopenedFrame = await openSapToolsSidebar(session.window);
+      await expect(
+        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 20000 });
+      await reopenedFrame
+        .locator('.workspace-tabs .tab-button[data-tab-id="apps"]')
+        .first()
+        .evaluate((button) => {
+          if (button instanceof HTMLElement) {
+            button.click();
+          }
+        });
+
+      const reopenedMappedStateCells = reopenedFrame.locator(
+        '.service-map-row .service-map-state',
+        {
+          hasText: /^Mapped$/i,
+        }
+      );
+      await expect(reopenedFrame.locator('.service-export-path')).toContainText(fixtureRootPath, {
+        timeout: 15000,
+      });
+      await expect(reopenedMappedStateCells).toHaveCount(3, { timeout: 10000 });
+      await expect(reopenedFrame.locator('.service-map-row.is-unmapped')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(fixtureRootPath, { recursive: true, force: true });
+    }
+  });
+
+  test('User can search services in Apps Log Control', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+
+      const appLogSearchInput = webviewFrame.getByRole('searchbox', {
+        name: 'Search services in Apps Log Control',
+      });
+      await expect(appLogSearchInput).toBeVisible();
+      await expect(webviewFrame.locator('.app-log-item')).toHaveCount(3);
+
+      await appLogSearchInput.fill('worker');
+      await expect(webviewFrame.locator('.app-log-item')).toHaveCount(1);
+      await expect(webviewFrame.locator('.app-log-item .app-log-name')).toHaveText([
+        'finance-uat-worker',
+      ]);
+
+      await appLogSearchInput.fill('service-not-found');
+      await expect(webviewFrame.locator('.app-log-item')).toHaveCount(0);
+      await expect(webviewFrame.getByText('No apps found in current space.')).toBeVisible();
+
+      await appLogSearchInput.fill('');
+      await expect(webviewFrame.locator('.app-log-item')).toHaveCount(3);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can search services in Export Service Artifacts', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+
+      const serviceSearchInput = webviewFrame.getByRole('searchbox', {
+        name: 'Search services in Export Service Artifacts',
+      });
+      await expect(serviceSearchInput).toBeVisible();
+      await expect(webviewFrame.locator('.service-map-row')).toHaveCount(3);
+
+      await serviceSearchInput.fill('worker');
+      await expect(webviewFrame.locator('.service-map-row')).toHaveCount(1);
+      await expect(webviewFrame.locator('.service-map-row .service-map-name')).toHaveText([
+        'finance-uat-worker',
+      ]);
+
+      await serviceSearchInput.fill('service-not-found');
+      await expect(webviewFrame.locator('.service-map-row')).toHaveCount(0);
+      await expect(webviewFrame.getByText('No services match current search.')).toBeVisible();
+
+      await serviceSearchInput.fill('');
+      await expect(webviewFrame.locator('.service-map-row')).toHaveCount(3);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees consistent Apps and export typography with front-truncated service paths', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+
+      const logsHeadingSnapshot = await webviewFrame.evaluate(() => {
+        const activeAppsLogHeading = document.querySelector('.active-apps-log h3');
+        const appsLogControlHeading = document.querySelector('.app-logs-panel h2');
+        if (
+          !(activeAppsLogHeading instanceof HTMLElement) ||
+          !(appsLogControlHeading instanceof HTMLElement)
+        ) {
+          return null;
+        }
+
+        return {
+          activeAppsLogFontSize: getComputedStyle(activeAppsLogHeading).fontSize,
+          appsLogControlFontSize: getComputedStyle(appsLogControlHeading).fontSize,
+        };
+      });
+      expect(logsHeadingSnapshot).not.toBeNull();
+      if (logsHeadingSnapshot === null) {
+        return;
+      }
+      expect(logsHeadingSnapshot.activeAppsLogFontSize).toBe(
+        logsHeadingSnapshot.appsLogControlFontSize
+      );
+
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      const exportSnapshot = await webviewFrame.evaluate(() => {
+        const exportArtifactsButton = document.querySelector(
+          '[data-action="export-service-artifacts"]'
+        );
+        const exportSqltoolsButton = document.querySelector(
+          '[data-action="export-sqltools-config"]'
+        );
+        const mapPathCell = document.querySelector('.service-map-path');
+
+        if (
+          !(exportArtifactsButton instanceof HTMLElement) ||
+          !(exportSqltoolsButton instanceof HTMLElement) ||
+          !(mapPathCell instanceof HTMLElement)
+        ) {
+          return null;
+        }
+
+        const mapPathStyle = getComputedStyle(mapPathCell);
+        return {
+          exportArtifactsHeight: Math.round(exportArtifactsButton.getBoundingClientRect().height),
+          exportSqltoolsHeight: Math.round(exportSqltoolsButton.getBoundingClientRect().height),
+          mapPathDirection: mapPathStyle.direction,
+          mapPathTextAlign: mapPathStyle.textAlign,
+          mapPathTextOverflow: mapPathStyle.textOverflow,
+          mapPathUnicodeBidi: mapPathStyle.unicodeBidi,
+        };
+      });
+      expect(exportSnapshot).not.toBeNull();
+      if (exportSnapshot === null) {
+        return;
+      }
+      expect(
+        Math.abs(exportSnapshot.exportArtifactsHeight - exportSnapshot.exportSqltoolsHeight)
+      ).toBeLessThanOrEqual(1);
+      expect(exportSnapshot.mapPathDirection).toBe('rtl');
+      expect(exportSnapshot.mapPathTextAlign).toBe('left');
+      expect(exportSnapshot.mapPathTextOverflow).toBe('ellipsis');
+      expect(exportSnapshot.mapPathUnicodeBidi).toBe('plaintext');
+    } finally {
+      await cleanupExtensionHost(session);
     }
   });
 
