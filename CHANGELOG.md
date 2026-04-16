@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.0
+- Promoted 0.3.0 workspace mapping/search improvements to stable release.
+
 ## 0.3.0
 - Matched `Export SQLTools Config` button height with `Export Artifacts`.
 - Hardened restored workspace flow to rescan service-folder mappings when root folder and apps are restored after reload.
