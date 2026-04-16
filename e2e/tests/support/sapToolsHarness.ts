@@ -162,6 +162,29 @@ export function createServiceRootMappingFixture(): string {
   return fixtureRoot;
 }
 
+export function createLongServiceRootMappingFixture(): string {
+  const fixtureRoot = fs.mkdtempSync(path.join('/tmp', 'sap-tools-e2e-root-long-'));
+  const nestedSegments = [
+    'very-long-root-folder-name-for-leading-ellipsis-check',
+    'team-integration-environment-with-lengthy-directory-name',
+    'sap-cap-service-artifacts-generated-output-folder',
+  ];
+
+  const longRootPath = nestedSegments.reduce((currentPath, segment) => {
+    return path.join(currentPath, segment);
+  }, fixtureRoot);
+  fs.mkdirSync(longRootPath, { recursive: true });
+
+  const folderNames = ['finance_uat_api', 'finance_uat_worker', 'finance_uat_audit'];
+  for (const folderName of folderNames) {
+    const serviceFolder = path.join(longRootPath, folderName);
+    fs.mkdirSync(serviceFolder, { recursive: true });
+    fs.writeFileSync(path.join(serviceFolder, 'package.json'), '{ "name": "fixture" }\n', 'utf8');
+  }
+
+  return longRootPath;
+}
+
 export async function dismissAiSignInModalIfNeeded(window: Page): Promise<void> {
   const signInPrompt = window.getByText('Sign in to use AI Features');
   const appeared = await signInPrompt

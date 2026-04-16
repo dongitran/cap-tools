@@ -398,6 +398,7 @@ body.pattern-dots::before {
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
   border-radius: 12px;
   padding: 10px;
+  min-width: 0;
 }
 
 .area-stage {
@@ -960,6 +961,7 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   overflow: auto;
   padding: 10px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 10px;
 }
@@ -1238,7 +1240,9 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .service-export-tab {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+  min-width: 0;
 }
 
 .service-export-header {
@@ -1334,6 +1338,8 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   max-height: 240px;
   overflow: auto;
   display: grid;
+  width: 100%;
+  min-width: 0;
 }
 
 .service-map-row {
@@ -1348,6 +1354,8 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   text-align: left;
   padding: 8px 10px;
   cursor: pointer;
+  width: 100%;
+  min-width: 0;
 }
 
 .service-map-row:last-child {
@@ -1404,6 +1412,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .service-map-name {
   font-size: 0.69rem;
   color: var(--text-color);
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1412,12 +1421,10 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .service-map-path {
   font-size: 0.65rem;
   color: var(--muted-color);
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
-  unicode-bidi: plaintext;
+  text-overflow: clip;
 }
 
 .service-map-state {

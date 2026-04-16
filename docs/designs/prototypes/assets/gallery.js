@@ -21,13 +21,19 @@ const PROTOTYPE_VARIANTS = [
     id: 'design',
     hash: 'design',
     label: 'Prototype: Region Menu',
-    framePath: './variants/design.html?v=20260413d',
+    framePath: './variants/design.html?v=20260416e',
   },
   {
     id: 'cf-logs-panel',
     hash: 'cf-logs-panel',
     label: 'Prototype: CFLogs Panel',
     framePath: './variants/cf-logs-panel.html?v=20260414n',
+  },
+  {
+    id: 'brand-gallery',
+    hash: 'brand-gallery',
+    label: '🎨 Brand Identity Gallery',
+    framePath: '../brand/index.html',
   },
 ];
 

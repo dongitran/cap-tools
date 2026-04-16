@@ -12,6 +12,7 @@ import {
   THEME_SCENARIOS,
   cleanupExtensionHost,
   clickWithFallback,
+  createLongServiceRootMappingFixture,
   createServiceRootMappingFixture,
   expectNoOuterGutter,
   launchExtensionHost,
@@ -1233,10 +1234,7 @@ test.describe('SAP Tools region selector', () => {
         return {
           exportArtifactsHeight: Math.round(exportArtifactsButton.getBoundingClientRect().height),
           exportSqltoolsHeight: Math.round(exportSqltoolsButton.getBoundingClientRect().height),
-          mapPathDirection: mapPathStyle.direction,
-          mapPathTextAlign: mapPathStyle.textAlign,
           mapPathTextOverflow: mapPathStyle.textOverflow,
-          mapPathUnicodeBidi: mapPathStyle.unicodeBidi,
         };
       });
       expect(exportSnapshot).not.toBeNull();
@@ -1246,12 +1244,62 @@ test.describe('SAP Tools region selector', () => {
       expect(
         Math.abs(exportSnapshot.exportArtifactsHeight - exportSnapshot.exportSqltoolsHeight)
       ).toBeLessThanOrEqual(1);
-      expect(exportSnapshot.mapPathDirection).toBe('rtl');
-      expect(exportSnapshot.mapPathTextAlign).toBe('left');
-      expect(exportSnapshot.mapPathTextOverflow).toBe('ellipsis');
-      expect(exportSnapshot.mapPathUnicodeBidi).toBe('plaintext');
+      expect(exportSnapshot.mapPathTextOverflow).toBe('clip');
     } finally {
       await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees leading ellipsis in service mapping path when root path is long', async () => {
+    const fixtureRootPath = createLongServiceRootMappingFixture();
+    const session = await launchExtensionHost({
+      extraEnv: {
+        SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'select',
+        SAP_TOOLS_E2E_ROOT_FOLDER_PATH: fixtureRootPath,
+      },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Select Root Folder' }));
+
+      const mappedStateCells = webviewFrame.locator('.service-map-row .service-map-state', {
+        hasText: /^Mapped$/i,
+      });
+      await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
+
+      const apiPathCell = webviewFrame.locator('.service-map-row', {
+        has: webviewFrame.locator('.service-map-name', { hasText: 'finance-uat-api' }),
+      }).locator('.service-map-path');
+      await expect(apiPathCell).toBeVisible();
+      await expect(apiPathCell).toHaveText(/^\.\.\./);
+      await expect(apiPathCell).toContainText('/finance_uat_api');
+
+      const mappingListSizeSnapshot = await webviewFrame.evaluate(() => {
+        const mappingList = document.querySelector('.service-mapping-list');
+        if (!(mappingList instanceof HTMLElement)) {
+          return null;
+        }
+        return {
+          clientWidth: mappingList.clientWidth,
+          scrollWidth: mappingList.scrollWidth,
+        };
+      });
+      expect(mappingListSizeSnapshot).not.toBeNull();
+      if (mappingListSizeSnapshot !== null) {
+        expect(mappingListSizeSnapshot.scrollWidth).toBeLessThanOrEqual(
+          mappingListSizeSnapshot.clientWidth + 1
+        );
+      }
+    } finally {
+      await cleanupExtensionHost(session);
+      fs.rmSync(fixtureRootPath, { recursive: true, force: true });
     }
   });
 

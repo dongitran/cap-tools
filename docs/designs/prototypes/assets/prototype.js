@@ -135,6 +135,8 @@ const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
+const SERVICE_MAP_PATH_LABEL_MAX_CHARS = 72;
+const SERVICE_MAP_PATH_LABEL_ELLIPSIS = '...';
 
 // Live data state — only used in VSCode mode (vscodeApi !== null).
 let liveOrgOptions = null;        // [{guid, name}] when loaded, null = use mock data
@@ -1639,6 +1641,7 @@ function renderPrototype() {
 
   if (mode === 'selection') {
     updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
+    return;
   }
 }
 
@@ -2646,7 +2649,9 @@ function renderServiceExportMappingRows(
 
   const mappedRows = mappingRows.map((mapping) => {
     const isSelected = selectedServiceExportAppId === mapping.appId;
-    const folderPathLabel = mapping.isMapped ? mapping.folderPath : 'No matching local folder';
+    const folderPathLabel = mapping.isMapped
+      ? formatServiceMapPathLabel(mapping.folderPath)
+      : 'No matching local folder';
 
     if (mapping.hasConflict) {
       const optionsMarkup = [
@@ -2673,7 +2678,7 @@ function renderServiceExportMappingRows(
       return `
         <div class="service-map-row is-unmapped" aria-disabled="true">
           <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
-          <span class="service-map-path">${escapeHtml(folderPathLabel)}</span>
+          <span class="service-map-path" title="${escapeHtml(folderPathLabel)}">${escapeHtml(folderPathLabel)}</span>
           <span class="service-map-state">Unmapped</span>
         </div>
       `;
@@ -2687,7 +2692,7 @@ function renderServiceExportMappingRows(
         data-app-id="${escapeHtml(mapping.appId)}"
       >
         <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
-        <span class="service-map-path">${escapeHtml(folderPathLabel)}</span>
+        <span class="service-map-path" title="${escapeHtml(mapping.folderPath)}">${escapeHtml(folderPathLabel)}</span>
         <span class="service-map-state">Mapped</span>
       </button>
     `;
@@ -3114,6 +3119,24 @@ function normalizeServiceFolderMappings(rawMappings) {
     });
   }
   return normalizedMappings;
+}
+
+function formatServiceMapPathLabel(pathValue) {
+  const normalizedPath = typeof pathValue === 'string' ? pathValue.trim() : '';
+  if (normalizedPath.length === 0) {
+    return '';
+  }
+
+  if (normalizedPath.length <= SERVICE_MAP_PATH_LABEL_MAX_CHARS) {
+    return normalizedPath;
+  }
+
+  const suffixLength = SERVICE_MAP_PATH_LABEL_MAX_CHARS - SERVICE_MAP_PATH_LABEL_ELLIPSIS.length;
+  if (suffixLength <= 0) {
+    return SERVICE_MAP_PATH_LABEL_ELLIPSIS;
+  }
+
+  return `${SERVICE_MAP_PATH_LABEL_ELLIPSIS}${normalizedPath.slice(-suffixLength)}`;
 }
 
 function buildMockServiceFolderMappings(rootFolderPath, availableApps) {
