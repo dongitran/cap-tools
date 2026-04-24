@@ -1864,6 +1864,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   padding: 6px;
   max-height: 360px;
   overflow: auto;
+  min-width: 0;
 }
 
 .debug-app-row {
@@ -1874,6 +1875,8 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   border: 1px solid color-mix(in oklab, var(--border-color) 75%, var(--mix-base));
   border-radius: 8px;
   background: color-mix(in oklab, var(--surface-bg) 92%, var(--mix-base));
+  width: 100%;
+  min-width: 0;
 }
 
 .debug-app-row-main {
@@ -1979,6 +1982,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   align-items: center;
   justify-content: flex-end;
   flex: 0 0 auto;
+  min-width: 0;
 }
 
 .debug-action-button {
@@ -2026,6 +2030,33 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 .debug-status-note--error {
   color: #dc2626;
+}
+
+@media (max-width: 300px) {
+  .debug-app-row {
+    padding-inline: 8px;
+  }
+  .debug-app-row-main {
+    gap: 6px;
+  }
+  .debug-app-row [data-role="debug-port"] {
+    display: none;
+  }
+  .debug-app-meta {
+    display: none;
+  }
+  .debug-error-code {
+    display: none;
+  }
+  .debug-status-badge {
+    padding: 2px 6px;
+    font-size: 0.58rem;
+  }
+  .debug-action-button,
+  .debug-stop-all {
+    min-width: 52px;
+    padding-inline: 8px;
+  }
 }
 
 @media (max-width: 240px) {

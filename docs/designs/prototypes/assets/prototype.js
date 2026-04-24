@@ -1113,7 +1113,7 @@ function handleDebugAction(action, actionElement) {
       const transitions = ['starting', 'tunneling', 'ready', 'attached'];
       simulateDebugTransitions(appName, transitions, session);
       debugStatusTone = 'info';
-      debugStatusMessage = `Started debug session for ${appName}.`;
+      debugStatusMessage = '';
       return true;
     }
     debugSessionsByApp = new Map(debugSessionsByApp);
@@ -1133,7 +1133,7 @@ function handleDebugAction(action, actionElement) {
     if (vscodeApi === null) {
       simulateDebugTransitions(appName, ['stopping', 'idle'], { appName, status: 'stopping' });
       debugStatusTone = 'info';
-      debugStatusMessage = `Stopped debug session for ${appName}.`;
+      debugStatusMessage = '';
       return true;
     }
     debugSessionsByApp = new Map(debugSessionsByApp);
@@ -1156,7 +1156,7 @@ function handleDebugAction(action, actionElement) {
       }
       debugSessionsByApp = next;
       debugStatusTone = 'info';
-      debugStatusMessage = 'Stopped all debug sessions.';
+      debugStatusMessage = 'Stopping all debug sessions...';
       return true;
     }
     vscodeApi.postMessage({

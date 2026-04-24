@@ -1,4 +1,7 @@
 import type * as vscode from 'vscode';
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // Local type declarations mirroring @saptools/cf-debugger's public API surface.
 // We cannot static-import types from that ESM package while compiling to
@@ -113,18 +116,99 @@ interface ManagedSession {
 }
 
 let cachedRunnerPromise: Promise<CfDebuggerRunner> | undefined;
+const DEFAULT_CF_DEBUGGER_PACKAGE_NAME = '@saptools/cf-debugger';
 
 interface CfDebuggerModule {
   readonly startDebugger: CfDebuggerRunner;
 }
 
-async function loadDefaultRunner(): Promise<CfDebuggerRunner> {
-  cachedRunnerPromise ??= (async (): Promise<CfDebuggerRunner> => {
-    const mod = (await import(
-      '@saptools/cf-debugger'
-    )) as unknown as CfDebuggerModule;
-    return mod.startDebugger;
-  })();
+type ModuleLoader = (specifier: string) => Promise<unknown>;
+type PathExists = (candidatePath: string) => Promise<boolean>;
+
+interface CfDebuggerModuleLoadOptions {
+  readonly distDir?: string;
+  readonly moduleLoader?: ModuleLoader;
+  readonly pathExists?: PathExists;
+}
+
+interface NormalizedModuleLoadOptions {
+  readonly distDir: string;
+  readonly moduleLoader: ModuleLoader;
+  readonly pathExists: PathExists;
+}
+
+const defaultModuleLoader: ModuleLoader = async (specifier) => import(specifier);
+
+async function defaultPathExists(candidatePath: string): Promise<boolean> {
+  try {
+    await access(candidatePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveVendoredCfDebuggerEntryPath(distDir: string): string {
+  return join(distDir, 'vendor', 'cf-debugger', 'dist', 'index.js');
+}
+
+function normalizeModuleLoadOptions(
+  options: CfDebuggerModuleLoadOptions
+): NormalizedModuleLoadOptions {
+  return {
+    distDir: options.distDir ?? __dirname,
+    moduleLoader: options.moduleLoader ?? defaultModuleLoader,
+    pathExists: options.pathExists ?? defaultPathExists,
+  };
+}
+
+function shouldUseCachedDefaultRunner(
+  options: NormalizedModuleLoadOptions
+): boolean {
+  return (
+    options.distDir === __dirname &&
+    options.moduleLoader === defaultModuleLoader &&
+    options.pathExists === defaultPathExists
+  );
+}
+
+async function importCfDebuggerModule(
+  options: NormalizedModuleLoadOptions
+): Promise<CfDebuggerModule> {
+  const specifier = await resolveCfDebuggerModuleSpecifier(options);
+  const mod = (await options.moduleLoader(specifier)) as Partial<CfDebuggerModule>;
+  if (typeof mod.startDebugger !== 'function') {
+    throw new Error(`The cf-debugger module "${specifier}" does not export startDebugger.`);
+  }
+  return mod as CfDebuggerModule;
+}
+
+export async function resolveCfDebuggerModuleSpecifier(
+  options: CfDebuggerModuleLoadOptions = {}
+): Promise<string> {
+  const normalized = normalizeModuleLoadOptions(options);
+  const vendoredEntryPath = resolveVendoredCfDebuggerEntryPath(normalized.distDir);
+  if (await normalized.pathExists(vendoredEntryPath)) {
+    return pathToFileURL(vendoredEntryPath).href;
+  }
+  return DEFAULT_CF_DEBUGGER_PACKAGE_NAME;
+}
+
+async function loadDefaultRunnerUncached(
+  options: NormalizedModuleLoadOptions
+): Promise<CfDebuggerRunner> {
+  const mod = await importCfDebuggerModule(options);
+  return mod.startDebugger;
+}
+
+export async function loadDefaultRunner(
+  options: CfDebuggerModuleLoadOptions = {}
+): Promise<CfDebuggerRunner> {
+  const normalized = normalizeModuleLoadOptions(options);
+  if (!shouldUseCachedDefaultRunner(normalized)) {
+    return loadDefaultRunnerUncached(normalized);
+  }
+  cachedRunnerPromise ??= loadDefaultRunnerUncached(normalized);
   return cachedRunnerPromise;
 }
 

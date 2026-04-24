@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 (pre-release)
+- Packaged the `@saptools/cf-debugger` runtime inside the extension so Debug works from the installed `.vsix` without relying on an external `node_modules` tree.
+- Added loader coverage that prefers the vendored debugger runtime in packaged builds and falls back to the npm package only in local development.
+- Tightened Debug tab e2e assertions around hidden status/error elements and responsive port visibility in narrow sidebars.
+- Updated the `index.html` prototype so the Debug layout matches the extension more closely on narrow widths and no longer shows a prototype-only success note for per-app start or stop actions.
+
 ## 0.7.0 (pre-release)
 - Replaced the placeholder `Targets` workspace tab with a `Debug` tab that lists every started Cloud Foundry app in the confirmed scope.
 - Integrated `@saptools/cf-debugger` to open an SSH tunnel to a CF app's Node inspector and attach the VS Code Node debugger automatically.

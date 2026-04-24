@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -83,11 +83,13 @@
     "docs/designs/prototypes/assets",
     "resources",
     "README.md",
+    "LICENSE",
     "CHANGELOG.md",
     "package.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node ./scripts/vendor-cf-debugger.mjs",
     "watch": "tsc -watch -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",

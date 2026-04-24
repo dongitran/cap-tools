@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type * as vscode from 'vscode';
 import type {
   DebuggerHandle,
@@ -12,6 +14,8 @@ import {
   type CfDebuggerServiceOptions,
   type DebugSessionView,
   type OutputChannelLike,
+  loadDefaultRunner,
+  resolveCfDebuggerModuleSpecifier,
   type VscodeDebugLike,
 } from './cfDebuggerService';
 
@@ -496,6 +500,64 @@ describe('CfDebuggerService', () => {
     expect(snapshot[0]?.status).toBe('stopped');
     expect(handles.get('billing-api')?.disposeCalls).toBe(1);
     expect(debugApi.stopCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('prefers the vendored cf-debugger runtime when the bundled file exists', async () => {
+    const distDir = '/tmp/sap-tools-extension/dist';
+
+    const specifier = await resolveCfDebuggerModuleSpecifier({
+      distDir,
+      pathExists: async (candidatePath): Promise<boolean> => {
+        return candidatePath === join(distDir, 'vendor', 'cf-debugger', 'dist', 'index.js');
+      },
+    });
+
+    expect(specifier).toBe(
+      pathToFileURL(join(distDir, 'vendor', 'cf-debugger', 'dist', 'index.js')).href
+    );
+  });
+
+  it('falls back to the package import when the vendored runtime is not present', async () => {
+    const specifier = await resolveCfDebuggerModuleSpecifier({
+      distDir: '/tmp/sap-tools-extension/dist',
+      pathExists: async (): Promise<boolean> => false,
+    });
+
+    expect(specifier).toBe('@saptools/cf-debugger');
+  });
+
+  it('loads startDebugger from the resolved cf-debugger module specifier', async () => {
+    const distDir = '/tmp/sap-tools-extension/dist';
+    const importedSpecifiers: string[] = [];
+    const startDebugger = vi.fn<CfDebuggerRunner>();
+
+    const runner = await loadDefaultRunner({
+      distDir,
+      pathExists: async (): Promise<boolean> => true,
+      moduleLoader: async (specifier) => {
+        importedSpecifiers.push(specifier);
+        return {
+          startDebugger,
+        };
+      },
+    });
+
+    expect(importedSpecifiers).toEqual([
+      pathToFileURL(join(distDir, 'vendor', 'cf-debugger', 'dist', 'index.js')).href,
+    ]);
+    expect(runner).toBe(startDebugger);
+  });
+
+  it('throws a clear error when the resolved module does not export startDebugger', async () => {
+    await expect(
+      loadDefaultRunner({
+        distDir: '/tmp/sap-tools-extension/dist',
+        pathExists: async (): Promise<boolean> => false,
+        moduleLoader: async () => {
+          return {};
+        },
+      })
+    ).rejects.toThrow('does not export startDebugger');
   });
 
   it('builds a fake runner that walks transitions and resolves a usable handle', async () => {

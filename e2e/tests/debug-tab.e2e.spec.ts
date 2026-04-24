@@ -1,4 +1,4 @@
-import { test, expect, type Frame } from '@playwright/test';
+import { test, expect, type Frame, type Locator } from '@playwright/test';
 
 import {
   cleanupExtensionHost,
@@ -33,6 +33,22 @@ async function openWorkspaceAndDebugTab(
     webviewFrame.locator('.debug-app-row').first()
   ).toBeVisible({ timeout: 15000 });
   return webviewFrame;
+}
+
+async function expectDebugPortState(
+  webviewFrame: Frame,
+  targetRow: Locator
+): Promise<void> {
+  const portLabel = targetRow.locator('[data-role="debug-port"]');
+  await expect(portLabel).toHaveText(`:${String(FAKE_RUNNER_LOCAL_PORT)}`);
+  const isCompactViewport = await webviewFrame.evaluate(
+    () => window.innerWidth <= 300
+  );
+  if (isCompactViewport) {
+    await expect(portLabel).toBeHidden();
+    return;
+  }
+  await expect(portLabel).toBeVisible();
 }
 
 test.describe('SAP Tools Debug tab', () => {
@@ -127,6 +143,15 @@ test.describe('SAP Tools Debug tab', () => {
       await expect(stopAll).toBeVisible();
       await expect(stopAll).toBeDisabled();
       await expect(stopAll).toHaveText('Stop all');
+      await expect(
+        webviewFrame.locator('[data-role="debug-status-note"]')
+      ).toBeHidden();
+      await expect(
+        webviewFrame.locator('.debug-app-row .debug-error-code')
+      ).toHaveCount(0);
+      await expect(
+        webviewFrame.locator('.debug-tab .debug-empty-note--error')
+      ).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -206,9 +231,7 @@ test.describe('SAP Tools Debug tab', () => {
         targetRow.locator('button[data-action="start-debug-app"]')
       ).toHaveCount(0);
 
-      const portLabel = targetRow.locator('[data-role="debug-port"]');
-      await expect(portLabel).toBeVisible();
-      await expect(portLabel).toHaveText(`:${String(FAKE_RUNNER_LOCAL_PORT)}`);
+      await expectDebugPortState(webviewFrame, targetRow);
 
       const targetMeta = await targetRow
         .locator('[data-role="debug-app-meta"]')
@@ -221,6 +244,15 @@ test.describe('SAP Tools Debug tab', () => {
       );
       await expect(stopAll).toBeEnabled();
       await expect(stopAll).toHaveText('Stop all (1)');
+      await expect(
+        webviewFrame.locator('[data-role="debug-status-note"]')
+      ).toBeHidden();
+      await expect(
+        webviewFrame.locator('.debug-app-row .debug-error-code')
+      ).toHaveCount(0);
+      await expect(
+        webviewFrame.locator('.debug-tab .debug-empty-note--error')
+      ).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -301,9 +333,7 @@ test.describe('SAP Tools Debug tab', () => {
       await expect(badge).toHaveAttribute('data-status', 'attached', {
         timeout: 20000,
       });
-      await expect(
-        targetRow.locator('[data-role="debug-port"]')
-      ).toHaveText(`:${String(FAKE_RUNNER_LOCAL_PORT)}`);
+      await expectDebugPortState(webviewFrame, targetRow);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -341,12 +371,8 @@ test.describe('SAP Tools Debug tab', () => {
         secondRow.locator('[data-role="debug-status"]')
       ).toHaveAttribute('data-status', 'attached', { timeout: 20000 });
 
-      await expect(
-        firstRow.locator('[data-role="debug-port"]')
-      ).toHaveText(`:${String(FAKE_RUNNER_LOCAL_PORT)}`);
-      await expect(
-        secondRow.locator('[data-role="debug-port"]')
-      ).toHaveText(`:${String(FAKE_RUNNER_LOCAL_PORT)}`);
+      await expectDebugPortState(webviewFrame, firstRow);
+      await expectDebugPortState(webviewFrame, secondRow);
 
       const stopAll = webviewFrame.locator(
         'button[data-action="stop-all-debug-apps"]'
@@ -486,9 +512,7 @@ test.describe('SAP Tools Debug tab', () => {
       await expect(
         restoredRow.locator('[data-role="debug-status"]')
       ).toHaveAttribute('data-status', 'attached', { timeout: 10000 });
-      await expect(
-        restoredRow.locator('[data-role="debug-port"]')
-      ).toHaveText(`:${String(FAKE_RUNNER_LOCAL_PORT)}`);
+      await expectDebugPortState(webviewFrame, restoredRow);
       await expect(
         restoredRow.locator('button[data-action="stop-debug-app"]')
       ).toBeVisible();
