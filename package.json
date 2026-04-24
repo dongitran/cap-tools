@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.5.1",
+  "version": "0.6.0-pre.0",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -100,6 +100,9 @@
     "validate": "npm run validate:root && npm run validate:e2e",
     "prepare": "husky",
     "vscode:prepublish": "npm run build"
+  },
+  "dependencies": {
+    "@saptools/cf-debugger": "^0.1.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",

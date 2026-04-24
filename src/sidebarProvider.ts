@@ -14,6 +14,7 @@ import { ensureCfHomeDir } from './cfHome';
 import type { CacheRuntimeSnapshot, CacheSyncService } from './cacheSyncService';
 import { normalizeUserEmail, type CacheStore } from './cacheStore';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
+import type { CfDebuggerService, DebugSessionView } from './cfDebuggerService';
 import { clearCredentials, getEffectiveCredentials, storeCredentials } from './credentialStore';
 import { isSyncIntervalHours } from './cacheModels';
 import type { SyncIntervalHours } from './cacheModels';
@@ -53,6 +54,10 @@ const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappin
 const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
 const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
+const MSG_REQUEST_DEBUG_STATE = 'sapTools.requestDebugState';
+const MSG_START_DEBUG_APP = 'sapTools.startDebugApp';
+const MSG_STOP_DEBUG_APP = 'sapTools.stopDebugApp';
+const MSG_STOP_ALL_DEBUG_APPS = 'sapTools.stopAllDebugApps';
 
 // ── Outbound message types (extension → webview) ────────────────────────────
 
@@ -73,6 +78,8 @@ const MSG_EXPORT_ARTIFACT_RESULT = 'sapTools.exportArtifactResult';
 const MSG_EXPORT_SQLTOOLS_PROGRESS = 'sapTools.exportSqlToolsProgress';
 const MSG_EXPORT_SQLTOOLS_RESULT = 'sapTools.exportSqlToolsResult';
 const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
+const MSG_DEBUG_SESSIONS_STATE = 'sapTools.debugSessionsState';
+const MSG_DEBUG_SESSION_UPDATE = 'sapTools.debugSessionUpdate';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -223,12 +230,19 @@ export class RegionSidebarProvider
     private readonly context: vscode.ExtensionContext,
     private readonly cfLogsPanel: CfLogsPanelProvider,
     private readonly cacheSyncService: CacheSyncService,
-    private readonly cacheStore: CacheStore
+    private readonly cacheStore: CacheStore,
+    private readonly cfDebuggerService: CfDebuggerService
   ) {
     const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
       this.postCacheState(snapshot);
     });
     this.disposables.push(cacheSubscription);
+    const debugSubscription = this.cfDebuggerService.onSessionChanged(
+      (session) => {
+        this.postDebugSessionUpdate(session);
+      }
+    );
+    this.disposables.push(debugSubscription);
   }
 
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
@@ -395,6 +409,32 @@ export class RegionSidebarProvider
 
     if (type === MSG_LOGOUT) {
       await this.handleLogout();
+      return;
+    }
+
+    if (type === MSG_REQUEST_DEBUG_STATE) {
+      this.postDebugSessionsState();
+      return;
+    }
+
+    if (type === MSG_START_DEBUG_APP) {
+      const appName = readDebugAppName(message);
+      if (appName !== null) {
+        await this.handleStartDebugApp(appName);
+      }
+      return;
+    }
+
+    if (type === MSG_STOP_DEBUG_APP) {
+      const appName = readDebugAppName(message);
+      if (appName !== null) {
+        await this.handleStopDebugApp(appName);
+      }
+      return;
+    }
+
+    if (type === MSG_STOP_ALL_DEBUG_APPS) {
+      await this.handleStopAllDebugApps();
     }
   }
 
@@ -423,6 +463,112 @@ export class RegionSidebarProvider
 
   private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
     await this.persistConfirmedScopeForCurrentUser(payload);
+    await this.syncDebuggerScopeFromPayload(payload);
+  }
+
+  private async syncDebuggerScopeFromPayload(
+    payload: ConfirmScopePayload
+  ): Promise<void> {
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      this.cfDebuggerService.clearScope();
+      return;
+    }
+    const region = payload.regionCode.trim().toLowerCase();
+    const org = payload.orgName.trim();
+    const space = payload.spaceName.trim();
+    if (region.length === 0 || org.length === 0 || space.length === 0) {
+      this.cfDebuggerService.clearScope();
+      return;
+    }
+    this.cfDebuggerService.setScope({
+      region,
+      org,
+      space,
+      email: credentials.email,
+      password: credentials.password,
+    });
+  }
+
+  private syncDebuggerScopeFromPersisted(
+    persistedScope: PersistedConfirmedScopeEntry,
+    credentials: { readonly email: string; readonly password: string }
+  ): void {
+    const region = persistedScope.regionCode.trim().toLowerCase();
+    const org = persistedScope.orgName.trim();
+    const space = persistedScope.spaceName.trim();
+    if (region.length === 0 || org.length === 0 || space.length === 0) {
+      this.cfDebuggerService.clearScope();
+      return;
+    }
+    this.cfDebuggerService.setScope({
+      region,
+      org,
+      space,
+      email: credentials.email,
+      password: credentials.password,
+    });
+  }
+
+  private async handleStartDebugApp(appName: string): Promise<void> {
+    if (!this.cfDebuggerService.hasScope()) {
+      const credentials = await getEffectiveCredentials(this.context);
+      if (credentials !== null) {
+        const persistedScope = this.readPersistedConfirmedScopeForEmail(
+          credentials.email
+        );
+        if (persistedScope !== null) {
+          this.syncDebuggerScopeFromPersisted(persistedScope, credentials);
+        }
+      }
+    }
+    try {
+      await this.cfDebuggerService.startDebug(appName);
+    } catch (error) {
+      this.outputChannel.appendLine(
+        `[debug] startDebug error for ${appName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  private async handleStopDebugApp(appName: string): Promise<void> {
+    try {
+      await this.cfDebuggerService.stopDebug(appName);
+    } catch (error) {
+      this.outputChannel.appendLine(
+        `[debug] stopDebug error for ${appName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  private async handleStopAllDebugApps(): Promise<void> {
+    try {
+      await this.cfDebuggerService.stopAll();
+    } catch (error) {
+      this.outputChannel.appendLine(
+        `[debug] stopAll error: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  private postDebugSessionsState(): void {
+    this.postMessage({
+      type: MSG_DEBUG_SESSIONS_STATE,
+      sessions: this.cfDebuggerService.snapshot(),
+    });
+  }
+
+  private postDebugSessionUpdate(session: DebugSessionView): void {
+    this.postMessage({
+      type: MSG_DEBUG_SESSION_UPDATE,
+      session,
+    });
   }
 
   private async preloadRootFolderForPersistedScope(): Promise<void> {
@@ -483,6 +629,7 @@ export class RegionSidebarProvider
         persistedScope.spaceName
       )
     );
+    this.syncDebuggerScopeFromPersisted(persistedScope, credentials);
     this.postMessage({
       type: MSG_RESTORE_CONFIRMED_SCOPE,
       scope: {
@@ -1404,6 +1551,9 @@ export class RegionSidebarProvider
       this.lastLoadedScope = null;
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
+      this.cfDebuggerService.clearScope();
+      await this.cfDebuggerService.stopAll();
+      this.postDebugSessionsState();
       this.reloadToLoginView();
       this.postMessage({
         type: MSG_LOGOUT_RESULT,
@@ -2501,6 +2651,14 @@ function readActiveAppsChangedPayload(
   return {
     appNames: (value['appNames'] as string[]).map((name) => name.trim()),
   };
+}
+
+function readDebugAppName(value: Record<string, unknown>): string | null {
+  const appName = value['appName'];
+  if (!isNonEmptyString(appName, 128)) {
+    return null;
+  }
+  return appName.trim();
 }
 
 function isUpdateSyncIntervalMessage(value: Record<string, unknown>): boolean {

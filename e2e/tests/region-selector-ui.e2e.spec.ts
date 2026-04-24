@@ -466,7 +466,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(webviewFrame.getByRole('tab', { name: 'Logs' })).toBeVisible();
       await expect(webviewFrame.getByRole('tab', { name: 'Apps' })).toBeVisible();
       await expect(
-        webviewFrame.getByRole('tab', { name: 'Targets' })
+        webviewFrame.getByRole('tab', { name: 'Debug' })
       ).toBeVisible();
       await expect(
         webviewFrame.getByRole('tab', { name: 'Settings' })

@@ -3,7 +3,7 @@ import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260412q';
 const TAB_ITEMS = [
   { id: 'logs', label: 'Logs' },
   { id: 'apps', label: 'Apps' },
-  { id: 'targets', label: 'Targets' },
+  { id: 'debug', label: 'Debug' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -132,6 +132,12 @@ const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolder
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
 const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
+const REQUEST_DEBUG_STATE_MESSAGE_TYPE = 'sapTools.requestDebugState';
+const START_DEBUG_APP_MESSAGE_TYPE = 'sapTools.startDebugApp';
+const STOP_DEBUG_APP_MESSAGE_TYPE = 'sapTools.stopDebugApp';
+const STOP_ALL_DEBUG_APPS_MESSAGE_TYPE = 'sapTools.stopAllDebugApps';
+const DEBUG_SESSIONS_STATE_MESSAGE_TYPE = 'sapTools.debugSessionsState';
+const DEBUG_SESSION_UPDATE_MESSAGE_TYPE = 'sapTools.debugSessionUpdate';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -166,6 +172,10 @@ let serviceExportStatusMessage = '';
 let serviceExportStatusTone = 'info';
 let serviceFolderScanInProgress = false;
 let serviceExportInProgress = false;
+let debugSessionsByApp = new Map();
+let debugSearchKeyword = '';
+let debugStatusMessage = '';
+let debugStatusTone = 'info';
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -271,6 +281,10 @@ window.addEventListener('message', (event) => {
       refreshWorkspaceAppsView();
       return;
     }
+    if (isWorkspaceDebugMounted()) {
+      refreshWorkspaceDebugView();
+      return;
+    }
     if (mode === 'selection') {
       return;
     }
@@ -300,6 +314,10 @@ window.addEventListener('message', (event) => {
     }
     if (isWorkspaceAppsMounted()) {
       refreshWorkspaceAppsView();
+      return;
+    }
+    if (isWorkspaceDebugMounted()) {
+      refreshWorkspaceDebugView();
       return;
     }
     if (mode === 'selection') {
@@ -412,6 +430,31 @@ window.addEventListener('message', (event) => {
           ? 'SQLTools config exported.'
           : 'SQLTools config export failed.';
     refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === DEBUG_SESSIONS_STATE_MESSAGE_TYPE) {
+    const rawSessions = Array.isArray(msg.sessions) ? msg.sessions : [];
+    const nextMap = new Map();
+    for (const session of rawSessions) {
+      const normalized = normalizeDebugSession(session);
+      if (normalized !== null) {
+        nextMap.set(normalized.appName, normalized);
+      }
+    }
+    debugSessionsByApp = nextMap;
+    refreshUiAfterDebugStateChange();
+    return;
+  }
+
+  if (msg.type === DEBUG_SESSION_UPDATE_MESSAGE_TYPE) {
+    const normalized = normalizeDebugSession(msg.session);
+    if (normalized === null) {
+      return;
+    }
+    debugSessionsByApp = new Map(debugSessionsByApp);
+    debugSessionsByApp.set(normalized.appName, normalized);
+    refreshUiAfterDebugStateChange();
   }
 });
 
@@ -587,6 +630,15 @@ appElement.addEventListener('input', (event) => {
     }
     renderPrototype();
     return;
+  }
+
+  if (role === 'debug-search') {
+    debugSearchKeyword = target.value;
+    if (isWorkspaceDebugMounted()) {
+      refreshWorkspaceDebugView();
+      return;
+    }
+    renderPrototype();
   }
 });
 
@@ -1026,6 +1078,9 @@ function handleAction(action, actionElement) {
 
   const tabActionHandled = handleTabAction(action, actionElement.dataset.tabId ?? '');
   if (tabActionHandled !== null) {
+    if (tabActionHandled === true && activeTabId === 'debug') {
+      requestDebugState();
+    }
     return tabActionHandled;
   }
 
@@ -1039,7 +1094,123 @@ function handleAction(action, actionElement) {
     return serviceExportActionHandled;
   }
 
+  const debugActionHandled = handleDebugAction(action, actionElement);
+  if (debugActionHandled !== null) {
+    return debugActionHandled;
+  }
+
   return false;
+}
+
+function handleDebugAction(action, actionElement) {
+  if (action === 'start-debug-app') {
+    const appName = actionElement.dataset.appName ?? '';
+    if (appName.length === 0) {
+      return false;
+    }
+    if (vscodeApi === null) {
+      const session = debugSessionsByApp.get(appName) ?? { appName, status: 'idle' };
+      const transitions = ['starting', 'tunneling', 'ready', 'attached'];
+      simulateDebugTransitions(appName, transitions, session);
+      debugStatusTone = 'info';
+      debugStatusMessage = `Started debug session for ${appName}.`;
+      return true;
+    }
+    debugSessionsByApp = new Map(debugSessionsByApp);
+    debugSessionsByApp.set(appName, { appName, status: 'starting' });
+    vscodeApi.postMessage({
+      type: START_DEBUG_APP_MESSAGE_TYPE,
+      appName,
+    });
+    return true;
+  }
+
+  if (action === 'stop-debug-app') {
+    const appName = actionElement.dataset.appName ?? '';
+    if (appName.length === 0) {
+      return false;
+    }
+    if (vscodeApi === null) {
+      simulateDebugTransitions(appName, ['stopping', 'idle'], { appName, status: 'stopping' });
+      debugStatusTone = 'info';
+      debugStatusMessage = `Stopped debug session for ${appName}.`;
+      return true;
+    }
+    debugSessionsByApp = new Map(debugSessionsByApp);
+    debugSessionsByApp.set(appName, {
+      ...(debugSessionsByApp.get(appName) ?? { appName, status: 'idle' }),
+      status: 'stopping',
+    });
+    vscodeApi.postMessage({
+      type: STOP_DEBUG_APP_MESSAGE_TYPE,
+      appName,
+    });
+    return true;
+  }
+
+  if (action === 'stop-all-debug-apps') {
+    if (vscodeApi === null) {
+      const next = new Map();
+      for (const session of debugSessionsByApp.values()) {
+        next.set(session.appName, { appName: session.appName, status: 'idle' });
+      }
+      debugSessionsByApp = next;
+      debugStatusTone = 'info';
+      debugStatusMessage = 'Stopped all debug sessions.';
+      return true;
+    }
+    vscodeApi.postMessage({
+      type: STOP_ALL_DEBUG_APPS_MESSAGE_TYPE,
+    });
+    debugStatusTone = 'info';
+    debugStatusMessage = 'Stopping all debug sessions...';
+    return true;
+  }
+
+  return null;
+}
+
+function simulateDebugTransitions(appName, statuses, baseSession) {
+  if (statuses.length === 0) {
+    return;
+  }
+  let stepIndex = 0;
+  const apply = (status) => {
+    debugSessionsByApp = new Map(debugSessionsByApp);
+    const previous = debugSessionsByApp.get(appName) ?? baseSession;
+    const next = { ...previous, status };
+    if (status === 'ready' || status === 'attached') {
+      next.localPort = previous.localPort ?? 39229;
+    }
+    if (status === 'idle') {
+      delete next.localPort;
+      delete next.message;
+      delete next.errorCode;
+    }
+    debugSessionsByApp.set(appName, next);
+    refreshUiAfterDebugStateChange();
+  };
+  apply(statuses[stepIndex]);
+  const tick = () => {
+    stepIndex += 1;
+    if (stepIndex >= statuses.length) {
+      return;
+    }
+    setTimeout(() => {
+      apply(statuses[stepIndex]);
+      tick();
+    }, 250);
+  };
+  tick();
+}
+
+function requestDebugState() {
+  if (vscodeApi === null) {
+    return;
+  }
+  vscodeApi.postMessage({
+    type: REQUEST_DEBUG_STATE_MESSAGE_TYPE,
+  });
 }
 
 function handleSelectionFlowAction(action) {
@@ -2480,6 +2651,10 @@ function renderWorkspaceTabContent() {
     return renderServiceExportTab();
   }
 
+  if (activeTabId === 'debug') {
+    return renderDebugTab();
+  }
+
   return renderPlaceholderTab(activeTabId);
 }
 
@@ -2948,6 +3123,236 @@ function renderEmptyLogDetails() {
   `;
 }
 
+function renderDebugTab() {
+  const availableApps = resolveCurrentSpaceApps();
+  const hasScope = selectedSpaceId.trim().length > 0;
+  const isLoadingApps = vscodeApi !== null && appsLoadingState === 'loading';
+  const hasAppsError = vscodeApi !== null && appsLoadingState === 'error';
+  const filteredApps = filterDebugAppRows(availableApps);
+  const activeCount = countActiveDebugSessions();
+  const stopAllDisabled = activeCount === 0;
+  const statusMarkup = renderDebugStatusNote();
+
+  const bodyMarkup = !hasScope
+    ? `<p class="debug-empty-note">Confirm a region, organization and space to enable debugging.</p>`
+    : isLoadingApps
+      ? `<p class="debug-empty-note">Loading apps in <strong>${escapeHtml(selectedSpaceId)}</strong>...</p>`
+      : hasAppsError
+        ? `<p class="debug-empty-note debug-empty-note--error">${escapeHtml(appsErrorMessage || 'Failed to load apps.')}</p>`
+        : availableApps.length === 0
+          ? `<p class="debug-empty-note">No apps found in <strong>${escapeHtml(selectedSpaceId)}</strong>.</p>`
+          : filteredApps.length === 0
+            ? `<p class="debug-empty-note">No apps match "${escapeHtml(debugSearchKeyword)}".</p>`
+            : `<div class="debug-app-list" role="list">${filteredApps.map(renderDebugAppRow).join('')}</div>`;
+
+  return `
+    <section class="group-card debug-tab" aria-label="Debug sessions">
+      <header class="debug-tab-header">
+        <div>
+          <h2>Debug Sessions</h2>
+          <p class="debug-tab-subline">
+            Open an SSH tunnel to a Cloud Foundry app's Node inspector and attach the VS Code debugger.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="secondary-action debug-stop-all"
+          data-action="stop-all-debug-apps"
+          ${stopAllDisabled ? 'disabled' : ''}
+        >
+          Stop all${activeCount > 0 ? ` (${activeCount})` : ''}
+        </button>
+      </header>
+      <label class="debug-search-row search-input-with-icon">
+        <span class="search-input-icon" aria-hidden="true">&#128269;</span>
+        <input
+          type="search"
+          class="debug-search"
+          data-role="debug-search"
+          value="${escapeHtml(debugSearchKeyword)}"
+          placeholder="Search apps to debug"
+          aria-label="Search apps to debug"
+        />
+      </label>
+      ${bodyMarkup}
+      ${statusMarkup}
+    </section>
+  `;
+}
+
+function renderDebugAppRow(app) {
+  const session = debugSessionsByApp.get(app.name);
+  const status = session?.status ?? 'idle';
+  const badge = formatDebugStatusBadge(status, session);
+  const isActive = isDebugSessionActive(status);
+  const isBusy = isDebugSessionBusy(status);
+  const portLabel =
+    session !== undefined && typeof session.localPort === 'number' && session.localPort > 0
+      ? `<span class="debug-port-label" data-role="debug-port" data-app-name="${escapeHtml(app.name)}">:${String(session.localPort)}</span>`
+      : '';
+  const messageLabel =
+    session !== undefined && typeof session.message === 'string' && session.message.length > 0
+      ? `<span class="debug-message-label">${escapeHtml(session.message)}</span>`
+      : '';
+  const errorLabel =
+    status === 'error' && session?.errorCode
+      ? `<span class="debug-error-code">${escapeHtml(session.errorCode)}</span>`
+      : '';
+  const buttonLabel = isActive ? 'Stop' : 'Start';
+  const buttonAction = isActive ? 'stop-debug-app' : 'start-debug-app';
+  const buttonClass = isActive ? 'secondary-action' : 'primary-action';
+
+  const runningInstances =
+    typeof app.runningInstances === 'number' && Number.isFinite(app.runningInstances)
+      ? app.runningInstances
+      : 0;
+  const instanceLabel = `${String(runningInstances)} running`;
+
+  return `
+    <div class="debug-app-row" role="listitem" data-role="debug-row" data-app-name="${escapeHtml(app.name)}">
+      <div class="debug-app-row-main">
+        <div class="debug-app-info">
+          <span class="debug-app-name">${escapeHtml(app.name)}</span>
+          <span class="debug-app-meta" data-role="debug-app-meta">${escapeHtml(instanceLabel)}</span>
+        </div>
+        <div class="debug-app-status">
+          ${badge}
+          ${portLabel}
+          ${errorLabel}
+        </div>
+        <div class="debug-action-row">
+          <button type="button" class="${buttonClass} debug-action-button" data-action="${buttonAction}" data-app-name="${escapeHtml(app.name)}"${isBusy ? ' disabled' : ''}>${escapeHtml(buttonLabel)}</button>
+        </div>
+      </div>
+      ${messageLabel}
+    </div>
+  `;
+}
+
+function formatDebugStatusBadge(status, session) {
+  const labelMap = {
+    idle: 'Idle',
+    starting: 'Starting...',
+    'logging-in': 'Logging in...',
+    targeting: 'Targeting...',
+    'ssh-enabling': 'Enabling SSH...',
+    'ssh-restarting': 'Restarting app...',
+    signaling: 'Signaling...',
+    tunneling: 'Tunneling...',
+    ready: 'Ready',
+    attached: 'Attached',
+    stopping: 'Stopping...',
+    stopped: 'Stopped',
+    'tunnel-closed': 'Tunnel closed',
+    error: 'Error',
+  };
+  const variant = mapDebugStatusToVariant(status);
+  const labelText = labelMap[status] ?? status;
+  return `<span class="debug-status-badge is-${variant}" data-role="debug-status" data-app-name="${escapeHtml(session?.appName ?? '')}" data-status="${escapeHtml(status)}">${escapeHtml(labelText)}</span>`;
+}
+
+function mapDebugStatusToVariant(status) {
+  if (status === 'idle' || status === 'stopped') {
+    return 'idle';
+  }
+  if (status === 'ready' || status === 'attached') {
+    return 'ready';
+  }
+  if (status === 'error' || status === 'tunnel-closed') {
+    return 'error';
+  }
+  return 'busy';
+}
+
+function isDebugSessionActive(status) {
+  return (
+    status !== 'idle' &&
+    status !== 'stopped' &&
+    status !== 'error' &&
+    status !== 'tunnel-closed'
+  );
+}
+
+function isDebugSessionBusy(status) {
+  return status === 'stopping';
+}
+
+function countActiveDebugSessions() {
+  let count = 0;
+  for (const session of debugSessionsByApp.values()) {
+    if (isDebugSessionActive(session.status)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function filterDebugAppRows(apps) {
+  const keyword = debugSearchKeyword.trim().toLowerCase();
+  if (keyword.length === 0) {
+    return apps;
+  }
+  return apps.filter((app) => app.name.toLowerCase().includes(keyword));
+}
+
+function renderDebugStatusNote() {
+  if (debugStatusMessage.length === 0) {
+    return '<p class="debug-status-note" data-role="debug-status-note" hidden></p>';
+  }
+  return `<p class="debug-status-note debug-status-note--${escapeHtml(debugStatusTone)}" data-role="debug-status-note">${escapeHtml(debugStatusMessage)}</p>`;
+}
+
+function normalizeDebugSession(raw) {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const appName = typeof raw.appName === 'string' ? raw.appName.trim() : '';
+  if (appName.length === 0) {
+    return null;
+  }
+  const status = typeof raw.status === 'string' ? raw.status : 'idle';
+  const result = { appName, status };
+  if (typeof raw.message === 'string' && raw.message.length > 0) {
+    result.message = raw.message;
+  }
+  if (typeof raw.localPort === 'number' && Number.isFinite(raw.localPort) && raw.localPort > 0) {
+    result.localPort = raw.localPort;
+  }
+  if (typeof raw.errorCode === 'string' && raw.errorCode.length > 0) {
+    result.errorCode = raw.errorCode;
+  }
+  if (typeof raw.startedAt === 'string' && raw.startedAt.length > 0) {
+    result.startedAt = raw.startedAt;
+  }
+  return result;
+}
+
+function refreshUiAfterDebugStateChange() {
+  if (isWorkspaceDebugMounted()) {
+    refreshWorkspaceDebugView();
+    return;
+  }
+  if (mode === 'workspace') {
+    renderPrototype();
+  }
+}
+
+function isWorkspaceDebugMounted() {
+  if (mode !== 'workspace' || activeTabId !== 'debug') {
+    return false;
+  }
+  return appElement.querySelector('.debug-tab') instanceof HTMLElement;
+}
+
+function refreshWorkspaceDebugView() {
+  const tabContainer = appElement.querySelector('.workspace-body');
+  if (!(tabContainer instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  tabContainer.innerHTML = renderDebugTab();
+}
+
 function renderPlaceholderTab(tabId) {
   const label = TAB_ITEMS.find((tab) => tab.id === tabId)?.label ?? 'Tab';
 
@@ -3023,13 +3428,18 @@ function resolveCurrentSpaceApps() {
     if (liveAppOptions === null) {
       return [];
     }
-    return liveAppOptions.map((app) => ({ id: app.id, name: app.name }));
+    return liveAppOptions.map((app) => ({
+      id: app.id,
+      name: app.name,
+      runningInstances:
+        typeof app.runningInstances === 'number' ? app.runningInstances : 0,
+    }));
   }
 
   const spaceKey = selectedSpaceId.trim().toLowerCase();
   const curatedAppNames = SPACE_APP_OPTIONS[spaceKey];
   const appNames = Array.isArray(curatedAppNames) ? curatedAppNames : buildFallbackAppNames(spaceKey);
-  return appNames.map((appName) => ({ id: appName, name: appName }));
+  return appNames.map((appName) => ({ id: appName, name: appName, runningInstances: 1 }));
 }
 
 function filterAppCatalogRows(apps) {

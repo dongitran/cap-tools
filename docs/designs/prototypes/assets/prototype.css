@@ -1263,7 +1263,8 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .service-export-search-row,
-.app-log-search-row {
+.app-log-search-row,
+.debug-search-row {
   display: block;
 }
 
@@ -1283,7 +1284,8 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .service-export-search,
-.app-log-search {
+.app-log-search,
+.debug-search {
   width: 100%;
   min-height: 30px;
   border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));
@@ -1823,5 +1825,221 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
   .service-map-state {
     justify-self: start;
+  }
+}
+
+.debug-tab {
+  display: grid;
+  gap: 10px;
+}
+
+.debug-tab-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.debug-tab-header h2 {
+  margin: 0 0 4px;
+  font-size: 0.84rem;
+}
+
+.debug-tab-subline {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--muted-color);
+}
+
+.debug-stop-all {
+  flex-shrink: 0;
+}
+
+.debug-app-list {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--frame-bg);
+  padding: 6px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.debug-app-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 75%, var(--mix-base));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 92%, var(--mix-base));
+}
+
+.debug-app-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.debug-app-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.debug-app-name {
+  font-size: 0.72rem;
+  color: var(--text-color);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.debug-app-meta {
+  font-size: 0.6rem;
+  color: var(--muted-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.debug-app-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.debug-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.debug-status-badge.is-idle {
+  background: color-mix(in oklab, var(--surface-bg) 80%, var(--mix-base));
+  color: var(--muted-color);
+  border-color: color-mix(in oklab, var(--border-color) 60%, var(--mix-base));
+}
+
+.debug-status-badge.is-busy {
+  background: color-mix(in oklab, var(--accent-color, #2563eb) 18%, var(--surface-bg));
+  color: var(--accent-color, #2563eb);
+  border-color: color-mix(in oklab, var(--accent-color, #2563eb) 35%, var(--surface-bg));
+}
+
+.debug-status-badge.is-ready {
+  background: color-mix(in oklab, #16a34a 22%, var(--surface-bg));
+  color: #16a34a;
+  border-color: color-mix(in oklab, #16a34a 40%, var(--surface-bg));
+}
+
+.debug-status-badge.is-error {
+  background: color-mix(in oklab, #dc2626 22%, var(--surface-bg));
+  color: #dc2626;
+  border-color: color-mix(in oklab, #dc2626 40%, var(--surface-bg));
+}
+
+.debug-port-label {
+  font-size: 0.65rem;
+  color: var(--chip-text);
+  font-family: var(--monospace-font, ui-monospace, SFMono-Regular, monospace);
+}
+
+.debug-error-code {
+  font-size: 0.62rem;
+  color: #dc2626;
+  font-family: var(--monospace-font, ui-monospace, SFMono-Regular, monospace);
+}
+
+.debug-message-label {
+  font-size: 0.6rem;
+  color: var(--muted-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 2px;
+}
+
+.debug-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.debug-action-button {
+  min-width: 56px;
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 0.66rem;
+  line-height: 1.1;
+  border-radius: 6px;
+}
+
+.debug-stop-all {
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 0.66rem;
+  line-height: 1.1;
+  border-radius: 6px;
+}
+
+.debug-empty-note {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed color-mix(in oklab, var(--border-color) 70%, var(--mix-base));
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface-bg) 92%, var(--mix-base));
+  font-size: 0.7rem;
+  color: var(--muted-color);
+  text-align: center;
+}
+
+.debug-empty-note--error {
+  border-color: color-mix(in oklab, #dc2626 50%, var(--surface-bg));
+  color: #dc2626;
+}
+
+.debug-status-note {
+  margin: 0;
+  font-size: 0.66rem;
+  color: var(--muted-color);
+}
+
+.debug-status-note--success {
+  color: #16a34a;
+}
+
+.debug-status-note--error {
+  color: #dc2626;
+}
+
+@media (max-width: 240px) {
+  .debug-app-row [data-role="debug-port"] {
+    display: none;
+  }
+  .debug-app-meta {
+    display: none;
+  }
+  .debug-error-code {
+    display: none;
+  }
+  .debug-status-badge {
+    padding: 2px 5px;
+    font-size: 0.58rem;
   }
 }

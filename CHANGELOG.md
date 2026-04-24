@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0-pre.0
+- Replaced the placeholder `Targets` workspace tab with a `Debug` tab that lists every started Cloud Foundry app in the confirmed scope.
+- Integrated `@saptools/cf-debugger` to open an SSH tunnel to a CF app's Node inspector and attach the VS Code Node debugger automatically.
+- Added per-app `Start` / `Stop` controls plus a workspace-wide `Stop all` action and a search input for the Debug tab.
+- Surfaced live status transitions (`Starting`, `Tunneling`, `Ready`, `Attached`, `Tunnel closed`, `Error`) and the forwarded local port for each session.
+- Added `SAP_TOOLS_TEST_MODE=1` debug runner and debug API fakes so the e2e suite can exercise the full Debug tab flow without real CF infrastructure.
+- New unit and e2e coverage for debugger lifecycle, status transitions, error and stop paths, and app search filtering.
+
 ## 0.4.0
 - Promoted 0.3.0 workspace mapping/search improvements to stable release.
 
