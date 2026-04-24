@@ -131,7 +131,7 @@ const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
 const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
-const OPEN_SQLTOOLS_EXTENSION_MESSAGE_TYPE = 'sapTools.openSqlToolsExtension';
+const OPEN_HANA_SQL_FILE_MESSAGE_TYPE = 'sapTools.openHanaSqlFile';
 const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const REQUEST_DEBUG_STATE_MESSAGE_TYPE = 'sapTools.requestDebugState';
 const START_DEBUG_APP_MESSAGE_TYPE = 'sapTools.startDebugApp';
@@ -139,6 +139,7 @@ const STOP_DEBUG_APP_MESSAGE_TYPE = 'sapTools.stopDebugApp';
 const STOP_ALL_DEBUG_APPS_MESSAGE_TYPE = 'sapTools.stopAllDebugApps';
 const DEBUG_SESSIONS_STATE_MESSAGE_TYPE = 'sapTools.debugSessionsState';
 const DEBUG_SESSION_UPDATE_MESSAGE_TYPE = 'sapTools.debugSessionUpdate';
+const HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE = 'sapTools.hanaSqlFileOpenResult';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -177,6 +178,10 @@ let debugSessionsByApp = new Map();
 let debugSearchKeyword = '';
 let debugStatusMessage = '';
 let debugStatusTone = 'info';
+let hanaServiceOptions = null;
+let selectedHanaServiceId = '';
+let hanaQueryStatusMessage = '';
+let hanaQueryStatusTone = 'info';
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -268,6 +273,7 @@ window.addEventListener('message', (event) => {
     appsLoadingState = 'loaded';
     appsErrorMessage = '';
     pruneSelectedAppIds();
+    syncSqlAppTargetsFromCurrentApps();
     if (localServiceRootFolderPath.length > 0) {
       refreshServiceMappingsAfterAppsLoaded();
     } else {
@@ -284,6 +290,10 @@ window.addEventListener('message', (event) => {
     }
     if (isWorkspaceDebugMounted()) {
       refreshWorkspaceDebugView();
+      return;
+    }
+    if (isWorkspaceSqlMounted()) {
+      refreshWorkspaceSqlView();
       return;
     }
     if (mode === 'selection') {
@@ -307,6 +317,7 @@ window.addEventListener('message', (event) => {
     appsLoadingState = 'error';
     appsErrorMessage = typeof msg.message === 'string' ? msg.message : 'Failed to load apps.';
     pruneSelectedAppIds();
+    syncSqlAppTargetsFromCurrentApps();
     clearServiceMappingsForScope();
 
     if (isWorkspaceLogsMounted()) {
@@ -321,10 +332,26 @@ window.addEventListener('message', (event) => {
       refreshWorkspaceDebugView();
       return;
     }
+    if (isWorkspaceSqlMounted()) {
+      refreshWorkspaceSqlView();
+      return;
+    }
     if (mode === 'selection') {
       return;
     }
     renderPrototype();
+    return;
+  }
+
+  if (msg.type === HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE) {
+    const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
+    const message = typeof msg.message === 'string' ? msg.message : '';
+    if (serviceId.length > 0) {
+      selectedHanaServiceId = serviceId;
+    }
+    hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
+    hanaQueryStatusMessage = message;
+    refreshUiAfterSqlStateChange();
     return;
   }
 
@@ -779,6 +806,14 @@ function isWorkspaceAppsMounted() {
   return appElement.querySelector('.service-export-tab') instanceof HTMLElement;
 }
 
+function isWorkspaceSqlMounted() {
+  if (mode !== 'workspace' || activeTabId !== 'settings') {
+    return false;
+  }
+
+  return appElement.querySelector('.sql-workbench') instanceof HTMLElement;
+}
+
 function handleAppLogRowClick(target) {
   const appLogRow = target.closest('.app-log-item');
   if (!(appLogRow instanceof HTMLElement)) {
@@ -1100,7 +1135,7 @@ function handleAction(action, actionElement) {
     return debugActionHandled;
   }
 
-  const sqlTabActionHandled = handleSqlTabAction(action);
+  const sqlTabActionHandled = handleSqlTabAction(action, actionElement);
   if (sqlTabActionHandled !== null) {
     return sqlTabActionHandled;
   }
@@ -1108,23 +1143,46 @@ function handleAction(action, actionElement) {
   return false;
 }
 
-function handleSqlTabAction(action) {
-  if (action === 'open-sqltools-extension') {
-    postOpenSqlToolsExtension();
-    return true;
+function handleSqlTabAction(action, actionElement) {
+  if (action === 'select-hana-service') {
+    const serviceId = actionElement.dataset.serviceId ?? '';
+    if (serviceId.length === 0) {
+      return false;
+    }
+    selectedHanaServiceId = serviceId;
+    return triggerOpenHanaSqlFile();
   }
 
   return null;
 }
 
-function postOpenSqlToolsExtension() {
+function requestHanaServicesIfNeeded() {
+  syncSqlAppTargetsFromCurrentApps();
+}
+
+function triggerOpenHanaSqlFile() {
+  const selectedService = resolveSelectedHanaService();
+  if (selectedService === undefined) {
+    hanaQueryStatusTone = 'error';
+    hanaQueryStatusMessage = 'Choose an app before opening a SQL file.';
+    return true;
+  }
+
+  hanaQueryStatusTone = 'info';
+  hanaQueryStatusMessage = `Opening SQL file for app ${selectedService.name}...`;
+
   if (vscodeApi === null) {
-    return;
+    hanaQueryStatusTone = 'success';
+    hanaQueryStatusMessage = `SQL file opened for app ${selectedService.name}.`;
+    return true;
   }
 
   vscodeApi.postMessage({
-    type: OPEN_SQLTOOLS_EXTENSION_MESSAGE_TYPE,
+    type: OPEN_HANA_SQL_FILE_MESSAGE_TYPE,
+    serviceId: selectedService.id,
+    serviceName: selectedService.name,
   });
+  return true;
 }
 
 function handleDebugAction(action, actionElement) {
@@ -1353,6 +1411,9 @@ function handleTabAction(action, tabId) {
   }
 
   activeTabId = tabId;
+  if (activeTabId === 'settings') {
+    requestHanaServicesIfNeeded();
+  }
   return true;
 }
 
@@ -2608,6 +2669,8 @@ function renderWorkspaceScreen() {
   const regionCode = selectedRegion?.code ?? 'no-region';
   const orgLabel = selectedOrg?.name ?? 'No org selected';
   const workspaceSummary = `Region: ${regionCode}. Org: ${orgLabel}. Space: ${selectedSpace}`;
+  const workspaceBodyClass =
+    activeTabId === 'settings' ? 'workspace-body workspace-body-sql' : 'workspace-body';
 
   return `
     <header class="shell-header workspace-header">
@@ -2637,7 +2700,7 @@ function renderWorkspaceScreen() {
 
     ${renderWorkspaceTabs()}
 
-    <section class="workspace-body">
+    <section class="${workspaceBodyClass}">
       ${renderWorkspaceTabContent()}
     </section>
 
@@ -3378,11 +3441,30 @@ function refreshWorkspaceDebugView() {
   tabContainer.innerHTML = renderDebugTab();
 }
 
+function refreshUiAfterSqlStateChange() {
+  if (isWorkspaceSqlMounted()) {
+    refreshWorkspaceSqlView();
+    return;
+  }
+  if (mode === 'workspace') {
+    renderPrototype();
+  }
+}
+
+function refreshWorkspaceSqlView() {
+  const tabContainer = appElement.querySelector('.workspace-body');
+  if (!(tabContainer instanceof HTMLElement)) {
+    renderPrototype();
+    return;
+  }
+  tabContainer.innerHTML = renderSqlWorkbenchTab();
+}
+
 function renderPlaceholderTab(tabId) {
   const label = TAB_ITEMS.find((tab) => tab.id === tabId)?.label ?? 'Tab';
 
   if (tabId === 'settings') {
-    return renderSqlTabPlaceholder();
+    return renderSqlWorkbenchTab();
   }
 
   return `
@@ -3393,49 +3475,115 @@ function renderPlaceholderTab(tabId) {
   `;
 }
 
-function renderSqlTabPlaceholder() {
+function renderSqlWorkbenchTab() {
+  const services = resolveHanaServices();
+  const servicesMarkup = renderHanaServiceRows(services);
+  const resultPreviewMarkup = renderSqlResultPreview();
+
   return `
-    <section class="group-card placeholder-tab sql-tab-placeholder">
-      <h2>SQL</h2>
-      <p>
-        SQL query execution is provided by the
-        <strong>SQLTools</strong> VS Code extension. SAP Tools integrates
-        with SQLTools by exporting HANA connection details from a Cloud
-        Foundry app into the workspace <code>.vscode/settings.json</code>.
-      </p>
-      <ol class="sql-tab-steps">
-        <li>
-          Open the <strong>Apps</strong> tab and map the target app to a
-          local folder containing <code>default-env.json</code>.
-        </li>
-        <li>
-          Click <strong>Export SQLTools Config</strong> on the mapped app
-          to write its HANA binding as a SQLTools connection.
-        </li>
-        <li>
-          Open the SQLTools sidebar to run queries against that connection.
-        </li>
-      </ol>
-      <div
-        class="toolbar-row sql-tab-actions"
-        role="group"
-        aria-label="SQL integration actions"
-      >
+    <section class="group-card sql-workbench" aria-label="S/4HANA SQL Workbench">
+      <header class="sql-workbench-header">
+        <h2>S/4HANA SQL Workbench</h2>
+      </header>
+
+      <section class="sql-service-list" data-role="hana-service-list" aria-label="Discovered apps">
+        ${servicesMarkup}
+      </section>
+
+      ${resultPreviewMarkup}
+
+      ${renderHanaQueryStatus()}
+    </section>
+  `;
+}
+
+function renderHanaServiceRows(services) {
+  if (services.length === 0) {
+    return '<p class="logs-empty-message">No apps found in current space.</p>';
+  }
+
+  return services
+    .map((service) => {
+      const isSelected = service.id === selectedHanaServiceId;
+      return `
         <button
           type="button"
-          class="primary-action"
-          data-action="switch-tab"
-          data-tab-id="apps"
+          class="sql-service-row${isSelected ? ' is-selected' : ''}"
+          data-action="select-hana-service"
+          data-service-id="${escapeHtml(service.id)}"
+          aria-pressed="${isSelected}"
         >
-          Go to Apps tab
+          <span class="sql-service-name">${escapeHtml(service.name)}</span>
+          <span class="sql-service-open-indicator" aria-hidden="true">&gt;</span>
         </button>
-        <button
-          type="button"
-          class="secondary-action"
-          data-action="open-sqltools-extension"
-        >
-          Open SQLTools in VS Code
-        </button>
+      `;
+    })
+    .join('');
+}
+
+function renderHanaQueryStatus() {
+  const hidden = hanaQueryStatusMessage.length === 0 ? 'hidden' : '';
+  const tone = hanaQueryStatusTone === 'error'
+    ? 'error'
+    : hanaQueryStatusTone === 'success'
+      ? 'success'
+      : 'info';
+  return `
+    <p
+      class="hana-query-status is-${tone}"
+      data-role="hana-query-status"
+      role="${tone === 'error' ? 'alert' : 'status'}"
+      aria-live="polite"
+      ${hidden}
+    >
+      ${escapeHtml(hanaQueryStatusMessage)}
+    </p>
+  `;
+}
+
+function renderSqlResultPreview() {
+  const selectedService = resolveSelectedHanaService();
+  if (selectedService === undefined) {
+    return '';
+  }
+
+  const previewRows = [
+    ['1000124', 'OPEN', '2026-04-24 09:21:18', '1480.00'],
+    ['1000125', 'PAID', '2026-04-24 09:44:03', '320.50'],
+    ['1000126', 'OPEN', '2026-04-24 10:11:40', '90.00'],
+  ];
+  const previewTableRows = previewRows
+    .map((row) => {
+      return `
+        <tr>
+          <td>${escapeHtml(row[0])}</td>
+          <td>${escapeHtml(row[1])}</td>
+          <td>${escapeHtml(row[2])}</td>
+          <td>${escapeHtml(row[3])}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `
+    <section class="sql-result-preview" data-role="hana-result-preview" aria-label="Result table preview">
+      <header class="sql-result-preview-head">
+        <h3>${escapeHtml(selectedService.name)}_ORDERS</h3>
+      </header>
+      <div class="sql-result-table-wrap">
+        <table class="sql-result-table">
+          <thead>
+            <tr>
+              <th>ORDER_ID</th>
+              <th>STATUS</th>
+              <th>CREATED_AT</th>
+              <th>AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${previewTableRows}
+          </tbody>
+        </table>
       </div>
     </section>
   `;
@@ -3517,6 +3665,43 @@ function resolveCurrentSpaceApps() {
   const curatedAppNames = SPACE_APP_OPTIONS[spaceKey];
   const appNames = Array.isArray(curatedAppNames) ? curatedAppNames : buildFallbackAppNames(spaceKey);
   return appNames.map((appName) => ({ id: appName, name: appName, runningInstances: 1 }));
+}
+
+function resolveHanaServices() {
+  if (hanaServiceOptions !== null) {
+    return hanaServiceOptions;
+  }
+
+  syncSqlAppTargetsFromCurrentApps();
+  return hanaServiceOptions ?? [];
+}
+
+function resolveSelectedHanaService() {
+  const services = resolveHanaServices();
+  return services.find((service) => service.id === selectedHanaServiceId);
+}
+
+function pruneSelectedHanaServiceId() {
+  if (selectedHanaServiceId.length === 0) {
+    return;
+  }
+  const serviceIds = new Set(resolveHanaServices().map((service) => service.id));
+  if (!serviceIds.has(selectedHanaServiceId)) {
+    selectedHanaServiceId = '';
+  }
+}
+
+function syncSqlAppTargetsFromCurrentApps() {
+  const apps = resolveCurrentSpaceApps();
+  hanaServiceOptions = apps.map((app) => ({
+    id: app.id,
+    name: app.name,
+    runningInstances:
+      typeof app.runningInstances === 'number' && Number.isFinite(app.runningInstances)
+        ? app.runningInstances
+        : 0,
+  }));
+  pruneSelectedHanaServiceId();
 }
 
 function filterAppCatalogRows(apps) {
@@ -3804,6 +3989,14 @@ function buildFallbackAppNames(spaceKey) {
 function resetWorkspaceLoggingState() {
   resetActiveAppLoggingState();
   clearServiceMappingsForScope();
+  resetSqlWorkbenchState();
+}
+
+function resetSqlWorkbenchState() {
+  hanaServiceOptions = null;
+  selectedHanaServiceId = '';
+  hanaQueryStatusMessage = '';
+  hanaQueryStatusTone = 'info';
 }
 
 function resetActiveAppLoggingState() {

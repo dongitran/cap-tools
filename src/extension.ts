@@ -9,6 +9,7 @@ import {
   buildFakeRunner,
 } from './cfDebuggerService';
 import { getEffectiveCredentials } from './credentialStore';
+import { HanaSqlWorkbench } from './hanaSqlWorkbench';
 import { REGION_VIEW_ID, RegionSidebarProvider } from './sidebarProvider';
 
 const OPEN_REGION_MENU_COMMAND = 'sapTools.selectSapBtpRegion';
@@ -23,6 +24,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const cacheSyncService = new CacheSyncService(cacheStore, context, outputChannel);
 
   const cfLogsPanel = new CfLogsPanelProvider(context);
+  const hanaSqlWorkbench = new HanaSqlWorkbench(outputChannel);
 
   const debuggerTestMode = isDebuggerTestMode();
   const cfDebuggerService = new CfDebuggerService({
@@ -41,7 +43,8 @@ export function activate(context: vscode.ExtensionContext): void {
     cfLogsPanel,
     cacheSyncService,
     cacheStore,
-    cfDebuggerService
+    cfDebuggerService,
+    hanaSqlWorkbench
   );
 
   void getEffectiveCredentials(context)
@@ -87,6 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
     cacheSyncService,
     regionSidebarProvider,
     cfLogsPanel,
+    hanaSqlWorkbench,
     cfDebuggerService,
     webviewProviderRegistration,
     cfLogsPanelRegistration,

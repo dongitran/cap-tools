@@ -579,18 +579,26 @@ export async function openCfLogsPanel(window: Page): Promise<Frame> {
 }
 
 export async function runWorkbenchCommand(window: Page, commandTitle: string): Promise<void> {
-  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
+  const openCommandPalette = async (): Promise<void> => {
+    await window.keyboard.press(
+      process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P'
+    );
+  };
 
-  const quickInput = window.getByPlaceholder('Type the name of a command to run.');
-  try {
-    await expect(quickInput).toBeVisible({ timeout: 10000 });
-    await quickInput.fill(commandTitle);
-    await quickInput.press('Enter');
-    return;
-  } catch {
-    await window.keyboard.type(commandTitle);
-    await window.keyboard.press('Enter');
+  await openCommandPalette();
+
+  const quickInputWidget = window.locator('.quick-input-widget:visible').first();
+  const widgetVisible = await quickInputWidget.isVisible().catch(() => false);
+  if (!widgetVisible) {
+    await window.keyboard.press('F1');
+    await expect(quickInputWidget).toBeVisible({ timeout: 10000 });
   }
+
+  const quickInputField = quickInputWidget.locator('input[type="text"]').first();
+  await expect(quickInputField).toBeVisible({ timeout: 10000 });
+  await quickInputField.click();
+  await quickInputField.fill(commandTitle);
+  await window.keyboard.press('Enter');
 }
 
 export async function readWebviewBodyClasses(webviewFrame: Frame): Promise<string[]> {

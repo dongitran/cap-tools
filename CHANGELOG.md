@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.3-pre.0 (pre-release)
+- Reworked SQL tab flow to app-first workbench behavior: click one app to open its dedicated `.sql` editor immediately.
+- Added `SAP Tools: Run HANA SQL` command with SQLTools-like keybinding chord (`Cmd/Ctrl+E`, `Cmd/Ctrl+E`) and document-bound execution context.
+- Added HANA SQL execution pipeline with single-statement guard, mutating-statement confirmation, connection resolution from CF app env, and table name suggestions.
+- Redesigned SQL result webview to table-first UX for query runs, opening a fresh result tab per execution.
+- Expanded unit and e2e coverage for SQL workbench flow, command invocation reliability, and result rendering.
+
 ## 0.7.2 (pre-release)
 - Renamed the 4th workspace tab from `Settings` to `SQL` and turned its placeholder into an interactive SQL integration hub with a three-step explainer and two actions (`Go to Apps tab` and `Open SQLTools in VS Code`).
 - Added a new `sapTools.openSqlToolsExtension` webview → extension message and handler that activates the `mtxr.sqltools` extension and opens its activity bar, with a Marketplace fallback when SQLTools is not installed or the command is unavailable.

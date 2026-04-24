@@ -29,6 +29,7 @@ import {
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
 import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } from './testModeData';
 import { SAP_BTP_REGIONS } from './regions';
+import type { HanaSqlWorkbench } from './hanaSqlWorkbench';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
@@ -54,6 +55,7 @@ const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappin
 const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
 const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
+const MSG_OPEN_HANA_SQL_FILE = 'sapTools.openHanaSqlFile';
 const MSG_OPEN_SQLTOOLS_EXTENSION = 'sapTools.openSqlToolsExtension';
 const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
 const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
@@ -84,6 +86,7 @@ const MSG_EXPORT_SQLTOOLS_RESULT = 'sapTools.exportSqlToolsResult';
 const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
 const MSG_DEBUG_SESSIONS_STATE = 'sapTools.debugSessionsState';
 const MSG_DEBUG_SESSION_UPDATE = 'sapTools.debugSessionUpdate';
+const MSG_HANA_SQL_FILE_OPEN_RESULT = 'sapTools.hanaSqlFileOpenResult';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -143,6 +146,11 @@ interface ExportSqlToolsConfigPayload {
   readonly appId: string;
   readonly appName: string;
   readonly rootFolderPath: string;
+}
+
+interface OpenHanaSqlFilePayload {
+  readonly serviceId: string;
+  readonly serviceName: string;
 }
 
 interface LogoutResultPayload {
@@ -235,7 +243,8 @@ export class RegionSidebarProvider
     private readonly cfLogsPanel: CfLogsPanelProvider,
     private readonly cacheSyncService: CacheSyncService,
     private readonly cacheStore: CacheStore,
-    private readonly cfDebuggerService: CfDebuggerService
+    private readonly cfDebuggerService: CfDebuggerService,
+    private readonly hanaSqlWorkbench: HanaSqlWorkbench
   ) {
     const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
       this.postCacheState(snapshot);
@@ -393,6 +402,12 @@ export class RegionSidebarProvider
     if (type === MSG_EXPORT_SQLTOOLS_CONFIG && isExportSqlToolsConfigMessage(message)) {
       const payload = readExportSqlToolsConfigPayload(message);
       await this.handleExportSqlToolsConfig(payload);
+      return;
+    }
+
+    if (type === MSG_OPEN_HANA_SQL_FILE && isOpenHanaSqlFileMessage(message)) {
+      const payload = readOpenHanaSqlFilePayload(message);
+      await this.handleOpenHanaSqlFile(payload);
       return;
     }
 
@@ -1527,6 +1542,56 @@ export class RegionSidebarProvider
   }
 
   // ── SQLTools integration ─────────────────────────────────────────────────
+
+  private async handleOpenHanaSqlFile(payload: OpenHanaSqlFilePayload): Promise<void> {
+    const targetApp =
+      this.currentApps.find((app) => app.id === payload.serviceId) ??
+      this.currentApps.find((app) => app.name === payload.serviceName);
+    if (targetApp === undefined) {
+      this.postHanaSqlFileOpenResult(payload.serviceId, false, 'Selected app was not found.');
+      return;
+    }
+
+    const sessionSeed = this.currentLogSessionSeed;
+    if (sessionSeed === null && !isTestMode()) {
+      this.postHanaSqlFileOpenResult(
+        payload.serviceId,
+        false,
+        'No active CF scope session. Confirm scope and choose app again.'
+      );
+      return;
+    }
+
+    try {
+      await this.hanaSqlWorkbench.openSqlDocumentForApp({
+        appId: targetApp.id,
+        appName: targetApp.name,
+        session: sessionSeed,
+      });
+      this.postHanaSqlFileOpenResult(
+        targetApp.id,
+        true,
+        `SQL file opened for app ${targetApp.name}.`
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to open SQL file.';
+      this.postHanaSqlFileOpenResult(targetApp.id, false, errorMessage);
+    }
+  }
+
+  private postHanaSqlFileOpenResult(
+    serviceId: string,
+    success: boolean,
+    message: string
+  ): void {
+    this.postMessage({
+      type: MSG_HANA_SQL_FILE_OPEN_RESULT,
+      serviceId,
+      success,
+      message,
+    });
+  }
 
   private async handleOpenSqlToolsExtension(): Promise<void> {
     const sqlToolsExtension = vscode.extensions.getExtension(SQLTOOLS_EXTENSION_ID);
@@ -2792,5 +2857,21 @@ function readExportSqlToolsConfigPayload(
     appId: String(value['appId']).trim(),
     appName: String(value['appName']).trim(),
     rootFolderPath: String(value['rootFolderPath']).trim(),
+  };
+}
+
+function isOpenHanaSqlFileMessage(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value['serviceId'], 128) &&
+    isNonEmptyString(value['serviceName'], 128)
+  );
+}
+
+function readOpenHanaSqlFilePayload(
+  value: Record<string, unknown>
+): OpenHanaSqlFilePayload {
+  return {
+    serviceId: String(value['serviceId']).trim(),
+    serviceName: String(value['serviceName']).trim(),
   };
 }
