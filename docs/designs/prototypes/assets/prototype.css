@@ -1703,6 +1703,19 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   color: var(--muted-color);
 }
 
+.sql-tab-placeholder .sql-tab-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--muted-color);
+}
+
+.sql-tab-placeholder .sql-tab-actions {
+  margin-top: 2px;
+}
+
 .output-box {
   border-top: 1px solid var(--border-color);
   padding: 9px 10px;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2 (pre-release)
+- Renamed the 4th workspace tab from `Settings` to `SQL` and turned its placeholder into an interactive SQL integration hub with a three-step explainer and two actions (`Go to Apps tab` and `Open SQLTools in VS Code`).
+- Added a new `sapTools.openSqlToolsExtension` webview → extension message and handler that activates the `mtxr.sqltools` extension and opens its activity bar, with a Marketplace fallback when SQLTools is not installed or the command is unavailable.
+- Kept the header gear icon and Settings screen labeled `Settings` because they still manage Cache Sync Interval, Sync Status, and Logout.
+- Synced e2e expectations to the new tab label and fixed an indentation regression in the region-selector layout test.
+
 ## 0.7.1 (pre-release)
 - Packaged the `@saptools/cf-debugger` runtime inside the extension so Debug works from the installed `.vsix` without relying on an external `node_modules` tree.
 - Added loader coverage that prefers the vendored debugger runtime in packaged builds and falls back to the npm package only in local development.

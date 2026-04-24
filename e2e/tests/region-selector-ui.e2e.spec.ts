@@ -469,7 +469,7 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.getByRole('tab', { name: 'Debug' })
       ).toBeVisible();
       await expect(
-        webviewFrame.getByRole('tab', { name: 'Settings' })
+        webviewFrame.getByRole('tab', { name: 'SQL' })
       ).toBeVisible();
 
       const workspaceHeaderLayout = await webviewFrame.evaluate(() => {

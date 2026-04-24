@@ -54,6 +54,10 @@ const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappin
 const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
 const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
+const MSG_OPEN_SQLTOOLS_EXTENSION = 'sapTools.openSqlToolsExtension';
+const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
+const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
+const BUILTIN_EXTENSION_OPEN_COMMAND = 'extension.open';
 const MSG_REQUEST_DEBUG_STATE = 'sapTools.requestDebugState';
 const MSG_START_DEBUG_APP = 'sapTools.startDebugApp';
 const MSG_STOP_DEBUG_APP = 'sapTools.stopDebugApp';
@@ -389,6 +393,11 @@ export class RegionSidebarProvider
     if (type === MSG_EXPORT_SQLTOOLS_CONFIG && isExportSqlToolsConfigMessage(message)) {
       const payload = readExportSqlToolsConfigPayload(message);
       await this.handleExportSqlToolsConfig(payload);
+      return;
+    }
+
+    if (type === MSG_OPEN_SQLTOOLS_EXTENSION) {
+      await this.handleOpenSqlToolsExtension();
       return;
     }
 
@@ -1515,6 +1524,30 @@ export class RegionSidebarProvider
       'Export'
     );
     return selectedAction === 'Export';
+  }
+
+  // ── SQLTools integration ─────────────────────────────────────────────────
+
+  private async handleOpenSqlToolsExtension(): Promise<void> {
+    const sqlToolsExtension = vscode.extensions.getExtension(SQLTOOLS_EXTENSION_ID);
+
+    if (sqlToolsExtension !== undefined) {
+      try {
+        if (!sqlToolsExtension.isActive) {
+          await sqlToolsExtension.activate();
+        }
+        await vscode.commands.executeCommand(SQLTOOLS_ACTIVITY_BAR_COMMAND);
+        return;
+      } catch {
+        // Fall through to the marketplace-open fallback if the activity bar
+        // command is not registered for the installed SQLTools version.
+      }
+    }
+
+    await vscode.commands.executeCommand(
+      BUILTIN_EXTENSION_OPEN_COMMAND,
+      SQLTOOLS_EXTENSION_ID
+    );
   }
 
   // ── Login / logout ───────────────────────────────────────────────────────

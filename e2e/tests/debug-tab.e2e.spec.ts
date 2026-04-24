@@ -73,7 +73,7 @@ test.describe('SAP Tools Debug tab', () => {
         'Logs',
         'Apps',
         'Debug',
-        'Settings',
+        'SQL',
       ]);
 
       await expect(

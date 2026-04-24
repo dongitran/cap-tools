@@ -4,7 +4,7 @@ const TAB_ITEMS = [
   { id: 'logs', label: 'Logs' },
   { id: 'apps', label: 'Apps' },
   { id: 'debug', label: 'Debug' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'settings', label: 'SQL' },
 ];
 
 const DEFAULT_ORG_OPTIONS = [
@@ -131,6 +131,7 @@ const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
 const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
+const OPEN_SQLTOOLS_EXTENSION_MESSAGE_TYPE = 'sapTools.openSqlToolsExtension';
 const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const REQUEST_DEBUG_STATE_MESSAGE_TYPE = 'sapTools.requestDebugState';
 const START_DEBUG_APP_MESSAGE_TYPE = 'sapTools.startDebugApp';
@@ -1099,7 +1100,31 @@ function handleAction(action, actionElement) {
     return debugActionHandled;
   }
 
+  const sqlTabActionHandled = handleSqlTabAction(action);
+  if (sqlTabActionHandled !== null) {
+    return sqlTabActionHandled;
+  }
+
   return false;
+}
+
+function handleSqlTabAction(action) {
+  if (action === 'open-sqltools-extension') {
+    postOpenSqlToolsExtension();
+    return true;
+  }
+
+  return null;
+}
+
+function postOpenSqlToolsExtension() {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: OPEN_SQLTOOLS_EXTENSION_MESSAGE_TYPE,
+  });
 }
 
 function handleDebugAction(action, actionElement) {
@@ -3356,10 +3381,62 @@ function refreshWorkspaceDebugView() {
 function renderPlaceholderTab(tabId) {
   const label = TAB_ITEMS.find((tab) => tab.id === tabId)?.label ?? 'Tab';
 
+  if (tabId === 'settings') {
+    return renderSqlTabPlaceholder();
+  }
+
   return `
     <section class="group-card placeholder-tab">
       <h2>${label}</h2>
       <p>This prototype step focuses on the Logs tab. Content for ${label} comes next.</p>
+    </section>
+  `;
+}
+
+function renderSqlTabPlaceholder() {
+  return `
+    <section class="group-card placeholder-tab sql-tab-placeholder">
+      <h2>SQL</h2>
+      <p>
+        SQL query execution is provided by the
+        <strong>SQLTools</strong> VS Code extension. SAP Tools integrates
+        with SQLTools by exporting HANA connection details from a Cloud
+        Foundry app into the workspace <code>.vscode/settings.json</code>.
+      </p>
+      <ol class="sql-tab-steps">
+        <li>
+          Open the <strong>Apps</strong> tab and map the target app to a
+          local folder containing <code>default-env.json</code>.
+        </li>
+        <li>
+          Click <strong>Export SQLTools Config</strong> on the mapped app
+          to write its HANA binding as a SQLTools connection.
+        </li>
+        <li>
+          Open the SQLTools sidebar to run queries against that connection.
+        </li>
+      </ol>
+      <div
+        class="toolbar-row sql-tab-actions"
+        role="group"
+        aria-label="SQL integration actions"
+      >
+        <button
+          type="button"
+          class="primary-action"
+          data-action="switch-tab"
+          data-tab-id="apps"
+        >
+          Go to Apps tab
+        </button>
+        <button
+          type="button"
+          class="secondary-action"
+          data-action="open-sqltools-extension"
+        >
+          Open SQLTools in VS Code
+        </button>
+      </div>
     </section>
   `;
 }
