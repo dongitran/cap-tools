@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.3-pre.0 (pre-release)
+## 0.7.3 (pre-release)
 - Reworked SQL tab flow to app-first workbench behavior: click one app to open its dedicated `.sql` editor immediately.
 - Added `SAP Tools: Run HANA SQL` command with SQLTools-like keybinding chord (`Cmd/Ctrl+E`, `Cmd/Ctrl+E`) and document-bound execution context.
 - Added HANA SQL execution pipeline with single-statement guard, mutating-statement confirmation, connection resolution from CF app env, and table name suggestions.
