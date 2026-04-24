@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.4 (pre-release)
+- Detect the SAP HANA Client automatically when `hdbsql` is not on `PATH` by probing the default install locations (`/Applications/sap/hdbclient`, `/usr/sap/hdbclient`, `C:\Program Files\sap\hdbclient`, and the user's home `sap/hdbclient`).
+- Added the `sapTools.hanaSqlClientPath` VS Code setting so users can pin an explicit absolute path to `hdbsql` when the client lives outside of the standard locations.
+- Rendered a dedicated install-guidance card in the SQL result webview when the HANA Client is missing, including the searched paths, the download link, and the setting to configure a custom path.
+- Surfaced actionable buttons (`Download SAP HANA Client`, `Configure hdbsql Path`) on the error notification shown after an hdbsql-missing failure.
+- Extracted the SQL workbench pure helpers into a dedicated support module and expanded unit coverage across the template, result HTML branches (resultset, status, generic error, hdbsql-missing), HTML escaping, table/keyword filtering, and hdbsql path resolution.
+
 ## 0.7.3 (pre-release)
 - Reworked SQL tab flow to app-first workbench behavior: click one app to open its dedicated `.sql` editor immediately.
 - Added `SAP Tools: Run HANA SQL` command with SQLTools-like keybinding chord (`Cmd/Ctrl+E`, `Cmd/Ctrl+E`) and document-bound execution context.

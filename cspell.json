@@ -69,6 +69,7 @@
     "xlarge",
     "xsuaa",
     "hdbsql",
+    "hdbclient",
     "myschema",
     "hdbuserstore",
     "econn"
