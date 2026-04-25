@@ -69,6 +69,23 @@ const MOCK_APPS_BY_SPACE: Record<string, readonly string[]> = {
   proofspace: ['proof-gateway', 'proof-worker'],
 };
 
+function buildSqlStressUatApps(): readonly string[] {
+  return [
+    'finance-uat-api',
+    'finance-uat-worker',
+    'finance-uat-audit',
+    'finance-uat-ledger',
+    'finance-uat-recon',
+    'finance-uat-payments',
+    'finance-uat-tax',
+    'finance-uat-fx',
+    'finance-uat-risk',
+    'finance-uat-notify',
+    'finance-uat-reporting',
+    'finance-uat-archive',
+  ];
+}
+
 export function resolveMockOrgsForRegion(regionCode: string): readonly MockOrg[] {
   const normalizedRegionCode = regionCode.trim().toLowerCase();
   if (normalizedRegionCode === 'br-10') {
@@ -90,6 +107,10 @@ export function resolveMockSpacesForOrg(org: {
 
 export function resolveMockApps(spaceName: string): string[] {
   const key = spaceName.trim().toLowerCase();
+  if (key === 'uat' && process.env['SAP_TOOLS_E2E_SQL_MANY_APPS'] === '1') {
+    return [...buildSqlStressUatApps()];
+  }
+
   const apps = MOCK_APPS_BY_SPACE[key];
   if (apps !== undefined) {
     return [...apps];
@@ -98,4 +119,3 @@ export function resolveMockApps(spaceName: string): string[] {
   const fallbackPrefix = key.length > 0 ? key : 'space';
   return [`${fallbackPrefix}-api`, `${fallbackPrefix}-worker`, `${fallbackPrefix}-jobs`];
 }
-

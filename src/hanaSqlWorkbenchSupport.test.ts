@@ -4,8 +4,8 @@ import type { HanaQueryResultSet } from './hanaSqlService';
 import {
   QUICK_SELECT_ROW_LIMIT,
   SQL_KEYWORDS,
-  TABLE_DISCOVERY_QUERIES,
   TABLE_SUGGESTION_LIMIT,
+  buildTableDiscoveryQueries,
   buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
   buildQuickTableSelectSql,
@@ -107,12 +107,19 @@ describe('buildTestModeQueryResult', () => {
 });
 
 describe('createTestModeTableNames', () => {
-  test('emits per-app synthetic tables alongside known system tables', () => {
+  test('emits per-app synthetic tables, long table names, and known system tables', () => {
     const tables = createTestModeTableNames('finance-uat-api');
     expect(tables).toContain('FINANCE_UAT_API_ORDERS');
     expect(tables).toContain('FINANCE_UAT_API_ITEMS');
+    expect(tables).toContain(
+      'FINANCE_UAT_API_COM_SAP_S4HANA_FINANCE_GENERAL_LEDGER_ACCOUNTING_DOCUMENT_ITEM'
+    );
+    expect(tables).toContain(
+      'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON'
+    );
     expect(tables).toContain('DUMMY');
     expect(tables).toContain('M_TABLES');
+    expect(tables).toHaveLength(104);
   });
 
   test('uses the APP fallback prefix when app name is blank', () => {
@@ -335,13 +342,37 @@ describe('buildQuickTableSelectSql', () => {
   });
 });
 
-describe('TABLE_DISCOVERY_QUERIES', () => {
-  test('queries the schema TABLES view first and falls back to M_TABLES', () => {
-    expect(TABLE_DISCOVERY_QUERIES[0]).toContain('FROM TABLES');
-    expect(TABLE_DISCOVERY_QUERIES[1]).toContain('FROM M_TABLES');
-    for (const query of TABLE_DISCOVERY_QUERIES) {
-      expect(query).toContain('SCHEMA_NAME = CURRENT_SCHEMA');
-      expect(query).toContain('ORDER BY TABLE_NAME');
+describe('buildTableDiscoveryQueries', () => {
+  test('queries the resolved binding schema before falling back to M_TABLES', () => {
+    const queries = buildTableDiscoveryQueries('FINANCE_SCHEMA');
+
+    expect(queries[0]).toBe(
+      "SELECT TABLE_NAME FROM SYS.TABLES WHERE SCHEMA_NAME = 'FINANCE_SCHEMA' ORDER BY TABLE_NAME"
+    );
+    expect(queries[1]).toBe(
+      "SELECT TABLE_NAME FROM SYS.M_TABLES WHERE SCHEMA_NAME = 'FINANCE_SCHEMA' ORDER BY TABLE_NAME"
+    );
+    for (const query of queries) {
+      expect(query).not.toContain('CURRENT_SCHEMA');
     }
+  });
+
+  test('escapes quotes in schema names as SQL string literals', () => {
+    const queries = buildTableDiscoveryQueries("FINANCE'SCHEMA");
+
+    expect(queries[0]).toContain("SCHEMA_NAME = 'FINANCE''SCHEMA'");
+    expect(queries[1]).toContain("SCHEMA_NAME = 'FINANCE''SCHEMA'");
+    expect(queries[0]).not.toContain("SCHEMA_NAME = 'FINANCE'SCHEMA'");
+  });
+
+  test('falls back to CURRENT_SCHEMA only when no binding schema is available', () => {
+    const queries = buildTableDiscoveryQueries('   ');
+
+    expect(queries[0]).toBe(
+      'SELECT TABLE_NAME FROM SYS.TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA ORDER BY TABLE_NAME'
+    );
+    expect(queries[1]).toBe(
+      'SELECT TABLE_NAME FROM SYS.M_TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA ORDER BY TABLE_NAME'
+    );
   });
 });

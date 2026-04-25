@@ -14,10 +14,10 @@ import {
   type HanaSqlScopeSession,
 } from './hanaSqlConnectionResolver';
 import {
-  TABLE_DISCOVERY_QUERIES,
   buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
   buildQuickTableSelectSql,
+  buildTableDiscoveryQueries,
   buildTestModeQueryResult,
   createTestModeTableNames,
   extractTableNames,
@@ -111,6 +111,7 @@ export class HanaSqlWorkbench
   }
 
   async openSqlDocumentForApp(options: OpenHanaSqlFileRequest): Promise<void> {
+    this.logSql(`open editor for app ${sanitizeSqlLogValue(options.appName)}`);
     const fileName = sanitizeUntitledFileName(options.appName);
     const uri = vscode.Uri.parse(`untitled:saptools-${fileName}.sql`);
     let document = await vscode.workspace.openTextDocument(uri);
@@ -135,6 +136,7 @@ export class HanaSqlWorkbench
     const context = this.ensureAppContext(options);
     this.appIdByDocumentUri.set(document.uri.toString(), context.appId);
     this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
+    this.logSql(`editor ready for app ${sanitizeSqlLogValue(context.appName)}`);
     void this.prefetchTableNames(context.appId);
   }
 
@@ -153,11 +155,19 @@ export class HanaSqlWorkbench
       session: options.session,
     });
 
-    const sql = buildQuickTableSelectSql(context.schema, options.tableName);
     const statementKind: HanaSqlStatementKind = 'readonly';
+    let sql = '';
 
     try {
+      if (!this.isTestMode) {
+        await this.ensureConnection(context);
+      }
+      sql = buildQuickTableSelectSql(context.schema, options.tableName);
+      this.logSql(
+        `run quick SELECT for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(sql)}`
+      );
       const result = await this.executeSqlForContext(context, sql, statementKind);
+      this.logSql(`quick SELECT completed for app ${sanitizeSqlLogValue(context.appName)}`);
       this.openResultPanel({
         appName: context.appName,
         sql,
@@ -166,10 +176,13 @@ export class HanaSqlWorkbench
       });
     } catch (error) {
       const message = this.toSafeErrorMessage(error, context);
+      this.logSql(
+        `quick SELECT failed for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
+      );
       void vscode.window.showErrorMessage(message);
       this.openResultPanel({
         appName: context.appName,
-        sql,
+        sql: sql.length > 0 ? sql : options.tableName,
         executedAt: new Date().toISOString(),
         errorMessage: message,
       });
@@ -281,7 +294,11 @@ export class HanaSqlWorkbench
     }
 
     try {
+      this.logSql(
+        `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)}`
+      );
       const result = await this.executeSqlForContext(context, normalizedSql, statementKind);
+      this.logSql(`statement completed for app ${sanitizeSqlLogValue(context.appName)}`);
       this.openResultPanel({
         appName: context.appName,
         sql: normalizedSql,
@@ -290,6 +307,9 @@ export class HanaSqlWorkbench
       });
     } catch (error) {
       const message = this.toSafeErrorMessage(error, context);
+      this.logSql(
+        `statement failed for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
+      );
       void vscode.window.showErrorMessage(message);
       this.openResultPanel({
         appName: context.appName,
@@ -330,7 +350,7 @@ export class HanaSqlWorkbench
     context.tableNamesPromise = this.loadTableNames(context)
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
-        this.outputChannel.appendLine(`[sql] table suggestion preload failed: ${message}`);
+        this.logSql(`table suggestion preload failed: ${sanitizeSqlLogValue(message)}`);
       })
       .finally(() => {
         context.tableNamesPromise = null;
@@ -342,6 +362,9 @@ export class HanaSqlWorkbench
   private async loadTableNames(context: HanaSqlAppContext): Promise<void> {
     if (this.isTestMode) {
       context.tableNames = createTestModeTableNames(context.appName);
+      this.logSql(
+        `loaded ${String(context.tableNames.length)} test tables for app ${sanitizeSqlLogValue(context.appName)}`
+      );
       return;
     }
 
@@ -350,7 +373,13 @@ export class HanaSqlWorkbench
       return;
     }
 
-    for (const query of TABLE_DISCOVERY_QUERIES) {
+    const queries = buildTableDiscoveryQueries(context.schema);
+    let hadSuccessfulDiscoveryQuery = false;
+    let lastErrorMessage = '';
+    for (const [index, query] of queries.entries()) {
+      this.logSql(
+        `run table discovery query ${String(index + 1)} for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(query)}`
+      );
       try {
         const result = await executeHanaQuery(context.connection, query, {
           timeoutMs: 15_000,
@@ -358,14 +387,26 @@ export class HanaSqlWorkbench
         if (result.kind !== 'resultset') {
           continue;
         }
+        hadSuccessfulDiscoveryQuery = true;
         context.tableNames = extractTableNames(result);
         if (context.tableNames.length > 0) {
+          this.logSql(
+            `loaded ${String(context.tableNames.length)} tables for app ${sanitizeSqlLogValue(context.appName)}`
+          );
           return;
         }
-      } catch {
-        // Ignore individual discovery query failures and continue with fallback query.
+      } catch (error) {
+        const message = this.toSafeErrorMessage(error, context);
+        lastErrorMessage = message;
+        this.logSql(
+          `table discovery query ${String(index + 1)} failed for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
+        );
       }
     }
+    if (!hadSuccessfulDiscoveryQuery && lastErrorMessage.length > 0) {
+      throw new Error(`Failed to discover tables: ${lastErrorMessage}`);
+    }
+    this.logSql(`no tables found for app ${sanitizeSqlLogValue(context.appName)}`);
   }
 
   private async ensureConnection(context: HanaSqlAppContext): Promise<void> {
@@ -383,6 +424,9 @@ export class HanaSqlWorkbench
     });
     context.connection = resolved.connection;
     context.schema = resolved.schema;
+    this.logSql(
+      `resolved HANA connection for app ${sanitizeSqlLogValue(context.appName)} schema ${sanitizeSqlLogValue(context.schema)}`
+    );
   }
 
   private openResultPanel(options: RenderSqlResultOptions): void {
@@ -424,4 +468,12 @@ export class HanaSqlWorkbench
       this.appIdByDocumentUri.has(editor.document.uri.toString());
     void vscode.commands.executeCommand('setContext', HANA_SQL_EDITOR_CONTEXT_KEY, enabled);
   }
+
+  private logSql(message: string): void {
+    this.outputChannel.appendLine(`[sql] ${message}`);
+  }
+}
+
+function sanitizeSqlLogValue(value: string): string {
+  return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
 }

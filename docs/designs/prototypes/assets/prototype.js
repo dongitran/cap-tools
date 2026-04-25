@@ -55,7 +55,20 @@ const SPACE_APP_OPTIONS = {
   prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
   staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
   integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
-  uat: ['finance-uat-api', 'finance-uat-worker', 'finance-uat-audit'],
+  uat: [
+    'finance-uat-api',
+    'finance-uat-worker',
+    'finance-uat-audit',
+    'finance-uat-ledger',
+    'finance-uat-recon',
+    'finance-uat-payments',
+    'finance-uat-tax',
+    'finance-uat-fx',
+    'finance-uat-risk',
+    'finance-uat-notify',
+    'finance-uat-reporting',
+    'finance-uat-archive',
+  ],
   sandbox: ['sandbox-api', 'sandbox-worker', 'sandbox-observer'],
   campaigns: ['campaign-engine', 'campaign-events', 'campaign-content'],
   performance: ['perf-api', 'perf-worker', 'perf-load-probe'],
@@ -188,6 +201,7 @@ let hanaQueryStatusTone = 'info';
 let hanaTablesByServiceId = new Map();
 let hanaTablesLoadingByServiceId = new Map();
 let hanaTablesErrorByServiceId = new Map();
+let sqlTableSearchKeyword = '';
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -707,6 +721,16 @@ appElement.addEventListener('input', (event) => {
       return;
     }
     renderPrototype();
+    return;
+  }
+
+  if (role === 'sql-table-search') {
+    sqlTableSearchKeyword = target.value;
+    if (isWorkspaceSqlMounted()) {
+      refreshWorkspaceSqlView();
+      return;
+    }
+    renderPrototype();
   }
 });
 
@@ -1189,6 +1213,9 @@ function handleSqlTabAction(action, actionElement) {
     if (serviceId.length === 0) {
       return false;
     }
+    if (selectedHanaServiceId !== serviceId) {
+      sqlTableSearchKeyword = '';
+    }
     selectedHanaServiceId = serviceId;
     if (vscodeApi !== null && !hanaTablesByServiceId.has(serviceId)) {
       hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
@@ -1230,13 +1257,21 @@ function primeHanaTablesForStandalone(serviceId) {
 function buildStandaloneTableNames(appName) {
   const prefix = (appName ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   const normalized = prefix.length > 0 ? prefix : 'APP';
-  return [
+  const baseTables = [
     `${normalized}_ORDERS`,
     `${normalized}_ITEMS`,
     `${normalized}_AUDIT`,
+    `${normalized}_SAP_CAP_CDS_INVOICE_RECONCILIATION_DRAFTADMINISTRATIVEDATA`,
+    `${normalized}_COM_SAP_S4HANA_FINANCE_GENERAL_LEDGER_ACCOUNTING_DOCUMENT_ITEM`,
+    `${normalized}_VERY_LONG_NAMESPACE_WITH_DEEPLY_NESTED_SERVICE_PROJECTION_FOR_PAYMENT_ALLOCATION_HISTORY`,
+    `${normalized}_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON`,
     'DUMMY',
     'M_TABLES',
   ];
+  const generatedTables = Array.from({ length: 95 }, (_, index) => {
+    return `${normalized}_ENTITY_${String(index + 1).padStart(3, '0')}`;
+  });
+  return [...baseTables, ...generatedTables];
 }
 
 function triggerRunHanaTableSelect(serviceId, tableName) {
@@ -3650,16 +3685,27 @@ function renderHanaQueryStatus() {
 
 function renderSqlTablesPanel() {
   const selectedService = resolveSelectedHanaService();
-  if (selectedService === undefined) {
-    return '';
-  }
-
-  const loadingState = hanaTablesLoadingByServiceId.get(selectedService.id) ?? 'idle';
-  const tables = hanaTablesByServiceId.get(selectedService.id) ?? [];
-  const errorMessage = hanaTablesErrorByServiceId.get(selectedService.id) ?? '';
+  const selectedServiceId = selectedService?.id ?? '';
+  const loadingState =
+    selectedService === undefined
+      ? 'unselected'
+      : hanaTablesLoadingByServiceId.get(selectedService.id) ?? 'idle';
+  const tables =
+    selectedService === undefined ? [] : hanaTablesByServiceId.get(selectedService.id) ?? [];
+  const errorMessage =
+    selectedService === undefined ? '' : hanaTablesErrorByServiceId.get(selectedService.id) ?? '';
+  const filteredTables = filterSqlTableRows(tables);
+  const hasTableSearch = sqlTableSearchKeyword.trim().length > 0;
+  const countLabel =
+    hasTableSearch && filteredTables.length !== tables.length
+      ? `${String(filteredTables.length)}/${String(tables.length)}`
+      : String(tables.length);
+  const searchDisabled = selectedService === undefined ? 'disabled' : '';
 
   let bodyMarkup;
-  if (loadingState === 'loading' || (loadingState === 'idle' && tables.length === 0)) {
+  if (loadingState === 'unselected') {
+    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">Select an app above to load tables.</p>`;
+  } else if (loadingState === 'loading' || (loadingState === 'idle' && tables.length === 0)) {
     bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">Loading tables...</p>`;
   } else if (loadingState === 'error') {
     bodyMarkup = `
@@ -3669,21 +3715,35 @@ function renderSqlTablesPanel() {
     `;
   } else if (tables.length === 0) {
     bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables found in current schema.</p>`;
+  } else if (filteredTables.length === 0) {
+    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables match current search.</p>`;
   } else {
-    bodyMarkup = renderHanaTableRows(selectedService.id, tables);
+    bodyMarkup = renderHanaTableRows(selectedService.id, filteredTables);
   }
 
   return `
     <section
       class="group-card sql-tables-panel"
       data-role="hana-tables-panel"
-      data-service-id="${escapeHtml(selectedService.id)}"
+      data-service-id="${escapeHtml(selectedServiceId)}"
       aria-label="Tables for selected app"
     >
       <header class="sql-tables-head">
-        <h3>Tables · ${escapeHtml(selectedService.name)}</h3>
-        <span class="sql-tables-count" data-role="hana-tables-count">${String(tables.length)}</span>
+        <h3>${selectedService === undefined ? 'Tables' : `Tables · ${escapeHtml(selectedService.name)}`}</h3>
+        <span class="sql-tables-count" data-role="hana-tables-count">${escapeHtml(countLabel)}</span>
       </header>
+      <label class="sql-table-search-row search-input-with-icon">
+        <span class="search-input-icon" aria-hidden="true">&#128269;</span>
+        <input
+          type="search"
+          class="sql-table-search"
+          data-role="sql-table-search"
+          value="${escapeHtml(sqlTableSearchKeyword)}"
+          placeholder="${selectedService === undefined ? 'Select app to search tables' : 'Search tables'}"
+          aria-label="Search tables"
+          ${searchDisabled}
+        />
+      </label>
       <div class="sql-tables-list" data-role="hana-tables-list">
         ${bodyMarkup}
       </div>
@@ -3691,12 +3751,28 @@ function renderSqlTablesPanel() {
   `;
 }
 
+function filterSqlTableRows(tables) {
+  const keyword = sqlTableSearchKeyword.trim().toLowerCase();
+  if (keyword.length === 0) {
+    return tables;
+  }
+  return tables.filter((tableName) => tableName.toLowerCase().includes(keyword));
+}
+
 function renderHanaTableRows(serviceId, tables) {
   return tables
     .map((tableName) => {
+      const smartTableName = formatSmartTableName(tableName);
       return `
-        <div class="sql-table-row" data-role="hana-table-row" data-table-name="${escapeHtml(tableName)}">
-          <span class="sql-table-name">${escapeHtml(tableName)}</span>
+        <div
+          class="sql-table-row"
+          data-role="hana-table-row"
+          data-table-name="${escapeHtml(tableName)}"
+          data-full-table-name="${escapeHtml(tableName)}"
+          title="${escapeHtml(tableName)}"
+          aria-label="Table ${escapeHtml(tableName)}"
+        >
+          <span class="sql-table-name" title="${escapeHtml(tableName)}">${escapeHtml(smartTableName)}</span>
           <button
             type="button"
             class="sql-table-select-btn"
@@ -3709,6 +3785,15 @@ function renderHanaTableRows(serviceId, tables) {
       `;
     })
     .join('');
+}
+
+function formatSmartTableName(tableName) {
+  const maxLength = 48;
+  if (tableName.length <= maxLength) {
+    return tableName;
+  }
+  const tailLength = maxLength - 3;
+  return `...${tableName.slice(-tailLength)}`;
 }
 
 function getFilteredLogs() {
@@ -4119,6 +4204,7 @@ function resetSqlWorkbenchState() {
   selectedHanaServiceId = '';
   hanaQueryStatusMessage = '';
   hanaQueryStatusTone = 'info';
+  sqlTableSearchKeyword = '';
   hanaTablesByServiceId = new Map();
   hanaTablesLoadingByServiceId = new Map();
   hanaTablesErrorByServiceId = new Map();

@@ -8,11 +8,6 @@ export const SQL_RESULT_ROWS_LIMIT = 250;
 export const TABLE_SUGGESTION_LIMIT = 500;
 export const QUICK_SELECT_ROW_LIMIT = 10;
 
-export const TABLE_DISCOVERY_QUERIES: readonly string[] = [
-  'SELECT TABLE_NAME FROM TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA ORDER BY TABLE_NAME',
-  'SELECT TABLE_NAME FROM M_TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA ORDER BY TABLE_NAME',
-] as const;
-
 export const SQL_KEYWORDS: readonly string[] = [
   'SELECT',
   'FROM',
@@ -84,12 +79,38 @@ export function buildTestModeQueryResult(
 export function createTestModeTableNames(appName: string): readonly string[] {
   const appPrefix = appName.trim().toUpperCase().replaceAll(/[^A-Z0-9]+/g, '_');
   const normalizedPrefix = appPrefix.length > 0 ? appPrefix : 'APP';
-  return [
+  const baseTables = [
     `${normalizedPrefix}_ORDERS`,
     `${normalizedPrefix}_ITEMS`,
     `${normalizedPrefix}_AUDIT`,
+    `${normalizedPrefix}_SAP_CAP_CDS_INVOICE_RECONCILIATION_DRAFTADMINISTRATIVEDATA`,
+    `${normalizedPrefix}_COM_SAP_S4HANA_FINANCE_GENERAL_LEDGER_ACCOUNTING_DOCUMENT_ITEM`,
+    `${normalizedPrefix}_VERY_LONG_NAMESPACE_WITH_DEEPLY_NESTED_SERVICE_PROJECTION_FOR_PAYMENT_ALLOCATION_HISTORY`,
+    `${normalizedPrefix}_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON`,
     'DUMMY',
     'M_TABLES',
+  ];
+  const generatedTables = Array.from({ length: 95 }, (_, index) => {
+    return `${normalizedPrefix}_ENTITY_${String(index + 1).padStart(3, '0')}`;
+  });
+
+  return [...baseTables, ...generatedTables];
+}
+
+function quoteHanaStringLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+export function buildTableDiscoveryQueries(schema: string): readonly string[] {
+  const normalizedSchema = schema.trim();
+  const schemaExpression =
+    normalizedSchema.length > 0
+      ? quoteHanaStringLiteral(normalizedSchema)
+      : 'CURRENT_SCHEMA';
+
+  return [
+    `SELECT TABLE_NAME FROM SYS.TABLES WHERE SCHEMA_NAME = ${schemaExpression} ORDER BY TABLE_NAME`,
+    `SELECT TABLE_NAME FROM SYS.M_TABLES WHERE SCHEMA_NAME = ${schemaExpression} ORDER BY TABLE_NAME`,
   ];
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.8 (pre-release)
+- Matched the extension SQL tab to the prototype: the app workbench and Tables panel now render from the initial SQL view and share the remaining height in a bounded 50/50 split.
+- Added a Tables search input with the same inline search styling as Logs, compact table rows, and leading truncation for long HANA/CDS table names while preserving full names in titles and accessibility labels.
+- Fixed HANA table discovery to query the resolved binding schema instead of relying on `CURRENT_SCHEMA`, with output-channel logging for SQL editor open, table discovery, quick SELECT, and manual SQL execution.
+- Expanded SQL test-mode data and E2E coverage for large app lists, 104-table schemas, long table names, hidden/empty/error states, table search, and quick SELECT.
+
 ## 0.7.7 (pre-release)
 - Split the S/4HANA SQL Workbench tab into an upper app picker and a lower tables panel that lists the selected app's HANA tables, each with a dedicated `Select` button that runs `SELECT * FROM <schema>.<table> LIMIT 10` and opens the result panel.
 - Replaced the legacy `ORDER_ID` / `STATUS` / `CREATED_AT` / `AMOUNT` demo preview in the SQL tab so the workbench only renders real apps and real table names supplied by the extension.
