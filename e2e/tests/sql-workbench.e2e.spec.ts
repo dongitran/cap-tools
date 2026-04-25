@@ -24,8 +24,8 @@ async function findSqlResultFrame(window: Page): Promise<Frame | undefined> {
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
   for (const frame of [...candidateFrames].reverse()) {
-    const resultHeading = frame.getByRole('heading', { name: 'SAP Tools SQL Result' });
-    const visible = await resultHeading.isVisible().catch(() => false);
+    const resultLayout = frame.locator('.result-layout, .state-layout').first();
+    const visible = await resultLayout.isVisible().catch(() => false);
     if (visible) {
       return frame;
     }
@@ -140,18 +140,48 @@ test.describe('SAP Tools SQL workbench', () => {
       });
       await expect(
         resultFrame.getByRole('heading', { name: 'SAP Tools SQL Result' })
-      ).toBeVisible();
+      ).toHaveCount(0);
       await expect(resultFrame.getByText(/^App:\s*finance-uat-api$/)).toBeVisible();
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('columnheader', { name: '#' })).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
 
-      const resultHtml = await resultFrame.locator('body').innerHTML();
+      const resultHtml = await resultFrame.content();
+      expect(resultHtml).not.toContain('<h1>SAP Tools SQL Result</h1>');
+      expect(resultHtml).toContain('table-layout: auto;');
+      expect(resultHtml).toContain('width: max-content;');
+      expect(resultHtml).toContain('min-width: 100%;');
+      expect(resultHtml).toContain('--vscode-editor-background');
       expect(resultHtml).not.toContain('SAP HANA Client Not Found');
       expect(resultHtml).not.toContain('Install the SAP HANA Client');
       expect(resultHtml).not.toMatch(/hdbsql/i);
       expect(resultHtml).not.toMatch(/hdbclient/i);
       expect(resultHtml).not.toContain('hanaSqlClientPath');
+      const tableLayout = await resultFrame.getByRole('table').evaluate((table) => {
+        const firstCell = table.querySelector('td');
+        const wrapper = table.closest('.result-table-wrap');
+        if (!(table instanceof HTMLElement) || !(firstCell instanceof HTMLElement)) {
+          throw new Error('Result table or first cell is missing.');
+        }
+        if (!(wrapper instanceof HTMLElement)) {
+          throw new Error('Result table wrapper is missing.');
+        }
+        const tableStyles = window.getComputedStyle(table);
+        const cellStyles = window.getComputedStyle(firstCell);
+        return {
+          cellOverflow: cellStyles.overflow,
+          cellTextOverflow: cellStyles.textOverflow,
+          cellWhiteSpace: cellStyles.whiteSpace,
+          tableLayout: tableStyles.tableLayout,
+          tableWidth: table.getBoundingClientRect().width,
+          wrapperWidth: wrapper.getBoundingClientRect().width,
+        };
+      });
+      expect(tableLayout.tableLayout).toBe('auto');
+      expect(tableLayout.cellWhiteSpace).toBe('pre');
+      expect(tableLayout.cellOverflow).toBe('visible');
+      expect(tableLayout.cellTextOverflow).toBe('clip');
+      expect(tableLayout.tableWidth).toBeGreaterThanOrEqual(tableLayout.wrapperWidth);
       const toolbarChips = resultFrame.locator('.result-toolbar .result-chip');
       await expect(toolbarChips.filter({ hasText: 'App: finance-uat-api' })).toBeVisible();
       await expect(toolbarChips.filter({ hasText: /^Executed: /i })).toBeVisible();
@@ -419,6 +449,10 @@ test.describe('SAP Tools SQL workbench', () => {
         '[data-role="hana-table-row"][data-table-name="FINANCE_UAT_API_ORDERS"]'
       );
       await expect(targetTableRow).toBeVisible();
+      await expect(targetTableRow.locator('[data-role="hana-table-name"]')).toHaveCSS(
+        'pointer-events',
+        'none'
+      );
       const targetSelectButton = targetTableRow.getByRole('button', {
         name: 'Select first 10 rows of FINANCE_UAT_API_ORDERS',
       });
@@ -452,14 +486,14 @@ test.describe('SAP Tools SQL workbench', () => {
         .toBe(initialResultCount + 1);
 
       const resultFrame = await resolveSqlResultFrame(session.window, 20000);
-      await expect(resultFrame.getByRole('heading', { name: 'SAP Tools SQL Result' })).toBeVisible();
+      await expect(
+        resultFrame.getByRole('heading', { name: 'SAP Tools SQL Result' })
+      ).toHaveCount(0);
       await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
 
-      await expect(
-        webviewFrame.locator('[data-role="hana-query-status"]')
-      ).toContainText('Selected first 10 rows of FINANCE_UAT_API_ORDERS.', {
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden({
         timeout: 10000,
       });
     } finally {

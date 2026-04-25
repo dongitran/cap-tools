@@ -1563,12 +1563,18 @@ export class RegionSidebarProvider
       this.currentApps.find((app) => app.id === payload.serviceId) ??
       this.currentApps.find((app) => app.name === payload.serviceName);
     if (targetApp === undefined) {
+      this.outputChannel.appendLine(
+        `[sql-ui] open sql file rejected: app not found serviceId=${sanitizeSqlUiLogValue(payload.serviceId)} serviceName=${sanitizeSqlUiLogValue(payload.serviceName)}`
+      );
       this.postHanaSqlFileOpenResult(payload.serviceId, false, 'Selected app was not found.');
       return;
     }
 
     const sessionSeed = this.currentLogSessionSeed;
     if (sessionSeed === null && !isTestMode()) {
+      this.outputChannel.appendLine(
+        `[sql-ui] open sql file rejected: no active session app=${sanitizeSqlUiLogValue(targetApp.name)}`
+      );
       this.postHanaSqlFileOpenResult(
         payload.serviceId,
         false,
@@ -1577,17 +1583,26 @@ export class RegionSidebarProvider
       return;
     }
 
+    this.outputChannel.appendLine(
+      `[sql-ui] open sql file requested app=${sanitizeSqlUiLogValue(targetApp.name)}`
+    );
     try {
       await this.hanaSqlWorkbench.openSqlDocumentForApp({
         appId: targetApp.id,
         appName: targetApp.name,
         session: sessionSeed,
       });
+      this.outputChannel.appendLine(
+        `[sql-ui] open sql file succeeded app=${sanitizeSqlUiLogValue(targetApp.name)}`
+      );
       this.postHanaSqlFileOpenResult(targetApp.id, true, '');
       void this.publishHanaTablesForApp(targetApp.id, targetApp.name, sessionSeed);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to open SQL file.';
+      this.outputChannel.appendLine(
+        `[sql-ui] open sql file failed app=${sanitizeSqlUiLogValue(targetApp.name)} message=${sanitizeSqlUiLogValue(errorMessage)}`
+      );
       this.postHanaSqlFileOpenResult(targetApp.id, false, errorMessage);
     }
   }
@@ -1597,12 +1612,18 @@ export class RegionSidebarProvider
     appName: string,
     session: CfLogSessionSeed | null
   ): Promise<void> {
+    this.outputChannel.appendLine(
+      `[sql-ui] load tables requested app=${sanitizeSqlUiLogValue(appName)}`
+    );
     try {
       const tables = await this.hanaSqlWorkbench.loadTableEntriesForApp({
         appId,
         appName,
         session,
       });
+      this.outputChannel.appendLine(
+        `[sql-ui] load tables succeeded app=${sanitizeSqlUiLogValue(appName)} count=${String(tables.length)}`
+      );
       this.postMessage({
         type: MSG_HANA_TABLES_LOADED,
         serviceId: appId,
@@ -1615,6 +1636,9 @@ export class RegionSidebarProvider
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to load tables for app.';
+      this.outputChannel.appendLine(
+        `[sql-ui] load tables failed app=${sanitizeSqlUiLogValue(appName)} message=${sanitizeSqlUiLogValue(message)}`
+      );
       this.postMessage({
         type: MSG_HANA_TABLES_LOADED,
         serviceId: appId,
@@ -1630,6 +1654,9 @@ export class RegionSidebarProvider
       this.currentApps.find((app) => app.id === payload.serviceId) ??
       this.currentApps.find((app) => app.name === payload.serviceName);
     if (targetApp === undefined) {
+      this.outputChannel.appendLine(
+        `[sql-ui] quick select rejected: app not found serviceId=${sanitizeSqlUiLogValue(payload.serviceId)} serviceName=${sanitizeSqlUiLogValue(payload.serviceName)} table=${sanitizeSqlUiLogValue(payload.tableName)}`
+      );
       this.postHanaTableSelectResult(
         payload.serviceId,
         payload.tableName,
@@ -1641,6 +1668,9 @@ export class RegionSidebarProvider
 
     const sessionSeed = this.currentLogSessionSeed;
     if (sessionSeed === null && !isTestMode()) {
+      this.outputChannel.appendLine(
+        `[sql-ui] quick select rejected: no active session app=${sanitizeSqlUiLogValue(targetApp.name)} table=${sanitizeSqlUiLogValue(payload.tableName)}`
+      );
       this.postHanaTableSelectResult(
         payload.serviceId,
         payload.tableName,
@@ -1650,6 +1680,9 @@ export class RegionSidebarProvider
       return;
     }
 
+    this.outputChannel.appendLine(
+      `[sql-ui] quick select requested app=${sanitizeSqlUiLogValue(targetApp.name)} table=${sanitizeSqlUiLogValue(payload.tableName)}`
+    );
     try {
       await this.hanaSqlWorkbench.runQuickTableSelectForApp({
         appId: targetApp.id,
@@ -1657,15 +1690,21 @@ export class RegionSidebarProvider
         session: sessionSeed,
         tableName: payload.tableName,
       });
+      this.outputChannel.appendLine(
+        `[sql-ui] quick select succeeded app=${sanitizeSqlUiLogValue(targetApp.name)} table=${sanitizeSqlUiLogValue(payload.tableName)}`
+      );
       this.postHanaTableSelectResult(
         targetApp.id,
         payload.tableName,
         true,
-        `Selected first 10 rows of ${payload.tableName}.`
+        ''
       );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to run quick SELECT.';
+      this.outputChannel.appendLine(
+        `[sql-ui] quick select failed app=${sanitizeSqlUiLogValue(targetApp.name)} table=${sanitizeSqlUiLogValue(payload.tableName)} message=${sanitizeSqlUiLogValue(errorMessage)}`
+      );
       this.postHanaTableSelectResult(
         targetApp.id,
         payload.tableName,
@@ -3002,4 +3041,8 @@ function readRunHanaTableSelectPayload(
     serviceName: String(value['serviceName']).trim(),
     tableName: String(value['tableName']).trim(),
   };
+}
+
+function sanitizeSqlUiLogValue(value: string): string {
+  return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
 }

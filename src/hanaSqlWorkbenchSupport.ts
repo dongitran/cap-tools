@@ -197,14 +197,25 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
     <title>SAP Tools SQL Result</title>
     <style>
       :root {
-        color-scheme: dark;
-        font-family: Inter, "Segoe UI", sans-serif;
+        color-scheme: light dark;
+        font-family: var(--vscode-font-family, "Segoe WPC", "Segoe UI", sans-serif);
+        --saptools-bg: var(--vscode-editor-background, #1e1e1e);
+        --saptools-fg: var(--vscode-editor-foreground, #cccccc);
+        --saptools-border: var(--vscode-panel-border, var(--vscode-editorWidget-border, #3c3c3c));
+        --saptools-muted: var(
+          --vscode-descriptionForeground,
+          var(--vscode-editorLineNumber-foreground, #8b949e)
+        );
+        --saptools-surface: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
+        --saptools-surface-strong: var(--vscode-editor-selectionBackground, rgba(128, 128, 128, 0.18));
+        --saptools-success: var(--vscode-testing-iconPassed, #2ea043);
+        --saptools-error: var(--vscode-testing-iconFailed, #f85149);
       }
       body {
         margin: 0;
         min-height: 100vh;
-        background: #0f141d;
-        color: #e6edf3;
+        background: var(--saptools-bg);
+        color: var(--saptools-fg);
       }
       .state-layout {
         display: grid;
@@ -213,9 +224,9 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
         padding: 6px;
       }
       .state-card {
-        border: 1px solid #273246;
+        border: 1px solid var(--saptools-border);
         border-radius: 6px;
-        background: #141c28;
+        background: var(--saptools-surface);
         padding: 6px 8px;
       }
       .state-card.state-meta {
@@ -229,7 +240,7 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
         margin: 0;
         font-size: 12px;
         line-height: 18px;
-        color: #aab7c7;
+        color: var(--saptools-muted);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -249,10 +260,10 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
         line-height: 1.45;
       }
       .state-success h1 {
-        color: #83e2a5;
+        color: var(--saptools-success);
       }
       .state-error h1 {
-        color: #ff9d9d;
+        color: var(--saptools-error);
       }
     </style>
   </head>
@@ -293,14 +304,23 @@ function buildResultSetHtml(
     <title>SAP Tools SQL Result</title>
     <style>
       :root {
-        color-scheme: dark;
-        font-family: Inter, "Segoe UI", sans-serif;
+        color-scheme: light dark;
+        font-family: var(--vscode-font-family, "Segoe WPC", "Segoe UI", sans-serif);
+        --saptools-bg: var(--vscode-editor-background, #1e1e1e);
+        --saptools-fg: var(--vscode-editor-foreground, #cccccc);
+        --saptools-border: var(--vscode-panel-border, var(--vscode-editorWidget-border, #3c3c3c));
+        --saptools-muted: var(
+          --vscode-descriptionForeground,
+          var(--vscode-editorLineNumber-foreground, #8b949e)
+        );
+        --saptools-surface: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
+        --saptools-surface-strong: var(--vscode-editor-selectionBackground, rgba(128, 128, 128, 0.18));
       }
       body {
         margin: 0;
         min-height: 100vh;
-        background: #0f141d;
-        color: #e6edf3;
+        background: var(--saptools-bg);
+        color: var(--saptools-fg);
       }
       .result-layout {
         height: 100vh;
@@ -309,71 +329,65 @@ function buildResultSetHtml(
       }
       .result-toolbar {
         padding: 6px;
-        border-bottom: 1px solid #273246;
-        background: #141c28;
+        border-bottom: 1px solid var(--saptools-border);
+        background: var(--saptools-surface);
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
         align-items: center;
       }
-      .result-toolbar h1 {
-        margin: 0;
-        font-size: 13px;
-        color: #d7e6f9;
-        font-weight: 600;
-      }
       .result-chip {
-        border: 1px solid #2b3a53;
+        border: 1px solid var(--saptools-border);
         border-radius: 999px;
         padding: 2px 8px;
         font-size: 12px;
-        color: #aab7c7;
-        background: #101724;
+        color: var(--saptools-fg);
+        background: var(--saptools-surface-strong);
       }
       .result-chip.note {
-        border-color: #3e556f;
+        color: var(--saptools-muted);
       }
       .result-table-wrap {
         min-height: 0;
         overflow: auto;
       }
       table {
-        width: 100%;
+        width: max-content;
+        min-width: 100%;
         border-collapse: collapse;
-        table-layout: fixed;
+        table-layout: auto;
         font-size: 12px;
       }
       th,
       td {
-        border-bottom: 1px solid #273246;
+        border-bottom: 1px solid var(--saptools-border);
         padding: 6px 8px;
         text-align: left;
         vertical-align: top;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: pre;
+        overflow: visible;
+        text-overflow: clip;
       }
       th {
         position: sticky;
         top: 0;
         z-index: 1;
-        color: #afbdd0;
-        background: #1b2638;
+        color: var(--saptools-fg);
+        background: var(--saptools-bg);
         font-weight: 600;
       }
       tbody tr:nth-child(even) {
-        background: #121a28;
+        background: var(--saptools-surface);
       }
       .row-number {
         width: 52px;
-        color: #98a9bf;
+        color: var(--saptools-muted);
       }
     </style>
   </head>
   <body>
     <main class="result-layout">
       <header class="result-toolbar">
-        <h1>SAP Tools SQL Result</h1>
         <span class="result-chip">App: ${escapedAppName}</span>
         <span class="result-chip">Rows: ${String(result.rowCount)}</span>
         <span class="result-chip">Elapsed: ${String(result.elapsedMs)} ms</span>

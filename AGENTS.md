@@ -9,6 +9,16 @@
 - Start: `python3 -m http.server 4173 --bind 0.0.0.0 --directory docs/designs/prototypes`
 - Open: `http://127.0.0.1:4173/index.html`
 
+## MCP Playwright
+- Start prototype server first.
+- MCP navigate to `http://127.0.0.1:4173/index.html`.
+- Verify UI with snapshot/screenshot from `index.html`, not direct `file://`.
+
+## E2E Tests
+- Validate e2e: `npm --prefix e2e run validate`
+- Run full e2e: `npm --prefix e2e test`
+- Run one spec: `npm --prefix e2e test -- e2e/tests/sql-workbench.e2e.spec.ts`
+
 ## MCP Troubleshooting (Short)
 - If `ERR_CONNECTION_REFUSED`: check server first  
   `lsof -i :4173 -sTCP:LISTEN -n -P` and `curl -I http://127.0.0.1:4173/index.html`

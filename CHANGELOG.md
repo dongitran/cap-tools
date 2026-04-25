@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.17 (pre-release)
+- Removed noisy SQL quick-select success text from the SQL tab and removed the visible `SAP Tools SQL Result` heading from result pages.
+- Updated SQL result pages to use VS Code theme variables and content-width result tables so wide schemas and long cell values remain readable with horizontal scrolling.
+- Added SQL output logs for open-file, table-load, and quick-select flow, plus tighter unit/e2e coverage for result theming, table layout, and overlay table selection.
+- Documented the short prototype/MCP Playwright and e2e test commands in `AGENTS.md`.
+
 ## 0.7.16 (pre-release)
 - Optimized SQL table-list resize performance by replacing per-row text rewrite/binary-search truncation with cached width measurement and cheap overflow-state toggling.
 - Reworked SQL table middle-ellipsis rendering into a fixed head/ellipsis/tail layout so the `…` marker stays visually aligned across rows when space is tight.

@@ -175,13 +175,16 @@ describe('buildHanaSqlResultHtml', () => {
       },
     });
 
-    expect(html).toContain('SAP Tools SQL Result');
+    expect(html).not.toContain('<h1>SAP Tools SQL Result</h1>');
     expect(html).toContain('App: finance-uat-api');
     expect(html).toContain('Rows: 2');
     expect(html).toContain('Elapsed: 12 ms');
     expect(html).toContain('<th>ID</th>');
     expect(html).toContain('<th>STATUS</th>');
     expect(html).toContain('<td>OPEN</td>');
+    expect(html).toContain('table-layout: auto;');
+    expect(html).toContain('width: max-content;');
+    expect(html).toContain('min-width: 100%;');
     expect(html).not.toContain('Showing first');
   });
 
@@ -201,6 +204,28 @@ describe('buildHanaSqlResultHtml', () => {
     });
 
     expect(html).toContain('Showing first 250 rows of 260');
+  });
+
+  test('keeps very long cell content renderable without ellipsis clipping', () => {
+    const longValue = 'X'.repeat(10000);
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT LONG_VALUE FROM SAMPLE_TABLE',
+      executedAt: '2026-04-25T00:00:00Z',
+      result: {
+        kind: 'resultset',
+        columns: ['LONG_VALUE'],
+        rows: [[longValue]],
+        rowCount: 1,
+        elapsedMs: 2,
+      },
+    });
+
+    expect(html).toContain(`<td>${longValue}</td>`);
+    expect(html).toContain('white-space: pre;');
+    expect(html).toContain('overflow: visible;');
+    expect(html).toContain('text-overflow: clip;');
+    expect(html).not.toContain('text-overflow: ellipsis;');
   });
 
   test('renders a success card for status results', () => {
@@ -290,6 +315,21 @@ describe('buildHanaSqlResultHtml result meta layout', () => {
 
     expect(html).toContain('padding: 6px;');
     expect(html).not.toContain('padding: 14px;');
+  });
+
+  test('uses VS Code theme variables instead of fixed dark-only colors', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT 1 FROM DUMMY',
+      executedAt: '2026-04-25T00:00:00Z',
+      result: { kind: 'status', message: 'ok', elapsedMs: 1 },
+    });
+
+    expect(html).toContain('--vscode-editor-background');
+    expect(html).toContain('--vscode-editor-foreground');
+    expect(html).toContain('--vscode-panel-border');
+    expect(html).not.toContain('background: #0f141d;');
+    expect(html).not.toContain('color-scheme: dark;');
   });
 });
 

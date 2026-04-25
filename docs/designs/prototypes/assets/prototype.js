@@ -1314,7 +1314,7 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
 
   if (vscodeApi === null) {
     hanaQueryStatusTone = 'success';
-    hanaQueryStatusMessage = `Selected first 10 rows of ${tableName}.`;
+    hanaQueryStatusMessage = '';
     return true;
   }
 
