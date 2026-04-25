@@ -3,6 +3,12 @@ import type {
   HanaQueryResultSet,
   HanaSqlStatementKind,
 } from './hanaSqlService';
+export {
+  buildRawHanaTableDisplayEntries,
+  formatHanaTableDisplayEntries,
+  formatHanaTableDisplayName,
+  type HanaTableDisplayEntry,
+} from './hanaTableDisplayNameFormatter';
 
 export const SQL_RESULT_ROWS_LIMIT = 250;
 export const TABLE_SUGGESTION_LIMIT = 500;
@@ -87,10 +93,11 @@ export function createTestModeTableNames(appName: string): readonly string[] {
     `${normalizedPrefix}_COM_SAP_S4HANA_FINANCE_GENERAL_LEDGER_ACCOUNTING_DOCUMENT_ITEM`,
     `${normalizedPrefix}_VERY_LONG_NAMESPACE_WITH_DEEPLY_NESTED_SERVICE_PROJECTION_FOR_PAYMENT_ALLOCATION_HISTORY`,
     `${normalizedPrefix}_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON`,
+    'CORE_ADDRESSSECTIONINPUTMAPPING',
     'DUMMY',
     'M_TABLES',
   ];
-  const generatedTables = Array.from({ length: 95 }, (_, index) => {
+  const generatedTables = Array.from({ length: 94 }, (_, index) => {
     return `${normalizedPrefix}_ENTITY_${String(index + 1).padStart(3, '0')}`;
   });
 

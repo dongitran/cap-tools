@@ -19,11 +19,14 @@ import {
   buildQuickTableSelectSql,
   buildTableDiscoveryQueries,
   buildTestModeQueryResult,
+  buildRawHanaTableDisplayEntries,
   createTestModeTableNames,
   extractTableNames,
   filterKeywordCandidates,
   filterTableCandidates,
+  formatHanaTableDisplayEntries,
   sanitizeUntitledFileName,
+  type HanaTableDisplayEntry,
   type RenderSqlResultOptions,
 } from './hanaSqlWorkbenchSupport';
 export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWorkbenchSupport';
@@ -144,6 +147,19 @@ export class HanaSqlWorkbench
     const context = this.ensureAppContext(options);
     await this.prefetchTableNames(context.appId);
     return context.tableNames;
+  }
+
+  async loadTableEntriesForApp(
+    options: OpenHanaSqlFileRequest
+  ): Promise<readonly HanaTableDisplayEntry[]> {
+    const tableNames = await this.loadTableNamesForApp(options);
+    try {
+      return await formatHanaTableDisplayEntries(tableNames);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(`table display name formatter failed: ${sanitizeSqlLogValue(message)}`);
+      return buildRawHanaTableDisplayEntries(tableNames);
+    }
   }
 
   async runQuickTableSelectForApp(

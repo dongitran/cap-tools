@@ -202,6 +202,7 @@ let hanaTablesByServiceId = new Map();
 let hanaTablesLoadingByServiceId = new Map();
 let hanaTablesErrorByServiceId = new Map();
 let sqlTableSearchKeyword = '';
+const hanaTableDisplayNameCache = new Map();
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -381,9 +382,7 @@ window.addEventListener('message', (event) => {
       return;
     }
     const success = msg.success === true;
-    const tables = Array.isArray(msg.tables)
-      ? msg.tables.filter((entry) => typeof entry === 'string')
-      : [];
+    const tables = Array.isArray(msg.tables) ? normalizeHanaTableEntries(msg.tables) : [];
     hanaTablesByServiceId = new Map(hanaTablesByServiceId);
     hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
     hanaTablesErrorByServiceId = new Map(hanaTablesErrorByServiceId);
@@ -1256,7 +1255,10 @@ function primeHanaTablesForStandalone(serviceId) {
   window.setTimeout(() => {
     hanaTablesByServiceId = new Map(hanaTablesByServiceId);
     hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
-    hanaTablesByServiceId.set(serviceId, buildStandaloneTableNames(service.name));
+    hanaTablesByServiceId.set(
+      serviceId,
+      normalizeHanaTableEntries(buildStandaloneTableNames(service.name))
+    );
     hanaTablesLoadingByServiceId.set(serviceId, 'loaded');
     refreshUiAfterSqlStateChange();
   }, 450);
@@ -1273,10 +1275,11 @@ function buildStandaloneTableNames(appName) {
     `${normalized}_COM_SAP_S4HANA_FINANCE_GENERAL_LEDGER_ACCOUNTING_DOCUMENT_ITEM`,
     `${normalized}_VERY_LONG_NAMESPACE_WITH_DEEPLY_NESTED_SERVICE_PROJECTION_FOR_PAYMENT_ALLOCATION_HISTORY`,
     `${normalized}_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON`,
+    'CORE_ADDRESSSECTIONINPUTMAPPING',
     'DUMMY',
     'M_TABLES',
   ];
-  const generatedTables = Array.from({ length: 95 }, (_, index) => {
+  const generatedTables = Array.from({ length: 94 }, (_, index) => {
     return `${normalized}_ENTITY_${String(index + 1).padStart(3, '0')}`;
   });
   return [...baseTables, ...generatedTables];
@@ -3828,13 +3831,23 @@ function filterSqlTableRows(tables) {
   if (keyword.length === 0) {
     return tables;
   }
-  return tables.filter((tableName) => tableName.toLowerCase().includes(keyword));
+  return tables.filter((tableEntry) => {
+    const rawName = tableEntry.name.toLowerCase();
+    const displayName = tableEntry.displayName.toLowerCase();
+    const compactDisplayName = displayName.replaceAll('_', '').toLowerCase();
+    return (
+      rawName.includes(keyword) ||
+      displayName.includes(keyword) ||
+      compactDisplayName.includes(keyword)
+    );
+  });
 }
 
 function renderHanaTableRows(serviceId, tables) {
   return tables
-    .map((tableName) => {
-      const smartTableName = formatSmartTableName(tableName);
+    .map((tableEntry) => {
+      const tableName = tableEntry.name;
+      const smartTableName = formatSmartTableName(tableEntry.displayName);
       return `
         <div
           class="sql-table-row"
@@ -3867,6 +3880,147 @@ function formatSmartTableName(tableName) {
   const headLength = 22;
   const tailLength = maxLength - headLength - 1;
   return `${tableName.slice(0, headLength)}…${tableName.slice(-tailLength)}`;
+}
+
+const HANA_TABLE_ACRONYMS = new Set([
+  'API',
+  'CAP',
+  'CDS',
+  'FI',
+  'GL',
+  'HANA',
+  'I',
+  'ID',
+  'M',
+  'SAP',
+  'S4HANA',
+  'UAT',
+  'UUID',
+]);
+
+const HANA_TABLE_SEGMENT_OVERRIDES = new Map([
+  ['ADDRESSSECTIONINPUTMAPPING', 'AddressSectionInputMapping'],
+  ['BUSINESSPARTNERBANK', 'BusinessPartnerBank'],
+  ['DRAFTADMINISTRATIVEDATA', 'DraftAdministrativeData'],
+  ['GENERALLEDGERACCOUNTINGDOCUMENTITEM', 'GeneralLedgerAccountingDocumentItem'],
+  ['SUPPLIERINVOICEPAYMENTBLOCKREASON', 'SupplierInvoicePaymentBlockReason'],
+]);
+
+const HANA_TABLE_WORDS = [
+  'administrative',
+  'allocation',
+  'accounting',
+  'business',
+  'customer',
+  'document',
+  'supplier',
+  'projection',
+  'reconciliation',
+  'namespace',
+  'partner',
+  'payment',
+  'section',
+  'service',
+  'general',
+  'history',
+  'invoice',
+  'mapping',
+  'address',
+  'nested',
+  'reason',
+  'ledger',
+  'entity',
+  'input',
+  'block',
+  'draft',
+  'table',
+  'orders',
+  'items',
+  'audit',
+  'dummy',
+  'core',
+  'data',
+  'bank',
+  'item',
+  'very',
+  'long',
+  'with',
+  'for',
+  'to',
+  'com',
+].sort((left, right) => right.length - left.length);
+
+function normalizeHanaTableEntries(entries) {
+  return entries
+    .map((entry) => normalizeHanaTableEntry(entry))
+    .filter((entry) => entry !== null);
+}
+
+function normalizeHanaTableEntry(entry) {
+  if (typeof entry === 'string') {
+    return {
+      displayName: formatReadableHanaTableName(entry),
+      name: entry,
+    };
+  }
+  if (!isRecord(entry) || typeof entry.name !== 'string') {
+    return null;
+  }
+  const name = entry.name.trim();
+  if (name.length === 0) {
+    return null;
+  }
+  const displayName =
+    typeof entry.displayName === 'string' && entry.displayName.trim().length > 0
+      ? entry.displayName.trim()
+      : formatReadableHanaTableName(name);
+  return { displayName, name };
+}
+
+function formatReadableHanaTableName(tableName) {
+  const cachedName = hanaTableDisplayNameCache.get(tableName);
+  if (cachedName !== undefined) {
+    return cachedName;
+  }
+  const displayName = tableName
+    .split('_')
+    .map((segment) => formatReadableHanaTableSegment(segment))
+    .join('_');
+  hanaTableDisplayNameCache.set(tableName, displayName);
+  return displayName;
+}
+
+function formatReadableHanaTableSegment(segment) {
+  const normalizedSegment = segment.trim();
+  if (normalizedSegment.length === 0 || /^\d+$/.test(normalizedSegment)) {
+    return normalizedSegment;
+  }
+  const upperSegment = normalizedSegment.toUpperCase();
+  if (HANA_TABLE_ACRONYMS.has(upperSegment)) {
+    return upperSegment;
+  }
+  const overriddenSegment = HANA_TABLE_SEGMENT_OVERRIDES.get(upperSegment);
+  if (overriddenSegment !== undefined) {
+    return overriddenSegment;
+  }
+  return splitReadableHanaTableWords(normalizedSegment.toLowerCase())
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`)
+    .join('');
+}
+
+function splitReadableHanaTableWords(lowerSegment) {
+  const words = [];
+  let cursor = 0;
+  while (cursor < lowerSegment.length) {
+    const matchedWord = HANA_TABLE_WORDS.find((word) => lowerSegment.startsWith(word, cursor));
+    if (matchedWord === undefined) {
+      words.push(lowerSegment.slice(cursor));
+      break;
+    }
+    words.push(matchedWord);
+    cursor += matchedWord.length;
+  }
+  return words;
 }
 
 function getFilteredLogs() {

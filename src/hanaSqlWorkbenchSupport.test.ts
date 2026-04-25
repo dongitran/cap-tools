@@ -15,6 +15,8 @@ import {
   extractTableNames,
   filterKeywordCandidates,
   filterTableCandidates,
+  formatHanaTableDisplayEntries,
+  formatHanaTableDisplayName,
   quoteHanaIdentifier,
   sanitizeUntitledFileName,
 } from './hanaSqlWorkbenchSupport';
@@ -117,6 +119,7 @@ describe('createTestModeTableNames', () => {
     expect(tables).toContain(
       'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON'
     );
+    expect(tables).toContain('CORE_ADDRESSSECTIONINPUTMAPPING');
     expect(tables).toContain('DUMMY');
     expect(tables).toContain('M_TABLES');
     expect(tables).toHaveLength(104);
@@ -305,6 +308,51 @@ describe('buildHanaSqlResultHtml (no install card)', () => {
     expect(html).not.toContain('hanaSqlClientPath');
     expect(html).toContain('Execution Error');
     expect(html).toContain('connect ECONNREFUSED');
+  });
+});
+
+describe('formatHanaTableDisplayName', () => {
+  test('formats compact uppercase English table segments into readable PascalCase', async () => {
+    await expect(formatHanaTableDisplayName('CORE_ADDRESSSECTIONINPUTMAPPING')).resolves.toBe(
+      'Core_AddressSectionInputMapping'
+    );
+  });
+
+  test('keeps SAP acronyms and numeric segments readable', async () => {
+    await expect(
+      formatHanaTableDisplayName(
+        'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON'
+      )
+    ).resolves.toBe(
+      'Finance_UAT_API_I_BusinessPartnerBank_0001_To_SupplierInvoicePaymentBlockReason'
+    );
+  });
+
+  test('does not split common SAP acronyms into mixed-case words', async () => {
+    await expect(
+      formatHanaTableDisplayName(
+        'SAP_CAP_CDS_INVOICE_RECONCILIATION_DRAFTADMINISTRATIVEDATA'
+      )
+    ).resolves.toBe('SAP_CAP_CDS_Invoice_Reconciliation_DraftAdministrativeData');
+  });
+
+  test('formats display entries while preserving the raw executable table name', async () => {
+    const entries = await formatHanaTableDisplayEntries([
+      'CORE_ADDRESSSECTIONINPUTMAPPING',
+      'DUMMY',
+    ]);
+
+    expect(entries).toEqual([
+      {
+        displayName: 'Core_AddressSectionInputMapping',
+        name: 'CORE_ADDRESSSECTIONINPUTMAPPING',
+      },
+      { displayName: 'Dummy', name: 'DUMMY' },
+    ]);
+  });
+
+  test('keeps unknown alphanumeric segments safe instead of blocking formatting', async () => {
+    await expect(formatHanaTableDisplayName('XYZ123ABC')).resolves.toBe('XYZ123ABC');
   });
 });
 

@@ -181,11 +181,27 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(tableRows(tablesPanel)).toHaveCount(104, { timeout: 15000 });
       await expect(tablesPanel.getByRole('button', { name: /^Select first 10 rows of / })).toHaveCount(104);
 
+      const readableTableName = 'CORE_ADDRESSSECTIONINPUTMAPPING';
+      await searchInput.click();
+      await searchInput.pressSequentially('AddressSection');
+      await expect(searchInput).toHaveValue('AddressSection');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
+      await expect(tableRows(tablesPanel)).toHaveCount(1);
+
+      const readableTableRow = tablesPanel.locator(`[data-full-table-name="${readableTableName}"]`);
+      await expect(readableTableRow).toBeVisible();
+      await expect(readableTableRow).toHaveAttribute('title', readableTableName);
+      await expect(readableTableRow).toHaveAttribute('data-table-name', readableTableName);
+      await expect(readableTableRow.locator('.sql-table-name')).toHaveText(
+        'Core_AddressSectionInputMapping'
+      );
+      await expect(searchInput).toBeFocused();
+
       const longTableName =
         'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON';
-      await searchInput.click();
-      await searchInput.pressSequentially('BUSINESSPARTNERBANK');
-      await expect(searchInput).toHaveValue('BUSINESSPARTNERBANK');
+      await searchInput.fill('');
+      await searchInput.pressSequentially('BusinessPartnerBank');
+      await expect(searchInput).toHaveValue('BusinessPartnerBank');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
       await expect(tableRows(tablesPanel)).toHaveCount(1);
 
@@ -194,9 +210,9 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(longTableRow).toHaveAttribute('title', longTableName);
       await expect(longTableRow).toHaveAttribute('aria-label', `Table ${longTableName}`);
       const longTableDisplayName = await longTableRow.locator('.sql-table-name').innerText();
-      expect(longTableDisplayName.startsWith('FINANCE_UAT_API_I_BUS')).toBe(true);
+      expect(longTableDisplayName.startsWith('Finance_UAT_API_I_')).toBe(true);
       expect(longTableDisplayName).toContain('…');
-      expect(longTableDisplayName.endsWith('SUPPLIERINVOICEPAYMENTBLOCKREASON')).toBe(true);
+      expect(longTableDisplayName.endsWith('SupplierInvoicePaymentBlockReason')).toBe(true);
       await expect(searchInput).toBeFocused();
 
       await searchInput.fill('ORDERS');

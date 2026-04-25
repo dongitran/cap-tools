@@ -1598,7 +1598,7 @@ export class RegionSidebarProvider
     session: CfLogSessionSeed | null
   ): Promise<void> {
     try {
-      const tables = await this.hanaSqlWorkbench.loadTableNamesForApp({
+      const tables = await this.hanaSqlWorkbench.loadTableEntriesForApp({
         appId,
         appName,
         session,
@@ -1607,7 +1607,10 @@ export class RegionSidebarProvider
         type: MSG_HANA_TABLES_LOADED,
         serviceId: appId,
         success: true,
-        tables: [...tables],
+        tables: tables.map((table) => ({
+          displayName: table.displayName,
+          name: table.name,
+        })),
       });
     } catch (error) {
       const message =
