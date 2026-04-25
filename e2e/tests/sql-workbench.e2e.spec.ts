@@ -181,10 +181,10 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(tableRows(tablesPanel)).toHaveCount(104, { timeout: 15000 });
       await expect(tablesPanel.getByRole('button', { name: /^Select first 10 rows of / })).toHaveCount(104);
 
-      const readableTableName = 'CORE_ADDRESSSECTIONINPUTMAPPING';
+      const readableTableName = 'DEMO_PURCHASEORDERITEMMAPPING';
       await searchInput.click();
-      await searchInput.pressSequentially('AddressSection');
-      await expect(searchInput).toHaveValue('AddressSection');
+      await searchInput.pressSequentially('PurchaseOrder');
+      await expect(searchInput).toHaveValue('PurchaseOrder');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
       await expect(tableRows(tablesPanel)).toHaveCount(1);
 
@@ -193,7 +193,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(readableTableRow).toHaveAttribute('title', readableTableName);
       await expect(readableTableRow).toHaveAttribute('data-table-name', readableTableName);
       await expect(readableTableRow.locator('.sql-table-name')).toHaveText(
-        'Core_AddressSectionInputMapping'
+        'Demo_PurchaseOrderItemMapping'
       );
       await expect(searchInput).toBeFocused();
 
@@ -297,15 +297,25 @@ test.describe('SAP Tools SQL workbench', () => {
         const tablesPanelElement = readElement('[data-role="hana-tables-panel"]');
         const tablesList = readElement('[data-role="hana-tables-list"]');
         const firstTableRow = readElement('[data-role="hana-table-row"]');
+        const firstServiceName = readElement('.sql-service-name');
+        const firstTableName = readElement('.sql-table-name');
         const tableSearch = readElement('[data-role="sql-table-search"]');
         const searchIcon = readElement('.sql-table-search-row .search-input-icon');
         const searchStyles = window.getComputedStyle(tableSearch);
         const iconStyles = window.getComputedStyle(searchIcon);
+        const serviceNameStyles = window.getComputedStyle(firstServiceName);
+        const tableNameStyles = window.getComputedStyle(firstTableName);
 
         return {
           firstTableRowHeight: firstTableRow.getBoundingClientRect().height,
           heightRatio: workbench.getBoundingClientRect().height /
             tablesPanelElement.getBoundingClientRect().height,
+          serviceNameFontFamily: serviceNameStyles.fontFamily,
+          serviceNameFontSize: serviceNameStyles.fontSize,
+          serviceNameFontWeight: serviceNameStyles.fontWeight,
+          tableNameFontFamily: tableNameStyles.fontFamily,
+          tableNameFontSize: tableNameStyles.fontSize,
+          tableNameFontWeight: tableNameStyles.fontWeight,
           tableNamePaddingBottom: window.getComputedStyle(
             firstTableRow.querySelector('.sql-table-name') ?? firstTableRow
           ).paddingBottom,
@@ -329,6 +339,9 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(layoutSnapshot.serviceListCanScroll).toBe(true);
       expect(layoutSnapshot.tablesListCanScroll).toBe(true);
       expect(layoutSnapshot.firstTableRowHeight).toBeLessThanOrEqual(30);
+      expect(layoutSnapshot.tableNameFontFamily).toBe(layoutSnapshot.serviceNameFontFamily);
+      expect(layoutSnapshot.tableNameFontSize).toBe(layoutSnapshot.serviceNameFontSize);
+      expect(layoutSnapshot.tableNameFontWeight).toBe(layoutSnapshot.serviceNameFontWeight);
       expect(layoutSnapshot.tableNamePaddingTop).toBe('3px');
       expect(layoutSnapshot.tableNamePaddingBottom).toBe('3px');
       expect(layoutSnapshot.tableSearchHeight).toBeGreaterThanOrEqual(30);

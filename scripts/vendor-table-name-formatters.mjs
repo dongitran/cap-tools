@@ -51,9 +51,9 @@ async function smokeTestVendoredPackages() {
     `const WordsNinjaPack = require(${JSON.stringify(wordsNinjaEntry)});\n` +
       `const wordsNinja = new WordsNinjaPack();\n` +
       `wordsNinja.loadDictionary().then(() => {\n` +
-      `  wordsNinja.addWords(['address', 'section', 'input', 'mapping']);\n` +
-      `  const words = wordsNinja.splitSentence('addresssectioninputmapping');\n` +
-      `  if (!Array.isArray(words) || words.join(' ') !== 'address section input mapping') {\n` +
+      `  wordsNinja.addWords(['purchase', 'order', 'item', 'mapping']);\n` +
+      `  const words = wordsNinja.splitSentence('purchaseorderitemmapping');\n` +
+      `  if (!Array.isArray(words) || words.join(' ') !== 'purchase order item mapping') {\n` +
       `    throw new Error('Unexpected wordsninja split: ' + String(words));\n` +
       `  }\n` +
       `}).catch((error) => { throw error; });\n`,
@@ -65,7 +65,7 @@ async function smokeTestVendoredPackages() {
       `  if (typeof moduleValue.pascalCase !== 'function') {\n` +
       `    throw new Error('Missing pascalCase export.');\n` +
       `  }\n` +
-      `  if (moduleValue.pascalCase('address section') !== 'AddressSection') {\n` +
+      `  if (moduleValue.pascalCase('purchase order') !== 'PurchaseOrder') {\n` +
       `    throw new Error('Unexpected pascalCase result.');\n` +
       `  }\n` +
       `}).catch((error) => { throw error; });\n`,

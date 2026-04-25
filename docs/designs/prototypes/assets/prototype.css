@@ -1811,6 +1811,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 }
 
 .sql-service-name {
+  font-family: var(--body-font);
   font-size: 0.7rem;
   font-weight: 700;
 }
@@ -1890,15 +1891,15 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 .sql-table-name {
   display: block;
   min-width: 0;
-  font-size: 0.62rem;
-  font-weight: 600;
+  font-family: var(--body-font);
+  font-size: 0.7rem;
+  font-weight: 700;
   line-height: 1.2;
   padding: 3px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-color);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .sql-table-select-btn {

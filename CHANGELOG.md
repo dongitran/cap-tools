@@ -1,8 +1,13 @@
 # Changelog
 
+## 0.7.12 (pre-release)
+- Replaced the readable SQL table fixture with a neutral purchase-order sample across the extension, prototype, unit tests, and e2e tests.
+- Aligned SQL table-name typography with SQL app-name typography so both use the same body font, size, and weight.
+- Extended SQL e2e layout coverage to assert matching app/table font family, size, and weight.
+
 ## 0.7.11 (pre-release)
 - Added readable SQL table display names for compact SAP/HANA identifiers, using `wordsninja` for segmentation and `change-case` for PascalCase formatting while preserving raw table names for SQL execution.
-- Updated the SQL Tables search to match readable display fragments such as `AddressSection` as well as raw table identifiers.
+- Updated the SQL Tables search to match readable display fragments such as `PurchaseOrder` as well as raw table identifiers.
 - Vendored `wordsninja` and `change-case` into the packaged extension so `vsce --no-dependencies` builds remain self-contained.
 - Added unit and e2e coverage for readable table names, raw identifier preservation, long-name truncation, and quick SELECT behavior.
 

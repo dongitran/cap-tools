@@ -41,7 +41,8 @@ const TABLE_NAME_ACRONYMS = new Set([
 ]);
 
 const TABLE_NAME_SEGMENT_OVERRIDES = new Map([
-  ['ADDRESSSECTIONINPUTMAPPING', 'AddressSectionInputMapping'],
+  ['DEMO', 'Demo'],
+  ['PURCHASEORDERITEMMAPPING', 'PurchaseOrderItemMapping'],
   ['BUSINESSPARTNERBANK', 'BusinessPartnerBank'],
   ['DRAFTADMINISTRATIVEDATA', 'DraftAdministrativeData'],
   ['GENERALLEDGERACCOUNTINGDOCUMENTITEM', 'GeneralLedgerAccountingDocumentItem'],
@@ -50,7 +51,6 @@ const TABLE_NAME_SEGMENT_OVERRIDES = new Map([
 
 const TABLE_NAME_DOMAIN_WORDS: readonly string[] = [
   'accounting',
-  'address',
   'administrative',
   'allocation',
   'audit',
@@ -58,9 +58,9 @@ const TABLE_NAME_DOMAIN_WORDS: readonly string[] = [
   'block',
   'business',
   'com',
-  'core',
   'customer',
   'data',
+  'demo',
   'document',
   'draft',
   'dummy',
@@ -78,12 +78,13 @@ const TABLE_NAME_DOMAIN_WORDS: readonly string[] = [
   'namespace',
   'nested',
   'orders',
+  'order',
+  'purchase',
   'partner',
   'payment',
   'projection',
   'reason',
   'reconciliation',
-  'section',
   'service',
   'supplier',
   'table',

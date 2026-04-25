@@ -119,7 +119,7 @@ describe('createTestModeTableNames', () => {
     expect(tables).toContain(
       'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON'
     );
-    expect(tables).toContain('CORE_ADDRESSSECTIONINPUTMAPPING');
+    expect(tables).toContain('DEMO_PURCHASEORDERITEMMAPPING');
     expect(tables).toContain('DUMMY');
     expect(tables).toContain('M_TABLES');
     expect(tables).toHaveLength(104);
@@ -313,8 +313,8 @@ describe('buildHanaSqlResultHtml (no install card)', () => {
 
 describe('formatHanaTableDisplayName', () => {
   test('formats compact uppercase English table segments into readable PascalCase', async () => {
-    await expect(formatHanaTableDisplayName('CORE_ADDRESSSECTIONINPUTMAPPING')).resolves.toBe(
-      'Core_AddressSectionInputMapping'
+    await expect(formatHanaTableDisplayName('DEMO_PURCHASEORDERITEMMAPPING')).resolves.toBe(
+      'Demo_PurchaseOrderItemMapping'
     );
   });
 
@@ -338,14 +338,14 @@ describe('formatHanaTableDisplayName', () => {
 
   test('formats display entries while preserving the raw executable table name', async () => {
     const entries = await formatHanaTableDisplayEntries([
-      'CORE_ADDRESSSECTIONINPUTMAPPING',
+      'DEMO_PURCHASEORDERITEMMAPPING',
       'DUMMY',
     ]);
 
     expect(entries).toEqual([
       {
-        displayName: 'Core_AddressSectionInputMapping',
-        name: 'CORE_ADDRESSSECTIONINPUTMAPPING',
+        displayName: 'Demo_PurchaseOrderItemMapping',
+        name: 'DEMO_PURCHASEORDERITEMMAPPING',
       },
       { displayName: 'Dummy', name: 'DUMMY' },
     ]);
