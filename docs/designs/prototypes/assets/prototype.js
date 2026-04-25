@@ -727,7 +727,7 @@ appElement.addEventListener('input', (event) => {
   if (role === 'sql-table-search') {
     sqlTableSearchKeyword = target.value;
     if (isWorkspaceSqlMounted()) {
-      refreshWorkspaceSqlView();
+      refreshSqlTableResults();
       return;
     }
     renderPrototype();
@@ -1244,14 +1244,22 @@ function primeHanaTablesForStandalone(serviceId) {
   if (hanaTablesByServiceId.has(serviceId)) {
     return;
   }
+  if (hanaTablesLoadingByServiceId.get(serviceId) === 'loading') {
+    return;
+  }
   const service = resolveHanaServices().find((entry) => entry.id === serviceId);
   if (service === undefined) {
     return;
   }
-  hanaTablesByServiceId = new Map(hanaTablesByServiceId);
   hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
-  hanaTablesByServiceId.set(serviceId, buildStandaloneTableNames(service.name));
-  hanaTablesLoadingByServiceId.set(serviceId, 'loaded');
+  hanaTablesLoadingByServiceId.set(serviceId, 'loading');
+  window.setTimeout(() => {
+    hanaTablesByServiceId = new Map(hanaTablesByServiceId);
+    hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
+    hanaTablesByServiceId.set(serviceId, buildStandaloneTableNames(service.name));
+    hanaTablesLoadingByServiceId.set(serviceId, 'loaded');
+    refreshUiAfterSqlStateChange();
+  }, 450);
 }
 
 function buildStandaloneTableNames(appName) {
@@ -3603,6 +3611,24 @@ function refreshWorkspaceSqlView() {
   tabContainer.innerHTML = renderSqlWorkbenchTab();
 }
 
+function refreshSqlTableResults() {
+  const tablesPanel = appElement.querySelector('[data-role="hana-tables-panel"]');
+  if (!(tablesPanel instanceof HTMLElement)) {
+    refreshWorkspaceSqlView();
+    return;
+  }
+  const state = resolveSqlTablesPanelState();
+  const countElement = tablesPanel.querySelector('[data-role="hana-tables-count"]');
+  if (countElement instanceof HTMLElement) {
+    countElement.textContent = state.countLabel;
+  }
+  const tablesList = tablesPanel.querySelector('[data-role="hana-tables-list"]');
+  if (tablesList instanceof HTMLElement) {
+    tablesList.className = `sql-tables-list${state.listStateClass}`;
+    tablesList.innerHTML = state.bodyMarkup;
+  }
+}
+
 function renderPlaceholderTab(tabId) {
   const label = TAB_ITEMS.find((tab) => tab.id === tabId)?.label ?? 'Tab';
 
@@ -3684,53 +3710,20 @@ function renderHanaQueryStatus() {
 }
 
 function renderSqlTablesPanel() {
-  const selectedService = resolveSelectedHanaService();
-  const selectedServiceId = selectedService?.id ?? '';
-  const loadingState =
-    selectedService === undefined
-      ? 'unselected'
-      : hanaTablesLoadingByServiceId.get(selectedService.id) ?? 'idle';
-  const tables =
-    selectedService === undefined ? [] : hanaTablesByServiceId.get(selectedService.id) ?? [];
-  const errorMessage =
-    selectedService === undefined ? '' : hanaTablesErrorByServiceId.get(selectedService.id) ?? '';
-  const filteredTables = filterSqlTableRows(tables);
-  const hasTableSearch = sqlTableSearchKeyword.trim().length > 0;
-  const countLabel =
-    hasTableSearch && filteredTables.length !== tables.length
-      ? `${String(filteredTables.length)}/${String(tables.length)}`
-      : String(tables.length);
+  const state = resolveSqlTablesPanelState();
+  const selectedService = state.selectedService;
   const searchDisabled = selectedService === undefined ? 'disabled' : '';
-
-  let bodyMarkup;
-  if (loadingState === 'unselected') {
-    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">Select an app above to load tables.</p>`;
-  } else if (loadingState === 'loading' || (loadingState === 'idle' && tables.length === 0)) {
-    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">Loading tables...</p>`;
-  } else if (loadingState === 'error') {
-    bodyMarkup = `
-      <p class="sql-tables-empty sql-tables-error" data-role="hana-tables-error">
-        ${escapeHtml(errorMessage.length > 0 ? errorMessage : 'Failed to load tables.')}
-      </p>
-    `;
-  } else if (tables.length === 0) {
-    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables found in current schema.</p>`;
-  } else if (filteredTables.length === 0) {
-    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables match current search.</p>`;
-  } else {
-    bodyMarkup = renderHanaTableRows(selectedService.id, filteredTables);
-  }
 
   return `
     <section
       class="group-card sql-tables-panel"
       data-role="hana-tables-panel"
-      data-service-id="${escapeHtml(selectedServiceId)}"
+      data-service-id="${escapeHtml(state.selectedServiceId)}"
       aria-label="Tables for selected app"
     >
       <header class="sql-tables-head">
         <h3>${selectedService === undefined ? 'Tables' : `Tables · ${escapeHtml(selectedService.name)}`}</h3>
-        <span class="sql-tables-count" data-role="hana-tables-count">${escapeHtml(countLabel)}</span>
+        <span class="sql-tables-count" data-role="hana-tables-count">${escapeHtml(state.countLabel)}</span>
       </header>
       <label class="sql-table-search-row search-input-with-icon">
         <span class="search-input-icon" aria-hidden="true">&#128269;</span>
@@ -3739,15 +3732,94 @@ function renderSqlTablesPanel() {
           class="sql-table-search"
           data-role="sql-table-search"
           value="${escapeHtml(sqlTableSearchKeyword)}"
-          placeholder="${selectedService === undefined ? 'Select app to search tables' : 'Search tables'}"
+          placeholder="${selectedService === undefined ? 'Select app to search tables…' : 'Search tables…'}"
           aria-label="Search tables"
           ${searchDisabled}
         />
       </label>
-      <div class="sql-tables-list" data-role="hana-tables-list">
-        ${bodyMarkup}
+      <div class="sql-tables-list${state.listStateClass}" data-role="hana-tables-list">
+        ${state.bodyMarkup}
       </div>
     </section>
+  `;
+}
+
+function resolveSqlTablesPanelState() {
+  const selectedService = resolveSelectedHanaService();
+  const selectedServiceId = selectedService?.id ?? '';
+  const loadingState =
+    selectedService === undefined
+      ? 'unselected'
+      : hanaTablesLoadingByServiceId.get(selectedService.id) ?? 'idle';
+  const tables =
+    selectedService === undefined ? [] : hanaTablesByServiceId.get(selectedService.id) ?? [];
+  const filteredTables = filterSqlTableRows(tables);
+  const hasTableSearch = sqlTableSearchKeyword.trim().length > 0;
+  const countLabel =
+    hasTableSearch && filteredTables.length !== tables.length
+      ? `${String(filteredTables.length)}/${String(tables.length)}`
+      : String(tables.length);
+  const bodyState = renderSqlTablesBodyState(
+    selectedService,
+    loadingState,
+    tables,
+    filteredTables
+  );
+
+  return {
+    bodyMarkup: bodyState.bodyMarkup,
+    countLabel,
+    listStateClass: bodyState.listStateClass,
+    selectedService,
+    selectedServiceId,
+  };
+}
+
+function renderSqlTablesBodyState(selectedService, loadingState, tables, filteredTables) {
+  if (loadingState === 'unselected') {
+    return {
+      bodyMarkup: `<p class="sql-tables-empty" data-role="hana-tables-empty">Select an app above to load tables.</p>`,
+      listStateClass: '',
+    };
+  }
+  if (loadingState === 'loading' || (loadingState === 'idle' && tables.length === 0)) {
+    return { bodyMarkup: renderSqlTablesLoadingState(), listStateClass: ' is-loading' };
+  }
+  if (loadingState === 'error') {
+    const errorMessage = hanaTablesErrorByServiceId.get(selectedService.id) ?? '';
+    return {
+      bodyMarkup: `
+        <p class="sql-tables-empty sql-tables-error" data-role="hana-tables-error">
+          ${escapeHtml(errorMessage.length > 0 ? errorMessage : 'Failed to load tables.')}
+        </p>
+      `,
+      listStateClass: '',
+    };
+  }
+  if (tables.length === 0) {
+    return {
+      bodyMarkup: `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables found in current schema.</p>`,
+      listStateClass: '',
+    };
+  }
+  if (filteredTables.length === 0) {
+    return {
+      bodyMarkup: `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables match current search.</p>`,
+      listStateClass: '',
+    };
+  }
+  return {
+    bodyMarkup: renderHanaTableRows(selectedService.id, filteredTables),
+    listStateClass: '',
+  };
+}
+
+function renderSqlTablesLoadingState() {
+  return `
+    <div class="sql-tables-loading" data-role="hana-tables-loading" role="status" aria-live="polite">
+      <span class="sql-tables-spinner" aria-hidden="true"></span>
+      <span>Loading tables…</span>
+    </div>
   `;
 }
 
@@ -3788,12 +3860,13 @@ function renderHanaTableRows(serviceId, tables) {
 }
 
 function formatSmartTableName(tableName) {
-  const maxLength = 48;
+  const maxLength = 56;
   if (tableName.length <= maxLength) {
     return tableName;
   }
-  const tailLength = maxLength - 3;
-  return `...${tableName.slice(-tailLength)}`;
+  const headLength = 22;
+  const tailLength = maxLength - headLength - 1;
+  return `${tableName.slice(0, headLength)}…${tableName.slice(-tailLength)}`;
 }
 
 function getFilteredLogs() {

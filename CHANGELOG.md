@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.9 (pre-release)
+- Improved the SQL Tables panel UX with middle-truncated HANA/CDS table names, preserving both the app/schema prefix and the business suffix while keeping full names available through metadata and accessible labels.
+- Fixed the Tables search input losing focus after the first typed character by updating only the table count/list during filtering instead of re-rendering the full SQL workspace.
+- Centered the table-loading state with a spinner inside the bounded Tables panel and added deterministic e2e coverage for the loading state.
+- Increased table-name vertical padding to improve scanability without breaking the compact 100+ table layout.
+
 ## 0.7.8 (pre-release)
 - Matched the extension SQL tab to the prototype: the app workbench and Tables panel now render from the initial SQL view and share the remaining height in a bounded 50/50 split.
 - Added a Tables search input with the same inline search styling as Logs, compact table rows, and leading truncation for long HANA/CDS table names while preserving full names in titles and accessibility labels.

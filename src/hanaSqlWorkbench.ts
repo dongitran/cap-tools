@@ -361,6 +361,7 @@ export class HanaSqlWorkbench
 
   private async loadTableNames(context: HanaSqlAppContext): Promise<void> {
     if (this.isTestMode) {
+      await delayTestModeTableLoadIfConfigured();
       context.tableNames = createTestModeTableNames(context.appName);
       this.logSql(
         `loaded ${String(context.tableNames.length)} test tables for app ${sanitizeSqlLogValue(context.appName)}`
@@ -476,4 +477,28 @@ export class HanaSqlWorkbench
 
 function sanitizeSqlLogValue(value: string): string {
   return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
+}
+
+async function delayTestModeTableLoadIfConfigured(): Promise<void> {
+  const delayMs = resolveE2eTestModeTablesDelayMs();
+  if (delayMs === 0) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+function resolveE2eTestModeTablesDelayMs(): number {
+  if (process.env['SAP_TOOLS_E2E'] !== '1') {
+    return 0;
+  }
+
+  const rawDelay = process.env['SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS'] ?? '';
+  const parsedDelay = Number.parseInt(rawDelay, 10);
+  if (!Number.isFinite(parsedDelay) || parsedDelay <= 0) {
+    return 0;
+  }
+
+  return Math.min(parsedDelay, 30_000);
 }

@@ -184,7 +184,9 @@ test.describe('SAP Tools SQL workbench', () => {
 
       const longTableName =
         'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON';
-      await searchInput.fill('BUSINESSPARTNERBANK');
+      await searchInput.click();
+      await searchInput.pressSequentially('BUSINESSPARTNERBANK');
+      await expect(searchInput).toHaveValue('BUSINESSPARTNERBANK');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
       await expect(tableRows(tablesPanel)).toHaveCount(1);
 
@@ -193,8 +195,10 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(longTableRow).toHaveAttribute('title', longTableName);
       await expect(longTableRow).toHaveAttribute('aria-label', `Table ${longTableName}`);
       const longTableDisplayName = await longTableRow.locator('.sql-table-name').innerText();
-      expect(longTableDisplayName.startsWith('...')).toBe(true);
-      expect(longTableDisplayName.endsWith('PAYMENTBLOCKREASON')).toBe(true);
+      expect(longTableDisplayName.startsWith('FINANCE_UAT_API_I_BUS')).toBe(true);
+      expect(longTableDisplayName).toContain('…');
+      expect(longTableDisplayName.endsWith('SUPPLIERINVOICEPAYMENTBLOCKREASON')).toBe(true);
+      await expect(searchInput).toBeFocused();
 
       await searchInput.fill('ORDERS');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
@@ -283,6 +287,12 @@ test.describe('SAP Tools SQL workbench', () => {
           firstTableRowHeight: firstTableRow.getBoundingClientRect().height,
           heightRatio: workbench.getBoundingClientRect().height /
             tablesPanelElement.getBoundingClientRect().height,
+          tableNamePaddingBottom: window.getComputedStyle(
+            firstTableRow.querySelector('.sql-table-name') ?? firstTableRow
+          ).paddingBottom,
+          tableNamePaddingTop: window.getComputedStyle(
+            firstTableRow.querySelector('.sql-table-name') ?? firstTableRow
+          ).paddingTop,
           serviceListCanScroll: serviceList.scrollHeight > serviceList.clientHeight,
           tableSearchHeight: tableSearch.getBoundingClientRect().height,
           tableSearchPaddingLeft: searchStyles.paddingLeft,
@@ -299,13 +309,56 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(layoutSnapshot.heightRatio).toBeLessThan(1.05);
       expect(layoutSnapshot.serviceListCanScroll).toBe(true);
       expect(layoutSnapshot.tablesListCanScroll).toBe(true);
-      expect(layoutSnapshot.firstTableRowHeight).toBeLessThanOrEqual(28);
+      expect(layoutSnapshot.firstTableRowHeight).toBeLessThanOrEqual(30);
+      expect(layoutSnapshot.tableNamePaddingTop).toBe('3px');
+      expect(layoutSnapshot.tableNamePaddingBottom).toBe('3px');
       expect(layoutSnapshot.tableSearchHeight).toBeGreaterThanOrEqual(30);
       expect(layoutSnapshot.tableSearchHeight).toBeLessThanOrEqual(32);
       expect(layoutSnapshot.tableSearchPaddingLeft).toBe('31px');
       expect(layoutSnapshot.iconLeft).toBe('12px');
       await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
       await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User sees centered loading state while selected app tables load', async () => {
+    const session = await launchExtensionHost({
+      extraEnv: { SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS: '1200' },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+
+      const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
+      const loadingState = tablesPanel.locator('[data-role="hana-tables-loading"]');
+      await expect(loadingState).toBeVisible();
+      await expect(loadingState).toHaveText('Loading tables…');
+      await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+
+      const loadingSnapshot = await loadingState.evaluate((element) => {
+        const list = element.closest('[data-role="hana-tables-list"]');
+        if (!(list instanceof HTMLElement)) {
+          throw new Error('Tables list is missing.');
+        }
+        const listBox = list.getBoundingClientRect();
+        const loadingBox = element.getBoundingClientRect();
+        return {
+          centerDelta: Math.abs(
+            loadingBox.top + loadingBox.height / 2 - (listBox.top + listBox.height / 2)
+          ),
+          listClass: list.className,
+        };
+      });
+      expect(loadingSnapshot.centerDelta).toBeLessThanOrEqual(2);
+      expect(loadingSnapshot.listClass).toContain('is-loading');
+
+      await expect(tableRows(tablesPanel)).toHaveCount(104, { timeout: 15000 });
+      await expect(loadingState).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
