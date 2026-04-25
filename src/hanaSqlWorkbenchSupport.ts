@@ -6,6 +6,7 @@ import type {
 
 export const SQL_RESULT_ROWS_LIMIT = 250;
 export const TABLE_SUGGESTION_LIMIT = 500;
+export const QUICK_SELECT_ROW_LIMIT = 10;
 
 export const TABLE_DISCOVERY_QUERIES: readonly string[] = [
   'SELECT TABLE_NAME FROM TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA ORDER BY TABLE_NAME',
@@ -123,6 +124,24 @@ export function filterTableCandidates(
   return matches.slice(0, TABLE_SUGGESTION_LIMIT);
 }
 
+export function quoteHanaIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+export function buildQuickTableSelectSql(schema: string, tableName: string): string {
+  const trimmedTable = tableName.trim();
+  if (trimmedTable.length === 0) {
+    throw new Error('Table name is required to build a SELECT statement.');
+  }
+  const tableId = quoteHanaIdentifier(trimmedTable);
+  const trimmedSchema = schema.trim();
+  if (trimmedSchema.length === 0) {
+    return `SELECT * FROM ${tableId} LIMIT ${String(QUICK_SELECT_ROW_LIMIT)}`;
+  }
+  const schemaId = quoteHanaIdentifier(trimmedSchema);
+  return `SELECT * FROM ${schemaId}.${tableId} LIMIT ${String(QUICK_SELECT_ROW_LIMIT)}`;
+}
+
 export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string {
   if (options.result?.kind === 'resultset') {
     return buildResultSetHtml(options, options.result);
@@ -159,26 +178,32 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
         color: #e6edf3;
       }
       .state-layout {
-        height: 100vh;
         display: grid;
         grid-template-rows: auto auto auto;
-        gap: 10px;
-        padding: 14px;
+        gap: 6px;
+        padding: 6px;
       }
       .state-card {
         border: 1px solid #273246;
-        border-radius: 8px;
+        border-radius: 6px;
         background: #141c28;
-        padding: 10px 12px;
+        padding: 6px 8px;
+      }
+      .state-card.state-meta {
+        padding: 4px 8px;
       }
       .state-card h1 {
         margin: 0;
-        font-size: 14px;
+        font-size: 13px;
       }
       .state-meta-line {
-        margin: 4px 0 0;
+        margin: 0;
         font-size: 12px;
+        line-height: 18px;
         color: #aab7c7;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .state-message {
         margin: 0;
@@ -204,9 +229,8 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
   </head>
   <body>
     <main class="state-layout">
-      <section class="state-card">
-        <p class="state-meta-line">App: ${escapedAppName}</p>
-        <p class="state-meta-line">Executed: ${escapedExecutedAt}</p>
+      <section class="state-card state-meta">
+        <p class="state-meta-line">App: ${escapedAppName} · Executed: ${escapedExecutedAt}</p>
       </section>
       <section class="state-card ${stateToneClass}">
         <h1>${stateTitle}</h1>
@@ -255,12 +279,12 @@ function buildResultSetHtml(
         grid-template-rows: auto minmax(0, 1fr);
       }
       .result-toolbar {
-        padding: 10px 12px;
+        padding: 6px;
         border-bottom: 1px solid #273246;
         background: #141c28;
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
         align-items: center;
       }
       .result-toolbar h1 {
@@ -272,7 +296,7 @@ function buildResultSetHtml(
       .result-chip {
         border: 1px solid #2b3a53;
         border-radius: 999px;
-        padding: 3px 9px;
+        padding: 2px 8px;
         font-size: 12px;
         color: #aab7c7;
         background: #101724;

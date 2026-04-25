@@ -17,6 +17,7 @@ import {
   TABLE_DISCOVERY_QUERIES,
   buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
+  buildQuickTableSelectSql,
   buildTestModeQueryResult,
   createTestModeTableNames,
   extractTableNames,
@@ -29,10 +30,10 @@ export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWo
 export const RUN_HANA_SQL_COMMAND_ID = 'sapTools.runHanaSql';
 const HANA_SQL_EDITOR_CONTEXT_KEY = 'sapTools.hanaSqlEditor';
 const SQL_RESULT_VIEW_TYPE = 'sapTools.hanaSqlResult';
-interface HanaSqlDocumentContext {
+interface HanaSqlAppContext {
   readonly appId: string;
   readonly appName: string;
-  readonly session: HanaSqlScopeSession | null;
+  session: HanaSqlScopeSession | null;
   connection: HanaConnection | null;
   schema: string;
   tableNames: readonly string[];
@@ -42,6 +43,12 @@ export interface OpenHanaSqlFileRequest {
   readonly appId: string;
   readonly appName: string;
   readonly session: HanaSqlScopeSession | null;
+}
+export interface RunQuickTableSelectRequest {
+  readonly appId: string;
+  readonly appName: string;
+  readonly session: HanaSqlScopeSession | null;
+  readonly tableName: string;
 }
 function buildSqlKeywordCompletionItems(prefix: string): vscode.CompletionItem[] {
   return filterKeywordCandidates(prefix).map((keyword) => {
@@ -66,7 +73,8 @@ export class HanaSqlWorkbench
   implements vscode.Disposable, vscode.CompletionItemProvider
 {
   private readonly isTestMode: boolean;
-  private readonly documentContexts = new Map<string, HanaSqlDocumentContext>();
+  private readonly appContextsByAppId = new Map<string, HanaSqlAppContext>();
+  private readonly appIdByDocumentUri = new Map<string, string>();
   private readonly disposables: vscode.Disposable[] = [];
   private resultSequence = 0;
 
@@ -88,7 +96,7 @@ export class HanaSqlWorkbench
         this.updateSqlEditorContextKey(editor);
       }),
       vscode.workspace.onDidCloseTextDocument((document) => {
-        this.documentContexts.delete(document.uri.toString());
+        this.appIdByDocumentUri.delete(document.uri.toString());
         this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
       })
     );
@@ -124,7 +132,84 @@ export class HanaSqlWorkbench
       });
     }
 
-    const context: HanaSqlDocumentContext = {
+    const context = this.ensureAppContext(options);
+    this.appIdByDocumentUri.set(document.uri.toString(), context.appId);
+    this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
+    void this.prefetchTableNames(context.appId);
+  }
+
+  async loadTableNamesForApp(options: OpenHanaSqlFileRequest): Promise<readonly string[]> {
+    const context = this.ensureAppContext(options);
+    await this.prefetchTableNames(context.appId);
+    return context.tableNames;
+  }
+
+  async runQuickTableSelectForApp(
+    options: RunQuickTableSelectRequest
+  ): Promise<void> {
+    const context = this.ensureAppContext({
+      appId: options.appId,
+      appName: options.appName,
+      session: options.session,
+    });
+
+    const sql = buildQuickTableSelectSql(context.schema, options.tableName);
+    const statementKind: HanaSqlStatementKind = 'readonly';
+
+    try {
+      const result = await this.executeSqlForContext(context, sql, statementKind);
+      this.openResultPanel({
+        appName: context.appName,
+        sql,
+        executedAt: new Date().toISOString(),
+        result,
+      });
+    } catch (error) {
+      const message = this.toSafeErrorMessage(error, context);
+      void vscode.window.showErrorMessage(message);
+      this.openResultPanel({
+        appName: context.appName,
+        sql,
+        executedAt: new Date().toISOString(),
+        errorMessage: message,
+      });
+    }
+  }
+
+  provideCompletionItems(
+    document: vscode.TextDocument,
+    position: vscode.Position
+  ): vscode.ProviderResult<vscode.CompletionItem[]> {
+    const appId = this.appIdByDocumentUri.get(document.uri.toString());
+    if (appId === undefined) {
+      return undefined;
+    }
+    const context = this.appContextsByAppId.get(appId);
+    if (context === undefined) {
+      return undefined;
+    }
+
+    const wordRange = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
+    const prefix = wordRange === undefined ? '' : document.getText(wordRange);
+
+    void this.prefetchTableNames(context.appId);
+
+    return [
+      ...buildTableCompletionItems(context.tableNames, prefix),
+      ...buildSqlKeywordCompletionItems(prefix),
+    ];
+  }
+
+  private ensureAppContext(options: OpenHanaSqlFileRequest): HanaSqlAppContext {
+    const existing = this.appContextsByAppId.get(options.appId);
+    if (existing !== undefined) {
+      if (options.session !== null) {
+        existing.session = options.session;
+      }
+      return existing;
+    }
+
+    const created: HanaSqlAppContext = {
       appId: options.appId,
       appName: options.appName,
       session: options.session,
@@ -133,29 +218,8 @@ export class HanaSqlWorkbench
       tableNames: [],
       tableNamesPromise: null,
     };
-    this.documentContexts.set(document.uri.toString(), context);
-    this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
-    void this.prefetchTableNames(document.uri.toString());
-  }
-
-  provideCompletionItems(
-    document: vscode.TextDocument,
-    position: vscode.Position
-  ): vscode.ProviderResult<vscode.CompletionItem[]> {
-    const context = this.documentContexts.get(document.uri.toString());
-    if (context === undefined) {
-      return undefined;
-    }
-
-    const wordRange = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
-    const prefix = wordRange === undefined ? '' : document.getText(wordRange);
-
-    void this.prefetchTableNames(document.uri.toString());
-
-    return [
-      ...buildTableCompletionItems(context.tableNames, prefix),
-      ...buildSqlKeywordCompletionItems(prefix),
-    ];
+    this.appContextsByAppId.set(options.appId, created);
+    return created;
   }
 
   private async handleRunHanaSqlCommand(): Promise<void> {
@@ -165,7 +229,8 @@ export class HanaSqlWorkbench
       return;
     }
 
-    const context = this.documentContexts.get(editor.document.uri.toString());
+    const appId = this.appIdByDocumentUri.get(editor.document.uri.toString());
+    const context = appId === undefined ? undefined : this.appContextsByAppId.get(appId);
     if (context === undefined) {
       void vscode.window.showWarningMessage(
         'Open SQL file from SAP Tools SQL tab before running a query.'
@@ -216,7 +281,7 @@ export class HanaSqlWorkbench
     }
 
     try {
-      const result = await this.executeSql(context, normalizedSql, statementKind);
+      const result = await this.executeSqlForContext(context, normalizedSql, statementKind);
       this.openResultPanel({
         appName: context.appName,
         sql: normalizedSql,
@@ -235,8 +300,8 @@ export class HanaSqlWorkbench
     }
   }
 
-  private async executeSql(
-    context: HanaSqlDocumentContext,
+  private async executeSqlForContext(
+    context: HanaSqlAppContext,
     sql: string,
     statementKind: HanaSqlStatementKind
   ): Promise<HanaQueryResult> {
@@ -252,12 +317,13 @@ export class HanaSqlWorkbench
     return executeHanaQuery(context.connection, sql);
   }
 
-  private async prefetchTableNames(uriKey: string): Promise<void> {
-    const context = this.documentContexts.get(uriKey);
-    if (context?.tableNamesPromise != null) {
+  private async prefetchTableNames(appId: string): Promise<void> {
+    const context = this.appContextsByAppId.get(appId);
+    if (context === undefined) {
       return;
     }
-    if (context === undefined) {
+    if (context.tableNamesPromise != null) {
+      await context.tableNamesPromise;
       return;
     }
 
@@ -273,7 +339,7 @@ export class HanaSqlWorkbench
     await context.tableNamesPromise;
   }
 
-  private async loadTableNames(context: HanaSqlDocumentContext): Promise<void> {
+  private async loadTableNames(context: HanaSqlAppContext): Promise<void> {
     if (this.isTestMode) {
       context.tableNames = createTestModeTableNames(context.appName);
       return;
@@ -302,7 +368,7 @@ export class HanaSqlWorkbench
     }
   }
 
-  private async ensureConnection(context: HanaSqlDocumentContext): Promise<void> {
+  private async ensureConnection(context: HanaSqlAppContext): Promise<void> {
     if (context.connection !== null) {
       return;
     }
@@ -332,7 +398,7 @@ export class HanaSqlWorkbench
     panel.webview.html = buildHanaSqlResultHtml(options);
   }
 
-  private toSafeErrorMessage(error: unknown, context: HanaSqlDocumentContext): string {
+  private toSafeErrorMessage(error: unknown, context: HanaSqlAppContext): string {
     const secrets: string[] = [];
     if (context.connection !== null) {
       secrets.push(context.connection.password);
@@ -355,7 +421,7 @@ export class HanaSqlWorkbench
   ): void {
     const enabled =
       editor !== undefined &&
-      this.documentContexts.has(editor.document.uri.toString());
+      this.appIdByDocumentUri.has(editor.document.uri.toString());
     void vscode.commands.executeCommand('setContext', HANA_SQL_EDITOR_CONTEXT_KEY, enabled);
   }
 }

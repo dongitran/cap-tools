@@ -2,17 +2,20 @@ import { describe, expect, test } from 'vitest';
 
 import type { HanaQueryResultSet } from './hanaSqlService';
 import {
+  QUICK_SELECT_ROW_LIMIT,
   SQL_KEYWORDS,
   TABLE_DISCOVERY_QUERIES,
   TABLE_SUGGESTION_LIMIT,
   buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
+  buildQuickTableSelectSql,
   buildTestModeQueryResult,
   createTestModeTableNames,
   escapeHtml,
   extractTableNames,
   filterKeywordCandidates,
   filterTableCandidates,
+  quoteHanaIdentifier,
   sanitizeUntitledFileName,
 } from './hanaSqlWorkbenchSupport';
 
@@ -237,6 +240,48 @@ describe('buildHanaSqlResultHtml', () => {
   });
 });
 
+describe('buildHanaSqlResultHtml result meta layout', () => {
+  test('renders the App and Executed metadata as a single line for status results', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'UPDATE T SET X = 1',
+      executedAt: '2026-04-25T01:23:45.000Z',
+      result: { kind: 'status', message: '1 row affected', elapsedMs: 4 },
+    });
+
+    expect(html).toContain(
+      '<p class="state-meta-line">App: finance-uat-api · Executed: 2026-04-25T01:23:45.000Z</p>'
+    );
+    expect(html).not.toContain('<p class="state-meta-line">App: finance-uat-api</p>');
+    expect(html).not.toContain('<p class="state-meta-line">Executed: 2026-04-25T01:23:45.000Z</p>');
+  });
+
+  test('renders the App and Executed metadata as a single line for error results', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT broken',
+      executedAt: '2026-04-25T02:00:00.000Z',
+      errorMessage: 'syntax error',
+    });
+
+    expect(html).toContain(
+      '<p class="state-meta-line">App: finance-uat-api · Executed: 2026-04-25T02:00:00.000Z</p>'
+    );
+  });
+
+  test('uses compact padding to keep the result panel tight', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT 1 FROM DUMMY',
+      executedAt: '2026-04-25T00:00:00Z',
+      result: { kind: 'status', message: 'ok', elapsedMs: 1 },
+    });
+
+    expect(html).toContain('padding: 6px;');
+    expect(html).not.toContain('padding: 14px;');
+  });
+});
+
 describe('buildHanaSqlResultHtml (no install card)', () => {
   test('does not surface the legacy SAP HANA Client install card for connection errors', () => {
     const html = buildHanaSqlResultHtml({
@@ -253,6 +298,40 @@ describe('buildHanaSqlResultHtml (no install card)', () => {
     expect(html).not.toContain('hanaSqlClientPath');
     expect(html).toContain('Execution Error');
     expect(html).toContain('connect ECONNREFUSED');
+  });
+});
+
+describe('quoteHanaIdentifier', () => {
+  test('wraps simple identifiers in double quotes', () => {
+    expect(quoteHanaIdentifier('ORDERS')).toBe('"ORDERS"');
+  });
+
+  test('escapes embedded double quotes by doubling them', () => {
+    expect(quoteHanaIdentifier('WEIRD"NAME')).toBe('"WEIRD""NAME"');
+  });
+});
+
+describe('buildQuickTableSelectSql', () => {
+  test('builds a schema-qualified SELECT with a row limit', () => {
+    expect(buildQuickTableSelectSql('TEST_SCHEMA', 'ORDERS')).toBe(
+      `SELECT * FROM "TEST_SCHEMA"."ORDERS" LIMIT ${String(QUICK_SELECT_ROW_LIMIT)}`
+    );
+  });
+
+  test('falls back to the unqualified table name when the schema is blank', () => {
+    expect(buildQuickTableSelectSql('   ', 'ORDERS')).toBe(
+      `SELECT * FROM "ORDERS" LIMIT ${String(QUICK_SELECT_ROW_LIMIT)}`
+    );
+  });
+
+  test('escapes injection attempts inside the table identifier', () => {
+    const sql = buildQuickTableSelectSql('SCHEMA', 'BAD"; DROP TABLE');
+    expect(sql).toContain('"SCHEMA"."BAD""; DROP TABLE"');
+    expect(sql.endsWith(`LIMIT ${String(QUICK_SELECT_ROW_LIMIT)}`)).toBe(true);
+  });
+
+  test('throws when the table name is empty', () => {
+    expect(() => buildQuickTableSelectSql('SCHEMA', '   ')).toThrow(/required/i);
   });
 });
 

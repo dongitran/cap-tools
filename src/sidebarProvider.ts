@@ -56,6 +56,7 @@ const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
 const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
 const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
 const MSG_OPEN_HANA_SQL_FILE = 'sapTools.openHanaSqlFile';
+const MSG_RUN_HANA_TABLE_SELECT = 'sapTools.runHanaTableSelect';
 const MSG_OPEN_SQLTOOLS_EXTENSION = 'sapTools.openSqlToolsExtension';
 const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
 const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
@@ -87,6 +88,8 @@ const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
 const MSG_DEBUG_SESSIONS_STATE = 'sapTools.debugSessionsState';
 const MSG_DEBUG_SESSION_UPDATE = 'sapTools.debugSessionUpdate';
 const MSG_HANA_SQL_FILE_OPEN_RESULT = 'sapTools.hanaSqlFileOpenResult';
+const MSG_HANA_TABLES_LOADED = 'sapTools.hanaTablesLoaded';
+const MSG_HANA_TABLE_SELECT_RESULT = 'sapTools.hanaTableSelectResult';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -151,6 +154,12 @@ interface ExportSqlToolsConfigPayload {
 interface OpenHanaSqlFilePayload {
   readonly serviceId: string;
   readonly serviceName: string;
+}
+
+interface RunHanaTableSelectPayload {
+  readonly serviceId: string;
+  readonly serviceName: string;
+  readonly tableName: string;
 }
 
 interface LogoutResultPayload {
@@ -408,6 +417,12 @@ export class RegionSidebarProvider
     if (type === MSG_OPEN_HANA_SQL_FILE && isOpenHanaSqlFileMessage(message)) {
       const payload = readOpenHanaSqlFilePayload(message);
       await this.handleOpenHanaSqlFile(payload);
+      return;
+    }
+
+    if (type === MSG_RUN_HANA_TABLE_SELECT && isRunHanaTableSelectMessage(message)) {
+      const payload = readRunHanaTableSelectPayload(message);
+      await this.handleRunHanaTableSelect(payload);
       return;
     }
 
@@ -1573,10 +1588,91 @@ export class RegionSidebarProvider
         true,
         `SQL file opened for app ${targetApp.name}.`
       );
+      void this.publishHanaTablesForApp(targetApp.id, targetApp.name, sessionSeed);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to open SQL file.';
       this.postHanaSqlFileOpenResult(targetApp.id, false, errorMessage);
+    }
+  }
+
+  private async publishHanaTablesForApp(
+    appId: string,
+    appName: string,
+    session: CfLogSessionSeed | null
+  ): Promise<void> {
+    try {
+      const tables = await this.hanaSqlWorkbench.loadTableNamesForApp({
+        appId,
+        appName,
+        session,
+      });
+      this.postMessage({
+        type: MSG_HANA_TABLES_LOADED,
+        serviceId: appId,
+        success: true,
+        tables: [...tables],
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load tables for app.';
+      this.postMessage({
+        type: MSG_HANA_TABLES_LOADED,
+        serviceId: appId,
+        success: false,
+        tables: [],
+        message,
+      });
+    }
+  }
+
+  private async handleRunHanaTableSelect(payload: RunHanaTableSelectPayload): Promise<void> {
+    const targetApp =
+      this.currentApps.find((app) => app.id === payload.serviceId) ??
+      this.currentApps.find((app) => app.name === payload.serviceName);
+    if (targetApp === undefined) {
+      this.postHanaTableSelectResult(
+        payload.serviceId,
+        payload.tableName,
+        false,
+        'Selected app was not found.'
+      );
+      return;
+    }
+
+    const sessionSeed = this.currentLogSessionSeed;
+    if (sessionSeed === null && !isTestMode()) {
+      this.postHanaTableSelectResult(
+        payload.serviceId,
+        payload.tableName,
+        false,
+        'No active CF scope session. Confirm scope and choose app again.'
+      );
+      return;
+    }
+
+    try {
+      await this.hanaSqlWorkbench.runQuickTableSelectForApp({
+        appId: targetApp.id,
+        appName: targetApp.name,
+        session: sessionSeed,
+        tableName: payload.tableName,
+      });
+      this.postHanaTableSelectResult(
+        targetApp.id,
+        payload.tableName,
+        true,
+        `Selected first 10 rows of ${payload.tableName}.`
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to run quick SELECT.';
+      this.postHanaTableSelectResult(
+        targetApp.id,
+        payload.tableName,
+        false,
+        errorMessage
+      );
     }
   }
 
@@ -1588,6 +1684,21 @@ export class RegionSidebarProvider
     this.postMessage({
       type: MSG_HANA_SQL_FILE_OPEN_RESULT,
       serviceId,
+      success,
+      message,
+    });
+  }
+
+  private postHanaTableSelectResult(
+    serviceId: string,
+    tableName: string,
+    success: boolean,
+    message: string
+  ): void {
+    this.postMessage({
+      type: MSG_HANA_TABLE_SELECT_RESULT,
+      serviceId,
+      tableName,
       success,
       message,
     });
@@ -2873,5 +2984,23 @@ function readOpenHanaSqlFilePayload(
   return {
     serviceId: String(value['serviceId']).trim(),
     serviceName: String(value['serviceName']).trim(),
+  };
+}
+
+function isRunHanaTableSelectMessage(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value['serviceId'], 128) &&
+    isNonEmptyString(value['serviceName'], 128) &&
+    isNonEmptyString(value['tableName'], 256)
+  );
+}
+
+function readRunHanaTableSelectPayload(
+  value: Record<string, unknown>
+): RunHanaTableSelectPayload {
+  return {
+    serviceId: String(value['serviceId']).trim(),
+    serviceName: String(value['serviceName']).trim(),
+    tableName: String(value['tableName']).trim(),
   };
 }

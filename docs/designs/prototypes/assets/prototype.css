@@ -971,6 +971,11 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
 .workspace-body-sql {
   overflow: hidden;
   align-content: stretch;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-body-sql:has(.sql-tables-panel) {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .settings-body {
@@ -1799,59 +1804,105 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   color: color-mix(in oklab, var(--accent-color) 72%, var(--mix-base));
 }
 
-.sql-result-preview {
-  border: 1px solid color-mix(in oklab, var(--border-color) 82%, var(--mix-base));
-  border-radius: 10px;
-  background: var(--frame-bg);
+.sql-tables-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-.workspace-body-sql .sql-result-preview {
-  min-height: 170px;
+.workspace-body-sql .sql-tables-panel {
+  height: 100%;
 }
 
-.sql-result-preview-head {
-  padding: 7px 9px;
+.sql-tables-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
   border-bottom: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
 }
 
-.sql-result-preview-head h3 {
+.sql-tables-head h3 {
   margin: 0;
   font-size: 0.68rem;
   font-family: var(--title-font);
   color: var(--chip-text);
-}
-
-.sql-result-table-wrap {
-  min-height: 0;
-  overflow: auto;
-}
-
-.sql-result-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 0.65rem;
-}
-
-.sql-result-table th,
-.sql-result-table td {
-  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 85%, var(--mix-base));
-  padding: 5px 7px;
-  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.sql-result-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: color-mix(in oklab, var(--surface-bg) 86%, var(--frame-bg));
+.sql-tables-count {
+  font-size: 0.6rem;
   color: var(--muted-color);
+  border: 1px solid color-mix(in oklab, var(--border-color) 80%, var(--mix-base));
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
+}
+
+.sql-tables-list {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.sql-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 80%, var(--mix-base));
+  background: color-mix(in oklab, var(--surface-bg) 90%, var(--frame-bg));
+}
+
+.sql-table-name {
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.sql-table-select-btn {
+  font-size: 0.62rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in oklab, var(--accent-color) 50%, var(--mix-base));
+  background: color-mix(in oklab, var(--accent-soft) 50%, var(--frame-bg));
+  color: var(--text-color);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.sql-table-select-btn:hover {
+  border-color: var(--accent-color);
+  background: color-mix(in oklab, var(--accent-color) 30%, var(--frame-bg));
+  transform: translateY(-1px);
+}
+
+.sql-tables-empty {
+  margin: 0;
+  padding: 10px 8px;
+  font-size: 0.66rem;
+  color: var(--muted-color);
+  text-align: center;
+}
+
+.sql-tables-empty.sql-tables-error {
+  color: var(--state-danger-fg);
 }
 
 .hana-query-status {

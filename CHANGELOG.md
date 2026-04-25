@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.7 (pre-release)
+- Split the S/4HANA SQL Workbench tab into an upper app picker and a lower tables panel that lists the selected app's HANA tables, each with a dedicated `Select` button that runs `SELECT * FROM <schema>.<table> LIMIT 10` and opens the result panel.
+- Replaced the legacy `ORDER_ID` / `STATUS` / `CREATED_AT` / `AMOUNT` demo preview in the SQL tab so the workbench only renders real apps and real table names supplied by the extension.
+- Compacted the SQL result panel for status and error outcomes by collapsing the `App:` and `Executed:` lines into a single ellipsis-truncated line and reducing the page padding to 6px.
+- Wired new sidebar messages (`hanaTablesLoaded`, `runHanaTableSelect`, `hanaTableSelectResult`) and an idempotent per-app workbench context map so quick selects reuse the already-resolved HANA connection.
+- Extended the SQL workbench unit tests with `quoteHanaIdentifier`, `buildQuickTableSelectSql`, and result HTML layout assertions, and added two e2e tests covering the tables panel quick SELECT and the single-line meta header.
+
 ## 0.7.6 (pre-release)
 - Fixed `Cannot find module 'safer-buffer'` at runtime by walking the full `hdb` dependency tree and copying every transitive package (including `iconv-lite`, `safer-buffer`, and the optional `lz4-wasm-nodejs`) into `dist/vendor/hdb/node_modules/` during build.
 - Added a build-time smoke test in `scripts/vendor-hdb.mjs` that spawns Node to `require` the vendored `hdb` entry and assert `createClient` resolves, so any future missing transitive dependency fails the build instead of shipping broken to users.

@@ -132,6 +132,7 @@ const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolder
 const EXPORT_SERVICE_ARTIFACTS_MESSAGE_TYPE = 'sapTools.exportServiceArtifacts';
 const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
 const OPEN_HANA_SQL_FILE_MESSAGE_TYPE = 'sapTools.openHanaSqlFile';
+const RUN_HANA_TABLE_SELECT_MESSAGE_TYPE = 'sapTools.runHanaTableSelect';
 const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const REQUEST_DEBUG_STATE_MESSAGE_TYPE = 'sapTools.requestDebugState';
 const START_DEBUG_APP_MESSAGE_TYPE = 'sapTools.startDebugApp';
@@ -140,6 +141,8 @@ const STOP_ALL_DEBUG_APPS_MESSAGE_TYPE = 'sapTools.stopAllDebugApps';
 const DEBUG_SESSIONS_STATE_MESSAGE_TYPE = 'sapTools.debugSessionsState';
 const DEBUG_SESSION_UPDATE_MESSAGE_TYPE = 'sapTools.debugSessionUpdate';
 const HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE = 'sapTools.hanaSqlFileOpenResult';
+const HANA_TABLES_LOADED_MESSAGE_TYPE = 'sapTools.hanaTablesLoaded';
+const HANA_TABLE_SELECT_RESULT_MESSAGE_TYPE = 'sapTools.hanaTableSelectResult';
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -182,6 +185,9 @@ let hanaServiceOptions = null;
 let selectedHanaServiceId = '';
 let hanaQueryStatusMessage = '';
 let hanaQueryStatusTone = 'info';
+let hanaTablesByServiceId = new Map();
+let hanaTablesLoadingByServiceId = new Map();
+let hanaTablesErrorByServiceId = new Map();
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -349,6 +355,40 @@ window.addEventListener('message', (event) => {
     if (serviceId.length > 0) {
       selectedHanaServiceId = serviceId;
     }
+    hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
+    hanaQueryStatusMessage = message;
+    refreshUiAfterSqlStateChange();
+    return;
+  }
+
+  if (msg.type === HANA_TABLES_LOADED_MESSAGE_TYPE) {
+    const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
+    if (serviceId.length === 0) {
+      return;
+    }
+    const success = msg.success === true;
+    const tables = Array.isArray(msg.tables)
+      ? msg.tables.filter((entry) => typeof entry === 'string')
+      : [];
+    hanaTablesByServiceId = new Map(hanaTablesByServiceId);
+    hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
+    hanaTablesErrorByServiceId = new Map(hanaTablesErrorByServiceId);
+    hanaTablesByServiceId.set(serviceId, tables);
+    hanaTablesLoadingByServiceId.set(serviceId, success ? 'loaded' : 'error');
+    if (success) {
+      hanaTablesErrorByServiceId.delete(serviceId);
+    } else {
+      hanaTablesErrorByServiceId.set(
+        serviceId,
+        typeof msg.message === 'string' ? msg.message : 'Failed to load tables.'
+      );
+    }
+    refreshUiAfterSqlStateChange();
+    return;
+  }
+
+  if (msg.type === HANA_TABLE_SELECT_RESULT_MESSAGE_TYPE) {
+    const message = typeof msg.message === 'string' ? msg.message : '';
     hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
     hanaQueryStatusMessage = message;
     refreshUiAfterSqlStateChange();
@@ -1150,10 +1190,78 @@ function handleSqlTabAction(action, actionElement) {
       return false;
     }
     selectedHanaServiceId = serviceId;
+    if (vscodeApi !== null && !hanaTablesByServiceId.has(serviceId)) {
+      hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
+      hanaTablesLoadingByServiceId.set(serviceId, 'loading');
+    }
+    primeHanaTablesForStandalone(serviceId);
     return triggerOpenHanaSqlFile();
   }
 
+  if (action === 'run-hana-table-select') {
+    const serviceId = actionElement.dataset.serviceId ?? '';
+    const tableName = actionElement.dataset.tableName ?? '';
+    if (serviceId.length === 0 || tableName.length === 0) {
+      return false;
+    }
+    return triggerRunHanaTableSelect(serviceId, tableName);
+  }
+
   return null;
+}
+
+function primeHanaTablesForStandalone(serviceId) {
+  if (vscodeApi !== null) {
+    return;
+  }
+  if (hanaTablesByServiceId.has(serviceId)) {
+    return;
+  }
+  const service = resolveHanaServices().find((entry) => entry.id === serviceId);
+  if (service === undefined) {
+    return;
+  }
+  hanaTablesByServiceId = new Map(hanaTablesByServiceId);
+  hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
+  hanaTablesByServiceId.set(serviceId, buildStandaloneTableNames(service.name));
+  hanaTablesLoadingByServiceId.set(serviceId, 'loaded');
+}
+
+function buildStandaloneTableNames(appName) {
+  const prefix = (appName ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  const normalized = prefix.length > 0 ? prefix : 'APP';
+  return [
+    `${normalized}_ORDERS`,
+    `${normalized}_ITEMS`,
+    `${normalized}_AUDIT`,
+    'DUMMY',
+    'M_TABLES',
+  ];
+}
+
+function triggerRunHanaTableSelect(serviceId, tableName) {
+  const service = resolveHanaServices().find((entry) => entry.id === serviceId);
+  if (service === undefined) {
+    hanaQueryStatusTone = 'error';
+    hanaQueryStatusMessage = 'Selected app is no longer available.';
+    return true;
+  }
+  hanaQueryStatusTone = 'info';
+  hanaQueryStatusMessage = `Running SELECT * FROM ${tableName} LIMIT 10...`;
+
+  if (vscodeApi === null) {
+    hanaQueryStatusTone = 'success';
+    hanaQueryStatusMessage = `Selected first 10 rows of ${tableName}.`;
+    return true;
+  }
+
+  vscodeApi.postMessage({
+    type: RUN_HANA_TABLE_SELECT_MESSAGE_TYPE,
+    serviceId: service.id,
+    serviceName: service.name,
+    tableName,
+  });
+  return true;
 }
 
 function requestHanaServicesIfNeeded() {
@@ -3478,7 +3586,7 @@ function renderPlaceholderTab(tabId) {
 function renderSqlWorkbenchTab() {
   const services = resolveHanaServices();
   const servicesMarkup = renderHanaServiceRows(services);
-  const resultPreviewMarkup = renderSqlResultPreview();
+  const tablesPanelMarkup = renderSqlTablesPanel();
 
   return `
     <section class="group-card sql-workbench" aria-label="S/4HANA SQL Workbench">
@@ -3490,10 +3598,9 @@ function renderSqlWorkbenchTab() {
         ${servicesMarkup}
       </section>
 
-      ${resultPreviewMarkup}
-
       ${renderHanaQueryStatus()}
     </section>
+    ${tablesPanelMarkup}
   `;
 }
 
@@ -3541,52 +3648,67 @@ function renderHanaQueryStatus() {
   `;
 }
 
-function renderSqlResultPreview() {
+function renderSqlTablesPanel() {
   const selectedService = resolveSelectedHanaService();
   if (selectedService === undefined) {
     return '';
   }
 
-  const previewRows = [
-    ['1000124', 'OPEN', '2026-04-24 09:21:18', '1480.00'],
-    ['1000125', 'PAID', '2026-04-24 09:44:03', '320.50'],
-    ['1000126', 'OPEN', '2026-04-24 10:11:40', '90.00'],
-  ];
-  const previewTableRows = previewRows
-    .map((row) => {
-      return `
-        <tr>
-          <td>${escapeHtml(row[0])}</td>
-          <td>${escapeHtml(row[1])}</td>
-          <td>${escapeHtml(row[2])}</td>
-          <td>${escapeHtml(row[3])}</td>
-        </tr>
-      `;
-    })
-    .join('');
+  const loadingState = hanaTablesLoadingByServiceId.get(selectedService.id) ?? 'idle';
+  const tables = hanaTablesByServiceId.get(selectedService.id) ?? [];
+  const errorMessage = hanaTablesErrorByServiceId.get(selectedService.id) ?? '';
+
+  let bodyMarkup;
+  if (loadingState === 'loading' || (loadingState === 'idle' && tables.length === 0)) {
+    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">Loading tables...</p>`;
+  } else if (loadingState === 'error') {
+    bodyMarkup = `
+      <p class="sql-tables-empty sql-tables-error" data-role="hana-tables-error">
+        ${escapeHtml(errorMessage.length > 0 ? errorMessage : 'Failed to load tables.')}
+      </p>
+    `;
+  } else if (tables.length === 0) {
+    bodyMarkup = `<p class="sql-tables-empty" data-role="hana-tables-empty">No tables found in current schema.</p>`;
+  } else {
+    bodyMarkup = renderHanaTableRows(selectedService.id, tables);
+  }
 
   return `
-    <section class="sql-result-preview" data-role="hana-result-preview" aria-label="Result table preview">
-      <header class="sql-result-preview-head">
-        <h3>${escapeHtml(selectedService.name)}_ORDERS</h3>
+    <section
+      class="group-card sql-tables-panel"
+      data-role="hana-tables-panel"
+      data-service-id="${escapeHtml(selectedService.id)}"
+      aria-label="Tables for selected app"
+    >
+      <header class="sql-tables-head">
+        <h3>Tables · ${escapeHtml(selectedService.name)}</h3>
+        <span class="sql-tables-count" data-role="hana-tables-count">${String(tables.length)}</span>
       </header>
-      <div class="sql-result-table-wrap">
-        <table class="sql-result-table">
-          <thead>
-            <tr>
-              <th>ORDER_ID</th>
-              <th>STATUS</th>
-              <th>CREATED_AT</th>
-              <th>AMOUNT</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${previewTableRows}
-          </tbody>
-        </table>
+      <div class="sql-tables-list" data-role="hana-tables-list">
+        ${bodyMarkup}
       </div>
     </section>
   `;
+}
+
+function renderHanaTableRows(serviceId, tables) {
+  return tables
+    .map((tableName) => {
+      return `
+        <div class="sql-table-row" data-role="hana-table-row" data-table-name="${escapeHtml(tableName)}">
+          <span class="sql-table-name">${escapeHtml(tableName)}</span>
+          <button
+            type="button"
+            class="sql-table-select-btn"
+            data-action="run-hana-table-select"
+            data-service-id="${escapeHtml(serviceId)}"
+            data-table-name="${escapeHtml(tableName)}"
+            aria-label="Select first 10 rows of ${escapeHtml(tableName)}"
+          >Select</button>
+        </div>
+      `;
+    })
+    .join('');
 }
 
 function getFilteredLogs() {
@@ -3997,6 +4119,9 @@ function resetSqlWorkbenchState() {
   selectedHanaServiceId = '';
   hanaQueryStatusMessage = '';
   hanaQueryStatusTone = 'info';
+  hanaTablesByServiceId = new Map();
+  hanaTablesLoadingByServiceId = new Map();
+  hanaTablesErrorByServiceId = new Map();
 }
 
 function resetActiveAppLoggingState() {
