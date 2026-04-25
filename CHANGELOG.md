@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.13 (pre-release)
+- Matched the SQL Tables selected database heading typography to table names, including body font, size, weight, and line height.
+- Tightened SQL e2e layout coverage so table typography is compared against the visible selected database heading, not only app-list rows.
+- Bumped the prototype design CSS cache key so `index.html` reflects the latest SQL typography change.
+
 ## 0.7.12 (pre-release)
 - Replaced the readable SQL table fixture with a neutral purchase-order sample across the extension, prototype, unit tests, and e2e tests.
 - Aligned SQL table-name typography with SQL app-name typography so both use the same body font, size, and weight.

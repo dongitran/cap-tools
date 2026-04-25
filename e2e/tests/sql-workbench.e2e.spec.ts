@@ -298,24 +298,32 @@ test.describe('SAP Tools SQL workbench', () => {
         const tablesList = readElement('[data-role="hana-tables-list"]');
         const firstTableRow = readElement('[data-role="hana-table-row"]');
         const firstServiceName = readElement('.sql-service-name');
+        const selectedDatabaseHeading = readElement('.sql-tables-head h3');
         const firstTableName = readElement('.sql-table-name');
         const tableSearch = readElement('[data-role="sql-table-search"]');
         const searchIcon = readElement('.sql-table-search-row .search-input-icon');
         const searchStyles = window.getComputedStyle(tableSearch);
         const iconStyles = window.getComputedStyle(searchIcon);
         const serviceNameStyles = window.getComputedStyle(firstServiceName);
+        const selectedDatabaseHeadingStyles = window.getComputedStyle(selectedDatabaseHeading);
         const tableNameStyles = window.getComputedStyle(firstTableName);
 
         return {
           firstTableRowHeight: firstTableRow.getBoundingClientRect().height,
           heightRatio: workbench.getBoundingClientRect().height /
             tablesPanelElement.getBoundingClientRect().height,
+          selectedDatabaseHeadingText: selectedDatabaseHeading.textContent.trim(),
+          selectedDatabaseHeadingFontFamily: selectedDatabaseHeadingStyles.fontFamily,
+          selectedDatabaseHeadingFontSize: selectedDatabaseHeadingStyles.fontSize,
+          selectedDatabaseHeadingFontWeight: selectedDatabaseHeadingStyles.fontWeight,
+          selectedDatabaseHeadingLineHeight: selectedDatabaseHeadingStyles.lineHeight,
           serviceNameFontFamily: serviceNameStyles.fontFamily,
           serviceNameFontSize: serviceNameStyles.fontSize,
           serviceNameFontWeight: serviceNameStyles.fontWeight,
           tableNameFontFamily: tableNameStyles.fontFamily,
           tableNameFontSize: tableNameStyles.fontSize,
           tableNameFontWeight: tableNameStyles.fontWeight,
+          tableNameLineHeight: tableNameStyles.lineHeight,
           tableNamePaddingBottom: window.getComputedStyle(
             firstTableRow.querySelector('.sql-table-name') ?? firstTableRow
           ).paddingBottom,
@@ -342,6 +350,17 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(layoutSnapshot.tableNameFontFamily).toBe(layoutSnapshot.serviceNameFontFamily);
       expect(layoutSnapshot.tableNameFontSize).toBe(layoutSnapshot.serviceNameFontSize);
       expect(layoutSnapshot.tableNameFontWeight).toBe(layoutSnapshot.serviceNameFontWeight);
+      expect(layoutSnapshot.selectedDatabaseHeadingText).toContain('finance-uat-api');
+      expect(layoutSnapshot.tableNameFontFamily).toBe(
+        layoutSnapshot.selectedDatabaseHeadingFontFamily
+      );
+      expect(layoutSnapshot.tableNameFontSize).toBe(layoutSnapshot.selectedDatabaseHeadingFontSize);
+      expect(layoutSnapshot.tableNameFontWeight).toBe(
+        layoutSnapshot.selectedDatabaseHeadingFontWeight
+      );
+      expect(layoutSnapshot.tableNameLineHeight).toBe(
+        layoutSnapshot.selectedDatabaseHeadingLineHeight
+      );
       expect(layoutSnapshot.tableNamePaddingTop).toBe('3px');
       expect(layoutSnapshot.tableNamePaddingBottom).toBe('3px');
       expect(layoutSnapshot.tableSearchHeight).toBeGreaterThanOrEqual(30);

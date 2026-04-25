@@ -1845,8 +1845,10 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 .sql-tables-head h3 {
   margin: 0;
-  font-size: 0.68rem;
-  font-family: var(--title-font);
+  font-family: var(--body-font);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--chip-text);
   white-space: nowrap;
   overflow: hidden;
