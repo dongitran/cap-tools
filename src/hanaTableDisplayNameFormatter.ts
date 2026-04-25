@@ -53,6 +53,7 @@ const TABLE_NAME_DOMAIN_WORDS: readonly string[] = [
   'accounting',
   'administrative',
   'allocation',
+  'app',
   'audit',
   'bank',
   'block',
@@ -89,6 +90,7 @@ const TABLE_NAME_DOMAIN_WORDS: readonly string[] = [
   'supplier',
   'table',
   'tables',
+  'test',
   'very',
   'with',
   'for',
@@ -102,7 +104,6 @@ const TABLE_NAME_DOMAIN_WORDS: readonly string[] = [
   's4hana',
   'uuid',
   'id',
-  ...'abcdefghijklmnopqrstuvwxyz0123456789'.split(''),
 ];
 
 let formatterPromise: Promise<HanaTableDisplayNameFormatter> | null = null;
@@ -181,19 +182,37 @@ class HanaTableDisplayNameFormatter {
       return overriddenSegment;
     }
 
-    return this.splitWords(normalizedSegment).map((word) => this.formatWord(word)).join('');
+    if (/\d/.test(normalizedSegment)) {
+      return normalizedSegment;
+    }
+
+    const words = this.splitWords(normalizedSegment);
+    if (!this.shouldUseSplitWords(normalizedSegment, words)) {
+      return this.pascalCase(normalizedSegment.toLowerCase());
+    }
+
+    return words.map((word) => this.formatWord(word)).join('');
   }
 
   private splitWords(segment: string): readonly string[] {
     const result = this.wordsNinja.splitSentence(segment.toLowerCase());
     if (!Array.isArray(result)) {
-      return [segment.toLowerCase()];
+      return [];
     }
 
-    const words = result.filter((word): word is string => {
+    return result.filter((word): word is string => {
       return typeof word === 'string' && word.length > 0;
     });
-    return words.length > 0 ? words : [segment.toLowerCase()];
+  }
+
+  private shouldUseSplitWords(segment: string, words: readonly string[]): boolean {
+    if (words.length === 0) {
+      return false;
+    }
+    if (words.join('') !== segment.toLowerCase()) {
+      return false;
+    }
+    return !words.every((word) => word.length === 1);
   }
 
   private formatWord(word: string): string {

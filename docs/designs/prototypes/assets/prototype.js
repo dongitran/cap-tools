@@ -1276,6 +1276,7 @@ function buildStandaloneTableNames(appName) {
     `${normalized}_VERY_LONG_NAMESPACE_WITH_DEEPLY_NESTED_SERVICE_PROJECTION_FOR_PAYMENT_ALLOCATION_HISTORY`,
     `${normalized}_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON`,
     'DEMO_PURCHASEORDERITEMMAPPING',
+    'DEMO_BUSINESSAPP_TEST',
     'DUMMY',
     'M_TABLES',
   ];
@@ -3873,13 +3874,29 @@ function renderHanaTableRows(serviceId, tables) {
 }
 
 function formatSmartTableName(tableName) {
-  const maxLength = 56;
+  const maxLength = 30;
   if (tableName.length <= maxLength) {
     return tableName;
   }
-  const headLength = 22;
-  const tailLength = maxLength - headLength - 1;
-  return `${tableName.slice(0, headLength)}…${tableName.slice(-tailLength)}`;
+  const preferredHeadLength = 15;
+  const tail = resolveSmartTableNameTail(tableName, maxLength - preferredHeadLength - 1);
+  const headLength = Math.max(1, Math.min(preferredHeadLength, maxLength - tail.length - 1));
+  return `${tableName.slice(0, headLength)}…${tail}`;
+}
+
+function resolveSmartTableNameTail(tableName, maxLength) {
+  const fallbackTail = tableName.slice(-maxLength);
+  const lastSegment = tableName.split('_').filter(Boolean).at(-1) ?? '';
+  const words = lastSegment.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+/g) ?? [];
+  let tail = '';
+  for (let index = words.length - 1; index >= 0; index -= 1) {
+    const nextTail = `${words[index]}${tail}`;
+    if (nextTail.length > maxLength) {
+      break;
+    }
+    tail = nextTail;
+  }
+  return tail.length > 0 ? tail : fallbackTail;
 }
 
 const HANA_TABLE_ACRONYMS = new Set([
@@ -3938,9 +3955,11 @@ const HANA_TABLE_WORDS = [
   'orders',
   'items',
   'audit',
+  'test',
   'dummy',
   'data',
   'demo',
+  'app',
   'bank',
   'item',
   'very',
@@ -4004,7 +4023,14 @@ function formatReadableHanaTableSegment(segment) {
   if (overriddenSegment !== undefined) {
     return overriddenSegment;
   }
-  return splitReadableHanaTableWords(normalizedSegment.toLowerCase())
+  if (/\d/.test(normalizedSegment)) {
+    return normalizedSegment;
+  }
+  const words = splitReadableHanaTableWords(normalizedSegment.toLowerCase());
+  if (!shouldUseReadableHanaTableWords(normalizedSegment, words)) {
+    return `${normalizedSegment.charAt(0).toUpperCase()}${normalizedSegment.slice(1).toLowerCase()}`;
+  }
+  return words
     .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`)
     .join('');
 }
@@ -4022,6 +4048,16 @@ function splitReadableHanaTableWords(lowerSegment) {
     cursor += matchedWord.length;
   }
   return words;
+}
+
+function shouldUseReadableHanaTableWords(segment, words) {
+  if (words.length === 0) {
+    return false;
+  }
+  if (words.join('') !== segment.toLowerCase()) {
+    return false;
+  }
+  return !words.every((word) => word.length === 1);
 }
 
 function getFilteredLogs() {

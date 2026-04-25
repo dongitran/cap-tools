@@ -174,18 +174,18 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(tablesPanel.getByRole('heading', { name: /Tables · finance-uat-api/i })).toBeVisible();
       await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
       await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
-      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('104');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('105');
 
       const searchInput = tablesPanel.getByRole('searchbox', { name: 'Search tables' });
       await expect(searchInput).toBeEnabled();
-      await expect(tableRows(tablesPanel)).toHaveCount(104, { timeout: 15000 });
-      await expect(tablesPanel.getByRole('button', { name: /^Select first 10 rows of / })).toHaveCount(104);
+      await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
+      await expect(tablesPanel.getByRole('button', { name: /^Select first 10 rows of / })).toHaveCount(105);
 
       const readableTableName = 'DEMO_PURCHASEORDERITEMMAPPING';
       await searchInput.click();
       await searchInput.pressSequentially('PurchaseOrder');
       await expect(searchInput).toHaveValue('PurchaseOrder');
-      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       await expect(tableRows(tablesPanel)).toHaveCount(1);
 
       const readableTableRow = tablesPanel.locator(`[data-full-table-name="${readableTableName}"]`);
@@ -197,12 +197,19 @@ test.describe('SAP Tools SQL workbench', () => {
       );
       await expect(searchInput).toBeFocused();
 
+      const productTableName = 'DEMO_BUSINESSAPP_TEST';
+      await searchInput.fill('BusinessApp');
+      await expect(searchInput).toHaveValue('BusinessApp');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
+      const productTableRow = tablesPanel.locator(`[data-full-table-name="${productTableName}"]`);
+      await expect(productTableRow).toBeVisible();
+      await expect(productTableRow.locator('.sql-table-name')).toHaveText('Demo_BusinessApp_Test');
+
       const longTableName =
         'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON';
-      await searchInput.fill('');
-      await searchInput.pressSequentially('BusinessPartnerBank');
+      await searchInput.fill('BusinessPartnerBank');
       await expect(searchInput).toHaveValue('BusinessPartnerBank');
-      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       await expect(tableRows(tablesPanel)).toHaveCount(1);
 
       const longTableRow = tablesPanel.locator(`[data-full-table-name="${longTableName}"]`);
@@ -210,13 +217,24 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(longTableRow).toHaveAttribute('title', longTableName);
       await expect(longTableRow).toHaveAttribute('aria-label', `Table ${longTableName}`);
       const longTableDisplayName = await longTableRow.locator('.sql-table-name').innerText();
-      expect(longTableDisplayName.startsWith('Finance_UAT_API_I_')).toBe(true);
+      expect(longTableDisplayName.startsWith('Finance_UAT_API')).toBe(true);
       expect(longTableDisplayName).toContain('…');
-      expect(longTableDisplayName.endsWith('SupplierInvoicePaymentBlockReason')).toBe(true);
-      await expect(searchInput).toBeFocused();
+      expect(longTableDisplayName.endsWith('BlockReason')).toBe(true);
+      const longTableNameLayout = await longTableRow.locator('.sql-table-name').evaluate((element) => {
+        const styles = window.getComputedStyle(element);
+        return {
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          textOverflow: styles.textOverflow,
+        };
+      });
+      expect(longTableNameLayout.textOverflow).toBe('clip');
+      expect(longTableNameLayout.scrollWidth).toBeLessThanOrEqual(
+        longTableNameLayout.clientWidth
+      );
 
       await searchInput.fill('ORDERS');
-      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/104');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       const targetTableRow = tablesPanel.locator(
         '[data-role="hana-table-row"][data-table-name="FINANCE_UAT_API_ORDERS"]'
       );
@@ -282,7 +300,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await selectSqlApp(webviewFrame, 'finance-uat-api');
 
       const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
-      await expect(tableRows(tablesPanel)).toHaveCount(104, { timeout: 15000 });
+      await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
 
       const layoutSnapshot = await webviewFrame.locator('body').evaluate(() => {
         const readElement = (selector: string): HTMLElement => {
@@ -408,7 +426,7 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(loadingSnapshot.centerDelta).toBeLessThanOrEqual(2);
       expect(loadingSnapshot.listClass).toContain('is-loading');
 
-      await expect(tableRows(tablesPanel)).toHaveCount(104, { timeout: 15000 });
+      await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
       await expect(loadingState).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);

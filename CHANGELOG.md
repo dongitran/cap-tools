@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.14 (pre-release)
+- Improved SQL table readable-name formatting so non-acronym uppercase English segments such as `DEMO_BUSINESSAPP_TEST` render as `Demo_BusinessApp_Test` while configured SAP acronyms remain uppercase.
+- Hardened the table-name formatter against low-confidence `wordsninja` splits by rejecting single-letter segmentation and preserving mixed alphanumeric identifiers.
+- Reworked SQL table middle truncation so long names render a semantic middle ellipsis without relying on browser tail `text-overflow`.
+- Expanded unit and e2e coverage for readable uppercase product segments, 105-table test schemas, search filtering, and visible middle truncation layout.
+
 ## 0.7.13 (pre-release)
 - Matched the SQL Tables selected database heading typography to table names, including body font, size, weight, and line height.
 - Tightened SQL e2e layout coverage so table typography is compared against the visible selected database heading, not only app-list rows.

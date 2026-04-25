@@ -120,9 +120,10 @@ describe('createTestModeTableNames', () => {
       'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON'
     );
     expect(tables).toContain('DEMO_PURCHASEORDERITEMMAPPING');
+    expect(tables).toContain('DEMO_BUSINESSAPP_TEST');
     expect(tables).toContain('DUMMY');
     expect(tables).toContain('M_TABLES');
-    expect(tables).toHaveLength(104);
+    expect(tables).toHaveLength(105);
   });
 
   test('uses the APP fallback prefix when app name is blank', () => {
@@ -315,6 +316,12 @@ describe('formatHanaTableDisplayName', () => {
   test('formats compact uppercase English table segments into readable PascalCase', async () => {
     await expect(formatHanaTableDisplayName('DEMO_PURCHASEORDERITEMMAPPING')).resolves.toBe(
       'Demo_PurchaseOrderItemMapping'
+    );
+  });
+
+  test('formats common uppercase product segments without treating every letter as an acronym', async () => {
+    await expect(formatHanaTableDisplayName('DEMO_BUSINESSAPP_TEST')).resolves.toBe(
+      'Demo_BusinessApp_Test'
     );
   });
 
