@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.6 (pre-release)
+- Fixed `Cannot find module 'safer-buffer'` at runtime by walking the full `hdb` dependency tree and copying every transitive package (including `iconv-lite`, `safer-buffer`, and the optional `lz4-wasm-nodejs`) into `dist/vendor/hdb/node_modules/` during build.
+- Added a build-time smoke test in `scripts/vendor-hdb.mjs` that spawns Node to `require` the vendored `hdb` entry and assert `createClient` resolves, so any future missing transitive dependency fails the build instead of shipping broken to users.
+
 ## 0.7.5 (pre-release)
 - Replaced the `hdbsql` CLI executor with the SAP-maintained `hdb` Node.js driver so HANA SQL no longer requires installing the SAP HANA Client locally.
 - Vendored the `hdb` and `iconv-lite` packages into `dist/vendor/hdb` so the `--no-dependencies` packaged extension keeps a self-contained driver.
