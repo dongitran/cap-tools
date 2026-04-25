@@ -63,13 +63,20 @@ export function sanitizeUntitledFileName(appName: string): string {
 
 export function buildTestModeQueryResult(
   appName: string,
-  statementKind: HanaSqlStatementKind
+  statementKind: HanaSqlStatementKind,
+  executedSql?: string
 ): HanaQueryResult {
   if (statementKind === 'readonly') {
+    const columns =
+      executedSql === undefined
+        ? ['APP_NAME', 'CURRENT_SCHEMA']
+        : ['APP_NAME', 'CURRENT_SCHEMA', 'EXECUTED_SQL'];
+    const row =
+      executedSql === undefined ? [appName, 'TEST_SCHEMA'] : [appName, 'TEST_SCHEMA', executedSql];
     return {
       kind: 'resultset',
-      columns: ['APP_NAME', 'CURRENT_SCHEMA'],
-      rows: [[appName, 'TEST_SCHEMA']],
+      columns,
+      rows: [row],
       rowCount: 1,
       elapsedMs: 5,
     };

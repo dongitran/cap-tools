@@ -106,6 +106,21 @@ describe('buildTestModeQueryResult', () => {
     if (result.kind !== 'status') return;
     expect(result.message).toContain('test mode');
   });
+
+  test('can include executed SQL in readonly test-mode results for e2e verification', () => {
+    const result = buildTestModeQueryResult(
+      'finance-uat-api',
+      'readonly',
+      'SELECT * FROM ORDERS LIMIT 100'
+    );
+
+    expect(result.kind).toBe('resultset');
+    if (result.kind !== 'resultset') return;
+    expect(result.columns).toEqual(['APP_NAME', 'CURRENT_SCHEMA', 'EXECUTED_SQL']);
+    expect(result.rows).toEqual([
+      ['finance-uat-api', 'TEST_SCHEMA', 'SELECT * FROM ORDERS LIMIT 100'],
+    ]);
+  });
 });
 
 describe('createTestModeTableNames', () => {

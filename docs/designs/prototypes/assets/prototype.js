@@ -204,6 +204,7 @@ let hanaTablesErrorByServiceId = new Map();
 let sqlTableSearchKeyword = '';
 const hanaTableDisplayNameCache = new Map();
 const SQL_TABLE_NAME_WIDTH_TOLERANCE = 1;
+let sqlTableResultsRefreshTimer = 0;
 let sqlTableNameTruncationFrame = 0;
 let sqlTableNameResizeObserver = null;
 let sqlTableNamePanelWidth = -1;
@@ -742,7 +743,7 @@ appElement.addEventListener('input', (event) => {
   if (role === 'sql-table-search') {
     sqlTableSearchKeyword = target.value;
     if (isWorkspaceSqlMounted()) {
-      refreshSqlTableResults();
+      queueSqlTableResultsRefresh();
       return;
     }
     renderPrototype();
@@ -3652,6 +3653,16 @@ function refreshSqlTableResults() {
   queueSqlTableNameTruncation();
 }
 
+function queueSqlTableResultsRefresh() {
+  if (sqlTableResultsRefreshTimer !== 0) {
+    window.clearTimeout(sqlTableResultsRefreshTimer);
+  }
+  sqlTableResultsRefreshTimer = window.setTimeout(() => {
+    sqlTableResultsRefreshTimer = 0;
+    refreshSqlTableResults();
+  }, 75);
+}
+
 function renderPlaceholderTab(tabId) {
   const label = TAB_ITEMS.find((tab) => tab.id === tabId)?.label ?? 'Tab';
 
@@ -3676,6 +3687,9 @@ function renderSqlWorkbenchTab() {
     <section class="group-card sql-workbench" aria-label="S/4HANA SQL Workbench">
       <header class="sql-workbench-header">
         <h2>S/4HANA SQL Workbench</h2>
+        <p class="sql-workbench-safety-note">
+          Manual SELECT queries without a row limit run with LIMIT 100.
+        </p>
       </header>
 
       <section class="sql-service-list" data-role="hana-service-list" aria-label="Discovered apps">

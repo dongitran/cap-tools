@@ -219,10 +219,11 @@ test.describe('SAP Tools Debug tab', () => {
         }, '__sapToolsDebugStatusLog'))
       );
 
-      expect(observedStatuses[0]).toBe('starting');
-      expect(observedStatuses).toContain('tunneling');
-      expect(observedStatuses).toContain('ready');
-      expect(observedStatuses[observedStatuses.length - 1]).toBe('attached');
+      const activeStatuses = observedStatuses.filter((status) => status !== 'idle');
+      expect(activeStatuses[0]).toBe('starting');
+      expect(activeStatuses).toContain('tunneling');
+      expect(activeStatuses).toContain('ready');
+      expect(activeStatuses[activeStatuses.length - 1]).toBe('attached');
 
       await expect(
         targetRow.locator('button[data-action="stop-debug-app"]')

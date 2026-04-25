@@ -23,6 +23,7 @@ import {
   readWebviewBodyClasses,
   relaunchExtensionHost,
   resolveSapToolsLoginFrame,
+  resolveSapToolsWorkspaceFrame,
   selectDefaultScope,
   type ShellNodeStabilitySnapshot,
 } from './support/sapToolsHarness';
@@ -626,7 +627,7 @@ test.describe('SAP Tools region selector', () => {
       await loginFrame.getByLabel('SAP Password').fill('test-password');
       await clickWithFallback(loginFrame.getByRole('button', { name: 'Save and Continue' }));
 
-      const reloadedFrame = await openSapToolsSidebar(session.window);
+      const reloadedFrame = await resolveSapToolsWorkspaceFrame(session.window);
       await expect(
         reloadedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
       ).toBeVisible({ timeout: 20000 });

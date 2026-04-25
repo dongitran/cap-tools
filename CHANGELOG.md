@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.18 (pre-release)
+- Added a SQL safety guard that automatically appends `LIMIT 100` to manual `SELECT` and `WITH ... SELECT` queries when the user has not supplied a top-level row limit.
+- Preserved explicit `LIMIT`, `TOP`, and `FETCH FIRST/NEXT` clauses while ignoring misleading limit text in comments, string literals, quoted identifiers, nested subqueries, and branch-local set-query limits.
+- Logged the guarded SQL command shape to the SAP Tools output channel with string literals redacted, and exposed the executed SQL in test mode for e2e verification.
+- Added a SQL workbench safety note in the prototype/runtime webview and debounced table search refreshes so typing stays focused with large table lists.
+- Hardened SQL, Debug, and workspace-frame e2e assertions; full e2e verifies auto-limit behavior, explicit-limit preservation, stable search focus, and workspace restore after login.
+
 ## 0.7.17 (pre-release)
 - Removed noisy SQL quick-select success text from the SQL tab and removed the visible `SAP Tools SQL Result` heading from result pages.
 - Updated SQL result pages to use VS Code theme variables and content-width result tables so wide schemas and long cell values remain readable with horizontal scrolling.

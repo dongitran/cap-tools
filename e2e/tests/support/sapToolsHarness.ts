@@ -382,6 +382,22 @@ export async function findSapToolsLoginFrame(window: Page): Promise<Frame | unde
   return undefined;
 }
 
+export async function findSapToolsWorkspaceFrame(window: Page): Promise<Frame | undefined> {
+  const candidateFrames = window
+    .frames()
+    .filter((frame) => frame.url().includes('vscode-webview://'));
+
+  for (const frame of [...candidateFrames].reverse()) {
+    const workspaceTitle = frame.getByRole('heading', { name: 'Monitoring Workspace' });
+    const isWorkspaceVisible = await workspaceTitle.isVisible().catch(() => false);
+    if (isWorkspaceVisible) {
+      return frame;
+    }
+  }
+
+  return undefined;
+}
+
 export async function findCfLogsPanelFrame(window: Page): Promise<Frame | undefined> {
   const candidateFrames = window
     .frames()
@@ -458,10 +474,37 @@ export async function resolveSapToolsLoginFrame(window: Page): Promise<Frame> {
   return frame;
 }
 
+export async function resolveSapToolsWorkspaceFrame(
+  window: Page,
+  timeoutMs = 20000
+): Promise<Frame> {
+  await expect
+    .poll(
+      async () => {
+        const frame = await findSapToolsWorkspaceFrame(window);
+        return frame?.url() ?? '';
+      },
+      { timeout: timeoutMs }
+    )
+    .toContain('vscode-webview://');
+
+  const frame = await findSapToolsWorkspaceFrame(window);
+  if (frame === undefined) {
+    throw new Error('SAP Tools workspace frame was not found.');
+  }
+
+  return frame;
+}
+
 export async function openSapToolsSidebar(
   window: Page,
   timeoutMs = 20000
 ): Promise<Frame> {
+  const visibleFrame = await findSapToolsWebviewFrame(window);
+  if (visibleFrame !== undefined) {
+    return visibleFrame;
+  }
+
   const sapToolsTab = window.getByRole('tab', {
     name: new RegExp(ACTIVITY_BAR_TITLE),
   });

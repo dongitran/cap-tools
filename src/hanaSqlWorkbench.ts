@@ -10,6 +10,10 @@ import {
   type HanaSqlStatementKind,
 } from './hanaSqlService';
 import {
+  HANA_SQL_DEFAULT_SELECT_LIMIT,
+  applyDefaultHanaSelectLimit,
+} from './hanaSqlLimitGuard';
+import {
   resolveHanaConnectionFromApp,
   type HanaSqlScopeSession,
 } from './hanaSqlConnectionResolver';
@@ -295,6 +299,17 @@ export class HanaSqlWorkbench
     }
 
     const statementKind = classifyHanaSqlStatement(normalizedSql);
+    const guardedSql = statementKind === 'readonly'
+      ? applyDefaultHanaSelectLimit(normalizedSql)
+      : { sql: normalizedSql, applied: false, limit: HANA_SQL_DEFAULT_SELECT_LIMIT };
+    const executionSql = guardedSql.sql;
+
+    if (guardedSql.applied) {
+      this.logSql(
+        `applied default LIMIT ${String(guardedSql.limit)} for app ${sanitizeSqlLogValue(context.appName)}`
+      );
+    }
+
     if (statementKind === 'mutating') {
       const action = await vscode.window.showWarningMessage(
         `Run mutating SQL statement for app "${context.appName}"?`,
@@ -311,13 +326,13 @@ export class HanaSqlWorkbench
 
     try {
       this.logSql(
-        `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)}`
+        `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlCommandLogValue(executionSql)}`
       );
-      const result = await this.executeSqlForContext(context, normalizedSql, statementKind);
+      const result = await this.executeSqlForContext(context, executionSql, statementKind);
       this.logSql(`statement completed for app ${sanitizeSqlLogValue(context.appName)}`);
       this.openResultPanel({
         appName: context.appName,
-        sql: normalizedSql,
+        sql: executionSql,
         executedAt: new Date().toISOString(),
         result,
       });
@@ -329,7 +344,7 @@ export class HanaSqlWorkbench
       void vscode.window.showErrorMessage(message);
       this.openResultPanel({
         appName: context.appName,
-        sql: normalizedSql,
+        sql: executionSql,
         executedAt: new Date().toISOString(),
         errorMessage: message,
       });
@@ -342,7 +357,7 @@ export class HanaSqlWorkbench
     statementKind: HanaSqlStatementKind
   ): Promise<HanaQueryResult> {
     if (this.isTestMode) {
-      return buildTestModeQueryResult(context.appName, statementKind);
+      return buildTestModeQueryResult(context.appName, statementKind, sql);
     }
 
     await this.ensureConnection(context);
@@ -493,6 +508,37 @@ export class HanaSqlWorkbench
 
 function sanitizeSqlLogValue(value: string): string {
   return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
+}
+
+function sanitizeSqlCommandLogValue(value: string): string {
+  return sanitizeSqlLogValue(redactSqlStringLiteralsForLog(value));
+}
+
+function redactSqlStringLiteralsForLog(value: string): string {
+  let redacted = '';
+  let index = 0;
+  while (index < value.length) {
+    if (value[index] !== "'") {
+      redacted += value[index] ?? '';
+      index += 1;
+      continue;
+    }
+    redacted += "'[literal]'";
+    index = skipSqlStringLiteralForLog(value, index);
+  }
+  return redacted;
+}
+
+function skipSqlStringLiteralForLog(value: string, start: number): number {
+  for (let index = start + 1; index < value.length; index += 1) {
+    if (value[index] !== "'") continue;
+    if (value[index + 1] === "'") {
+      index += 1;
+      continue;
+    }
+    return index + 1;
+  }
+  return value.length;
 }
 
 async function delayTestModeTableLoadIfConfigured(): Promise<void> {

@@ -59,6 +59,18 @@ async function focusActiveSqlEditor(window: Page): Promise<void> {
   await clickWithFallback(editorSurface);
 }
 
+async function replaceActiveSqlEditorText(window: Page, sql: string): Promise<void> {
+  await focusActiveSqlEditor(window);
+  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await window.keyboard.insertText(sql);
+}
+
+async function runActiveSqlEditorCommand(window: Page): Promise<void> {
+  const chordKey = process.platform === 'darwin' ? 'Meta+E' : 'Control+E';
+  await window.keyboard.press(chordKey);
+  await window.keyboard.press(chordKey);
+}
+
 async function selectSqlApp(webviewFrame: Frame, appName: string): Promise<void> {
   await clickWithFallback(webviewFrame.getByRole('button', { name: appName }));
 }
@@ -75,6 +87,9 @@ test.describe('SAP Tools SQL workbench', () => {
       const webviewFrame = await openSapToolsSidebar(session.window);
       await openSqlTabForDefaultScope(webviewFrame);
 
+      await expect(
+        webviewFrame.getByText('Manual SELECT queries without a row limit run with LIMIT 100.')
+      ).toBeVisible();
       await expect(webviewFrame.locator('.sql-service-row')).toHaveCount(3);
       await expect(webviewFrame.locator('.sql-service-open-indicator')).toHaveCount(3);
       await expect(webviewFrame.locator('.sql-service-panel')).toHaveCount(0);
@@ -131,9 +146,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await clickWithFallback(sqlEditorTab);
       await focusActiveSqlEditor(session.window);
 
-      const chordKey = process.platform === 'darwin' ? 'Meta+E' : 'Control+E';
-      await session.window.keyboard.press(chordKey);
-      await session.window.keyboard.press(chordKey);
+      await runActiveSqlEditorCommand(session.window);
       const resultFrame = await resolveSqlResultFrame(session.window, 7000).catch(async () => {
         await runWorkbenchCommand(session.window, 'SAP Tools: Run HANA SQL');
         return resolveSqlResultFrame(session.window, 30000);
@@ -145,6 +158,12 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('columnheader', { name: '#' })).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /SELECT CURRENT_USER, CURRENT_SCHEMA FROM DUMMY LIMIT 100/i })
+          .first()
+      ).toBeVisible();
 
       const resultHtml = await resultFrame.content();
       expect(resultHtml).not.toContain('<h1>SAP Tools SQL Result</h1>');
@@ -185,6 +204,34 @@ test.describe('SAP Tools SQL workbench', () => {
       const toolbarChips = resultFrame.locator('.result-toolbar .result-chip');
       await expect(toolbarChips.filter({ hasText: 'App: finance-uat-api' })).toBeVisible();
       await expect(toolbarChips.filter({ hasText: /^Executed: /i })).toBeVisible();
+
+      await clickWithFallback(sqlEditorTab);
+      await replaceActiveSqlEditorText(session.window, 'SELECT ID FROM DUMMY LIMIT 7');
+
+      const resultTabsBeforeExplicitLimit = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      await runActiveSqlEditorCommand(session.window);
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeExplicitLimit + 1);
+
+      const explicitLimitResultFrame = await resolveSqlResultFrame(session.window, 20000);
+      const explicitLimitSqlCell = explicitLimitResultFrame
+        .getByRole('cell')
+        .filter({ hasText: /SELECT ID FROM DUMMY LIMIT 7/i })
+        .first();
+      await expect(explicitLimitSqlCell).toBeVisible();
+      const explicitLimitSqlText = await explicitLimitSqlCell.innerText();
+      expect(explicitLimitSqlText.match(/\bLIMIT\b/g) ?? []).toHaveLength(1);
+      expect(explicitLimitSqlText).not.toContain('LIMIT 100');
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -255,6 +302,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await searchInput.click();
       await searchInput.pressSequentially('PurchaseOrder');
       await expect(searchInput).toHaveValue('PurchaseOrder');
+      await expect(searchInput).toBeFocused();
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       await expect(tableRows(tablesPanel)).toHaveCount(1);
 
@@ -280,7 +328,6 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(readableTableLayout.text.startsWith('Demo_Purchase')).toBe(true);
       expect(readableTableLayout.text.endsWith('ItemMapping')).toBe(true);
       expect(readableTableLayout.scrollWidth).toBeLessThanOrEqual(readableTableLayout.width);
-      await expect(searchInput).toBeFocused();
 
       const productTableName = 'DEMO_BUSINESSAPP_TEST';
       await searchInput.fill('BusinessApp');
@@ -309,6 +356,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(longTableRow).toHaveAttribute('title', longTableName);
       await expect(longTableRow).toHaveAttribute('aria-label', `Table ${longTableName}`);
       const longTableNameElement = longTableRow.locator('[data-role="hana-table-name"]');
+      await expect(longTableNameElement).toHaveClass(/is-middle-truncated/);
       const narrowTableDisplayName = await longTableNameElement.innerText();
       expect(narrowTableDisplayName.startsWith('Finance_UAT_API')).toBe(true);
       expect(narrowTableDisplayName).toContain('…');
