@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.16 (pre-release)
+- Optimized SQL table-list resize performance by replacing per-row text rewrite/binary-search truncation with cached width measurement and cheap overflow-state toggling.
+- Reworked SQL table middle-ellipsis rendering into a fixed head/ellipsis/tail layout so the `…` marker stays visually aligned across rows when space is tight.
+- Updated SQL table row layout to use full-width table names and moved the `Select` action into a right-side hover overlay instead of reserving a permanent empty column.
+- Expanded SQL e2e assertions to cover narrow-width middle truncation, aligned ellipsis behavior, full-width table names with overlay `Select`, and no text-node mutation churn during resize.
+
 ## 0.7.15 (pre-release)
 - Reworked SQL table-name fitting so long names measure the available row width after render/resize and only middle-truncate when the full readable name cannot fit.
 - Kept the hover-only `Select` action in its own right-side grid column while allowing table names to use the remaining width.

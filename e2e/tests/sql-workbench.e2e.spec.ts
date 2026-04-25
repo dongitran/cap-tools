@@ -180,6 +180,46 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(searchInput).toBeEnabled();
       await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
       await expect(tablesPanel.getByRole('button', { name: /^Select first 10 rows of / })).toHaveCount(105);
+      await tablesPanel.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('Tables panel is missing.');
+        }
+        element.style.width = '360px';
+        element.style.maxWidth = '360px';
+        element.style.justifySelf = 'start';
+        window.dispatchEvent(new Event('resize'));
+      });
+      await expect(
+        tablesPanel.locator('[data-role="hana-table-name"].is-middle-truncated').first()
+      ).toBeVisible();
+
+      const defaultTableNameLayout = await tablesPanel.evaluate((element) => {
+        const ellipsisLefts: number[] = [];
+        const truncatedNames = Array.from(
+          element.querySelectorAll('[data-role="hana-table-name"].is-middle-truncated')
+        );
+        for (const nameElement of truncatedNames) {
+          const ellipsis = nameElement.querySelector('.sql-table-name-ellipsis');
+          if (ellipsis instanceof HTMLElement) {
+            ellipsisLefts.push(Math.round(ellipsis.getBoundingClientRect().left));
+          }
+          if (ellipsisLefts.length >= 3) {
+            break;
+          }
+        }
+        const ellipsisLeftRange =
+          ellipsisLefts.length > 0
+            ? Math.max(...ellipsisLefts) - Math.min(...ellipsisLefts)
+            : Number.NaN;
+        return {
+          ellipsisCount: ellipsisLefts.length,
+          ellipsisLeftRange,
+          truncatedCount: truncatedNames.length,
+        };
+      });
+      expect(defaultTableNameLayout.truncatedCount).toBeGreaterThanOrEqual(3);
+      expect(defaultTableNameLayout.ellipsisCount).toBeGreaterThanOrEqual(3);
+      expect(defaultTableNameLayout.ellipsisLeftRange).toBeLessThanOrEqual(1);
 
       const readableTableName = 'DEMO_PURCHASEORDERITEMMAPPING';
       await searchInput.click();
@@ -197,11 +237,16 @@ test.describe('SAP Tools SQL workbench', () => {
         'data-full-display-name',
         'Demo_PurchaseOrderItemMapping'
       );
-      const readableTableLayout = await readableTableNameElement.evaluate((element) => ({
-        scrollWidth: element.scrollWidth,
-        text: element.textContent,
-        width: element.clientWidth,
-      }));
+      const readableTableLayout = await readableTableNameElement.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('Table name is missing.');
+        }
+        return {
+          scrollWidth: element.scrollWidth,
+          text: element.innerText,
+          width: element.clientWidth,
+        };
+      });
       expect(readableTableLayout.text.startsWith('Demo_Purchase')).toBe(true);
       expect(readableTableLayout.text.endsWith('ItemMapping')).toBe(true);
       expect(readableTableLayout.scrollWidth).toBeLessThanOrEqual(readableTableLayout.width);
@@ -213,7 +258,10 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       const productTableRow = tablesPanel.locator(`[data-full-table-name="${productTableName}"]`);
       await expect(productTableRow).toBeVisible();
-      await expect(productTableRow.locator('[data-role="hana-table-name"]')).toHaveText(
+      await expect(productTableRow.locator('[data-role="hana-table-name"]')).not.toHaveClass(
+        /is-middle-truncated/
+      );
+      await expect(productTableRow.locator('.sql-table-name-full')).toHaveText(
         'Demo_BusinessApp_Test'
       );
 
@@ -237,8 +285,24 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(narrowTableDisplayName.endsWith('BlockReason')).toBe(true);
       const longTableNameLayout = await longTableNameElement.evaluate((element) => {
         const styles = window.getComputedStyle(element);
+        const row = element.closest('[data-role="hana-table-row"]');
+        const selectButton = row?.querySelector('[data-action="run-hana-table-select"]');
+        if (!(row instanceof HTMLElement) || !(selectButton instanceof HTMLElement)) {
+          throw new Error('Table row or select button is missing.');
+        }
+        const rowBox = row.getBoundingClientRect();
+        const rowStyles = window.getComputedStyle(row);
+        const nameBox = element.getBoundingClientRect();
+        const selectBox = selectButton.getBoundingClientRect();
+        const rowContentRight =
+          rowBox.right -
+          Number.parseFloat(rowStyles.borderRightWidth) -
+          Number.parseFloat(rowStyles.paddingRight);
         return {
           clientWidth: element.clientWidth,
+          nameRightGap: rowContentRight - nameBox.right,
+          selectOverlapsName: selectBox.left < nameBox.right,
+          selectWidth: selectBox.width,
           scrollWidth: element.scrollWidth,
           textOverflow: styles.textOverflow,
         };
@@ -247,6 +311,9 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(longTableNameLayout.scrollWidth).toBeLessThanOrEqual(
         longTableNameLayout.clientWidth
       );
+      expect(longTableNameLayout.nameRightGap).toBeLessThanOrEqual(2);
+      expect(longTableNameLayout.selectOverlapsName).toBe(true);
+      expect(longTableNameLayout.selectWidth).toBeGreaterThan(0);
 
       await tablesPanel.evaluate((element) => {
         if (!(element instanceof HTMLElement)) {
@@ -256,8 +323,14 @@ test.describe('SAP Tools SQL workbench', () => {
         element.style.maxWidth = '1120px';
         window.dispatchEvent(new Event('resize'));
       });
-      await expect(longTableNameElement).toHaveText(longTableFullDisplayName);
+      await expect(longTableNameElement).not.toHaveClass(/is-middle-truncated/);
+      await expect(longTableNameElement.locator('.sql-table-name-full')).toHaveText(
+        longTableFullDisplayName
+      );
       const wideTableNameLayout = await longTableNameElement.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('Table name is missing.');
+        }
         const row = element.closest('[data-role="hana-table-row"]');
         const selectButton = row?.querySelector('[data-action="run-hana-table-select"]');
         if (!(row instanceof HTMLElement) || !(selectButton instanceof HTMLElement)) {
@@ -267,9 +340,13 @@ test.describe('SAP Tools SQL workbench', () => {
         const selectBox = selectButton.getBoundingClientRect();
         return {
           clientWidth: element.clientWidth,
-          gapBeforeSelectButton: selectBox.left - nameBox.right,
-          hasMiddleEllipsis: element.textContent.includes('…'),
+          hasMiddleEllipsis: element.innerText.includes('…'),
+          nameRightGap: row.getBoundingClientRect().right -
+            Number.parseFloat(window.getComputedStyle(row).borderRightWidth) -
+            Number.parseFloat(window.getComputedStyle(row).paddingRight) -
+            nameBox.right,
           scrollWidth: element.scrollWidth,
+          selectOverlapsName: selectBox.left < nameBox.right,
           selectButtonWidth: selectBox.width,
         };
       });
@@ -278,11 +355,60 @@ test.describe('SAP Tools SQL workbench', () => {
         wideTableNameLayout.clientWidth
       );
       expect(wideTableNameLayout.selectButtonWidth).toBeGreaterThan(0);
-      expect(wideTableNameLayout.gapBeforeSelectButton).toBeGreaterThanOrEqual(0);
+      expect(wideTableNameLayout.nameRightGap).toBeLessThanOrEqual(2);
+      expect(wideTableNameLayout.selectOverlapsName).toBe(true);
+
+      const resizeMutationSnapshot = await longTableNameElement.evaluate(async (element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('Table name is missing.');
+        }
+        const tablesPanelElement = element.closest('[data-role="hana-tables-panel"]');
+        if (!(tablesPanelElement instanceof HTMLElement)) {
+          throw new Error('Tables panel is missing.');
+        }
+        let characterMutationCount = 0;
+        const observer = new MutationObserver((records) => {
+          for (const record of records) {
+            if (record.type === 'childList' || record.type === 'characterData') {
+              characterMutationCount += 1;
+            }
+          }
+        });
+        const waitForTwoFrames = async (): Promise<void> => {
+          await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => {
+              window.requestAnimationFrame(() => {
+                resolve();
+              });
+            });
+          });
+        };
+        observer.observe(element, {
+          characterData: true,
+          childList: true,
+          subtree: true,
+        });
+        tablesPanelElement.style.width = '720px';
+        tablesPanelElement.style.maxWidth = '720px';
+        window.dispatchEvent(new Event('resize'));
+        await waitForTwoFrames();
+        tablesPanelElement.style.width = '1120px';
+        tablesPanelElement.style.maxWidth = '1120px';
+        window.dispatchEvent(new Event('resize'));
+        await waitForTwoFrames();
+        observer.disconnect();
+        return {
+          characterMutationCount,
+          text: element.innerText,
+        };
+      });
+      expect(resizeMutationSnapshot.characterMutationCount).toBe(0);
+      expect(resizeMutationSnapshot.text).toContain('Finance_UAT_API');
       await tablesPanel.evaluate((element) => {
         if (element instanceof HTMLElement) {
           element.style.width = '';
           element.style.maxWidth = '';
+          element.style.justifySelf = '';
         }
         window.dispatchEvent(new Event('resize'));
       });

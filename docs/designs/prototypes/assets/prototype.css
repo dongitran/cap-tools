@@ -1869,6 +1869,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   gap: 3px;
   padding: 4px;
   overflow: auto;
+  min-width: 0;
   min-height: 0;
   align-content: start;
 }
@@ -1879,10 +1880,10 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 }
 
 .sql-table-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   min-height: 24px;
   padding: 0 7px;
   border-radius: 6px;
@@ -1904,7 +1905,61 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   color: var(--text-color);
 }
 
+.sql-table-name-full {
+  display: inline-block;
+  width: max-content;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sql-table-name-middle {
+  display: none;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.sql-table-name.is-middle-truncated .sql-table-name-full {
+  display: none;
+}
+
+.sql-table-name.is-middle-truncated .sql-table-name-middle {
+  display: grid;
+}
+
+.sql-table-name-head,
+.sql-table-name-tail {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sql-table-name-head {
+  text-align: left;
+}
+
+.sql-table-name-ellipsis {
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.sql-table-name-tail {
+  direction: rtl;
+  text-align: left;
+}
+
+.sql-table-name-tail-text {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 .sql-table-select-btn {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 6px;
   opacity: 0;
   font-size: 0.58rem;
   line-height: 1;
@@ -1916,7 +1971,8 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   color: var(--text-color);
   cursor: pointer;
   pointer-events: none;
-  transform: translateX(4px);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--shadow-color) 24%, transparent);
+  transform: translate(4px, -50%);
   transition:
     opacity 140ms ease,
     border-color 140ms ease,
@@ -1928,13 +1984,13 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 .sql-table-row:focus-within .sql-table-select-btn {
   opacity: 1;
   pointer-events: auto;
-  transform: translateX(0);
+  transform: translate(0, -50%);
 }
 
 .sql-table-select-btn:hover {
   border-color: var(--accent-color);
   background: color-mix(in oklab, var(--accent-color) 30%, var(--frame-bg));
-  transform: translateY(-1px) translateX(0);
+  transform: translate(0, calc(-50% - 1px));
 }
 
 .sql-tables-empty {

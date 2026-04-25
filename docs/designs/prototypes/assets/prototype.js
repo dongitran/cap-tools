@@ -203,10 +203,11 @@ let hanaTablesLoadingByServiceId = new Map();
 let hanaTablesErrorByServiceId = new Map();
 let sqlTableSearchKeyword = '';
 const hanaTableDisplayNameCache = new Map();
-const SQL_TABLE_NAME_FALLBACK_MAX_LENGTH = 30;
-const SQL_TABLE_NAME_MIN_SMART_LENGTH = 4;
+const SQL_TABLE_NAME_WIDTH_TOLERANCE = 1;
 let sqlTableNameTruncationFrame = 0;
 let sqlTableNameResizeObserver = null;
+let sqlTableNamePanelWidth = -1;
+let sqlTableNameMeasureContext = null;
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -3867,7 +3868,7 @@ function renderHanaTableRows(serviceId, tables) {
     .map((tableEntry) => {
       const tableName = tableEntry.name;
       const displayName = tableEntry.displayName;
-      const smartTableName = formatSmartTableName(displayName);
+      const displayNameParts = splitSqlTableDisplayName(displayName);
       return `
         <div
           class="sql-table-row"
@@ -3882,7 +3883,16 @@ function renderHanaTableRows(serviceId, tables) {
             data-role="hana-table-name"
             data-full-display-name="${escapeHtml(displayName)}"
             title="${escapeHtml(tableName)}"
-          >${escapeHtml(smartTableName)}</span>
+          >
+            <span class="sql-table-name-full">${escapeHtml(displayName)}</span>
+            <span class="sql-table-name-middle" aria-hidden="true">
+              <span class="sql-table-name-head">${escapeHtml(displayNameParts.head)}</span>
+              <span class="sql-table-name-ellipsis">…</span>
+              <span class="sql-table-name-tail">
+                <span class="sql-table-name-tail-text">${escapeHtml(displayNameParts.tail)}</span>
+              </span>
+            </span>
+          </span>
           <button
             type="button"
             class="sql-table-select-btn"
@@ -3897,6 +3907,14 @@ function renderHanaTableRows(serviceId, tables) {
     .join('');
 }
 
+function splitSqlTableDisplayName(displayName) {
+  const middleIndex = Math.ceil(displayName.length / 2);
+  return {
+    head: displayName.slice(0, middleIndex),
+    tail: displayName.slice(middleIndex),
+  };
+}
+
 function queueSqlTableNameTruncation() {
   if (sqlTableNameTruncationFrame !== 0) {
     return;
@@ -3909,86 +3927,72 @@ function queueSqlTableNameTruncation() {
 }
 
 function refreshSqlTableNameTruncation() {
+  const tablesPanel = appElement.querySelector('[data-role="hana-tables-panel"]');
   const tableNameElements = appElement.querySelectorAll(
     '[data-role="hana-table-name"][data-full-display-name]'
   );
+  const nextPanelWidth =
+    tablesPanel instanceof HTMLElement
+      ? Math.round(tablesPanel.getBoundingClientRect().width)
+      : -1;
+  const hasUnmeasuredName = Array.from(tableNameElements).some((element) => {
+    return element instanceof HTMLElement && element.dataset.fullDisplayWidth === undefined;
+  });
+  if (nextPanelWidth === sqlTableNamePanelWidth && !hasUnmeasuredName) {
+    return;
+  }
+  sqlTableNamePanelWidth = nextPanelWidth;
+
   for (const element of tableNameElements) {
     if (element instanceof HTMLElement) {
-      fitSqlTableNameElement(element);
+      refreshSqlTableNameOverflowState(element);
     }
   }
 }
 
-function fitSqlTableNameElement(element) {
+function refreshSqlTableNameOverflowState(element) {
   const fullDisplayName = element.dataset.fullDisplayName ?? '';
   if (fullDisplayName.length === 0) {
     return;
   }
-
-  element.textContent = fullDisplayName;
-  element.classList.remove('is-middle-truncated');
-  if (element.clientWidth <= 0 || doesSqlTableNameFit(element)) {
-    return;
-  }
-
-  const fittedName = resolveFittedSmartTableName(element, fullDisplayName);
-  element.textContent = fittedName;
-  if (fittedName !== fullDisplayName) {
-    element.classList.add('is-middle-truncated');
-  }
+  const fullDisplayWidth = resolveSqlTableNameFullWidth(element, fullDisplayName);
+  const isOverflowing =
+    fullDisplayWidth > element.clientWidth + SQL_TABLE_NAME_WIDTH_TOLERANCE;
+  element.classList.toggle('is-middle-truncated', isOverflowing);
 }
 
-function resolveFittedSmartTableName(element, fullDisplayName) {
-  let low = SQL_TABLE_NAME_MIN_SMART_LENGTH;
-  let high = fullDisplayName.length - 1;
-  let fittedName = '…';
-
-  while (low <= high) {
-    const nextLength = Math.floor((low + high) / 2);
-    const candidate = formatSmartTableName(fullDisplayName, nextLength);
-    element.textContent = candidate;
-    if (doesSqlTableNameFit(element)) {
-      fittedName = candidate;
-      low = nextLength + 1;
-      continue;
-    }
-    high = nextLength - 1;
+function resolveSqlTableNameFullWidth(element, fullDisplayName) {
+  const cachedWidth = Number.parseFloat(element.dataset.fullDisplayWidth ?? '');
+  if (Number.isFinite(cachedWidth) && cachedWidth > 0) {
+    return cachedWidth;
   }
 
-  return fittedName;
+  const measureContext = resolveSqlTableNameMeasureContext();
+  const fullDisplayWidth =
+    measureContext === null
+      ? element.scrollWidth
+      : measureSqlTableDisplayNameWidth(element, fullDisplayName, measureContext);
+  element.dataset.fullDisplayWidth = String(Math.ceil(fullDisplayWidth));
+  return fullDisplayWidth;
 }
 
-function doesSqlTableNameFit(element) {
-  return element.scrollWidth <= element.clientWidth + 1;
+function resolveSqlTableNameMeasureContext() {
+  if (sqlTableNameMeasureContext !== null) {
+    return sqlTableNameMeasureContext;
+  }
+
+  const canvas = document.createElement('canvas');
+  sqlTableNameMeasureContext = canvas.getContext('2d');
+  return sqlTableNameMeasureContext;
 }
 
-function formatSmartTableName(tableName, maxLength = SQL_TABLE_NAME_FALLBACK_MAX_LENGTH) {
-  const normalizedMaxLength = Math.max(1, Math.floor(maxLength));
-  if (normalizedMaxLength === 1) {
-    return '…';
-  }
-  if (tableName.length <= normalizedMaxLength) {
-    return tableName;
-  }
-  const tailBudget = Math.max(1, Math.floor((normalizedMaxLength - 1) / 2));
-  const tail = resolveSmartTableNameTail(tableName, tailBudget).slice(-tailBudget);
-  const headLength = Math.max(1, normalizedMaxLength - tail.length - 1);
-  return `${tableName.slice(0, headLength)}…${tail}`;
-}
-
-function resolveSmartTableNameTail(tableName, maxLength) {
-  const fallbackTail = tableName.slice(-maxLength);
-  const lastSegment = tableName.split('_').filter(Boolean).at(-1) ?? '';
-  const words = lastSegment.match(/[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+/g) ?? [];
-  let tail = '';
-  for (let index = words.length - 1; index >= 0; index -= 1) {
-    const nextTail = `${words[index]}${tail}`;
-    if (nextTail.length > maxLength) {
-      break;
-    }
-    tail = nextTail;
-  }
-  return tail.length > 0 ? tail : fallbackTail;
+function measureSqlTableDisplayNameWidth(element, fullDisplayName, measureContext) {
+  const styles = window.getComputedStyle(element);
+  measureContext.font =
+    styles.font.length > 0
+      ? styles.font
+      : `${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+  return measureContext.measureText(fullDisplayName).width;
 }
 
 const HANA_TABLE_ACRONYMS = new Set([
