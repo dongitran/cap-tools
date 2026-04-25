@@ -1583,11 +1583,7 @@ export class RegionSidebarProvider
         appName: targetApp.name,
         session: sessionSeed,
       });
-      this.postHanaSqlFileOpenResult(
-        targetApp.id,
-        true,
-        `SQL file opened for app ${targetApp.name}.`
-      );
+      this.postHanaSqlFileOpenResult(targetApp.id, true, '');
       void this.publishHanaTablesForApp(targetApp.id, targetApp.name, sessionSeed);
     } catch (error) {
       const errorMessage =

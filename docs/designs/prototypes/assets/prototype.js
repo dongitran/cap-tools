@@ -370,7 +370,7 @@ window.addEventListener('message', (event) => {
       selectedHanaServiceId = serviceId;
     }
     hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
-    hanaQueryStatusMessage = message;
+    hanaQueryStatusMessage = msg.success === true ? '' : message;
     refreshUiAfterSqlStateChange();
     return;
   }
@@ -1324,7 +1324,7 @@ function triggerOpenHanaSqlFile() {
 
   if (vscodeApi === null) {
     hanaQueryStatusTone = 'success';
-    hanaQueryStatusMessage = `SQL file opened for app ${selectedService.name}.`;
+    hanaQueryStatusMessage = '';
     return true;
   }
 

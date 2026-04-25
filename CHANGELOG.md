@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.10 (pre-release)
+- Hid SQL table `Select` buttons by default so table names stay visually quiet; the action now appears on row hover or keyboard focus.
+- Removed the post-open `SQL file opened for app...` status line from the SQL workbench while keeping error and quick SELECT statuses visible.
+- Updated SQL e2e coverage to verify the hover-only table action and the hidden open-success status.
+
 ## 0.7.9 (pre-release)
 - Improved the SQL Tables panel UX with middle-truncated HANA/CDS table names, preserving both the app/schema prefix and the business suffix while keeping full names available through metadata and accessible labels.
 - Fixed the Tables search input losing focus after the first typed character by updating only the table count/list during filtering instead of re-rendering the full SQL workspace.

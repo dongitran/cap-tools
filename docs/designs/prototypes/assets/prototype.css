@@ -1902,6 +1902,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 }
 
 .sql-table-select-btn {
+  opacity: 0;
   font-size: 0.58rem;
   line-height: 1;
   min-height: 18px;
@@ -1911,16 +1912,26 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   background: color-mix(in oklab, var(--accent-soft) 50%, var(--frame-bg));
   color: var(--text-color);
   cursor: pointer;
+  pointer-events: none;
+  transform: translateX(4px);
   transition:
+    opacity 140ms ease,
     border-color 140ms ease,
     background 140ms ease,
     transform 140ms ease;
 }
 
+.sql-table-row:hover .sql-table-select-btn,
+.sql-table-row:focus-within .sql-table-select-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
 .sql-table-select-btn:hover {
   border-color: var(--accent-color);
   background: color-mix(in oklab, var(--accent-color) 30%, var(--frame-bg));
-  transform: translateY(-1px);
+  transform: translateY(-1px) translateX(0);
 }
 
 .sql-tables-empty {

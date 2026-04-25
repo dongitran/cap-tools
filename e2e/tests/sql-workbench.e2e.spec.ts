@@ -119,11 +119,10 @@ test.describe('SAP Tools SQL workbench', () => {
       await openSqlTabForDefaultScope(webviewFrame);
 
       await selectSqlApp(webviewFrame, 'finance-uat-api');
-      await expect(
-        webviewFrame.locator('[data-role="hana-query-status"]')
-      ).toContainText('SQL file opened for app finance-uat-api.', {
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden({
         timeout: 10000,
       });
+      await expect(webviewFrame.locator('body')).not.toContainText('SQL file opened for app');
 
       const sqlEditorTab = session.window.getByRole('tab', {
         name: /finance-uat-api\.sql/i,
@@ -206,6 +205,11 @@ test.describe('SAP Tools SQL workbench', () => {
         '[data-role="hana-table-row"][data-table-name="FINANCE_UAT_API_ORDERS"]'
       );
       await expect(targetTableRow).toBeVisible();
+      const targetSelectButton = targetTableRow.getByRole('button', {
+        name: 'Select first 10 rows of FINANCE_UAT_API_ORDERS',
+      });
+      await expect(targetSelectButton).toHaveCSS('opacity', '0');
+      await expect(targetSelectButton).toHaveCSS('pointer-events', 'none');
 
       const sqlEditorTab = session.window.getByRole('tab', {
         name: /finance-uat-api\.sql/i,
@@ -217,11 +221,10 @@ test.describe('SAP Tools SQL workbench', () => {
       });
       const initialResultCount = await initialResultTabs.count();
 
-      await clickWithFallback(
-        targetTableRow.getByRole('button', {
-          name: 'Select first 10 rows of FINANCE_UAT_API_ORDERS',
-        })
-      );
+      await targetTableRow.hover();
+      await expect(targetSelectButton).toHaveCSS('opacity', '1');
+      await expect(targetSelectButton).toHaveCSS('pointer-events', 'auto');
+      await clickWithFallback(targetSelectButton);
 
       await expect
         .poll(
