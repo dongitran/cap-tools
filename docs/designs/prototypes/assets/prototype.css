@@ -1892,6 +1892,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 .sql-table-name {
   display: block;
+  width: 100%;
   min-width: 0;
   font-family: var(--body-font);
   font-size: 0.7rem;

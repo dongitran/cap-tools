@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.15 (pre-release)
+- Reworked SQL table-name fitting so long names measure the available row width after render/resize and only middle-truncate when the full readable name cannot fit.
+- Kept the hover-only `Select` action in its own right-side grid column while allowing table names to use the remaining width.
+- Added e2e coverage for narrow middle truncation, wide full-name rendering, preserved full display metadata, and non-overflowing table text.
+- Synced the prototype cache key and standalone table formatter word list so prototype verification matches extension behavior.
+
 ## 0.7.14 (pre-release)
 - Improved SQL table readable-name formatting so non-acronym uppercase English segments such as `DEMO_BUSINESSAPP_TEST` render as `Demo_BusinessApp_Test` while configured SAP acronyms remain uppercase.
 - Hardened the table-name formatter against low-confidence `wordsninja` splits by rejecting single-letter segmentation and preserving mixed alphanumeric identifiers.

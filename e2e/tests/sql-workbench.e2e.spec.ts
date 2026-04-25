@@ -192,9 +192,19 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(readableTableRow).toBeVisible();
       await expect(readableTableRow).toHaveAttribute('title', readableTableName);
       await expect(readableTableRow).toHaveAttribute('data-table-name', readableTableName);
-      await expect(readableTableRow.locator('.sql-table-name')).toHaveText(
+      const readableTableNameElement = readableTableRow.locator('[data-role="hana-table-name"]');
+      await expect(readableTableNameElement).toHaveAttribute(
+        'data-full-display-name',
         'Demo_PurchaseOrderItemMapping'
       );
+      const readableTableLayout = await readableTableNameElement.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        text: element.textContent,
+        width: element.clientWidth,
+      }));
+      expect(readableTableLayout.text.startsWith('Demo_Purchase')).toBe(true);
+      expect(readableTableLayout.text.endsWith('ItemMapping')).toBe(true);
+      expect(readableTableLayout.scrollWidth).toBeLessThanOrEqual(readableTableLayout.width);
       await expect(searchInput).toBeFocused();
 
       const productTableName = 'DEMO_BUSINESSAPP_TEST';
@@ -203,10 +213,14 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       const productTableRow = tablesPanel.locator(`[data-full-table-name="${productTableName}"]`);
       await expect(productTableRow).toBeVisible();
-      await expect(productTableRow.locator('.sql-table-name')).toHaveText('Demo_BusinessApp_Test');
+      await expect(productTableRow.locator('[data-role="hana-table-name"]')).toHaveText(
+        'Demo_BusinessApp_Test'
+      );
 
       const longTableName =
         'FINANCE_UAT_API_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON';
+      const longTableFullDisplayName =
+        'Finance_UAT_API_I_BusinessPartnerBank_0001_To_SupplierInvoicePaymentBlockReason';
       await searchInput.fill('BusinessPartnerBank');
       await expect(searchInput).toHaveValue('BusinessPartnerBank');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
@@ -216,11 +230,12 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(longTableRow).toBeVisible();
       await expect(longTableRow).toHaveAttribute('title', longTableName);
       await expect(longTableRow).toHaveAttribute('aria-label', `Table ${longTableName}`);
-      const longTableDisplayName = await longTableRow.locator('.sql-table-name').innerText();
-      expect(longTableDisplayName.startsWith('Finance_UAT_API')).toBe(true);
-      expect(longTableDisplayName).toContain('…');
-      expect(longTableDisplayName.endsWith('BlockReason')).toBe(true);
-      const longTableNameLayout = await longTableRow.locator('.sql-table-name').evaluate((element) => {
+      const longTableNameElement = longTableRow.locator('[data-role="hana-table-name"]');
+      const narrowTableDisplayName = await longTableNameElement.innerText();
+      expect(narrowTableDisplayName.startsWith('Finance_UAT_API')).toBe(true);
+      expect(narrowTableDisplayName).toContain('…');
+      expect(narrowTableDisplayName.endsWith('BlockReason')).toBe(true);
+      const longTableNameLayout = await longTableNameElement.evaluate((element) => {
         const styles = window.getComputedStyle(element);
         return {
           clientWidth: element.clientWidth,
@@ -232,6 +247,45 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(longTableNameLayout.scrollWidth).toBeLessThanOrEqual(
         longTableNameLayout.clientWidth
       );
+
+      await tablesPanel.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('Tables panel is missing.');
+        }
+        element.style.width = '1120px';
+        element.style.maxWidth = '1120px';
+        window.dispatchEvent(new Event('resize'));
+      });
+      await expect(longTableNameElement).toHaveText(longTableFullDisplayName);
+      const wideTableNameLayout = await longTableNameElement.evaluate((element) => {
+        const row = element.closest('[data-role="hana-table-row"]');
+        const selectButton = row?.querySelector('[data-action="run-hana-table-select"]');
+        if (!(row instanceof HTMLElement) || !(selectButton instanceof HTMLElement)) {
+          throw new Error('Table row or select button is missing.');
+        }
+        const nameBox = element.getBoundingClientRect();
+        const selectBox = selectButton.getBoundingClientRect();
+        return {
+          clientWidth: element.clientWidth,
+          gapBeforeSelectButton: selectBox.left - nameBox.right,
+          hasMiddleEllipsis: element.textContent.includes('…'),
+          scrollWidth: element.scrollWidth,
+          selectButtonWidth: selectBox.width,
+        };
+      });
+      expect(wideTableNameLayout.hasMiddleEllipsis).toBe(false);
+      expect(wideTableNameLayout.scrollWidth).toBeLessThanOrEqual(
+        wideTableNameLayout.clientWidth
+      );
+      expect(wideTableNameLayout.selectButtonWidth).toBeGreaterThan(0);
+      expect(wideTableNameLayout.gapBeforeSelectButton).toBeGreaterThanOrEqual(0);
+      await tablesPanel.evaluate((element) => {
+        if (element instanceof HTMLElement) {
+          element.style.width = '';
+          element.style.maxWidth = '';
+        }
+        window.dispatchEvent(new Event('resize'));
+      });
 
       await searchInput.fill('ORDERS');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
@@ -317,7 +371,7 @@ test.describe('SAP Tools SQL workbench', () => {
         const firstTableRow = readElement('[data-role="hana-table-row"]');
         const firstServiceName = readElement('.sql-service-name');
         const selectedDatabaseHeading = readElement('.sql-tables-head h3');
-        const firstTableName = readElement('.sql-table-name');
+        const firstTableName = readElement('[data-role="hana-table-name"]');
         const tableSearch = readElement('[data-role="sql-table-search"]');
         const searchIcon = readElement('.sql-table-search-row .search-input-icon');
         const searchStyles = window.getComputedStyle(tableSearch);
@@ -343,10 +397,10 @@ test.describe('SAP Tools SQL workbench', () => {
           tableNameFontWeight: tableNameStyles.fontWeight,
           tableNameLineHeight: tableNameStyles.lineHeight,
           tableNamePaddingBottom: window.getComputedStyle(
-            firstTableRow.querySelector('.sql-table-name') ?? firstTableRow
+            firstTableRow.querySelector('[data-role="hana-table-name"]') ?? firstTableRow
           ).paddingBottom,
           tableNamePaddingTop: window.getComputedStyle(
-            firstTableRow.querySelector('.sql-table-name') ?? firstTableRow
+            firstTableRow.querySelector('[data-role="hana-table-name"]') ?? firstTableRow
           ).paddingTop,
           serviceListCanScroll: serviceList.scrollHeight > serviceList.clientHeight,
           tableSearchHeight: tableSearch.getBoundingClientRect().height,

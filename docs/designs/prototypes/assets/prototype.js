@@ -203,6 +203,10 @@ let hanaTablesLoadingByServiceId = new Map();
 let hanaTablesErrorByServiceId = new Map();
 let sqlTableSearchKeyword = '';
 const hanaTableDisplayNameCache = new Map();
+const SQL_TABLE_NAME_FALLBACK_MAX_LENGTH = 30;
+const SQL_TABLE_NAME_MIN_SMART_LENGTH = 4;
+let sqlTableNameTruncationFrame = 0;
+let sqlTableNameResizeObserver = null;
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -580,6 +584,17 @@ const SELECTION_STAGE_SLOT_IDS = ['area', 'region', 'org', 'space', 'confirm'];
 applyDesignTokens(activeDesign);
 renderPrototype();
 requestInitialState();
+
+window.addEventListener('resize', () => {
+  queueSqlTableNameTruncation();
+});
+
+if (typeof window.ResizeObserver === 'function') {
+  sqlTableNameResizeObserver = new window.ResizeObserver(() => {
+    queueSqlTableNameTruncation();
+  });
+  sqlTableNameResizeObserver.observe(appElement);
+}
 
 appElement.addEventListener('click', (event) => {
   const target = event.target;
@@ -2050,6 +2065,7 @@ function renderPrototype() {
       ${shellMarkup}
     </section>
   `;
+  queueSqlTableNameTruncation();
 
   if (mode === 'selection') {
     updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
@@ -3613,6 +3629,7 @@ function refreshWorkspaceSqlView() {
     return;
   }
   tabContainer.innerHTML = renderSqlWorkbenchTab();
+  queueSqlTableNameTruncation();
 }
 
 function refreshSqlTableResults() {
@@ -3631,6 +3648,7 @@ function refreshSqlTableResults() {
     tablesList.className = `sql-tables-list${state.listStateClass}`;
     tablesList.innerHTML = state.bodyMarkup;
   }
+  queueSqlTableNameTruncation();
 }
 
 function renderPlaceholderTab(tabId) {
@@ -3848,7 +3866,8 @@ function renderHanaTableRows(serviceId, tables) {
   return tables
     .map((tableEntry) => {
       const tableName = tableEntry.name;
-      const smartTableName = formatSmartTableName(tableEntry.displayName);
+      const displayName = tableEntry.displayName;
+      const smartTableName = formatSmartTableName(displayName);
       return `
         <div
           class="sql-table-row"
@@ -3858,7 +3877,12 @@ function renderHanaTableRows(serviceId, tables) {
           title="${escapeHtml(tableName)}"
           aria-label="Table ${escapeHtml(tableName)}"
         >
-          <span class="sql-table-name" title="${escapeHtml(tableName)}">${escapeHtml(smartTableName)}</span>
+          <span
+            class="sql-table-name"
+            data-role="hana-table-name"
+            data-full-display-name="${escapeHtml(displayName)}"
+            title="${escapeHtml(tableName)}"
+          >${escapeHtml(smartTableName)}</span>
           <button
             type="button"
             class="sql-table-select-btn"
@@ -3873,14 +3897,82 @@ function renderHanaTableRows(serviceId, tables) {
     .join('');
 }
 
-function formatSmartTableName(tableName) {
-  const maxLength = 30;
-  if (tableName.length <= maxLength) {
+function queueSqlTableNameTruncation() {
+  if (sqlTableNameTruncationFrame !== 0) {
+    return;
+  }
+
+  sqlTableNameTruncationFrame = window.requestAnimationFrame(() => {
+    sqlTableNameTruncationFrame = 0;
+    refreshSqlTableNameTruncation();
+  });
+}
+
+function refreshSqlTableNameTruncation() {
+  const tableNameElements = appElement.querySelectorAll(
+    '[data-role="hana-table-name"][data-full-display-name]'
+  );
+  for (const element of tableNameElements) {
+    if (element instanceof HTMLElement) {
+      fitSqlTableNameElement(element);
+    }
+  }
+}
+
+function fitSqlTableNameElement(element) {
+  const fullDisplayName = element.dataset.fullDisplayName ?? '';
+  if (fullDisplayName.length === 0) {
+    return;
+  }
+
+  element.textContent = fullDisplayName;
+  element.classList.remove('is-middle-truncated');
+  if (element.clientWidth <= 0 || doesSqlTableNameFit(element)) {
+    return;
+  }
+
+  const fittedName = resolveFittedSmartTableName(element, fullDisplayName);
+  element.textContent = fittedName;
+  if (fittedName !== fullDisplayName) {
+    element.classList.add('is-middle-truncated');
+  }
+}
+
+function resolveFittedSmartTableName(element, fullDisplayName) {
+  let low = SQL_TABLE_NAME_MIN_SMART_LENGTH;
+  let high = fullDisplayName.length - 1;
+  let fittedName = '…';
+
+  while (low <= high) {
+    const nextLength = Math.floor((low + high) / 2);
+    const candidate = formatSmartTableName(fullDisplayName, nextLength);
+    element.textContent = candidate;
+    if (doesSqlTableNameFit(element)) {
+      fittedName = candidate;
+      low = nextLength + 1;
+      continue;
+    }
+    high = nextLength - 1;
+  }
+
+  return fittedName;
+}
+
+function doesSqlTableNameFit(element) {
+  return element.scrollWidth <= element.clientWidth + 1;
+}
+
+function formatSmartTableName(tableName, maxLength = SQL_TABLE_NAME_FALLBACK_MAX_LENGTH) {
+  const normalizedMaxLength = Math.max(1, Math.floor(maxLength));
+  if (normalizedMaxLength === 1) {
+    return '…';
+  }
+  if (tableName.length <= normalizedMaxLength) {
     return tableName;
   }
-  const preferredHeadLength = 15;
-  const tail = resolveSmartTableNameTail(tableName, maxLength - preferredHeadLength - 1);
-  const headLength = Math.max(1, Math.min(preferredHeadLength, maxLength - tail.length - 1));
+  const tailBudget = Math.max(1, Math.floor((normalizedMaxLength - 1) / 2));
+  const tail = resolveSmartTableNameTail(tableName, tailBudget).slice(-tailBudget);
+  const headLength = Math.max(1, normalizedMaxLength - tail.length - 1);
   return `${tableName.slice(0, headLength)}…${tail}`;
 }
 
@@ -3952,6 +4044,7 @@ const HANA_TABLE_WORDS = [
   'block',
   'draft',
   'table',
+  'tables',
   'orders',
   'items',
   'audit',
