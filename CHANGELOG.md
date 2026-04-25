@@ -1,9 +1,17 @@
 # Changelog
 
+## 0.7.5 (pre-release)
+- Replaced the `hdbsql` CLI executor with the SAP-maintained `hdb` Node.js driver so HANA SQL no longer requires installing the SAP HANA Client locally.
+- Vendored the `hdb` and `iconv-lite` packages into `dist/vendor/hdb` so the `--no-dependencies` packaged extension keeps a self-contained driver.
+- Connections now default to TLS (`encrypt`, `sslValidateCertificate`) which matches BTP HANA Cloud requirements out of the box.
+- Removed the `sapTools.hanaSqlClientPath` setting, the install-guidance card, the `Download SAP HANA Client` notification, and the `hdbsqlDiscovery` module along with their tests.
+- Extended the SQL service tests to cover the new client lifecycle: column-metadata mapping, row-key fallback, affected-row status messaging, auth/connection/SQL/timeout error classification, and statement cleanup on failure.
+- Added an e2e regression that asserts the SQL result webview no longer surfaces any legacy `hdbsql` / `hdbclient` / `hanaSqlClientPath` strings.
+
 ## 0.7.4 (pre-release)
-- Detect the SAP HANA Client automatically when `hdbsql` is not on `PATH` by probing the default install locations (`/Applications/sap/hdbclient`, `/usr/sap/hdbclient`, `C:\Program Files\sap\hdbclient`, and the user's home `sap/hdbclient`).
-- Added the `sapTools.hanaSqlClientPath` VS Code setting so users can pin an explicit absolute path to `hdbsql` when the client lives outside of the standard locations.
-- Rendered a dedicated install-guidance card in the SQL result webview when the HANA Client is missing, including the searched paths, the download link, and the setting to configure a custom path.
+- Detected the SAP HANA Client automatically when `hdbsql` was missing from `PATH` by probing the default install locations on macOS, Linux, and Windows.
+- Added the `sapTools.hanaSqlClientPath` VS Code setting so users could pin an explicit absolute path to `hdbsql` when the client lived outside of the standard locations.
+- Rendered a dedicated install-guidance card in the SQL result webview when the HANA Client was missing, including the searched paths, the download link, and the setting to configure a custom path.
 - Surfaced actionable buttons (`Download SAP HANA Client`, `Configure hdbsql Path`) on the error notification shown after an hdbsql-missing failure.
 - Extracted the SQL workbench pure helpers into a dedicated support module and expanded unit coverage across the template, result HTML branches (resultset, status, generic error, hdbsql-missing), HTML escaping, table/keyword filtering, and hdbsql path resolution.
 

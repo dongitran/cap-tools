@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -88,17 +88,7 @@
         "mac": "cmd+e cmd+e",
         "when": "editorTextFocus && editorLangId == sql && sapTools.hanaSqlEditor"
       }
-    ],
-    "configuration": {
-      "title": "SAP Tools",
-      "properties": {
-        "sapTools.hanaSqlClientPath": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Absolute path to the `hdbsql` binary from the SAP HANA Client. Leave empty to auto-detect via `PATH` and well-known install locations (`/Applications/sap/hdbclient` on macOS, `/usr/sap/hdbclient` on Linux, `C:\\Program Files\\sap\\hdbclient` on Windows)."
-        }
-      }
-    }
+    ]
   },
   "files": [
     "dist",
@@ -111,7 +101,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postbuild": "node ./scripts/vendor-cf-debugger.mjs",
+    "postbuild": "node ./scripts/vendor-cf-debugger.mjs && node ./scripts/vendor-hdb.mjs",
     "watch": "tsc -watch -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
@@ -127,7 +117,8 @@
     "vscode:prepublish": "npm run build"
   },
   "dependencies": {
-    "@saptools/cf-debugger": "^0.1.2"
+    "@saptools/cf-debugger": "^0.1.2",
+    "hdb": "^2.27.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",

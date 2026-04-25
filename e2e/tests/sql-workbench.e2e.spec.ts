@@ -125,6 +125,13 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('columnheader', { name: '#' })).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
+
+      const resultHtml = await resultFrame.locator('body').innerHTML();
+      expect(resultHtml).not.toContain('SAP HANA Client Not Found');
+      expect(resultHtml).not.toContain('Install the SAP HANA Client');
+      expect(resultHtml).not.toMatch(/hdbsql/i);
+      expect(resultHtml).not.toMatch(/hdbclient/i);
+      expect(resultHtml).not.toContain('hanaSqlClientPath');
     } finally {
       await cleanupExtensionHost(session);
     }

@@ -6,7 +6,6 @@ import {
   normalizeSingleHanaStatement,
   sanitizeHanaErrorMessage,
   type HanaConnection,
-  type HanaQueryErrorKind,
   type HanaQueryResult,
   type HanaSqlStatementKind,
 } from './hanaSqlService';
@@ -15,7 +14,6 @@ import {
   type HanaSqlScopeSession,
 } from './hanaSqlConnectionResolver';
 import {
-  SAP_HANA_CLIENT_DOWNLOAD_URL,
   TABLE_DISCOVERY_QUERIES,
   buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
@@ -27,16 +25,10 @@ import {
   sanitizeUntitledFileName,
   type RenderSqlResultOptions,
 } from './hanaSqlWorkbenchSupport';
-import {
-  listDefaultHdbsqlPaths,
-  resolveHdbsqlPath,
-  type ResolveHdbsqlPathResult,
-} from './hdbsqlDiscovery';
 export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWorkbenchSupport';
 export const RUN_HANA_SQL_COMMAND_ID = 'sapTools.runHanaSql';
 const HANA_SQL_EDITOR_CONTEXT_KEY = 'sapTools.hanaSqlEditor';
 const SQL_RESULT_VIEW_TYPE = 'sapTools.hanaSqlResult';
-const HANA_SQL_CLIENT_PATH_SETTING = 'sapTools.hanaSqlClientPath';
 interface HanaSqlDocumentContext {
   readonly appId: string;
   readonly appName: string;
@@ -233,21 +225,12 @@ export class HanaSqlWorkbench
       });
     } catch (error) {
       const message = this.toSafeErrorMessage(error, context);
-      const errorKind = this.toErrorKind(error);
-      if (errorKind === 'hdbsql-missing') {
-        void this.showHdbsqlMissingNotification(message);
-      } else {
-        void vscode.window.showErrorMessage(message);
-      }
+      void vscode.window.showErrorMessage(message);
       this.openResultPanel({
         appName: context.appName,
         sql: normalizedSql,
         executedAt: new Date().toISOString(),
         errorMessage: message,
-        ...(errorKind !== undefined ? { errorKind } : {}),
-        ...(errorKind === 'hdbsql-missing'
-          ? { searchedPaths: listDefaultHdbsqlPaths() }
-          : {}),
       });
     }
   }
@@ -266,42 +249,7 @@ export class HanaSqlWorkbench
       throw new Error('Unable to resolve HANA connection.');
     }
 
-    const hdbsqlPath = await this.resolveConfiguredHdbsqlPath();
-    return executeHanaQuery(context.connection, sql, { hdbsqlPath: hdbsqlPath.path });
-  }
-
-  private async resolveConfiguredHdbsqlPath(): Promise<ResolveHdbsqlPathResult> {
-    const configuration = vscode.workspace.getConfiguration();
-    const configuredPath =
-      configuration.get<string>(HANA_SQL_CLIENT_PATH_SETTING)?.trim() ?? '';
-    return resolveHdbsqlPath({
-      ...(configuredPath.length > 0 ? { configuredPath } : {}),
-    });
-  }
-
-  private toErrorKind(error: unknown): HanaQueryErrorKind | undefined {
-    if (error instanceof HanaQueryError) {
-      return error.kind;
-    }
-    return undefined;
-  }
-
-  private async showHdbsqlMissingNotification(message: string): Promise<void> {
-    const openDownload = 'Download SAP HANA Client';
-    const openSettings = 'Configure hdbsql Path';
-    const action = await vscode.window.showErrorMessage(
-      message,
-      openDownload,
-      openSettings
-    );
-    if (action === openDownload) {
-      await vscode.env.openExternal(vscode.Uri.parse(SAP_HANA_CLIENT_DOWNLOAD_URL));
-    } else if (action === openSettings) {
-      await vscode.commands.executeCommand(
-        'workbench.action.openSettings',
-        HANA_SQL_CLIENT_PATH_SETTING
-      );
-    }
+    return executeHanaQuery(context.connection, sql);
   }
 
   private async prefetchTableNames(uriKey: string): Promise<void> {
@@ -336,12 +284,10 @@ export class HanaSqlWorkbench
       return;
     }
 
-    const hdbsqlPath = await this.resolveConfiguredHdbsqlPath();
     for (const query of TABLE_DISCOVERY_QUERIES) {
       try {
         const result = await executeHanaQuery(context.connection, query, {
           timeoutMs: 15_000,
-          hdbsqlPath: hdbsqlPath.path,
         });
         if (result.kind !== 'resultset') {
           continue;

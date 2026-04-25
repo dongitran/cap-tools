@@ -1,11 +1,9 @@
-// cspell:words hdbsql ondemand tenantdb
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { createRequire } from 'node:module';
 
-const execFileAsync = promisify(execFile);
-
-const HDBSQL_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
-const HDBSQL_DEFAULT_TIMEOUT_MS = 30_000;
+const HANA_QUERY_DEFAULT_TIMEOUT_MS = 30_000;
+const HANA_QUERY_RESULT_PREVIEW_BYTES = 4096;
 
 export interface HanaConnection {
   readonly host: string;
@@ -34,7 +32,6 @@ export type HanaQueryResult = HanaQueryResultSet | HanaQueryStatus;
 export type HanaSqlStatementKind = 'empty' | 'readonly' | 'mutating';
 
 export type HanaQueryErrorKind =
-  | 'hdbsql-missing'
   | 'connection'
   | 'auth'
   | 'sql'
@@ -54,24 +51,55 @@ export class HanaQueryError extends Error {
   }
 }
 
+export interface HdbColumnMetadata {
+  readonly columnDisplayName?: string;
+  readonly columnName?: string;
+  readonly displayName?: string;
+}
+
+export interface HdbStatement {
+  readonly resultSetMetadata?: readonly HdbColumnMetadata[];
+  exec(values: readonly unknown[], callback: HdbExecCallback): void;
+  drop(callback?: (err: Error | null) => void): void;
+}
+
+export interface HdbClient {
+  connect(callback: (err: Error | null) => void): void;
+  prepare(sql: string, callback: (err: Error | null, statement: HdbStatement) => void): void;
+  disconnect(callback?: (err: Error | null) => void): void;
+  close(): void;
+  on?(event: 'error', listener: (error: Error) => void): void;
+}
+
+export type HdbExecCallback = (
+  err: Error | null,
+  rowsOrAffected: HdbRowsOrAffected
+) => void;
+
+export type HdbRow = Readonly<Record<string, unknown>>;
+export type HdbRowsOrAffected = number | readonly HdbRow[];
+
+export interface HdbCreateClientArgs {
+  readonly host: string;
+  readonly port: number;
+  readonly user: string;
+  readonly password: string;
+  readonly databaseName?: string;
+  readonly encrypt?: boolean;
+  readonly sslValidateCertificate?: boolean;
+}
+
+export interface HdbModule {
+  createClient(args: HdbCreateClientArgs): HdbClient;
+}
+
+export type HdbClientFactory = (connection: HanaConnection) => HdbClient;
+
 export interface ExecuteHanaQueryOptions {
   readonly timeoutMs?: number;
-  readonly hdbsqlPath?: string;
+  readonly clientFactory?: HdbClientFactory;
 }
 
-interface HdbsqlInvocationResult {
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-/**
- * Execute a single SQL statement against a HANA instance via the `hdbsql` CLI.
- *
- * Callers must have the SAP HANA Client installed and `hdbsql` on PATH. The
- * password is passed via the `-p` flag; this project accepts that trade-off
- * to keep the feature free of native driver dependencies. For scripts that
- * need stronger secrecy, use `hdbuserstore` and a custom `hdbsqlPath`.
- */
 export async function executeHanaQuery(
   connection: HanaConnection,
   sql: string,
@@ -82,25 +110,38 @@ export async function executeHanaQuery(
     throw new HanaQueryError('empty', 'Query is empty.');
   }
 
-  const args = buildHdbsqlArgs(connection, trimmedSql);
-  const timeoutMs = options.timeoutMs ?? HDBSQL_DEFAULT_TIMEOUT_MS;
-  const hdbsqlPath = options.hdbsqlPath ?? 'hdbsql';
+  const timeoutMs = options.timeoutMs ?? HANA_QUERY_DEFAULT_TIMEOUT_MS;
+  const factory = options.clientFactory ?? createDefaultHdbClient;
+
+  let client: HdbClient;
+  try {
+    client = factory(connection);
+  } catch (error) {
+    throw toHanaQueryError(error, 'create-client');
+  }
+
+  client.on?.('error', () => {
+    /* swallow late errors so they don't crash the host */
+  });
 
   const started = Date.now();
-  let invocation: HdbsqlInvocationResult;
   try {
-    invocation = await invokeHdbsql(hdbsqlPath, args, timeoutMs);
+    await connectClient(client, timeoutMs);
   } catch (error) {
-    throw toHanaQueryError(error);
-  }
-  const elapsedMs = Date.now() - started;
-
-  const stderrTrim = invocation.stderr.trim();
-  if (stderrTrim.length > 0 && !isIgnorableStderr(stderrTrim)) {
-    throw classifyStderr(stderrTrim);
+    safeClose(client);
+    throw toHanaQueryError(error, 'connect');
   }
 
-  return parseHdbsqlOutput(invocation.stdout, elapsedMs);
+  let result: HanaQueryResult;
+  try {
+    result = await runStatement(client, trimmedSql, timeoutMs, () => Date.now() - started);
+  } catch (error) {
+    await safeDisconnect(client);
+    throw toHanaQueryError(error, 'exec');
+  }
+
+  await safeDisconnect(client);
+  return result;
 }
 
 export function classifyHanaSqlStatement(sql: string): HanaSqlStatementKind {
@@ -145,93 +186,264 @@ export function sanitizeHanaErrorMessage(
     .replace(/(secret\s*[=:]\s*)\S+/gi, '$1[redacted]');
 }
 
-function buildHdbsqlArgs(connection: HanaConnection, sql: string): string[] {
-  const args: string[] = [
-    '-n',
-    `${connection.host}:${String(connection.port)}`,
-    '-u',
-    connection.user,
-    '-p',
-    connection.password,
-    '-a',
-  ];
-
-  const database = (connection.database ?? '').trim();
-  if (database.length > 0) {
-    args.push('-d', database);
+export function formatHanaCellValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
   }
-
-  args.push(sql);
-  return args;
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') {
+    return value.toString();
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
+    const head = value.subarray(0, HANA_QUERY_RESULT_PREVIEW_BYTES);
+    const suffix =
+      value.length > HANA_QUERY_RESULT_PREVIEW_BYTES
+        ? `… (${String(value.length)} bytes)`
+        : '';
+    return `0x${head.toString('hex')}${suffix}`;
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return Object.prototype.toString.call(value);
+    }
+  }
+  return Object.prototype.toString.call(value);
 }
 
-async function invokeHdbsql(
-  command: string,
-  args: string[],
-  timeoutMs: number
-): Promise<HdbsqlInvocationResult> {
-  const { stdout, stderr } = await execFileAsync(command, args, {
-    maxBuffer: HDBSQL_MAX_BUFFER_BYTES,
-    timeout: timeoutMs,
-    windowsHide: true,
-  });
-  return { stdout, stderr };
-}
-
-function toHanaQueryError(error: unknown): HanaQueryError {
-  if (error !== null && typeof error === 'object') {
-    const maybeError = error as {
-      code?: unknown;
-      killed?: unknown;
-      stderr?: unknown;
-      stdout?: unknown;
-      message?: unknown;
-    };
-
-    if (maybeError.code === 'ENOENT') {
-      return new HanaQueryError(
-        'hdbsql-missing',
-        'hdbsql CLI not found. Install the SAP HANA Client and ensure hdbsql is on PATH.'
+export function extractColumnNames(
+  statement: HdbStatement,
+  rows: readonly HdbRow[]
+): string[] {
+  const metadata = statement.resultSetMetadata ?? [];
+  if (metadata.length > 0) {
+    return metadata.map((column, index) => {
+      return (
+        column.columnDisplayName ??
+        column.displayName ??
+        column.columnName ??
+        `COL_${String(index + 1)}`
       );
-    }
-
-    if (maybeError.killed === true) {
-      return new HanaQueryError('timeout', 'hdbsql timed out.');
-    }
-
-    const stderrText = typeof maybeError.stderr === 'string' ? maybeError.stderr : '';
-    const stdoutText = typeof maybeError.stdout === 'string' ? maybeError.stdout : '';
-    const messageText = typeof maybeError.message === 'string' ? maybeError.message : '';
-    const combined = [stderrText, stdoutText, messageText]
-      .map((text) => text.trim())
-      .filter((text) => text.length > 0)
-      .join('\n');
-
-    if (combined.length > 0) {
-      return classifyStderr(combined);
-    }
+    });
   }
-
-  return new HanaQueryError('unknown', 'hdbsql invocation failed.');
+  if (rows.length === 0) {
+    return [];
+  }
+  return Object.keys(rows[0] ?? {});
 }
 
-function classifyStderr(text: string): HanaQueryError {
-  const normalized = text.trim();
-
-  if (/authentication failed|invalid user name or password|259|10/i.test(normalized)
-      && /authentication/i.test(normalized)) {
-    return new HanaQueryError('auth', normalized);
-  }
-
-  if (/cannot connect|connection refused|network|econn|unreachable|host not found/i.test(normalized)) {
-    return new HanaQueryError('connection', normalized);
-  }
-
-  return new HanaQueryError('sql', normalized);
+async function connectClient(client: HdbClient, timeoutMs: number): Promise<void> {
+  await runWithTimeout(
+    'Connect',
+    timeoutMs,
+    new Promise<undefined>((resolve, reject) => {
+      try {
+        client.connect((err) => {
+          if (err !== null) {
+            reject(err);
+            return;
+          }
+          resolve(undefined);
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    })
+  );
 }
 
-function isIgnorableStderr(stderr: string): boolean {
-  return /^password:\s*$/i.test(stderr);
+function runStatement(
+  client: HdbClient,
+  sql: string,
+  timeoutMs: number,
+  elapsedAtCompletion: () => number
+): Promise<HanaQueryResult> {
+  return runWithTimeout<HanaQueryResult>(
+    'Query',
+    timeoutMs,
+    new Promise<HanaQueryResult>((resolve, reject) => {
+      try {
+        client.prepare(sql, (prepareErr, statement) => {
+          if (prepareErr !== null) {
+            reject(prepareErr);
+            return;
+          }
+          statement.exec([], (execErr, rowsOrAffected) => {
+            const finishElapsed = elapsedAtCompletion();
+            if (execErr !== null) {
+              statement.drop(() => {
+                reject(execErr);
+              });
+              return;
+            }
+            const final = buildHanaQueryResult(statement, rowsOrAffected, finishElapsed);
+            statement.drop(() => {
+              resolve(final);
+            });
+          });
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    })
+  );
+}
+
+function buildHanaQueryResult(
+  statement: HdbStatement,
+  rowsOrAffected: HdbRowsOrAffected,
+  elapsedMs: number
+): HanaQueryResult {
+  if (typeof rowsOrAffected === 'number') {
+    const message =
+      rowsOrAffected === 1
+        ? '1 row affected.'
+        : `${String(rowsOrAffected)} rows affected.`;
+    return { kind: 'status', message, elapsedMs };
+  }
+
+  const columns = extractColumnNames(statement, rowsOrAffected);
+  const rows = rowsOrAffected.map((row) => {
+    return columns.map((column) => formatHanaCellValue(row[column]));
+  });
+  return {
+    kind: 'resultset',
+    columns,
+    rows,
+    rowCount: rows.length,
+    elapsedMs,
+  };
+}
+
+function runWithTimeout<T>(
+  label: string,
+  timeoutMs: number,
+  operation: Promise<T>
+): Promise<T> {
+  if (timeoutMs <= 0) {
+    return operation;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new HanaQueryError('timeout', `${label} timed out after ${String(timeoutMs)} ms.`));
+    }, timeoutMs);
+  });
+  return Promise.race([operation, timeoutPromise]).finally(() => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  });
+}
+
+async function safeDisconnect(client: HdbClient): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      safeClose(client);
+      resolve();
+    };
+    try {
+      client.disconnect((err) => {
+        if (err !== null) {
+          finish();
+          return;
+        }
+        finish();
+      });
+    } catch {
+      finish();
+    }
+    setTimeout(finish, 1500);
+  });
+}
+
+function safeClose(client: HdbClient): void {
+  try {
+    client.close();
+  } catch {
+    /* ignore double close */
+  }
+}
+
+function toHanaQueryError(
+  error: unknown,
+  stage: 'create-client' | 'connect' | 'exec'
+): HanaQueryError {
+  if (error instanceof HanaQueryError) {
+    return error;
+  }
+  if (error !== null && typeof error === 'object') {
+    const detail = error as {
+      readonly code?: unknown;
+      readonly message?: unknown;
+      readonly sqlState?: unknown;
+    };
+    const messageText =
+      typeof detail.message === 'string' && detail.message.length > 0
+        ? detail.message
+        : `hdb ${stage} failed.`;
+    const numericCode = typeof detail.code === 'number' ? detail.code : null;
+    const stringCode = typeof detail.code === 'string' ? detail.code : '';
+    if (isAuthError(numericCode, messageText, stringCode)) {
+      return new HanaQueryError('auth', messageText, numericCode);
+    }
+    if (isConnectionError(stage, stringCode, messageText)) {
+      return new HanaQueryError('connection', messageText, numericCode);
+    }
+    if (stage === 'exec') {
+      return new HanaQueryError('sql', messageText, numericCode);
+    }
+    return new HanaQueryError('unknown', messageText, numericCode);
+  }
+  return new HanaQueryError('unknown', `hdb ${stage} failed.`);
+}
+
+function isAuthError(
+  numericCode: number | null,
+  message: string,
+  stringCode: string
+): boolean {
+  if (numericCode === 10 || numericCode === 414 || numericCode === 332) {
+    return true;
+  }
+  if (stringCode === 'EAUTH') {
+    return true;
+  }
+  return /authentication failed|invalid user name or password|user is locked|password.*expired/i.test(
+    message
+  );
+}
+
+function isConnectionError(
+  stage: 'create-client' | 'connect' | 'exec',
+  stringCode: string,
+  message: string
+): boolean {
+  if (stage === 'connect' || stage === 'create-client') {
+    return true;
+  }
+  if (
+    stringCode === 'ECONNREFUSED' ||
+    stringCode === 'ECONNRESET' ||
+    stringCode === 'ETIMEDOUT' ||
+    stringCode === 'ENOTFOUND' ||
+    stringCode === 'EHOSTUNREACH' ||
+    stringCode === 'EAI_AGAIN'
+  ) {
+    return true;
+  }
+  return /cannot connect|connection refused|network|host not found|unreachable|socket closed/i.test(
+    message
+  );
 }
 
 function stripLeadingSqlComments(sql: string): string {
@@ -283,67 +495,31 @@ function hasSqlDelimiterOutsideLiteral(sql: string): boolean {
   return false;
 }
 
-/**
- * Parse hdbsql's default pipe-delimited text output into a result set.
- *
- * Typical DQL output with `-a` (suppressed query echo):
- *   | COL1 | COL2 |
- *   | ---- | ---- |
- *   | a    | 1    |
- *   1 row selected (overall time 5 ms; server time 2 ms)
- *
- * DDL / DML output has no table, just a status line such as:
- *   0 rows affected (overall time 3 ms; server time 1 ms)
- */
-export function parseHdbsqlOutput(stdout: string, elapsedMs: number): HanaQueryResult {
-  const lines = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0);
+let cachedHdbModule: HdbModule | undefined;
 
-  const dataLines: string[] = [];
-  const statusLines: string[] = [];
-  for (const line of lines) {
-    if (line.startsWith('|')) {
-      dataLines.push(line);
-      continue;
-    }
-    statusLines.push(line);
+export function loadHdbModule(distDir: string = __dirname): HdbModule {
+  if (cachedHdbModule !== undefined) {
+    return cachedHdbModule;
   }
-
-  if (dataLines.length === 0) {
-    const message = statusLines.length > 0 ? statusLines.join(' ') : 'Statement executed.';
-    return { kind: 'status', message, elapsedMs };
-  }
-
-  const cells = dataLines.map(splitPipeRow);
-
-  let separatorIndex = -1;
-  for (let i = 1; i < cells.length; i += 1) {
-    const row = cells[i];
-    if (row?.every((cell) => /^-+$/.test(cell.trim()) || cell.trim().length === 0) === true) {
-      separatorIndex = i;
-      break;
-    }
-  }
-
-  const headerRow = cells[0] ?? [];
-  const columns = headerRow.map((cell) => cell.trim());
-  const dataStart = separatorIndex >= 0 ? separatorIndex + 1 : 1;
-  const rows = cells
-    .slice(dataStart)
-    .map((row) => row.map((cell) => cell.trim()));
-
-  return {
-    kind: 'resultset',
-    columns,
-    rows,
-    rowCount: rows.length,
-    elapsedMs,
-  };
+  const requireFromHere = createRequire(__filename);
+  const vendoredEntry = join(distDir, 'vendor', 'hdb', 'index.js');
+  const specifier = existsSync(vendoredEntry) ? vendoredEntry : 'hdb';
+  cachedHdbModule = requireFromHere(specifier) as HdbModule;
+  return cachedHdbModule;
 }
 
-function splitPipeRow(line: string): string[] {
-  const trimmed = line.replace(/^\|/, '').replace(/\|\s*$/, '');
-  return trimmed.split('|');
+function createDefaultHdbClient(connection: HanaConnection): HdbClient {
+  const hdbModule = loadHdbModule();
+  const args: HdbCreateClientArgs = {
+    host: connection.host,
+    port: connection.port,
+    user: connection.user,
+    password: connection.password,
+    encrypt: true,
+    sslValidateCertificate: true,
+  };
+  if (connection.database !== undefined && connection.database.length > 0) {
+    return hdbModule.createClient({ ...args, databaseName: connection.database });
+  }
+  return hdbModule.createClient(args);
 }

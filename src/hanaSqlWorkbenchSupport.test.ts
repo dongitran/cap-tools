@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 
 import type { HanaQueryResultSet } from './hanaSqlService';
 import {
-  SAP_HANA_CLIENT_DOWNLOAD_URL,
   SQL_KEYWORDS,
   TABLE_DISCOVERY_QUERIES,
   TABLE_SUGGESTION_LIMIT,
@@ -238,56 +237,22 @@ describe('buildHanaSqlResultHtml', () => {
   });
 });
 
-describe('buildHanaSqlResultHtml (hdbsql-missing)', () => {
-  test('renders install guidance card when errorKind is hdbsql-missing', () => {
+describe('buildHanaSqlResultHtml (no install card)', () => {
+  test('does not surface the legacy SAP HANA Client install card for connection errors', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
-      sql: 'SELECT * FROM DUMMY',
+      sql: 'SELECT 1 FROM DUMMY',
       executedAt: '2026-04-25T00:00:00Z',
-      errorKind: 'hdbsql-missing',
-      errorMessage:
-        'hdbsql CLI not found. Install the SAP HANA Client and ensure hdbsql is on PATH.',
-      searchedPaths: [
-        '/Applications/sap/hdbclient/hdbsql',
-        '/usr/local/sap/hdbclient/hdbsql',
-      ],
+      errorMessage: 'connect ECONNREFUSED 1.2.3.4:443',
     });
 
-    expect(html).toContain('SAP HANA Client Not Found');
-    expect(html).toContain('Install the SAP HANA Client');
-    expect(html).toContain(SAP_HANA_CLIENT_DOWNLOAD_URL);
-    expect(html).toContain('sapTools.hanaSqlClientPath');
-    expect(html).toContain('/Applications/sap/hdbclient/hdbsql');
-    expect(html).toContain('/usr/local/sap/hdbclient/hdbsql');
-    expect(html).not.toContain('Execution Error');
-  });
-
-  test('omits the searched-paths section when none are supplied', () => {
-    const html = buildHanaSqlResultHtml({
-      appName: 'finance-uat-api',
-      sql: 'SELECT 1',
-      executedAt: '2026-04-25T00:00:00Z',
-      errorKind: 'hdbsql-missing',
-    });
-
-    expect(html).toContain('SAP HANA Client Not Found');
-    expect(html).not.toContain('Paths we checked');
-  });
-
-  test('escapes the error message and searched paths to prevent HTML injection', () => {
-    const html = buildHanaSqlResultHtml({
-      appName: 'finance-uat-api',
-      sql: 'SELECT 1',
-      executedAt: '2026-04-25T00:00:00Z',
-      errorKind: 'hdbsql-missing',
-      errorMessage: '<script>alert(1)</script>',
-      searchedPaths: ['<img src="x" onerror="y"/>'],
-    });
-
-    expect(html).not.toContain('<script>alert(1)</script>');
-    expect(html).not.toContain('onerror="y"');
-    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
-    expect(html).toContain('&lt;img src=&quot;x&quot; onerror=&quot;y&quot;/&gt;');
+    expect(html).not.toContain('SAP HANA Client Not Found');
+    expect(html).not.toContain('Install the SAP HANA Client');
+    expect(html).not.toContain('hdbsql');
+    expect(html).not.toContain('hdbclient');
+    expect(html).not.toContain('hanaSqlClientPath');
+    expect(html).toContain('Execution Error');
+    expect(html).toContain('connect ECONNREFUSED');
   });
 });
 

@@ -68,10 +68,13 @@
     "nums",
     "xlarge",
     "xsuaa",
-    "hdbsql",
-    "hdbclient",
     "myschema",
-    "hdbuserstore",
-    "econn"
+    "econn",
+    "tenantdb",
+    "iconv",
+    "databasename",
+    "EAUTH",
+    "hdbsql",
+    "hdbclient"
   ]
 }

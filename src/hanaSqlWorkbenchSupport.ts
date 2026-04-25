@@ -1,12 +1,8 @@
 import type {
-  HanaQueryErrorKind,
   HanaQueryResult,
   HanaQueryResultSet,
   HanaSqlStatementKind,
 } from './hanaSqlService';
-
-export const SAP_HANA_CLIENT_DOWNLOAD_URL =
-  'https://tools.hana.ondemand.com/#hanatools';
 
 export const SQL_RESULT_ROWS_LIMIT = 250;
 export const TABLE_SUGGESTION_LIMIT = 500;
@@ -44,8 +40,6 @@ export interface RenderSqlResultOptions {
   readonly executedAt: string;
   readonly result?: HanaQueryResult;
   readonly errorMessage?: string;
-  readonly errorKind?: HanaQueryErrorKind;
-  readonly searchedPaths?: readonly string[];
 }
 
 export function buildInitialHanaSqlTemplate(appName: string): string {
@@ -132,10 +126,6 @@ export function filterTableCandidates(
 export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string {
   if (options.result?.kind === 'resultset') {
     return buildResultSetHtml(options, options.result);
-  }
-
-  if (options.errorKind === 'hdbsql-missing') {
-    return buildHdbsqlMissingHtml(options);
   }
 
   const hasStatusResult = options.result?.kind === 'status';
@@ -369,164 +359,6 @@ function renderResultTable(columns: readonly string[], rows: readonly string[][]
       </tbody>
     </table>
   `;
-}
-
-function buildHdbsqlMissingHtml(options: RenderSqlResultOptions): string {
-  const escapedAppName = escapeHtml(options.appName);
-  const escapedExecutedAt = escapeHtml(options.executedAt);
-  const escapedSql = escapeHtml(options.sql);
-  const rawMessage =
-    options.errorMessage ??
-    'hdbsql CLI not found. Install the SAP HANA Client and ensure hdbsql is on PATH.';
-  const escapedMessage = escapeHtml(rawMessage);
-  const searchedItems =
-    options.searchedPaths !== undefined && options.searchedPaths.length > 0
-      ? options.searchedPaths
-          .map((path) => `<li><code>${escapeHtml(path)}</code></li>`)
-          .join('')
-      : '';
-  const searchedSection =
-    searchedItems.length > 0
-      ? `<section class="state-card">
-        <h2>Paths we checked</h2>
-        <ul class="state-path-list">${searchedItems}</ul>
-        <p class="state-meta-line">
-          If your HANA Client lives elsewhere, set
-          <code>sapTools.hanaSqlClientPath</code> in VS Code settings to the absolute path of the
-          <code>hdbsql</code> binary.
-        </p>
-      </section>`
-      : '';
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SAP Tools SQL Result</title>
-    <style>
-      :root {
-        color-scheme: dark;
-        font-family: Inter, "Segoe UI", sans-serif;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: #0f141d;
-        color: #e6edf3;
-      }
-      .state-layout {
-        min-height: 100vh;
-        display: grid;
-        grid-template-rows: auto auto auto auto auto;
-        gap: 10px;
-        padding: 14px;
-      }
-      .state-card {
-        border: 1px solid #273246;
-        border-radius: 8px;
-        background: #141c28;
-        padding: 10px 12px;
-      }
-      .state-card h1 {
-        margin: 0 0 4px;
-        font-size: 14px;
-      }
-      .state-card h2 {
-        margin: 0 0 6px;
-        font-size: 12px;
-        color: #d7e6f9;
-      }
-      .state-meta-line {
-        margin: 4px 0 0;
-        font-size: 12px;
-        color: #aab7c7;
-      }
-      .state-message {
-        margin: 0 0 6px;
-        font-size: 12px;
-        line-height: 1.45;
-        color: #ff9d9d;
-      }
-      .state-install ol {
-        margin: 4px 0 0;
-        padding-left: 18px;
-        font-size: 12px;
-        line-height: 1.55;
-      }
-      .state-install li + li {
-        margin-top: 4px;
-      }
-      .state-install code,
-      .state-path-list code {
-        background: #101724;
-        border: 1px solid #23324a;
-        border-radius: 4px;
-        padding: 1px 5px;
-        font-size: 11px;
-      }
-      .state-path-list {
-        margin: 4px 0 0;
-        padding-left: 18px;
-        font-size: 12px;
-        line-height: 1.5;
-      }
-      .state-sql {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 12px;
-        line-height: 1.45;
-      }
-      .state-error h1 {
-        color: #ff9d9d;
-      }
-    </style>
-  </head>
-  <body>
-    <main class="state-layout">
-      <section class="state-card">
-        <p class="state-meta-line">App: ${escapedAppName}</p>
-        <p class="state-meta-line">Executed: ${escapedExecutedAt}</p>
-      </section>
-      <section class="state-card state-error">
-        <h1>SAP HANA Client Not Found</h1>
-        <p class="state-message">${escapedMessage}</p>
-        <p class="state-meta-line">
-          SAP Tools runs HANA queries through the <code>hdbsql</code> CLI that ships with the SAP
-          HANA Client. Install it, then rerun your SQL.
-        </p>
-      </section>
-      <section class="state-card state-install">
-        <h2>Install the SAP HANA Client</h2>
-        <ol>
-          <li>
-            Download the SAP HANA Client for your platform from
-            <a href="${SAP_HANA_CLIENT_DOWNLOAD_URL}">${SAP_HANA_CLIENT_DOWNLOAD_URL}</a>.
-          </li>
-          <li>
-            Run the installer. Default install paths:
-            <ul class="state-path-list">
-              <li>macOS: <code>/Applications/sap/hdbclient/hdbsql</code></li>
-              <li>Linux: <code>/usr/sap/hdbclient/hdbsql</code></li>
-              <li>Windows: <code>C:\\Program Files\\sap\\hdbclient\\hdbsql.exe</code></li>
-            </ul>
-          </li>
-          <li>
-            Either add the <code>hdbclient</code> folder to your <code>PATH</code>, or set the VS
-            Code setting <code>sapTools.hanaSqlClientPath</code> to the absolute path of the
-            <code>hdbsql</code> binary.
-          </li>
-          <li>Reload the SAP Tools SQL workbench and re-run your query.</li>
-        </ol>
-      </section>
-      ${searchedSection}
-      <section class="state-card">
-        <pre class="state-sql">${escapedSql}</pre>
-      </section>
-    </main>
-  </body>
-</html>`;
 }
 
 export function escapeHtml(value: string): string {
