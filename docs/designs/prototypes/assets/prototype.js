@@ -206,6 +206,7 @@ let hanaTableSelectLoadingKeys = new Set();
 const hanaTableDisplayNameCache = new Map();
 let hanaSqlResultPreviewState = null;
 let hanaSqlResultExportMenuOpen = false;
+let hanaSqlResultContextMenuState = null;
 const SQL_TABLE_NAME_WIDTH_TOLERANCE = 1;
 let sqlTableResultsRefreshTimer = 0;
 let sqlTableNameTruncationFrame = 0;
@@ -609,11 +610,21 @@ renderPrototype();
 requestInitialState();
 
 window.addEventListener('resize', () => {
+  hanaSqlResultContextMenuState = null;
   queueSqlTableNameTruncation();
+});
+
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || hanaSqlResultContextMenuState === null) {
+    return;
+  }
+  hanaSqlResultContextMenuState = null;
+  refreshSqlResultPreviewPanel();
 });
 
 if (typeof window.ResizeObserver === 'function') {
   sqlTableNameResizeObserver = new window.ResizeObserver(() => {
+    hanaSqlResultContextMenuState = null;
     queueSqlTableNameTruncation();
   });
   sqlTableNameResizeObserver.observe(appElement);
@@ -622,6 +633,18 @@ if (typeof window.ResizeObserver === 'function') {
 appElement.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const clickedContextMenu = target.closest('[data-role="sql-result-context-menu"]');
+  const clickedAction = target.closest('[data-action]');
+  if (
+    hanaSqlResultContextMenuState !== null &&
+    !(clickedContextMenu instanceof HTMLElement) &&
+    !(clickedAction instanceof HTMLElement)
+  ) {
+    hanaSqlResultContextMenuState = null;
+    refreshSqlResultPreviewPanel();
     return;
   }
 
@@ -722,6 +745,35 @@ appElement.addEventListener('click', (event) => {
   }
 
   rerenderSelectionStageSlotsWithMotion(affectedSlots);
+});
+
+appElement.addEventListener('contextmenu', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const cell = target.closest('[data-role="sql-result-cell"]');
+  if (!(cell instanceof HTMLElement)) {
+    if (hanaSqlResultContextMenuState !== null) {
+      hanaSqlResultContextMenuState = null;
+      refreshSqlResultPreviewPanel();
+    }
+    return;
+  }
+  const rowIndex = Number.parseInt(cell.dataset.rowIndex ?? '', 10);
+  const columnIndex = Number.parseInt(cell.dataset.columnIndex ?? '', 10);
+  if (!Number.isInteger(rowIndex) || !Number.isInteger(columnIndex)) {
+    return;
+  }
+  event.preventDefault();
+  hanaSqlResultExportMenuOpen = false;
+  hanaSqlResultContextMenuState = {
+    columnIndex,
+    rowIndex,
+    x: Math.min(event.clientX, Math.max(8, window.innerWidth - 190)),
+    y: Math.min(event.clientY, Math.max(8, window.innerHeight - 96)),
+  };
+  refreshSqlResultPreviewPanel();
 });
 
 appElement.addEventListener('input', (event) => {
@@ -903,6 +955,8 @@ function shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction
     action === 'toggle-sql-result-export-menu' ||
     action === 'copy-sql-result-csv' ||
     action === 'copy-sql-result-json' ||
+    action === 'copy-sql-result-row-object' ||
+    action === 'copy-sql-result-cell-value' ||
     action === 'export-sql-result-csv' ||
     action === 'export-sql-result-json';
   if (!isSqlOnlyAction) {
@@ -1273,6 +1327,7 @@ function handleAction(action, actionElement) {
 function handleSqlTabAction(action, actionElement) {
   if (action === 'toggle-sql-result-export-menu') {
     hanaSqlResultExportMenuOpen = !hanaSqlResultExportMenuOpen;
+    hanaSqlResultContextMenuState = null;
     return true;
   }
 
@@ -1285,6 +1340,13 @@ function handleSqlTabAction(action, actionElement) {
     return triggerPrototypeSqlResultExportAction(action);
   }
 
+  if (
+    action === 'copy-sql-result-row-object' ||
+    action === 'copy-sql-result-cell-value'
+  ) {
+    return triggerPrototypeSqlResultContextCopyAction(action);
+  }
+
   if (action === 'select-hana-service') {
     const serviceId = actionElement.dataset.serviceId ?? '';
     if (serviceId.length === 0) {
@@ -1294,6 +1356,7 @@ function handleSqlTabAction(action, actionElement) {
       sqlTableSearchKeyword = '';
       hanaSqlResultPreviewState = null;
       hanaSqlResultExportMenuOpen = false;
+      hanaSqlResultContextMenuState = null;
     }
     selectedHanaServiceId = serviceId;
     if (vscodeApi !== null && !hanaTablesByServiceId.has(serviceId)) {
@@ -1376,6 +1439,7 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
   }
   hanaQueryStatusTone = 'info';
   hanaQueryStatusMessage = '';
+  hanaSqlResultContextMenuState = null;
   setHanaTableSelectLoading(serviceId, tableName, true);
 
   if (vscodeApi === null) {
@@ -1440,11 +1504,35 @@ function triggerPrototypeSqlResultExportAction(action) {
     ? buildPrototypeSqlResultJson(hanaSqlResultPreviewState)
     : buildPrototypeSqlResultCsv(hanaSqlResultPreviewState);
   hanaSqlResultExportMenuOpen = false;
+  hanaSqlResultContextMenuState = null;
 
   if (isCopy && navigator.clipboard?.writeText !== undefined) {
     void navigator.clipboard.writeText(content);
   }
 
+  return true;
+}
+
+function triggerPrototypeSqlResultContextCopyAction(action) {
+  if (hanaSqlResultPreviewState?.phase !== 'ready' || hanaSqlResultContextMenuState === null) {
+    return true;
+  }
+
+  const state = hanaSqlResultPreviewState;
+  const { rowIndex, columnIndex } = hanaSqlResultContextMenuState;
+  const row = state.rows[rowIndex];
+  hanaSqlResultContextMenuState = null;
+  if (!Array.isArray(row)) {
+    return true;
+  }
+
+  const content =
+    action === 'copy-sql-result-row-object'
+      ? buildPrototypeSqlResultRowObjectJson(state, row)
+      : row[columnIndex] ?? '';
+  if (navigator.clipboard?.writeText !== undefined) {
+    void navigator.clipboard.writeText(content);
+  }
   return true;
 }
 
@@ -1463,10 +1551,30 @@ function escapeCsvValue(value) {
 }
 
 function buildPrototypeSqlResultJson(state) {
+  const columnKeys = buildPrototypeSqlResultColumnKeys(state.columns);
   const rows = state.rows.map((row) => {
-    return Object.fromEntries(state.columns.map((column, index) => [column, row[index] ?? '']));
+    return Object.fromEntries(columnKeys.map((column, index) => [column, row[index] ?? '']));
   });
   return JSON.stringify(rows, null, 2);
+}
+
+function buildPrototypeSqlResultRowObjectJson(state, row) {
+  const columnKeys = buildPrototypeSqlResultColumnKeys(state.columns);
+  const rowObject = Object.fromEntries(
+    columnKeys.map((column, index) => [column, row[index] ?? ''])
+  );
+  return JSON.stringify(rowObject, null, 2);
+}
+
+function buildPrototypeSqlResultColumnKeys(columns) {
+  const counts = new Map();
+  return columns.map((column, index) => {
+    const rawColumn = typeof column === 'string' ? column.trim() : '';
+    const baseKey = rawColumn.length > 0 ? rawColumn : `COLUMN_${String(index + 1)}`;
+    const count = (counts.get(baseKey) ?? 0) + 1;
+    counts.set(baseKey, count);
+    return count === 1 ? baseKey : `${baseKey}_${String(count)}`;
+  });
 }
 
 function requestHanaServicesIfNeeded() {
@@ -3976,6 +4084,7 @@ function renderSqlResultPreviewPanel() {
       <div class="sql-result-preview-table-wrap">
         ${renderSqlResultPreviewTable(state)}
       </div>
+      ${renderSqlResultContextMenu()}
     </section>
   `;
 }
@@ -3988,9 +4097,11 @@ function renderSqlResultPreviewTable(state) {
   const bodyRows = state.rows
     .map((row, rowIndex) => {
       const cells = state.columns
-        .map((_, columnIndex) => `<td>${escapeHtml(row[columnIndex] ?? '')}</td>`)
+        .map((_, columnIndex) => {
+          return `<td data-role="sql-result-cell" data-row-index="${String(rowIndex)}" data-column-index="${String(columnIndex)}">${escapeHtml(row[columnIndex] ?? '')}</td>`;
+        })
         .join('');
-      return `<tr><td>${String(rowIndex + 1)}</td>${cells}</tr>`;
+      return `<tr data-role="sql-result-row" data-row-index="${String(rowIndex)}"><td>${String(rowIndex + 1)}</td>${cells}</tr>`;
     })
     .join('');
 
@@ -3999,6 +4110,25 @@ function renderSqlResultPreviewTable(state) {
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${bodyRows}</tbody>
     </table>
+  `;
+}
+
+function renderSqlResultContextMenu() {
+  if (hanaSqlResultContextMenuState === null) {
+    return '';
+  }
+  const left = Math.max(8, Math.round(hanaSqlResultContextMenuState.x));
+  const top = Math.max(8, Math.round(hanaSqlResultContextMenuState.y));
+  return `
+    <div
+      class="sql-result-context-menu"
+      data-role="sql-result-context-menu"
+      role="menu"
+      style="left: ${String(left)}px; top: ${String(top)}px;"
+    >
+      <button type="button" role="menuitem" data-action="copy-sql-result-row-object">Copy row object</button>
+      <button type="button" role="menuitem" data-action="copy-sql-result-cell-value">Copy cell value</button>
+    </div>
   `;
 }
 

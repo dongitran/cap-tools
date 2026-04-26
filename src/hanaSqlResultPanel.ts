@@ -3,8 +3,10 @@ import * as vscode from 'vscode';
 import {
   buildHanaSqlResultExportFileName,
   buildHanaSqlResultHtml,
+  formatHanaSqlResultRowObjectJson,
   formatHanaSqlResultSetCsv,
   formatHanaSqlResultSetJson,
+  resolveHanaSqlResultCellValue,
   resolveSqlResultTargetColumn,
   type HanaSqlResultExportFormat,
   type RenderSqlResultOptions,
@@ -14,11 +16,17 @@ const SQL_RESULT_VIEW_TYPE = 'sapTools.hanaSqlResult';
 const SQL_RESULT_EXPORT_ACTION_MESSAGE_TYPE = 'sapTools.sqlResultExportAction';
 
 type SqlResultExportActionName = 'copyCsv' | 'copyJson' | 'exportCsv' | 'exportJson';
+type SqlResultContextCopyActionName = 'copyRowObject' | 'copyCellValue';
 
 interface SqlResultExportAction {
   readonly name: SqlResultExportActionName;
   readonly format: HanaSqlResultExportFormat;
   readonly mode: 'copy' | 'export';
+}
+
+interface SqlResultContextCopyAction {
+  readonly name: SqlResultContextCopyActionName;
+  readonly logLabel: string;
 }
 
 export interface HanaSqlResultPanelSession {
@@ -80,10 +88,15 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
       return;
     }
     const action = parseExportAction(message['action']);
-    if (action === null) {
+    if (action !== null) {
+      await this.handleExportAction(options, action);
       return;
     }
-    await this.handleExportAction(options, action);
+    const copyAction = parseContextCopyAction(message['action']);
+    if (copyAction === null) {
+      return;
+    }
+    await this.handleContextCopyAction(options, copyAction, message);
   }
 
   private async handleExportAction(
@@ -99,6 +112,45 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
       return;
     }
     await this.exportResult(options, action, content);
+  }
+
+  private async handleContextCopyAction(
+    options: RenderSqlResultOptions,
+    action: SqlResultContextCopyAction,
+    message: Record<string, unknown>
+  ): Promise<void> {
+    if (options.result?.kind !== 'resultset') {
+      return;
+    }
+    const rowIndex = parseNonNegativeInteger(message['rowIndex']);
+    const columnIndex = parseNonNegativeInteger(message['columnIndex']);
+    const content = resolveContextCopyContent(options.result, action, rowIndex, columnIndex);
+    if (content === null || rowIndex === null) {
+      this.log(`ignored invalid ${action.logLabel} copy request for app ${sanitizeLogValue(options.appName)}`);
+      return;
+    }
+    await this.copyContextResult(options.appName, action, content, rowIndex, columnIndex);
+  }
+
+  private async copyContextResult(
+    appName: string,
+    action: SqlResultContextCopyAction,
+    content: string,
+    rowIndex: number,
+    columnIndex: number | null
+  ): Promise<void> {
+    const cellSuffix = columnIndex === null ? '' : ` column ${String(columnIndex + 1)}`;
+    try {
+      await vscode.env.clipboard.writeText(content);
+      this.log(
+        `copied ${action.logLabel} for app ${sanitizeLogValue(appName)} row ${String(rowIndex + 1)}${cellSuffix}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to copy SQL result value.';
+      this.log(
+        `failed to copy ${action.logLabel} for app ${sanitizeLogValue(appName)}: ${sanitizeLogValue(message)}`
+      );
+    }
   }
 
   private async copyResult(
@@ -176,6 +228,30 @@ function parseExportAction(rawAction: unknown): SqlResultExportAction | null {
   return null;
 }
 
+function parseContextCopyAction(rawAction: unknown): SqlResultContextCopyAction | null {
+  if (rawAction === 'copyRowObject') return { name: rawAction, logLabel: 'row object' };
+  if (rawAction === 'copyCellValue') return { name: rawAction, logLabel: 'cell value' };
+  return null;
+}
+
+function resolveContextCopyContent(
+  result: NonNullable<RenderSqlResultOptions['result']>,
+  action: SqlResultContextCopyAction,
+  rowIndex: number | null,
+  columnIndex: number | null
+): string | null {
+  if (result.kind !== 'resultset' || rowIndex === null) {
+    return null;
+  }
+  if (action.name === 'copyRowObject') {
+    return formatHanaSqlResultRowObjectJson(result, rowIndex);
+  }
+  if (columnIndex === null) {
+    return null;
+  }
+  return resolveHanaSqlResultCellValue(result, rowIndex, columnIndex);
+}
+
 function formatResultSet(
   result: NonNullable<RenderSqlResultOptions['result']>,
   format: HanaSqlResultExportFormat
@@ -208,6 +284,13 @@ function toPositiveViewColumnNumber(
   }
   const column: number = viewColumn;
   return column > 0 ? column : undefined;
+}
+
+function parseNonNegativeInteger(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    return null;
+  }
+  return value;
 }
 
 function sanitizeLogValue(value: string): string {

@@ -2211,12 +2211,49 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   white-space: pre;
 }
 
+.sql-result-preview-table-wrap tbody tr {
+  transition: background 120ms ease;
+}
+
+.sql-result-preview-table-wrap tbody tr:hover td {
+  background: color-mix(in oklab, var(--accent-soft) 38%, var(--surface-bg));
+}
+
 .sql-result-preview-table-wrap th {
   position: sticky;
   top: 0;
   background: var(--surface-bg);
   color: var(--text-color);
   font-weight: 800;
+}
+
+.sql-result-context-menu {
+  position: fixed;
+  z-index: 18;
+  display: grid;
+  gap: 3px;
+  min-width: 154px;
+  padding: 5px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 88%, var(--mix-base));
+  border-radius: 8px;
+  background: var(--surface-bg);
+  box-shadow: 0 14px 30px color-mix(in oklab, var(--shadow-color) 34%, transparent);
+}
+
+.sql-result-context-menu button {
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--text-color);
+  text-align: left;
+  font-size: 0.64rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sql-result-context-menu button:hover {
+  background: color-mix(in oklab, var(--accent-soft) 72%, var(--frame-bg));
 }
 
 .output-box {

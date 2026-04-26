@@ -546,6 +546,96 @@ test.describe('SAP Tools SQL workbench', () => {
     }
   });
 
+  test('User can copy a SQL result row object and cell value from the context menu', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+      await expect(webviewFrame.locator('[data-role="hana-tables-count"]')).toHaveText('105', {
+        timeout: 15000,
+      });
+
+      const sqlEditorTab = session.window.getByRole('tab', {
+        name: /finance-uat-api\.sql/i,
+      });
+      await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
+      await clickWithFallback(sqlEditorTab);
+      await replaceActiveSqlEditorText(
+        session.window,
+        'SELECT CURRENT_USER, CURRENT_SCHEMA FROM DUMMY;'
+      );
+      await selectActiveSqlEditorText(session.window);
+
+      const resultTabsBeforeRun = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      await runActiveSqlEditorCommand(session.window);
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeRun + 1)
+        .catch(async () => {
+          await runWorkbenchCommand(session.window, 'Run HANA SQL');
+          await expect
+            .poll(
+              async () => {
+                return session.window
+                  .getByRole('tab', { name: /SAP Tools SQL Result/i })
+                  .count();
+              },
+              { timeout: 20000 }
+            )
+            .toBe(resultTabsBeforeRun + 1);
+        });
+
+      const resultFrame = await resolveSqlResultFrame(session.window, 20000);
+      const schemaCell = resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true });
+      await expect(schemaCell).toBeVisible();
+      await schemaCell.click({ button: 'right' });
+      await expect(resultFrame.getByRole('menu')).toBeVisible();
+      await expect(resultFrame.getByRole('menuitem', { name: 'Copy row object' })).toBeVisible();
+      await expect(resultFrame.getByRole('menuitem', { name: 'Copy cell value' })).toBeVisible();
+
+      await schemaCell.hover();
+      const hoveredBackground = await schemaCell.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('SQL result cell is missing.');
+        }
+        return window.getComputedStyle(element).backgroundColor;
+      });
+      expect(hoveredBackground).not.toBe('rgba(0, 0, 0, 0)');
+
+      await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy row object' }));
+      await expect(resultFrame.getByRole('menu')).toHaveCount(0);
+      const rowObjectClipboardText = await readElectronClipboardText(session.electronApp);
+      const parsedRowObject = JSON.parse(rowObjectClipboardText) as unknown;
+      expect(parsedRowObject).toEqual({
+        APP_NAME: 'finance-uat-api',
+        CURRENT_SCHEMA: 'TEST_SCHEMA',
+        EXECUTED_SQL: 'SELECT CURRENT_USER, CURRENT_SCHEMA FROM DUMMY LIMIT 100',
+      });
+      expect(rowObjectClipboardText).toContain('\n  "CURRENT_SCHEMA": "TEST_SCHEMA"');
+
+      await schemaCell.click({ button: 'right' });
+      await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy cell value' }));
+      await expect(resultFrame.getByRole('menu')).toHaveCount(0);
+      const cellClipboardText = await readElectronClipboardText(session.electronApp);
+      expect(cellClipboardText).toBe('TEST_SCHEMA');
+      await expect(resultFrame.getByText('copied to clipboard')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can search selected app tables and run a quick SELECT', async () => {
     const session = await launchExtensionHost({
       extraEnv: { SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS: '2500' },

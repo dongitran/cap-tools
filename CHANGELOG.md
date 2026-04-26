@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.26 (pre-release)
+- Added SQL result row hover styling so data rows visibly respond without changing result table sizing.
+- Added a right-click result-cell context menu with silent `Copy row object` and `Copy cell value` actions.
+- Reused duplicate-safe JSON export keys for row-object copy and logged only copy action metadata, not query result data.
+- Updated the SQL prototype, unit tests, and e2e coverage for row/cell context copy behavior.
+
 ## 0.7.25 (pre-release)
 - Decoded text-like HANA Buffer/LOB result cells as readable UTF-8 text so JSON payloads no longer appear as `0x...` hex.
 - Preserved hex rendering for invalid UTF-8 or control-byte binary values to avoid misrepresenting binary data.

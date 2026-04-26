@@ -6,8 +6,10 @@ import {
 } from './hanaSqlService';
 export {
   buildHanaSqlResultExportFileName,
+  formatHanaSqlResultRowObjectJson,
   formatHanaSqlResultSetCsv,
   formatHanaSqlResultSetJson,
+  resolveHanaSqlResultCellValue,
   type HanaSqlResultExportFormat,
 } from './hanaSqlResultExport';
 export {

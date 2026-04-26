@@ -138,6 +138,9 @@ const LOADING_RESULT_STYLE = `${SHARED_THEME_STYLE}
 
 const RESULT_SET_STYLE = `${SHARED_THEME_STYLE}
       .result-layout { height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+      :root {
+        --saptools-row-hover: var(--vscode-list-hoverBackground, var(--saptools-surface-strong));
+      }
       .result-toolbar {
         padding: 6px;
         border-bottom: 1px solid var(--saptools-border);
@@ -195,6 +198,8 @@ const RESULT_SET_STYLE = `${SHARED_THEME_STYLE}
       .result-export-list button:hover { background: var(--saptools-surface-strong); }
       .result-table-wrap { min-height: 0; overflow: auto; }
       table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; font-size: 12px; }
+      tbody tr { transition: background-color 120ms ease; }
+      tbody tr:hover td { background: var(--saptools-row-hover); }
       th,
       td {
         border-bottom: 1px solid var(--saptools-border);
@@ -215,33 +220,113 @@ const RESULT_SET_STYLE = `${SHARED_THEME_STYLE}
       }
       tbody tr:nth-child(even) { background: var(--saptools-surface); }
       .row-number { width: 52px; color: var(--saptools-muted); }
+      .result-context-menu {
+        position: fixed;
+        z-index: 5;
+        display: grid;
+        min-width: 148px;
+        padding: 5px;
+        border: 1px solid var(--saptools-border);
+        border-radius: 6px;
+        background: var(--saptools-bg);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+      }
+      .result-context-menu[hidden] { display: none; }
+      .result-context-menu button {
+        border: 0;
+        border-radius: 4px;
+        padding: 6px 8px;
+        color: var(--saptools-fg);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+      }
+      .result-context-menu button:hover { background: var(--saptools-surface-strong); }
 `;
 
-const RESULT_EXPORT_SCRIPT = `
+const RESULT_ACTION_SCRIPT = `
 (() => {
   const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
   const trigger = document.querySelector('[data-role="result-export-trigger"]');
   const list = document.querySelector('[data-role="result-export-list"]');
-  if (!(trigger instanceof HTMLButtonElement) || !(list instanceof HTMLElement)) return;
+  const contextMenu = document.querySelector('[data-role="sql-result-context-menu"]');
+  if (
+    !(trigger instanceof HTMLButtonElement) ||
+    !(list instanceof HTMLElement) ||
+    !(contextMenu instanceof HTMLElement)
+  ) return;
+  let selectedContext = null;
   const setMenuOpen = (isOpen) => {
     list.hidden = !isOpen;
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   };
+  const closeContextMenu = () => {
+    selectedContext = null;
+    contextMenu.hidden = true;
+    contextMenu.removeAttribute('data-row-index');
+    contextMenu.removeAttribute('data-column-index');
+  };
+  const readIndex = (value) => {
+    const parsed = Number.parseInt(value ?? '', 10);
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+  };
+  const positionContextMenu = (event) => {
+    contextMenu.hidden = false;
+    const left = Math.min(event.clientX, Math.max(8, window.innerWidth - contextMenu.offsetWidth - 8));
+    const top = Math.min(event.clientY, Math.max(8, window.innerHeight - contextMenu.offsetHeight - 8));
+    contextMenu.style.left = String(Math.max(8, left)) + 'px';
+    contextMenu.style.top = String(Math.max(8, top)) + 'px';
+  };
+  document.addEventListener('contextmenu', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const cell = target.closest('[data-role="sql-result-cell"]');
+    if (!(cell instanceof HTMLElement)) {
+      closeContextMenu();
+      return;
+    }
+    const rowIndex = readIndex(cell.dataset.rowIndex);
+    const columnIndex = readIndex(cell.dataset.columnIndex);
+    if (rowIndex === null || columnIndex === null) return;
+    event.preventDefault();
+    setMenuOpen(false);
+    selectedContext = { rowIndex, columnIndex };
+    contextMenu.dataset.rowIndex = String(rowIndex);
+    contextMenu.dataset.columnIndex = String(columnIndex);
+    positionContextMenu(event);
+  });
   document.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target === trigger || trigger.contains(target)) {
+      closeContextMenu();
       setMenuOpen(list.hidden);
       return;
     }
     const actionButton = target.closest('[data-action]');
     if (actionButton instanceof HTMLButtonElement) {
       const action = actionButton.dataset.action ?? '';
+      if (action === 'copyRowObject' || action === 'copyCellValue') {
+        if (selectedContext !== null) {
+          vscode?.postMessage({ type: 'sapTools.sqlResultExportAction', action, ...selectedContext });
+        }
+        closeContextMenu();
+        setMenuOpen(false);
+        return;
+      }
       setMenuOpen(false);
+      closeContextMenu();
       vscode?.postMessage({ type: 'sapTools.sqlResultExportAction', action });
       return;
     }
     setMenuOpen(false);
+    closeContextMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    setMenuOpen(false);
+    closeContextMenu();
   });
 })();
 `;
@@ -314,8 +399,9 @@ function buildResultSetHtml(
       <div class="result-table-wrap">
         ${renderResultTable(result.columns, rows)}
       </div>
+      ${renderResultContextMenu()}
     </main>
-    ${buildResultExportScript(options.nonce)}
+    ${buildResultActionScript(options.nonce)}
   `
   );
 }
@@ -385,11 +471,11 @@ function buildNonceAttribute(nonce: string | undefined): string {
   return ` nonce="${escapeHtml(nonce)}"`;
 }
 
-function buildResultExportScript(nonce: string | undefined): string {
+function buildResultActionScript(nonce: string | undefined): string {
   if (nonce === undefined || nonce.length === 0) {
     return '';
   }
-  return `<script nonce="${escapeHtml(nonce)}">${RESULT_EXPORT_SCRIPT}</script>`;
+  return `<script nonce="${escapeHtml(nonce)}">${RESULT_ACTION_SCRIPT}</script>`;
 }
 
 function renderResultTable(columns: readonly string[], rows: readonly string[][]): string {
@@ -410,10 +496,19 @@ function renderResultTable(columns: readonly string[], rows: readonly string[][]
 function renderResultRow(columns: readonly string[]): (row: readonly string[], index: number) => string {
   return (row, rowIndex) => {
     const rowCells = columns
-      .map((_, index) => `<td>${escapeHtml(row[index] ?? '')}</td>`)
+      .map((_, index) => {
+        return `<td data-role="sql-result-cell" data-row-index="${String(rowIndex)}" data-column-index="${String(index)}">${escapeHtml(row[index] ?? '')}</td>`;
+      })
       .join('');
-    return `<tr><td class="row-number">${String(rowIndex + 1)}</td>${rowCells}</tr>`;
+    return `<tr data-role="sql-result-row" data-row-index="${String(rowIndex)}"><td class="row-number">${String(rowIndex + 1)}</td>${rowCells}</tr>`;
   };
+}
+
+function renderResultContextMenu(): string {
+  return `<div class="result-context-menu" data-role="sql-result-context-menu" role="menu" hidden>
+        <button type="button" role="menuitem" data-action="copyRowObject">Copy row object</button>
+        <button type="button" role="menuitem" data-action="copyCellValue">Copy cell value</button>
+      </div>`;
 }
 
 export function escapeHtml(value: string): string {

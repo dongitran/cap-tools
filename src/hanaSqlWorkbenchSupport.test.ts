@@ -14,6 +14,8 @@ import {
   escapeHtml,
   formatHanaSqlResultSetCsv,
   formatHanaSqlResultSetJson,
+  formatHanaSqlResultRowObjectJson,
+  resolveHanaSqlResultCellValue,
   extractTableNames,
   filterKeywordCandidates,
   filterTableEntryCandidates,
@@ -501,6 +503,44 @@ describe('SQL result export formatters', () => {
     );
   });
 
+  test('formats a single row object with the same duplicate-column keys as JSON export', () => {
+    const result: HanaQueryResultSet = {
+      kind: 'resultset',
+      columns: ['ID', 'STATUS', 'STATUS', ''],
+      rows: [['1', 'OPEN', 'PAID', 'fallback']],
+      rowCount: 1,
+      elapsedMs: 4,
+    };
+
+    expect(formatHanaSqlResultRowObjectJson(result, 0)).toBe(
+      JSON.stringify(
+        {
+          ID: '1',
+          STATUS: 'OPEN',
+          STATUS_2: 'PAID',
+          COLUMN_4: 'fallback',
+        },
+        null,
+        2
+      )
+    );
+    expect(formatHanaSqlResultRowObjectJson(result, 1)).toBeNull();
+  });
+
+  test('resolves a single cell value by row and column indexes', () => {
+    const result: HanaQueryResultSet = {
+      kind: 'resultset',
+      columns: ['ID', 'STATUS'],
+      rows: [['1', 'OPEN']],
+      rowCount: 1,
+      elapsedMs: 1,
+    };
+
+    expect(resolveHanaSqlResultCellValue(result, 0, 1)).toBe('OPEN');
+    expect(resolveHanaSqlResultCellValue(result, 1, 1)).toBeNull();
+    expect(resolveHanaSqlResultCellValue(result, 0, 2)).toBeNull();
+  });
+
   test('formats empty result sets safely', () => {
     const result: HanaQueryResultSet = {
       kind: 'resultset',
@@ -560,6 +600,17 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('Export CSV');
     expect(html).toContain('Export JSON');
     expect(html).toContain('data-action="copyCsv"');
+    expect(html).toContain('data-role="sql-result-row" data-row-index="0"');
+    expect(html).toContain(
+      '<td data-role="sql-result-cell" data-row-index="0" data-column-index="1">OPEN</td>'
+    );
+    expect(html).toContain('data-role="sql-result-context-menu"');
+    expect(html).toContain('Copy row object');
+    expect(html).toContain('Copy cell value');
+    expect(html).toContain('data-action="copyRowObject"');
+    expect(html).toContain('data-action="copyCellValue"');
+    expect(html).toContain('tbody tr:hover td');
+    expect(html).not.toContain('data-cell-value');
     expect(html).not.toContain('result-export-status');
     expect(html).not.toContain('sapTools.sqlResultExportActionResult');
     expect(html).not.toContain('Copying result');
@@ -569,7 +620,7 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('Elapsed: 12 ms');
     expect(html).toContain('<th>ID</th>');
     expect(html).toContain('<th>STATUS</th>');
-    expect(html).toContain('<td>OPEN</td>');
+    expect(html).toContain('>OPEN</td>');
     expect(html).toContain('table-layout: auto;');
     expect(html).toContain('width: max-content;');
     expect(html).toContain('min-width: 100%;');
@@ -609,7 +660,7 @@ describe('buildHanaSqlResultHtml', () => {
       },
     });
 
-    expect(html).toContain(`<td>${longValue}</td>`);
+    expect(html).toContain(`>${longValue}</td>`);
     expect(html).toContain('white-space: pre;');
     expect(html).toContain('overflow: visible;');
     expect(html).toContain('text-overflow: clip;');

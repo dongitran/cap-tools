@@ -21,11 +21,53 @@ function formatCsvCell(value: string): string {
 export function formatHanaSqlResultSetJson(result: HanaQueryResultSet): string {
   const columnKeys = buildUniqueColumnKeys(result.columns);
   const rows = result.rows.map((row) => {
-    return Object.fromEntries(
-      columnKeys.map((columnKey, index) => [columnKey, row[index] ?? ''])
-    );
+    return buildRowObject(columnKeys, row);
   });
   return JSON.stringify(rows, null, 2);
+}
+
+export function formatHanaSqlResultRowObjectJson(
+  result: HanaQueryResultSet,
+  rowIndex: number
+): string | null {
+  const row = resolveResultRow(result, rowIndex);
+  if (row === null) {
+    return null;
+  }
+  return JSON.stringify(buildRowObject(buildUniqueColumnKeys(result.columns), row), null, 2);
+}
+
+export function resolveHanaSqlResultCellValue(
+  result: HanaQueryResultSet,
+  rowIndex: number,
+  columnIndex: number
+): string | null {
+  const row = resolveResultRow(result, rowIndex);
+  if (row === null || !isValidIndex(columnIndex) || columnIndex >= result.columns.length) {
+    return null;
+  }
+  return row[columnIndex] ?? '';
+}
+
+function buildRowObject(
+  columnKeys: readonly string[],
+  row: readonly string[]
+): Record<string, string> {
+  return Object.fromEntries(columnKeys.map((columnKey, index) => [columnKey, row[index] ?? '']));
+}
+
+function resolveResultRow(
+  result: HanaQueryResultSet,
+  rowIndex: number
+): readonly string[] | null {
+  if (!isValidIndex(rowIndex)) {
+    return null;
+  }
+  return result.rows[rowIndex] ?? null;
+}
+
+function isValidIndex(value: number): boolean {
+  return Number.isInteger(value) && value >= 0;
 }
 
 function buildUniqueColumnKeys(columns: readonly string[]): readonly string[] {
