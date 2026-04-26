@@ -65,10 +65,15 @@ async function replaceActiveSqlEditorText(window: Page, sql: string): Promise<vo
   await window.keyboard.insertText(sql);
 }
 
+async function selectActiveSqlEditorText(window: Page): Promise<void> {
+  await focusActiveSqlEditor(window);
+  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+}
+
 async function runActiveSqlEditorCommand(window: Page): Promise<void> {
-  const chordKey = process.platform === 'darwin' ? 'Meta+E' : 'Control+E';
-  await window.keyboard.press(chordKey);
-  await window.keyboard.press(chordKey);
+  await window.keyboard.press(
+    process.platform === 'darwin' ? 'Meta+Shift+Enter' : 'Control+Shift+Enter'
+  );
 }
 
 async function triggerActiveEditorSuggest(window: Page): Promise<Locator> {
@@ -227,7 +232,7 @@ test.describe('SAP Tools SQL workbench', () => {
       const editorGroupCountBeforeFirstResult = await readVisibleEditorGroupCount(session.window);
       await runActiveSqlEditorCommand(session.window);
       const resultFrame = await resolveSqlResultFrame(session.window, 7000).catch(async () => {
-        await runWorkbenchCommand(session.window, 'SAP Tools: Run HANA SQL');
+        await runWorkbenchCommand(session.window, 'Run HANA SQL');
         return resolveSqlResultFrame(session.window, 30000);
       });
       const editorGroupCountAfterFirstResult = await readVisibleEditorGroupCount(session.window);
@@ -242,7 +247,9 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(resultFrame.getByText(/^App:\s*finance-uat-api$/)).toBeVisible();
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('columnheader', { name: '#' })).toBeVisible();
-      await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
+      await expect(
+        resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true })
+      ).toBeVisible();
       await expect(
         resultFrame
           .getByRole('cell')
@@ -311,7 +318,7 @@ test.describe('SAP Tools SQL workbench', () => {
         )
         .toBe(resultTabsBeforeExplicitLimit + 1)
         .catch(async () => {
-          await runWorkbenchCommand(session.window, 'SAP Tools: Run HANA SQL');
+          await runWorkbenchCommand(session.window, 'Run HANA SQL');
           await expect
             .poll(
               async () => {
@@ -341,6 +348,93 @@ test.describe('SAP Tools SQL workbench', () => {
       const explicitLimitSqlText = await explicitLimitSqlCell.innerText();
       expect(explicitLimitSqlText.match(/\bLIMIT\b/g) ?? []).toHaveLength(1);
       expect(explicitLimitSqlText).not.toContain('LIMIT 100');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can run selected SQL with a readable table name from the selected app', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+
+      const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
+      await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
+      await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+
+      const searchInput = tablesPanel.getByRole('searchbox', { name: 'Search tables' });
+      await searchInput.fill('Demo_App');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
+      const readableTableRow = tablesPanel.locator(
+        '[data-role="hana-table-row"][data-table-name="Demo_App"]'
+      );
+      await expect(readableTableRow).toBeVisible();
+      await expect(readableTableRow.locator('[data-role="hana-table-name"]')).toHaveAttribute(
+        'data-full-display-name',
+        'Demo_App'
+      );
+
+      const sqlEditorTab = session.window.getByRole('tab', {
+        name: /finance-uat-api\.sql/i,
+      });
+      await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
+      await clickWithFallback(sqlEditorTab);
+      await replaceActiveSqlEditorText(session.window, 'select * from Demo_App limit 100;');
+      await selectActiveSqlEditorText(session.window);
+
+      const resultTabsBeforeRun = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      await runActiveSqlEditorCommand(session.window);
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeRun + 1)
+        .catch(async () => {
+          await runWorkbenchCommand(session.window, 'Run HANA SQL');
+          await expect
+            .poll(
+              async () => {
+                return session.window
+                  .getByRole('tab', { name: /SAP Tools SQL Result/i })
+                  .count();
+              },
+              { timeout: 20000 }
+            )
+            .toBe(resultTabsBeforeRun + 1);
+        });
+
+      const resultFrame = await resolveSqlResultFrame(session.window, 20000);
+      await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
+      await expect(resultFrame.getByRole('table')).toBeVisible();
+      await expect(
+        resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true })
+      ).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /select \* from "TEST_SCHEMA"\."Demo_App" limit 100/i })
+          .first()
+      ).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /select \* from Demo_App limit 100/i })
+          .first()
+      ).toHaveCount(0);
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -722,7 +816,9 @@ test.describe('SAP Tools SQL workbench', () => {
       ).toHaveCount(0);
       await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
       await expect(resultFrame.getByRole('table')).toBeVisible();
-      await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
+      await expect(
+        resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true })
+      ).toBeVisible();
 
       const secondTargetSelectButton = secondTargetTableRow.getByRole('button', {
         name: `Select first 10 rows of ${secondTargetTableName}`,

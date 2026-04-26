@@ -596,7 +596,7 @@ export async function openCfLogsPanel(window: Page): Promise<Frame> {
     return frameFromShortcut;
   }
 
-  await runWorkbenchCommand(window, 'SAP Tools: Open CFLogs Panel');
+  await runWorkbenchCommand(window, 'Open CFLogs Panel');
 
   const frameFromCommand = await resolveCfLogsPanelFrame(window, 15000);
   if (frameFromCommand !== undefined) {
@@ -623,9 +623,7 @@ export async function openCfLogsPanel(window: Page): Promise<Frame> {
 
 export async function runWorkbenchCommand(window: Page, commandTitle: string): Promise<void> {
   const openCommandPalette = async (): Promise<void> => {
-    await window.keyboard.press(
-      process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P'
-    );
+    await window.keyboard.press('F1');
   };
 
   await openCommandPalette();
@@ -640,7 +638,8 @@ export async function runWorkbenchCommand(window: Page, commandTitle: string): P
   const quickInputField = quickInputWidget.locator('input[type="text"]').first();
   await expect(quickInputField).toBeVisible({ timeout: 10000 });
   await quickInputField.click();
-  await quickInputField.fill(commandTitle);
+  await quickInputField.fill('');
+  await window.keyboard.type(`>${commandTitle}`);
   await window.keyboard.press('Enter');
 }
 

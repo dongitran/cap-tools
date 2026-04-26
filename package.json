@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.7.20",
+  "version": "0.7.21",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -29,17 +29,17 @@
     "commands": [
       {
         "command": "sapTools.selectSapBtpRegion",
-        "title": "SAP Tools: Open Region Menu",
+        "title": "Open Region Menu",
         "category": "SAP Tools"
       },
       {
         "command": "sapTools.openCfLogsPanel",
-        "title": "SAP Tools: Open CFLogs Panel",
+        "title": "Open CFLogs Panel",
         "category": "SAP Tools"
       },
       {
         "command": "sapTools.runHanaSql",
-        "title": "SAP Tools: Run HANA SQL",
+        "title": "Run HANA SQL",
         "category": "SAP Tools"
       }
     ],
@@ -87,8 +87,27 @@
         "key": "ctrl+e ctrl+e",
         "mac": "cmd+e cmd+e",
         "when": "editorTextFocus && editorLangId == sql && sapTools.hanaSqlEditor"
+      },
+      {
+        "command": "sapTools.runHanaSql",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "editorTextFocus && editorLangId == sql && sapTools.hanaSqlEditor"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "sapTools.selectSapBtpRegion"
+        },
+        {
+          "command": "sapTools.openCfLogsPanel"
+        },
+        {
+          "command": "sapTools.runHanaSql"
+        }
+      ]
+    }
   },
   "files": [
     "dist",

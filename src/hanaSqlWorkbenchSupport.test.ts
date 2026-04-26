@@ -19,6 +19,7 @@ import {
   formatHanaTableDisplayEntries,
   formatHanaTableDisplayName,
   quoteHanaIdentifier,
+  resolveHanaDisplayTableReferences,
   resolveSqlResultTargetColumn,
   sanitizeUntitledFileName,
 } from './hanaSqlWorkbenchSupport';
@@ -217,6 +218,7 @@ describe('resolveSqlResultTargetColumn', () => {
 describe('createTestModeTableNames', () => {
   test('emits per-app synthetic tables, long table names, and known system tables', () => {
     const tables = createTestModeTableNames('finance-uat-api');
+    expect(tables).toContain('Demo_App');
     expect(tables).toContain('FINANCE_UAT_API_ORDERS');
     expect(tables).toContain('FINANCE_UAT_API_ITEMS');
     expect(tables).toContain(
@@ -235,6 +237,91 @@ describe('createTestModeTableNames', () => {
   test('uses the APP fallback prefix when app name is blank', () => {
     const tables = createTestModeTableNames('   ');
     expect(tables[0]).toBe('APP_ORDERS');
+  });
+});
+
+describe('resolveHanaDisplayTableReferences', () => {
+  const tableEntries = [
+    { displayName: 'Demo_App', name: 'Demo_App' },
+    { displayName: 'Demo_CompactName', name: 'DEMOCOMPACTNAME' },
+    { displayName: 'Demo_PurchaseOrderItemMapping', name: 'DEMO_PURCHASEORDERITEMMAPPING' },
+  ];
+
+  test('resolves mixed-case display table names to schema-qualified quoted identifiers', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'select * from Demo_App limit 100',
+      tableEntries,
+      'DEMO_APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('select * from "DEMO_APP_SCHEMA"."Demo_App" limit 100');
+    expect(result.replacements).toEqual([
+      {
+        displayName: 'Demo_App',
+        identifier: '"DEMO_APP_SCHEMA"."Demo_App"',
+        tableName: 'Demo_App',
+      },
+    ]);
+  });
+
+  test('resolves readable aliases when the display name uppercases to a different raw table', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM Demo_CompactName',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT * FROM "APP_SCHEMA"."DEMOCOMPACTNAME"');
+  });
+
+  test('keeps uppercase-safe display names unchanged when HANA can resolve them unquoted', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM Demo_PurchaseOrderItemMapping',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT * FROM Demo_PurchaseOrderItemMapping');
+    expect(result.replacements).toEqual([]);
+  });
+
+  test('does not rewrite strings, comments, or already quoted identifiers', () => {
+    const sql = [
+      "SELECT 'Demo_App' AS NAME FROM \"Demo_App\"",
+      '-- JOIN Demo_App',
+    ].join('\n');
+    const result = resolveHanaDisplayTableReferences(sql, tableEntries, 'APP_SCHEMA');
+
+    expect(result.sql).toBe(sql);
+    expect(result.replacements).toEqual([]);
+  });
+
+  test('preserves explicit schema qualifiers while quoting the resolved table name', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM CUSTOM_SCHEMA.Demo_App',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT * FROM CUSTOM_SCHEMA."Demo_App"');
+  });
+
+  test('resolves table references in joins and mutating statements', () => {
+    const selectResult = resolveHanaDisplayTableReferences(
+      'SELECT * FROM Demo_App d JOIN Demo_CompactName c ON c.ID = d.ID',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+    const updateResult = resolveHanaDisplayTableReferences(
+      'UPDATE Demo_App SET NAME = \'x\'',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(selectResult.sql).toBe(
+      'SELECT * FROM "APP_SCHEMA"."Demo_App" d JOIN "APP_SCHEMA"."DEMOCOMPACTNAME" c ON c.ID = d.ID'
+    );
+    expect(updateResult.sql).toBe('UPDATE "APP_SCHEMA"."Demo_App" SET NAME = \'x\'');
   });
 });
 

@@ -30,6 +30,7 @@ import {
   filterKeywordCandidates,
   formatHanaTableDisplayEntries,
   resolveSqlResultTargetColumn,
+  resolveHanaDisplayTableReferences,
   sanitizeUntitledFileName,
   type HanaTableDisplayEntry,
   type RenderSqlResultOptions,
@@ -329,7 +330,7 @@ export class HanaSqlWorkbench
     const guardedSql = statementKind === 'readonly'
       ? applyDefaultHanaSelectLimit(normalizedSql)
       : { sql: normalizedSql, applied: false, limit: HANA_SQL_DEFAULT_SELECT_LIMIT };
-    const executionSql = guardedSql.sql;
+    let executionSql = guardedSql.sql;
 
     if (guardedSql.applied) {
       this.logSql(
@@ -352,6 +353,24 @@ export class HanaSqlWorkbench
     }
 
     try {
+      await this.prefetchTableNames(context.appId);
+      const resolution = resolveHanaDisplayTableReferences(
+        executionSql,
+        resolveCompletionTableEntries(context),
+        context.schema
+      );
+      executionSql = resolution.sql;
+      if (resolution.replacements.length > 0) {
+        const preview = resolution.replacements.slice(0, 4).map((replacement) => {
+          return `${sanitizeSqlLogValue(replacement.displayName)} -> ${sanitizeSqlLogValue(replacement.identifier)}`;
+        });
+        const suffix = resolution.replacements.length > preview.length
+          ? `, +${String(resolution.replacements.length - preview.length)} more`
+          : '';
+        this.logSql(
+          `resolved ${String(resolution.replacements.length)} table display reference(s) for app ${sanitizeSqlLogValue(context.appName)}: ${preview.join(', ')}${suffix}`
+        );
+      }
       this.logSql(
         `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlCommandLogValue(executionSql)}`
       );
@@ -426,6 +445,7 @@ export class HanaSqlWorkbench
   private async loadTableNames(context: HanaSqlAppContext): Promise<void> {
     if (this.isTestMode) {
       await delayTestModeTableLoadIfConfigured();
+      context.schema = 'TEST_SCHEMA';
       context.tableNames = createTestModeTableNames(context.appName);
       context.tableEntries = await this.formatTableEntries(context.tableNames);
       this.logSql(

@@ -1329,12 +1329,13 @@ function buildStandaloneTableNames(appName) {
     `${normalized}_COM_SAP_S4HANA_FINANCE_GENERAL_LEDGER_ACCOUNTING_DOCUMENT_ITEM`,
     `${normalized}_VERY_LONG_NAMESPACE_WITH_DEEPLY_NESTED_SERVICE_PROJECTION_FOR_PAYMENT_ALLOCATION_HISTORY`,
     `${normalized}_I_BUSINESSPARTNERBANK_0001_TO_SUPPLIERINVOICEPAYMENTBLOCKREASON`,
+    'Demo_App',
     'DEMO_PURCHASEORDERITEMMAPPING',
     'DEMO_BUSINESSAPP_TEST',
     'DUMMY',
     'M_TABLES',
   ];
-  const generatedTables = Array.from({ length: 94 }, (_, index) => {
+  const generatedTables = Array.from({ length: 93 }, (_, index) => {
     return `${normalized}_ENTITY_${String(index + 1).padStart(3, '0')}`;
   });
   return [...baseTables, ...generatedTables];
@@ -3989,6 +3990,7 @@ function renderHanaTableRows(serviceId, tables) {
           data-role="hana-table-row"
           data-service-id="${escapeHtml(serviceId)}"
           data-table-name="${escapeHtml(tableName)}"
+          data-display-table-name="${escapeHtml(displayName)}"
           data-full-table-name="${escapeHtml(tableName)}"
           title="${escapeHtml(tableName)}"
           aria-label="Table ${escapeHtml(tableName)}"

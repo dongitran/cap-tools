@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.21 (pre-release)
+- Resolved SQL table display names such as `Demo_App` to schema-qualified quoted HANA identifiers before execution, so selected/manual SQL uses the same app table context as quick `Select`.
+- Added output-channel logging for display-name reference resolution and final SQL command shape while keeping string literal redaction.
+- Added a direct `Cmd/Ctrl+Shift+Enter` SQL run shortcut and cleaned Command Palette labels so `SAP Tools: Run HANA SQL` is discoverable without duplicated prefixes.
+- Expanded unit, prototype, and e2e coverage for mixed-case table names, selected SQL execution, quick-select schema output, and VS Code command fallback behavior.
+
 ## 0.7.20 (pre-release)
 - Added a per-table SQL quick-select loading state so the clicked `Select` action shows an animated spinner, remains visible while the query is running, and clears in place after completion.
 - Updated SQL table completions to use the same readable display names shown in the Tables list, with matching e2e coverage for the VS Code suggestion widget.
