@@ -218,7 +218,7 @@ describe('resolveSqlResultTargetColumn', () => {
 describe('createTestModeTableNames', () => {
   test('emits per-app synthetic tables, long table names, and known system tables', () => {
     const tables = createTestModeTableNames('finance-uat-api');
-    expect(tables).toContain('Demo_App');
+    expect(tables).toContain('DEMO_APP');
     expect(tables).toContain('FINANCE_UAT_API_ORDERS');
     expect(tables).toContain('FINANCE_UAT_API_ITEMS');
     expect(tables).toContain(
@@ -274,15 +274,44 @@ describe('resolveHanaDisplayTableReferences', () => {
     expect(result.sql).toBe('SELECT * FROM "APP_SCHEMA"."DEMOCOMPACTNAME"');
   });
 
-  test('keeps uppercase-safe display names unchanged when HANA can resolve them unquoted', () => {
+  test('resolves readable display casing even when the raw table name is uppercase-safe', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'select * from Demo_App limit 100',
+      [{ displayName: 'Demo_App', name: 'DEMO_APP' }],
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('select * from "APP_SCHEMA"."DEMO_APP" limit 100');
+  });
+
+  test('keeps exact raw uppercase table references unchanged', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM DEMO_APP',
+      [{ displayName: 'Demo_App', name: 'DEMO_APP' }],
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT * FROM DEMO_APP');
+    expect(result.replacements).toEqual([]);
+  });
+
+  test('schema-qualifies readable display names even when HANA could uppercase them', () => {
     const result = resolveHanaDisplayTableReferences(
       'SELECT * FROM Demo_PurchaseOrderItemMapping',
       tableEntries,
       'APP_SCHEMA'
     );
 
-    expect(result.sql).toBe('SELECT * FROM Demo_PurchaseOrderItemMapping');
-    expect(result.replacements).toEqual([]);
+    expect(result.sql).toBe(
+      'SELECT * FROM "APP_SCHEMA"."DEMO_PURCHASEORDERITEMMAPPING"'
+    );
+    expect(result.replacements).toEqual([
+      {
+        displayName: 'Demo_PurchaseOrderItemMapping',
+        identifier: '"APP_SCHEMA"."DEMO_PURCHASEORDERITEMMAPPING"',
+        tableName: 'DEMO_PURCHASEORDERITEMMAPPING',
+      },
+    ]);
   });
 
   test('does not rewrite strings, comments, or already quoted identifiers', () => {
@@ -304,6 +333,60 @@ describe('resolveHanaDisplayTableReferences', () => {
     );
 
     expect(result.sql).toBe('SELECT * FROM CUSTOM_SCHEMA."Demo_App"');
+  });
+
+  test('preserves quoted schema qualifiers while quoting the resolved table name', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM "CUSTOM_SCHEMA".Demo_App',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT * FROM "CUSTOM_SCHEMA"."Demo_App"');
+  });
+
+  test('resolves comma-separated table references', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM Demo_App a, Demo_CompactName c WHERE c.ID = a.ID',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe(
+      'SELECT * FROM "APP_SCHEMA"."Demo_App" a, "APP_SCHEMA"."DEMOCOMPACTNAME" c WHERE c.ID = a.ID'
+    );
+  });
+
+  test('does not rewrite derived-table aliases or CTE references', () => {
+    const derivedResult = resolveHanaDisplayTableReferences(
+      'SELECT * FROM (SELECT 1 AS ID) Demo_App',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+    const cteResult = resolveHanaDisplayTableReferences(
+      'WITH Demo_App AS (SELECT 1 AS ID) SELECT * FROM Demo_App',
+      tableEntries,
+      'APP_SCHEMA'
+    );
+
+    expect(derivedResult.sql).toBe('SELECT * FROM (SELECT 1 AS ID) Demo_App');
+    expect(cteResult.sql).toBe(
+      'WITH Demo_App AS (SELECT 1 AS ID) SELECT * FROM Demo_App'
+    );
+  });
+
+  test('skips ambiguous display and raw table reference keys', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT * FROM Demo_App',
+      [
+        { displayName: 'Demo_App', name: 'DEMO_APP_RAW' },
+        { displayName: 'Demo_App_Raw', name: 'DEMO_APP' },
+      ],
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT * FROM Demo_App');
+    expect(result.replacements).toEqual([]);
   });
 
   test('resolves table references in joins and mutating statements', () => {

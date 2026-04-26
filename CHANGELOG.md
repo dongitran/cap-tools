@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.22 (pre-release)
+- Fixed manual SQL execution for readable table names such as `Demo_App` by schema-qualifying selected-app display references even when the raw HANA name is uppercase-safe.
+- Hardened SQL table-reference resolution for quoted schema qualifiers, comma joins, derived-table aliases, CTE references, and ambiguous display/raw table-name collisions.
+- Updated prototype/test data so the SQL table list displays `Demo_App` while preserving raw `DEMO_APP`, with focused unit and e2e coverage for selected SQL execution.
+
 ## 0.7.21 (pre-release)
 - Resolved SQL table display names such as `Demo_App` to schema-qualified quoted HANA identifiers before execution, so selected/manual SQL uses the same app table context as quick `Select`.
 - Added output-channel logging for display-name reference resolution and final SQL command shape while keeping string literal redaction.

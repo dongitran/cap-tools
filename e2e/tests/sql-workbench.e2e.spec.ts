@@ -371,7 +371,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await searchInput.fill('Demo_App');
       await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
       const readableTableRow = tablesPanel.locator(
-        '[data-role="hana-table-row"][data-table-name="Demo_App"]'
+        '[data-role="hana-table-row"][data-table-name="DEMO_APP"]'
       );
       await expect(readableTableRow).toBeVisible();
       await expect(readableTableRow.locator('[data-role="hana-table-name"]')).toHaveAttribute(
@@ -424,7 +424,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(
         resultFrame
           .getByRole('cell')
-          .filter({ hasText: /select \* from "TEST_SCHEMA"\."Demo_App" limit 100/i })
+          .filter({ hasText: /select \* from "TEST_SCHEMA"\."DEMO_APP" limit 100/i })
           .first()
       ).toBeVisible();
       await expect(
