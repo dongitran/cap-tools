@@ -26,8 +26,8 @@ import {
   buildRawHanaTableDisplayEntries,
   createTestModeTableNames,
   extractTableNames,
+  filterTableEntryCandidates,
   filterKeywordCandidates,
-  filterTableCandidates,
   formatHanaTableDisplayEntries,
   resolveSqlResultTargetColumn,
   sanitizeUntitledFileName,
@@ -46,6 +46,7 @@ interface HanaSqlAppContext {
   schema: string;
   sqlDocumentUri: string;
   tableNames: readonly string[];
+  tableEntries: readonly HanaTableDisplayEntry[];
   tableNamesPromise: Promise<void> | null;
 }
 export interface OpenHanaSqlFileRequest {
@@ -68,14 +69,27 @@ function buildSqlKeywordCompletionItems(prefix: string): vscode.CompletionItem[]
 }
 
 function buildTableCompletionItems(
-  tableNames: readonly string[],
+  tableEntries: readonly HanaTableDisplayEntry[],
   prefix: string
 ): vscode.CompletionItem[] {
-  return filterTableCandidates(tableNames, prefix).map((tableName) => {
-    const item = new vscode.CompletionItem(tableName, vscode.CompletionItemKind.Struct);
+  return filterTableEntryCandidates(tableEntries, prefix).map((tableEntry) => {
+    const item = new vscode.CompletionItem(
+      tableEntry.displayName,
+      vscode.CompletionItemKind.Struct
+    );
     item.detail = 'S/4HANA table';
+    item.insertText = tableEntry.displayName;
     return item;
   });
+}
+
+function resolveCompletionTableEntries(
+  context: HanaSqlAppContext
+): readonly HanaTableDisplayEntry[] {
+  if (context.tableEntries.length > 0) {
+    return context.tableEntries;
+  }
+  return buildRawHanaTableDisplayEntries(context.tableNames);
 }
 
 export class HanaSqlWorkbench
@@ -159,14 +173,12 @@ export class HanaSqlWorkbench
   async loadTableEntriesForApp(
     options: OpenHanaSqlFileRequest
   ): Promise<readonly HanaTableDisplayEntry[]> {
-    const tableNames = await this.loadTableNamesForApp(options);
-    try {
-      return await formatHanaTableDisplayEntries(tableNames);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logSql(`table display name formatter failed: ${sanitizeSqlLogValue(message)}`);
-      return buildRawHanaTableDisplayEntries(tableNames);
+    const context = this.ensureAppContext(options);
+    await this.prefetchTableNames(context.appId);
+    if (context.tableNames.length > 0 && context.tableEntries.length === 0) {
+      context.tableEntries = await this.formatTableEntries(context.tableNames);
     }
+    return context.tableEntries;
   }
 
   async runQuickTableSelectForApp(
@@ -189,6 +201,7 @@ export class HanaSqlWorkbench
       this.logSql(
         `run quick SELECT for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(sql)}`
       );
+      await delayE2eQuickSelectIfConfigured();
       const result = await this.executeSqlForContext(context, sql, statementKind);
       this.logSql(`quick SELECT completed for app ${sanitizeSqlLogValue(context.appName)}`);
       this.openResultPanel(
@@ -237,7 +250,7 @@ export class HanaSqlWorkbench
     void this.prefetchTableNames(context.appId);
 
     return [
-      ...buildTableCompletionItems(context.tableNames, prefix),
+      ...buildTableCompletionItems(resolveCompletionTableEntries(context), prefix),
       ...buildSqlKeywordCompletionItems(prefix),
     ];
   }
@@ -259,6 +272,7 @@ export class HanaSqlWorkbench
       schema: '',
       sqlDocumentUri: '',
       tableNames: [],
+      tableEntries: [],
       tableNamesPromise: null,
     };
     this.appContextsByAppId.set(options.appId, created);
@@ -413,6 +427,7 @@ export class HanaSqlWorkbench
     if (this.isTestMode) {
       await delayTestModeTableLoadIfConfigured();
       context.tableNames = createTestModeTableNames(context.appName);
+      context.tableEntries = await this.formatTableEntries(context.tableNames);
       this.logSql(
         `loaded ${String(context.tableNames.length)} test tables for app ${sanitizeSqlLogValue(context.appName)}`
       );
@@ -440,6 +455,7 @@ export class HanaSqlWorkbench
         }
         hadSuccessfulDiscoveryQuery = true;
         context.tableNames = extractTableNames(result);
+        context.tableEntries = await this.formatTableEntries(context.tableNames);
         if (context.tableNames.length > 0) {
           this.logSql(
             `loaded ${String(context.tableNames.length)} tables for app ${sanitizeSqlLogValue(context.appName)}`
@@ -458,6 +474,19 @@ export class HanaSqlWorkbench
       throw new Error(`Failed to discover tables: ${lastErrorMessage}`);
     }
     this.logSql(`no tables found for app ${sanitizeSqlLogValue(context.appName)}`);
+    context.tableEntries = [];
+  }
+
+  private async formatTableEntries(
+    tableNames: readonly string[]
+  ): Promise<readonly HanaTableDisplayEntry[]> {
+    try {
+      return await formatHanaTableDisplayEntries(tableNames);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(`table display name formatter failed: ${sanitizeSqlLogValue(message)}`);
+      return buildRawHanaTableDisplayEntries(tableNames);
+    }
   }
 
   private async ensureConnection(context: HanaSqlAppContext): Promise<void> {
@@ -615,7 +644,15 @@ function skipSqlStringLiteralForLog(value: string, start: number): number {
 }
 
 async function delayTestModeTableLoadIfConfigured(): Promise<void> {
-  const delayMs = resolveE2eTestModeTablesDelayMs();
+  await delayE2eMsFromEnv('SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS');
+}
+
+async function delayE2eQuickSelectIfConfigured(): Promise<void> {
+  await delayE2eMsFromEnv('SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS');
+}
+
+async function delayE2eMsFromEnv(envName: string): Promise<void> {
+  const delayMs = resolveE2eDelayMs(envName);
   if (delayMs === 0) {
     return;
   }
@@ -624,12 +661,12 @@ async function delayTestModeTableLoadIfConfigured(): Promise<void> {
   });
 }
 
-function resolveE2eTestModeTablesDelayMs(): number {
+function resolveE2eDelayMs(envName: string): number {
   if (process.env['SAP_TOOLS_E2E'] !== '1') {
     return 0;
   }
 
-  const rawDelay = process.env['SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS'] ?? '';
+  const rawDelay = process.env[envName] ?? '';
   const parsedDelay = Number.parseInt(rawDelay, 10);
   if (!Number.isFinite(parsedDelay) || parsedDelay <= 0) {
     return 0;

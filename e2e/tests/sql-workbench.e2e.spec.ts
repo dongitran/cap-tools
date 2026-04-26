@@ -71,6 +71,21 @@ async function runActiveSqlEditorCommand(window: Page): Promise<void> {
   await window.keyboard.press(chordKey);
 }
 
+async function triggerActiveEditorSuggest(window: Page): Promise<Locator> {
+  await focusActiveSqlEditor(window);
+  await window.keyboard.press('Control+Space');
+  const suggestWidget = window.locator('.suggest-widget:visible').first();
+  const visibleFromShortcut = await suggestWidget
+    .isVisible({ timeout: 3000 })
+    .catch((): false => false);
+  if (visibleFromShortcut) {
+    return suggestWidget;
+  }
+
+  await runWorkbenchCommand(window, 'Trigger Suggest');
+  return suggestWidget;
+}
+
 async function selectSqlApp(webviewFrame: Frame, appName: string): Promise<void> {
   await clickWithFallback(webviewFrame.getByRole('button', { name: appName }));
 }
@@ -184,6 +199,9 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden({
         timeout: 10000,
       });
+      await expect(webviewFrame.locator('[data-role="hana-tables-count"]')).toHaveText('105', {
+        timeout: 15000,
+      });
       await expect(webviewFrame.locator('body')).not.toContainText('SQL file opened for app');
 
       const sqlEditorTab = session.window.getByRole('tab', {
@@ -191,7 +209,20 @@ test.describe('SAP Tools SQL workbench', () => {
       });
       await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
       await clickWithFallback(sqlEditorTab);
+      await expect(sqlEditorTab).toHaveAttribute('aria-selected', 'true', {
+        timeout: 10000,
+      });
       await focusActiveSqlEditor(session.window);
+      await replaceActiveSqlEditorText(session.window, 'SELECT * FROM Demo');
+      const suggestWidget = await triggerActiveEditorSuggest(session.window);
+      await expect(suggestWidget).toBeVisible({ timeout: 10000 });
+      await expect(suggestWidget).toContainText('Demo_PurchaseOrderItemMapping');
+      await expect(suggestWidget).not.toContainText('DEMO_PURCHASEORDERITEMMAPPING');
+      await session.window.keyboard.press('Escape');
+      await replaceActiveSqlEditorText(
+        session.window,
+        'SELECT CURRENT_USER, CURRENT_SCHEMA FROM DUMMY;'
+      );
 
       const editorGroupCountBeforeFirstResult = await readVisibleEditorGroupCount(session.window);
       await runActiveSqlEditorCommand(session.window);
@@ -316,7 +347,9 @@ test.describe('SAP Tools SQL workbench', () => {
   });
 
   test('User can search selected app tables and run a quick SELECT', async () => {
-    const session = await launchExtensionHost();
+    const session = await launchExtensionHost({
+      extraEnv: { SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS: '900' },
+    });
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
@@ -614,6 +647,27 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(targetSelectButton).toHaveCSS('opacity', '1');
       await expect(targetSelectButton).toHaveCSS('pointer-events', 'auto');
       await clickWithFallback(targetSelectButton);
+      const targetSelectAction = targetTableRow.locator(
+        '[data-action="run-hana-table-select"]'
+      );
+      await expect(targetTableRow).toHaveClass(/is-select-loading/);
+      await expect(targetSelectAction).toHaveClass(/is-loading/);
+      await expect(targetSelectAction).toHaveAttribute(
+        'aria-label',
+        `Loading first 10 rows of ${targetTableName}`
+      );
+      await expect(targetSelectAction).toHaveAttribute('aria-busy', 'true');
+      await expect(targetSelectAction).toBeDisabled();
+      await expect(targetSelectAction.locator('.sql-table-select-spinner')).toBeVisible();
+
+      const secondTargetTableName = 'FINANCE_UAT_API_ENTITY_091';
+      const secondTargetTableRow = tablesPanel.locator(
+        `[data-role="hana-table-row"][data-table-name="${secondTargetTableName}"]`
+      );
+      await expect(secondTargetTableRow).toBeVisible();
+      await secondTargetTableRow.hover();
+      await expect(targetSelectAction).toHaveCSS('opacity', '1');
+      await expect(targetSelectAction).toHaveCSS('pointer-events', 'auto');
 
       await expect
         .poll(
@@ -651,6 +705,16 @@ test.describe('SAP Tools SQL workbench', () => {
         .toBeGreaterThanOrEqual(scrollTopBeforeQuickSelect - 2);
       const sqlWorkbenchTextRecords = await readSqlWorkbenchTextRecords(webviewFrame);
       expect(sqlWorkbenchTextRecords.join('\n')).not.toContain('Running SELECT *');
+      await expect(targetTableRow).not.toHaveClass(/is-select-loading/);
+      await expect(targetSelectAction).not.toHaveClass(/is-loading/);
+      await expect(targetSelectAction).toHaveAttribute('aria-busy', 'false');
+      await expect(targetSelectAction).toHaveAttribute(
+        'aria-label',
+        `Select first 10 rows of ${targetTableName}`
+      );
+      await expect(targetSelectAction).toBeEnabled();
+      await expect(targetSelectAction.locator('.sql-table-select-spinner')).toBeHidden();
+      await expect(targetSelectAction).toHaveCSS('pointer-events', 'none');
 
       const resultFrame = await resolveSqlResultFrame(session.window, 20000);
       await expect(
@@ -660,11 +724,6 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
 
-      const secondTargetTableName = 'FINANCE_UAT_API_ENTITY_091';
-      const secondTargetTableRow = tablesPanel.locator(
-        `[data-role="hana-table-row"][data-table-name="${secondTargetTableName}"]`
-      );
-      await expect(secondTargetTableRow).toBeVisible();
       const secondTargetSelectButton = secondTargetTableRow.getByRole('button', {
         name: `Select first 10 rows of ${secondTargetTableName}`,
       });
@@ -674,7 +733,9 @@ test.describe('SAP Tools SQL workbench', () => {
       const editorGroupCountBeforeSecondQuickSelect = await readVisibleEditorGroupCount(
         session.window
       );
+      await secondTargetTableRow.scrollIntoViewIfNeeded();
       await secondTargetTableRow.hover();
+      await expect(secondTargetSelectButton).toHaveCSS('pointer-events', 'auto');
       await clickWithFallback(secondTargetSelectButton);
       await expect
         .poll(

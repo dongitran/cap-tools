@@ -3,6 +3,7 @@ import type {
   HanaQueryResultSet,
   HanaSqlStatementKind,
 } from './hanaSqlService';
+import type { HanaTableDisplayEntry } from './hanaTableDisplayNameFormatter';
 export {
   buildRawHanaTableDisplayEntries,
   formatHanaTableDisplayEntries,
@@ -197,6 +198,37 @@ export function filterTableCandidates(
       ? tableNames
       : tableNames.filter((tableName) => tableName.toUpperCase().startsWith(normalizedPrefix));
   return matches.slice(0, TABLE_SUGGESTION_LIMIT);
+}
+
+export function filterTableEntryCandidates(
+  tableEntries: readonly HanaTableDisplayEntry[],
+  prefix: string
+): readonly HanaTableDisplayEntry[] {
+  const normalizedPrefix = prefix.trim().toLowerCase();
+  if (normalizedPrefix.length === 0) {
+    return tableEntries.slice(0, TABLE_SUGGESTION_LIMIT);
+  }
+
+  const compactPrefix = normalizedPrefix.replaceAll(/[_\s]+/g, '');
+  const matches = tableEntries.filter((entry) => {
+    return isTableEntryCandidateMatch(entry, normalizedPrefix, compactPrefix);
+  });
+  return matches.slice(0, TABLE_SUGGESTION_LIMIT);
+}
+
+function isTableEntryCandidateMatch(
+  entry: HanaTableDisplayEntry,
+  normalizedPrefix: string,
+  compactPrefix: string
+): boolean {
+  const rawName = entry.name.toLowerCase();
+  const displayName = entry.displayName.toLowerCase();
+  const compactDisplayName = displayName.replaceAll('_', '');
+  return (
+    rawName.includes(normalizedPrefix) ||
+    displayName.includes(normalizedPrefix) ||
+    compactDisplayName.includes(compactPrefix)
+  );
 }
 
 export function quoteHanaIdentifier(identifier: string): string {

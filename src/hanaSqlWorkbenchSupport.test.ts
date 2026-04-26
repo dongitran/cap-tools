@@ -14,6 +14,7 @@ import {
   escapeHtml,
   extractTableNames,
   filterKeywordCandidates,
+  filterTableEntryCandidates,
   filterTableCandidates,
   formatHanaTableDisplayEntries,
   formatHanaTableDisplayName,
@@ -89,6 +90,61 @@ describe('filterTableCandidates', () => {
       return `T_${String(index).padStart(4, '0')}`;
     });
     expect(filterTableCandidates(many, '')).toHaveLength(TABLE_SUGGESTION_LIMIT);
+  });
+});
+
+describe('filterTableEntryCandidates', () => {
+  const entries = [
+    {
+      displayName: 'Demo_PurchaseOrderItemMapping',
+      name: 'DEMO_PURCHASEORDERITEMMAPPING',
+    },
+    {
+      displayName: 'Finance_UAT_API_Orders',
+      name: 'FINANCE_UAT_API_ORDERS',
+    },
+    {
+      displayName: 'Dummy',
+      name: 'DUMMY',
+    },
+  ];
+
+  test('matches readable table display names and preserves raw names', () => {
+    expect(filterTableEntryCandidates(entries, 'PurchaseOrder')).toEqual([
+      {
+        displayName: 'Demo_PurchaseOrderItemMapping',
+        name: 'DEMO_PURCHASEORDERITEMMAPPING',
+      },
+    ]);
+  });
+
+  test('matches raw table prefixes case-insensitively', () => {
+    expect(filterTableEntryCandidates(entries, 'finance_uat')).toEqual([
+      {
+        displayName: 'Finance_UAT_API_Orders',
+        name: 'FINANCE_UAT_API_ORDERS',
+      },
+    ]);
+  });
+
+  test('matches compact readable table names without underscores', () => {
+    expect(filterTableEntryCandidates(entries, 'DemoPurchase')).toEqual([
+      {
+        displayName: 'Demo_PurchaseOrderItemMapping',
+        name: 'DEMO_PURCHASEORDERITEMMAPPING',
+      },
+    ]);
+  });
+
+  test('respects the TABLE_SUGGESTION_LIMIT for display entries', () => {
+    const many = Array.from({ length: TABLE_SUGGESTION_LIMIT + 25 }, (_, index) => {
+      const id = String(index).padStart(4, '0');
+      return {
+        displayName: `Demo_Table_${id}`,
+        name: `DEMO_TABLE_${id}`,
+      };
+    });
+    expect(filterTableEntryCandidates(many, 'Demo')).toHaveLength(TABLE_SUGGESTION_LIMIT);
   });
 });
 

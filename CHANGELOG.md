@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.20 (pre-release)
+- Added a per-table SQL quick-select loading state so the clicked `Select` action shows an animated spinner, remains visible while the query is running, and clears in place after completion.
+- Updated SQL table completions to use the same readable display names shown in the Tables list, with matching e2e coverage for the VS Code suggestion widget.
+- Kept quick-select UI updates scoped to the affected row/button and added e2e delay coverage for stable loading behavior without re-rendering the table list.
+
 ## 0.7.19 (pre-release)
 - Reworked SQL result opening so repeated manual queries and table quick-selects reuse an existing editor group instead of creating extra vertical splits.
 - Resolved the quick-select source editor from the selected app SQL document so results still target the existing result group even after a previous result webview is active.

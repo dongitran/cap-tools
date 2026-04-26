@@ -202,6 +202,7 @@ let hanaTablesByServiceId = new Map();
 let hanaTablesLoadingByServiceId = new Map();
 let hanaTablesErrorByServiceId = new Map();
 let sqlTableSearchKeyword = '';
+let hanaTableSelectLoadingKeys = new Set();
 const hanaTableDisplayNameCache = new Map();
 const SQL_TABLE_NAME_WIDTH_TOLERANCE = 1;
 let sqlTableResultsRefreshTimer = 0;
@@ -416,6 +417,11 @@ window.addEventListener('message', (event) => {
   }
 
   if (msg.type === HANA_TABLE_SELECT_RESULT_MESSAGE_TYPE) {
+    const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
+    const tableName = typeof msg.tableName === 'string' ? msg.tableName : '';
+    if (serviceId.length > 0 && tableName.length > 0) {
+      setHanaTableSelectLoading(serviceId, tableName, false);
+    }
     const message = typeof msg.message === 'string' ? msg.message : '';
     hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
     hanaQueryStatusMessage = message;
@@ -1343,8 +1349,12 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
   }
   hanaQueryStatusTone = 'info';
   hanaQueryStatusMessage = '';
+  setHanaTableSelectLoading(serviceId, tableName, true);
 
   if (vscodeApi === null) {
+    window.setTimeout(() => {
+      setHanaTableSelectLoading(serviceId, tableName, false);
+    }, 700);
     return true;
   }
 
@@ -3679,6 +3689,54 @@ function updateHanaQueryStatusElement() {
   statusElement.textContent = hanaQueryStatusMessage;
 }
 
+function buildHanaTableSelectLoadingKey(serviceId, tableName) {
+  return `${serviceId}\u0000${tableName}`;
+}
+
+function isHanaTableSelectLoading(serviceId, tableName) {
+  return hanaTableSelectLoadingKeys.has(buildHanaTableSelectLoadingKey(serviceId, tableName));
+}
+
+function setHanaTableSelectLoading(serviceId, tableName, isLoading) {
+  const loadingKey = buildHanaTableSelectLoadingKey(serviceId, tableName);
+  hanaTableSelectLoadingKeys = new Set(hanaTableSelectLoadingKeys);
+  if (isLoading) {
+    hanaTableSelectLoadingKeys.add(loadingKey);
+  } else {
+    hanaTableSelectLoadingKeys.delete(loadingKey);
+  }
+  updateHanaTableSelectLoadingElement(serviceId, tableName, isLoading);
+}
+
+function updateHanaTableSelectLoadingElement(serviceId, tableName, isLoading) {
+  const rows = appElement.querySelectorAll('[data-role="hana-table-row"]');
+  for (const row of rows) {
+    if (!(row instanceof HTMLElement)) {
+      continue;
+    }
+    if (row.dataset.serviceId !== serviceId || row.dataset.tableName !== tableName) {
+      continue;
+    }
+    applyHanaTableSelectLoadingState(row, tableName, isLoading);
+    return;
+  }
+}
+
+function applyHanaTableSelectLoadingState(row, tableName, isLoading) {
+  row.classList.toggle('is-select-loading', isLoading);
+  const button = row.querySelector('[data-action="run-hana-table-select"]');
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+  button.classList.toggle('is-loading', isLoading);
+  button.disabled = isLoading;
+  button.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+  button.setAttribute(
+    'aria-label',
+    `${isLoading ? 'Loading' : 'Select'} first 10 rows of ${tableName}`
+  );
+}
+
 function refreshSqlTableResults() {
   const tablesPanel = appElement.querySelector('[data-role="hana-tables-panel"]');
   if (!(tablesPanel instanceof HTMLElement)) {
@@ -3927,8 +3985,9 @@ function renderHanaTableRows(serviceId, tables) {
       const displayNameParts = splitSqlTableDisplayName(displayName);
       return `
         <div
-          class="sql-table-row"
+          class="sql-table-row${isHanaTableSelectLoading(serviceId, tableName) ? ' is-select-loading' : ''}"
           data-role="hana-table-row"
+          data-service-id="${escapeHtml(serviceId)}"
           data-table-name="${escapeHtml(tableName)}"
           data-full-table-name="${escapeHtml(tableName)}"
           title="${escapeHtml(tableName)}"
@@ -3955,8 +4014,13 @@ function renderHanaTableRows(serviceId, tables) {
             data-action="run-hana-table-select"
             data-service-id="${escapeHtml(serviceId)}"
             data-table-name="${escapeHtml(tableName)}"
-            aria-label="Select first 10 rows of ${escapeHtml(tableName)}"
-          >Select</button>
+            aria-label="${isHanaTableSelectLoading(serviceId, tableName) ? 'Loading' : 'Select'} first 10 rows of ${escapeHtml(tableName)}"
+            aria-busy="${isHanaTableSelectLoading(serviceId, tableName) ? 'true' : 'false'}"
+            ${isHanaTableSelectLoading(serviceId, tableName) ? 'disabled' : ''}
+          >
+            <span class="sql-table-select-spinner" aria-hidden="true"></span>
+            <span>Select</span>
+          </button>
         </div>
       `;
     })
