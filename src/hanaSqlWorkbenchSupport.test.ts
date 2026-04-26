@@ -181,6 +181,25 @@ describe('buildTestModeQueryResult', () => {
       ['finance-uat-api', 'TEST_SCHEMA', 'SELECT * FROM ORDERS LIMIT 100'],
     ]);
   });
+
+  test('can include readable JSON payload text in readonly test-mode results', () => {
+    const result = buildTestModeQueryResult(
+      'finance-uat-api',
+      'readonly',
+      'SELECT SAMPLE_JSON_PAYLOAD FROM DEMO_APP LIMIT 100'
+    );
+
+    expect(result.kind).toBe('resultset');
+    if (result.kind !== 'resultset') return;
+    expect(result.columns).toEqual(['APP_NAME', 'CURRENT_SCHEMA', 'SAMPLE_JSON_PAYLOAD']);
+    expect(result.rows).toEqual([
+      [
+        'finance-uat-api',
+        'TEST_SCHEMA',
+        '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}',
+      ],
+    ]);
+  });
 });
 
 describe('resolveSqlResultTargetColumn', () => {
@@ -595,6 +614,28 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('overflow: visible;');
     expect(html).toContain('text-overflow: clip;');
     expect(html).not.toContain('text-overflow: ellipsis;');
+  });
+
+  test('renders readable JSON text cells and still escapes HTML-sensitive characters', () => {
+    const payload =
+      '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z","html":"<script>alert(1)</script>"}';
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT PAYLOAD FROM SAMPLE_MESSAGES',
+      executedAt: '2026-04-25T00:00:00Z',
+      result: {
+        kind: 'resultset',
+        columns: ['PAYLOAD'],
+        rows: [[payload]],
+        rowCount: 1,
+        elapsedMs: 3,
+      },
+    });
+
+    expect(html).toContain('This is mock data for testing');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).not.toContain('0x7b2273746174757322');
   });
 
   test('renders a success card for status results', () => {

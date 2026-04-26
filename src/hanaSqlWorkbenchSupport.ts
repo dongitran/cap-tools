@@ -1,7 +1,8 @@
-import type {
-  HanaQueryResult,
-  HanaQueryResultSet,
-  HanaSqlStatementKind,
+import {
+  formatHanaCellValue,
+  type HanaQueryResult,
+  type HanaQueryResultSet,
+  type HanaSqlStatementKind,
 } from './hanaSqlService';
 export {
   buildHanaSqlResultExportFileName,
@@ -25,6 +26,8 @@ export {
 
 export const TABLE_SUGGESTION_LIMIT = 500;
 export const QUICK_SELECT_ROW_LIMIT = 10;
+const TEST_MODE_SAMPLE_JSON_PAYLOAD =
+  '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}';
 
 export const SQL_KEYWORDS: readonly string[] = [
   'SELECT',
@@ -110,6 +113,22 @@ export function buildTestModeQueryResult(
   executedSql?: string
 ): HanaQueryResult {
   if (statementKind === 'readonly') {
+    if (isTestModeSampleJsonPayloadQuery(executedSql)) {
+      return {
+        kind: 'resultset',
+        columns: ['APP_NAME', 'CURRENT_SCHEMA', 'SAMPLE_JSON_PAYLOAD'],
+        rows: [
+          [
+            appName,
+            'TEST_SCHEMA',
+            formatHanaCellValue(Buffer.from(TEST_MODE_SAMPLE_JSON_PAYLOAD, 'utf8')),
+          ],
+        ],
+        rowCount: 1,
+        elapsedMs: 5,
+      };
+    }
+
     const columns =
       executedSql === undefined
         ? ['APP_NAME', 'CURRENT_SCHEMA']
@@ -130,6 +149,10 @@ export function buildTestModeQueryResult(
     message: 'Statement executed in SAP Tools test mode.',
     elapsedMs: 3,
   };
+}
+
+function isTestModeSampleJsonPayloadQuery(executedSql: string | undefined): boolean {
+  return executedSql !== undefined && /\bSAMPLE_JSON_PAYLOAD\b/i.test(executedSql);
 }
 
 export function createTestModeTableNames(appName: string): readonly string[] {

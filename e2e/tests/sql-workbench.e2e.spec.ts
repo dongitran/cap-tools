@@ -470,6 +470,82 @@ test.describe('SAP Tools SQL workbench', () => {
     }
   });
 
+  test('User can view readable JSON text returned from SQL results', async () => {
+    const session = await launchExtensionHost();
+    const expectedPayload =
+      '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}';
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+      await expect(webviewFrame.locator('[data-role="hana-tables-count"]')).toHaveText('105', {
+        timeout: 15000,
+      });
+
+      const sqlEditorTab = session.window.getByRole('tab', {
+        name: /finance-uat-api\.sql/i,
+      });
+      await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
+      await clickWithFallback(sqlEditorTab);
+      await replaceActiveSqlEditorText(
+        session.window,
+        'SELECT SAMPLE_JSON_PAYLOAD FROM Demo_App LIMIT 100;'
+      );
+      await selectActiveSqlEditorText(session.window);
+
+      const resultTabsBeforeRun = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      await runActiveSqlEditorCommand(session.window);
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeRun + 1)
+        .catch(async () => {
+          await runWorkbenchCommand(session.window, 'Run HANA SQL');
+          await expect
+            .poll(
+              async () => {
+                return session.window
+                  .getByRole('tab', { name: /SAP Tools SQL Result/i })
+                  .count();
+              },
+              { timeout: 20000 }
+            )
+            .toBe(resultTabsBeforeRun + 1);
+        });
+
+      const resultFrame = await resolveSqlResultFrame(session.window, 20000);
+      await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
+      await expect(resultFrame.getByRole('table')).toBeVisible();
+      await expect(resultFrame.getByRole('cell', { name: expectedPayload })).toBeVisible();
+      await expect(resultFrame.getByText('0x7b2273746174757322')).toHaveCount(0);
+
+      const exportButton = resultFrame.getByRole('button', { name: 'Export result' });
+      await clickWithFallback(exportButton);
+      await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy JSON' }));
+      const jsonClipboardText = await readElectronClipboardText(session.electronApp);
+      const parsedJson = JSON.parse(jsonClipboardText) as unknown;
+      expect(parsedJson).toEqual([
+        {
+          APP_NAME: 'finance-uat-api',
+          CURRENT_SCHEMA: 'TEST_SCHEMA',
+          SAMPLE_JSON_PAYLOAD: expectedPayload,
+        },
+      ]);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can search selected app tables and run a quick SELECT', async () => {
     const session = await launchExtensionHost({
       extraEnv: { SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS: '2500' },

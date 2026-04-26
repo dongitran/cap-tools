@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
+import { isUtf8 } from 'node:buffer';
 
 const HANA_QUERY_DEFAULT_TIMEOUT_MS = 30_000;
 const HANA_QUERY_RESULT_PREVIEW_BYTES = 4096;
@@ -200,12 +201,7 @@ export function formatHanaCellValue(value: unknown): string {
     return value.toISOString();
   }
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
-    const head = value.subarray(0, HANA_QUERY_RESULT_PREVIEW_BYTES);
-    const suffix =
-      value.length > HANA_QUERY_RESULT_PREVIEW_BYTES
-        ? `… (${String(value.length)} bytes)`
-        : '';
-    return `0x${head.toString('hex')}${suffix}`;
+    return formatHanaBufferCellValue(value);
   }
   if (typeof value === 'object') {
     try {
@@ -215,6 +211,48 @@ export function formatHanaCellValue(value: unknown): string {
     }
   }
   return Object.prototype.toString.call(value);
+}
+
+function formatHanaBufferCellValue(value: Buffer): string {
+  const textValue = decodeTextLikeHanaBuffer(value);
+  if (textValue !== null) {
+    return textValue;
+  }
+
+  const head = value.subarray(0, HANA_QUERY_RESULT_PREVIEW_BYTES);
+  const suffix =
+    value.length > HANA_QUERY_RESULT_PREVIEW_BYTES
+      ? `… (${String(value.length)} bytes)`
+      : '';
+  return `0x${head.toString('hex')}${suffix}`;
+}
+
+function decodeTextLikeHanaBuffer(value: Buffer): string | null {
+  if (!isUtf8(value)) {
+    return null;
+  }
+
+  const textValue = value.toString('utf8');
+  if (!isDisplayableText(textValue)) {
+    return null;
+  }
+  return textValue;
+}
+
+function isDisplayableText(value: string): boolean {
+  for (const char of value) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint === undefined) {
+      return false;
+    }
+    if (char === '\n' || char === '\r' || char === '\t') {
+      continue;
+    }
+    if (codePoint < 0x20 || codePoint === 0x7f) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function extractColumnNames(

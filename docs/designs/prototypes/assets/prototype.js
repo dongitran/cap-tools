@@ -1417,7 +1417,13 @@ function buildPrototypeSqlResultReadyState(appName, tableName) {
     phase: 'ready',
     rows: [
       ['1', tableName, 'READY', 'Prototype row with comma, quote " and newline\nfor export checks.'],
-      ['2', tableName, 'SYNCED', 'Short value'],
+      [
+        '2',
+        tableName,
+        'SUCCESS',
+        '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}',
+      ],
+      ['3', tableName, 'SYNCED', 'Short value'],
     ],
     tableName,
   };

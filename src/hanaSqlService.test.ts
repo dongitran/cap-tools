@@ -124,6 +124,28 @@ describe('executeHanaQuery (rows)', () => {
     expect(log.events).toContain('client.disconnect');
   });
 
+  test('decodes text-like Buffer values while mapping rows', async () => {
+    const payload =
+      '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}';
+    const rows: HdbRow[] = [{ ID: 1, PAYLOAD: Buffer.from(payload, 'utf8') }];
+    const { client } = createFakeClient({
+      statement: {
+        metadata: [{ columnDisplayName: 'ID' }, { columnDisplayName: 'PAYLOAD' }],
+        rowsOrAffected: rows,
+      },
+    });
+
+    const result = await executeHanaQuery(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      'SELECT ID, PAYLOAD FROM SAMPLE_MESSAGES',
+      { clientFactory: () => client }
+    );
+
+    expect(result.kind).toBe('resultset');
+    if (result.kind !== 'resultset') return;
+    expect(result.rows).toEqual([['1', payload]]);
+  });
+
   test('falls back to row keys when statement metadata is absent', async () => {
     const rows: HdbRow[] = [{ FOO: 1, BAR: 'x' }];
     const { client } = createFakeClient({
@@ -357,9 +379,26 @@ describe('formatHanaCellValue', () => {
     expect(formatHanaCellValue(date)).toBe('2026-04-25T12:34:56.000Z');
   });
 
-  test('renders Buffer as hex prefixed with 0x', () => {
+  test('renders UTF-8 JSON Buffer as readable text', () => {
+    const payload =
+      '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}';
+    expect(formatHanaCellValue(Buffer.from(payload, 'utf8'))).toBe(payload);
+  });
+
+  test('renders multiline UTF-8 text Buffer as readable text', () => {
+    expect(formatHanaCellValue(Buffer.from('first line\nsecond line\twith tab', 'utf8'))).toBe(
+      'first line\nsecond line\twith tab'
+    );
+  });
+
+  test('renders binary Buffer as hex prefixed with 0x', () => {
     const buffer = Buffer.from([0xab, 0xcd, 0x10]);
     expect(formatHanaCellValue(buffer)).toBe('0xabcd10');
+  });
+
+  test('renders invalid UTF-8 Buffer as hex', () => {
+    const buffer = Buffer.from([0xc3, 0x28]);
+    expect(formatHanaCellValue(buffer)).toBe('0xc328');
   });
 
   test('serializes plain objects as JSON', () => {

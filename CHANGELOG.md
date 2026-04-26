@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.25 (pre-release)
+- Decoded text-like HANA Buffer/LOB result cells as readable UTF-8 text so JSON payloads no longer appear as `0x...` hex.
+- Preserved hex rendering for invalid UTF-8 or control-byte binary values to avoid misrepresenting binary data.
+- Updated SQL prototype, unit tests, and e2e coverage for readable JSON result rendering and Copy JSON output.
+
 ## 0.7.24 (pre-release)
 - Removed visible SQL result export/copy feedback text such as `JSON copied to clipboard.` while keeping clipboard and export actions functional.
 - Kept SQL result export/copy actions logged to the SAP Tools output channel without rendering transient status messages in the result webview.
