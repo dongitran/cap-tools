@@ -18,6 +18,7 @@ import {
   formatHanaTableDisplayEntries,
   formatHanaTableDisplayName,
   quoteHanaIdentifier,
+  resolveSqlResultTargetColumn,
   sanitizeUntitledFileName,
 } from './hanaSqlWorkbenchSupport';
 
@@ -120,6 +121,40 @@ describe('buildTestModeQueryResult', () => {
     expect(result.rows).toEqual([
       ['finance-uat-api', 'TEST_SCHEMA', 'SELECT * FROM ORDERS LIMIT 100'],
     ]);
+  });
+});
+
+describe('resolveSqlResultTargetColumn', () => {
+  test('opens beside when no reusable editor group exists', () => {
+    expect(resolveSqlResultTargetColumn(1, [1])).toEqual({ kind: 'beside' });
+  });
+
+  test('reuses the nearest editor group to the right of the SQL source', () => {
+    expect(resolveSqlResultTargetColumn(1, [1, 2, 3])).toEqual({
+      kind: 'existing',
+      viewColumn: 2,
+    });
+  });
+
+  test('reuses the nearest non-source editor group when the source is rightmost', () => {
+    expect(resolveSqlResultTargetColumn(3, [1, 2, 3])).toEqual({
+      kind: 'existing',
+      viewColumn: 2,
+    });
+  });
+
+  test('ignores duplicate and non-editor columns before selecting a target', () => {
+    expect(resolveSqlResultTargetColumn(1, [-2, -1, 1, 1, 4, 4])).toEqual({
+      kind: 'existing',
+      viewColumn: 4,
+    });
+  });
+
+  test('uses the first existing editor group when the SQL source column is unknown', () => {
+    expect(resolveSqlResultTargetColumn(undefined, [3, 1, 2])).toEqual({
+      kind: 'existing',
+      viewColumn: 1,
+    });
   });
 });
 

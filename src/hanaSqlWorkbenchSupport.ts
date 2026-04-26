@@ -44,6 +44,15 @@ export interface RenderSqlResultOptions {
   readonly errorMessage?: string;
 }
 
+export type SqlResultTargetColumn =
+  | {
+      readonly kind: 'beside';
+    }
+  | {
+      readonly kind: 'existing';
+      readonly viewColumn: number;
+    };
+
 export function buildInitialHanaSqlTemplate(appName: string): string {
   const normalizedAppName = appName.trim().length > 0 ? appName.trim() : 'selected-app';
   return [
@@ -59,6 +68,36 @@ export function sanitizeUntitledFileName(appName: string): string {
     return normalized;
   }
   return 'hana-query';
+}
+
+export function resolveSqlResultTargetColumn(
+  sourceColumn: number | undefined,
+  existingColumns: readonly number[]
+): SqlResultTargetColumn {
+  const columns = [...new Set(existingColumns.filter((column) => column > 0))].sort(
+    (left, right) => left - right
+  );
+  if (columns.length === 0) {
+    return { kind: 'beside' };
+  }
+  if (sourceColumn === undefined || sourceColumn <= 0) {
+    if (columns.length > 1) {
+      return { kind: 'existing', viewColumn: columns[0] ?? 1 };
+    }
+    return { kind: 'beside' };
+  }
+
+  const rightColumn = columns.find((column) => column > sourceColumn);
+  if (rightColumn !== undefined) {
+    return { kind: 'existing', viewColumn: rightColumn };
+  }
+
+  const leftColumn = [...columns].reverse().find((column) => column < sourceColumn);
+  if (leftColumn !== undefined) {
+    return { kind: 'existing', viewColumn: leftColumn };
+  }
+
+  return { kind: 'beside' };
 }
 
 export function buildTestModeQueryResult(

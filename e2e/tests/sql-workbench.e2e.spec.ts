@@ -79,6 +79,52 @@ function tableRows(tablesPanel: Locator): Locator {
   return tablesPanel.locator('[data-role="hana-table-row"]');
 }
 
+async function readVisibleEditorGroupCount(window: Page): Promise<number> {
+  return window.evaluate(() => {
+    return Array.from(document.querySelectorAll('.editor-group-container')).filter((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    }).length;
+  });
+}
+
+async function installSqlWorkbenchTextRecorder(webviewFrame: Frame): Promise<void> {
+  await webviewFrame.evaluate(() => {
+    const targetWindow = window as typeof window & {
+      __sapToolsSqlTextObserver?: MutationObserver;
+      __sapToolsSqlTextRecords?: string[];
+    };
+    targetWindow.__sapToolsSqlTextObserver?.disconnect();
+    targetWindow.__sapToolsSqlTextRecords = [];
+    const recordText = (): void => {
+      targetWindow.__sapToolsSqlTextRecords?.push(document.body.innerText);
+    };
+    recordText();
+    const observer = new MutationObserver(recordText);
+    observer.observe(document.body, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    targetWindow.__sapToolsSqlTextObserver = observer;
+  });
+}
+
+async function readSqlWorkbenchTextRecords(webviewFrame: Frame): Promise<readonly string[]> {
+  return webviewFrame.evaluate(() => {
+    const targetWindow = window as typeof window & {
+      __sapToolsSqlTextObserver?: MutationObserver;
+      __sapToolsSqlTextRecords?: string[];
+    };
+    targetWindow.__sapToolsSqlTextObserver?.disconnect();
+    return targetWindow.__sapToolsSqlTextRecords ?? [];
+  });
+}
+
 test.describe('SAP Tools SQL workbench', () => {
   test('User can review SQL app list with initial tables panel state', async () => {
     const session = await launchExtensionHost();
@@ -89,7 +135,7 @@ test.describe('SAP Tools SQL workbench', () => {
 
       await expect(
         webviewFrame.getByText('Manual SELECT queries without a row limit run with LIMIT 100.')
-      ).toBeVisible();
+      ).toHaveCount(0);
       await expect(webviewFrame.locator('.sql-service-row')).toHaveCount(3);
       await expect(webviewFrame.locator('.sql-service-open-indicator')).toHaveCount(3);
       await expect(webviewFrame.locator('.sql-service-panel')).toHaveCount(0);
@@ -118,6 +164,7 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(bodyText).not.toContain('running instance');
       expect(bodyText).not.toContain('Click to open SQL file for this app');
       expect(bodyText).not.toContain('Click one app below to open SQL file for that app.');
+      expect(bodyText).not.toContain('Manual SELECT queries without a row limit run with LIMIT 100.');
       expect(bodyText).not.toContain('ORDER_ID');
       expect(bodyText).not.toContain('CREATED_AT');
       expect(bodyText).not.toContain('Failed to load tables.');
@@ -126,7 +173,7 @@ test.describe('SAP Tools SQL workbench', () => {
     }
   });
 
-  test('User can open app SQL editor and run SQL command to open result tab', async () => {
+  test('User can open app SQL editor and run SQL command in a stable result group', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -146,11 +193,18 @@ test.describe('SAP Tools SQL workbench', () => {
       await clickWithFallback(sqlEditorTab);
       await focusActiveSqlEditor(session.window);
 
+      const editorGroupCountBeforeFirstResult = await readVisibleEditorGroupCount(session.window);
       await runActiveSqlEditorCommand(session.window);
       const resultFrame = await resolveSqlResultFrame(session.window, 7000).catch(async () => {
         await runWorkbenchCommand(session.window, 'SAP Tools: Run HANA SQL');
         return resolveSqlResultFrame(session.window, 30000);
       });
+      const editorGroupCountAfterFirstResult = await readVisibleEditorGroupCount(session.window);
+      if (editorGroupCountBeforeFirstResult === 1) {
+        expect(editorGroupCountAfterFirstResult).toBe(2);
+      } else {
+        expect(editorGroupCountAfterFirstResult).toBe(editorGroupCountBeforeFirstResult);
+      }
       await expect(
         resultFrame.getByRole('heading', { name: 'SAP Tools SQL Result' })
       ).toHaveCount(0);
@@ -211,6 +265,9 @@ test.describe('SAP Tools SQL workbench', () => {
       const resultTabsBeforeExplicitLimit = await session.window
         .getByRole('tab', { name: /SAP Tools SQL Result/i })
         .count();
+      const editorGroupCountBeforeExplicitLimit = await readVisibleEditorGroupCount(
+        session.window
+      );
       await runActiveSqlEditorCommand(session.window);
       await expect
         .poll(
@@ -221,7 +278,28 @@ test.describe('SAP Tools SQL workbench', () => {
           },
           { timeout: 20000 }
         )
-        .toBe(resultTabsBeforeExplicitLimit + 1);
+        .toBe(resultTabsBeforeExplicitLimit + 1)
+        .catch(async () => {
+          await runWorkbenchCommand(session.window, 'SAP Tools: Run HANA SQL');
+          await expect
+            .poll(
+              async () => {
+                return session.window
+                  .getByRole('tab', { name: /SAP Tools SQL Result/i })
+                  .count();
+              },
+              { timeout: 20000 }
+            )
+            .toBe(resultTabsBeforeExplicitLimit + 1);
+        });
+      await expect
+        .poll(
+          async () => {
+            return readVisibleEditorGroupCount(session.window);
+          },
+          { timeout: 20000 }
+        )
+        .toBe(editorGroupCountBeforeExplicitLimit);
 
       const explicitLimitResultFrame = await resolveSqlResultFrame(session.window, 20000);
       const explicitLimitSqlCell = explicitLimitResultFrame
@@ -491,10 +569,13 @@ test.describe('SAP Tools SQL workbench', () => {
         window.dispatchEvent(new Event('resize'));
       });
 
-      await searchInput.fill('ORDERS');
-      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('1/105');
+      await searchInput.fill('');
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('105');
+      await expect(tableRows(tablesPanel)).toHaveCount(105);
+      const tablesList = tablesPanel.locator('[data-role="hana-tables-list"]');
+      const targetTableName = 'FINANCE_UAT_API_ENTITY_090';
       const targetTableRow = tablesPanel.locator(
-        '[data-role="hana-table-row"][data-table-name="FINANCE_UAT_API_ORDERS"]'
+        `[data-role="hana-table-row"][data-table-name="${targetTableName}"]`
       );
       await expect(targetTableRow).toBeVisible();
       await expect(targetTableRow.locator('[data-role="hana-table-name"]')).toHaveCSS(
@@ -502,7 +583,7 @@ test.describe('SAP Tools SQL workbench', () => {
         'none'
       );
       const targetSelectButton = targetTableRow.getByRole('button', {
-        name: 'Select first 10 rows of FINANCE_UAT_API_ORDERS',
+        name: `Select first 10 rows of ${targetTableName}`,
       });
       await expect(targetSelectButton).toHaveCSS('opacity', '0');
       await expect(targetSelectButton).toHaveCSS('pointer-events', 'none');
@@ -516,7 +597,19 @@ test.describe('SAP Tools SQL workbench', () => {
         name: /SAP Tools SQL Result/i,
       });
       const initialResultCount = await initialResultTabs.count();
+      const editorGroupCountBeforeFirstQuickSelect = await readVisibleEditorGroupCount(
+        session.window
+      );
 
+      await installSqlWorkbenchTextRecorder(webviewFrame);
+      await targetTableRow.scrollIntoViewIfNeeded();
+      const scrollTopBeforeQuickSelect = await tablesList.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('Tables list is missing.');
+        }
+        return element.scrollTop;
+      });
+      expect(scrollTopBeforeQuickSelect).toBeGreaterThan(0);
       await targetTableRow.hover();
       await expect(targetSelectButton).toHaveCSS('opacity', '1');
       await expect(targetSelectButton).toHaveCSS('pointer-events', 'auto');
@@ -532,6 +625,32 @@ test.describe('SAP Tools SQL workbench', () => {
           { timeout: 20000 }
         )
         .toBe(initialResultCount + 1);
+      const editorGroupCountAfterFirstQuickSelect = await readVisibleEditorGroupCount(
+        session.window
+      );
+      if (editorGroupCountBeforeFirstQuickSelect === 1) {
+        expect(editorGroupCountAfterFirstQuickSelect).toBe(2);
+      } else {
+        expect(editorGroupCountAfterFirstQuickSelect).toBe(
+          editorGroupCountBeforeFirstQuickSelect
+        );
+      }
+
+      await expect
+        .poll(
+          async () => {
+            return tablesList.evaluate((element) => {
+              if (!(element instanceof HTMLElement)) {
+                throw new Error('Tables list is missing.');
+              }
+              return element.scrollTop;
+            });
+          },
+          { timeout: 10000 }
+        )
+        .toBeGreaterThanOrEqual(scrollTopBeforeQuickSelect - 2);
+      const sqlWorkbenchTextRecords = await readSqlWorkbenchTextRecords(webviewFrame);
+      expect(sqlWorkbenchTextRecords.join('\n')).not.toContain('Running SELECT *');
 
       const resultFrame = await resolveSqlResultFrame(session.window, 20000);
       await expect(
@@ -540,6 +659,41 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: 'TEST_SCHEMA' })).toBeVisible();
+
+      const secondTargetTableName = 'FINANCE_UAT_API_ENTITY_091';
+      const secondTargetTableRow = tablesPanel.locator(
+        `[data-role="hana-table-row"][data-table-name="${secondTargetTableName}"]`
+      );
+      await expect(secondTargetTableRow).toBeVisible();
+      const secondTargetSelectButton = secondTargetTableRow.getByRole('button', {
+        name: `Select first 10 rows of ${secondTargetTableName}`,
+      });
+      const resultCountBeforeSecondQuickSelect = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      const editorGroupCountBeforeSecondQuickSelect = await readVisibleEditorGroupCount(
+        session.window
+      );
+      await secondTargetTableRow.hover();
+      await clickWithFallback(secondTargetSelectButton);
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultCountBeforeSecondQuickSelect + 1);
+      await expect
+        .poll(
+          async () => {
+            return readVisibleEditorGroupCount(session.window);
+          },
+          { timeout: 10000 }
+        )
+        .toBe(editorGroupCountBeforeSecondQuickSelect);
 
       await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden({
         timeout: 10000,

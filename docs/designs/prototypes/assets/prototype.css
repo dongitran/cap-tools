@@ -1755,13 +1755,6 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   font-family: var(--title-font);
 }
 
-.sql-workbench-safety-note {
-  margin: 0;
-  font-size: 0.62rem;
-  line-height: 1.35;
-  color: var(--muted-color);
-}
-
 .sql-service-list {
   display: grid;
   gap: 7px;

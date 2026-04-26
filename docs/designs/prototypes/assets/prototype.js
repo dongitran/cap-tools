@@ -373,11 +373,20 @@ window.addEventListener('message', (event) => {
   if (msg.type === HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE) {
     const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
     const message = typeof msg.message === 'string' ? msg.message : '';
+    const previousServiceId = selectedHanaServiceId;
     if (serviceId.length > 0) {
       selectedHanaServiceId = serviceId;
     }
     hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
     hanaQueryStatusMessage = msg.success === true ? '' : message;
+    if (isWorkspaceSqlMounted()) {
+      if (previousServiceId !== selectedHanaServiceId) {
+        refreshWorkspaceSqlView();
+        return;
+      }
+      updateHanaQueryStatusElement();
+      return;
+    }
     refreshUiAfterSqlStateChange();
     return;
   }
@@ -410,6 +419,10 @@ window.addEventListener('message', (event) => {
     const message = typeof msg.message === 'string' ? msg.message : '';
     hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
     hanaQueryStatusMessage = message;
+    if (isWorkspaceSqlMounted()) {
+      updateHanaQueryStatusElement();
+      return;
+    }
     refreshUiAfterSqlStateChange();
     return;
   }
@@ -683,6 +696,11 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  if (shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction)) {
+    updateHanaQueryStatusElement();
+    return;
+  }
+
   if (mode !== modeBeforeAction || mode !== 'selection') {
     renderPrototype();
     return;
@@ -867,6 +885,19 @@ function shouldRefreshWorkspaceAppsOnly(action, modeBeforeAction, tabBeforeActio
     mode === 'workspace' &&
     tabBeforeAction === 'apps' &&
     activeTabId === 'apps'
+  );
+}
+
+function shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction) {
+  if (action !== 'run-hana-table-select') {
+    return false;
+  }
+
+  return (
+    modeBeforeAction === 'workspace' &&
+    mode === 'workspace' &&
+    tabBeforeAction === 'settings' &&
+    activeTabId === 'settings'
   );
 }
 
@@ -1311,11 +1342,9 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
     return true;
   }
   hanaQueryStatusTone = 'info';
-  hanaQueryStatusMessage = `Running SELECT * FROM ${tableName} LIMIT 10...`;
+  hanaQueryStatusMessage = '';
 
   if (vscodeApi === null) {
-    hanaQueryStatusTone = 'success';
-    hanaQueryStatusMessage = '';
     return true;
   }
 
@@ -3634,6 +3663,22 @@ function refreshWorkspaceSqlView() {
   queueSqlTableNameTruncation();
 }
 
+function updateHanaQueryStatusElement() {
+  const statusElement = appElement.querySelector('[data-role="hana-query-status"]');
+  if (!(statusElement instanceof HTMLElement)) {
+    return;
+  }
+  const tone = hanaQueryStatusTone === 'error'
+    ? 'error'
+    : hanaQueryStatusTone === 'success'
+      ? 'success'
+      : 'info';
+  statusElement.className = `hana-query-status is-${tone}`;
+  statusElement.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+  statusElement.hidden = hanaQueryStatusMessage.length === 0;
+  statusElement.textContent = hanaQueryStatusMessage;
+}
+
 function refreshSqlTableResults() {
   const tablesPanel = appElement.querySelector('[data-role="hana-tables-panel"]');
   if (!(tablesPanel instanceof HTMLElement)) {
@@ -3687,9 +3732,6 @@ function renderSqlWorkbenchTab() {
     <section class="group-card sql-workbench" aria-label="S/4HANA SQL Workbench">
       <header class="sql-workbench-header">
         <h2>S/4HANA SQL Workbench</h2>
-        <p class="sql-workbench-safety-note">
-          Manual SELECT queries without a row limit run with LIMIT 100.
-        </p>
       </header>
 
       <section class="sql-service-list" data-role="hana-service-list" aria-label="Discovered apps">

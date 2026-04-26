@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.19 (pre-release)
+- Reworked SQL result opening so repeated manual queries and table quick-selects reuse an existing editor group instead of creating extra vertical splits.
+- Resolved the quick-select source editor from the selected app SQL document so results still target the existing result group even after a previous result webview is active.
+- Removed the SQL workbench auto-limit note and suppressed transient `Running SELECT * ...` text while keeping output-channel SQL execution logs.
+- Preserved the SQL Tables list scroll position after table `Select` actions and expanded e2e coverage for repeated quick-select layout stability.
+
 ## 0.7.18 (pre-release)
 - Added a SQL safety guard that automatically appends `LIMIT 100` to manual `SELECT` and `WITH ... SELECT` queries when the user has not supplied a top-level row limit.
 - Preserved explicit `LIMIT`, `TOP`, and `FETCH FIRST/NEXT` clauses while ignoring misleading limit text in comments, string literals, quoted identifiers, nested subqueries, and branch-local set-query limits.
