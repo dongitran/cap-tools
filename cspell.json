@@ -55,6 +55,7 @@
     "cfapps",
     "vcap",
     "hana",
+    "oklab",
     "ondemand",
     "noapps",
     "failspace",

@@ -3,6 +3,18 @@ import type {
   HanaQueryResultSet,
   HanaSqlStatementKind,
 } from './hanaSqlService';
+export {
+  buildHanaSqlResultExportFileName,
+  formatHanaSqlResultSetCsv,
+  formatHanaSqlResultSetJson,
+  type HanaSqlResultExportFormat,
+} from './hanaSqlResultExport';
+export {
+  buildHanaSqlResultHtml,
+  escapeHtml,
+  SQL_RESULT_ROWS_LIMIT,
+  type RenderSqlResultOptions,
+} from './hanaSqlResultHtml';
 import type { HanaTableDisplayEntry } from './hanaTableDisplayNameFormatter';
 export {
   buildRawHanaTableDisplayEntries,
@@ -11,7 +23,6 @@ export {
   type HanaTableDisplayEntry,
 } from './hanaTableDisplayNameFormatter';
 
-export const SQL_RESULT_ROWS_LIMIT = 250;
 export const TABLE_SUGGESTION_LIMIT = 500;
 export const QUICK_SELECT_ROW_LIMIT = 10;
 
@@ -36,14 +47,6 @@ export const SQL_KEYWORDS: readonly string[] = [
   'COMMIT',
   'ROLLBACK',
 ] as const;
-
-export interface RenderSqlResultOptions {
-  readonly appName: string;
-  readonly sql: string;
-  readonly executedAt: string;
-  readonly result?: HanaQueryResult;
-  readonly errorMessage?: string;
-}
 
 export type SqlResultTargetColumn =
   | {
@@ -254,270 +257,4 @@ export function buildQuickTableSelectSql(schema: string, tableName: string): str
   }
   const schemaId = quoteHanaIdentifier(trimmedSchema);
   return `SELECT * FROM ${schemaId}.${tableId} LIMIT ${String(QUICK_SELECT_ROW_LIMIT)}`;
-}
-
-export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string {
-  if (options.result?.kind === 'resultset') {
-    return buildResultSetHtml(options, options.result);
-  }
-
-  const hasStatusResult = options.result?.kind === 'status';
-  const stateTitle = hasStatusResult ? 'Statement Executed' : 'Execution Error';
-  const stateMessage = hasStatusResult
-    ? escapeHtml(options.result.message)
-    : escapeHtml(options.errorMessage ?? 'Query execution failed.');
-  const stateToneClass = hasStatusResult ? 'state-success' : 'state-error';
-  const escapedAppName = escapeHtml(options.appName);
-  const escapedExecutedAt = escapeHtml(options.executedAt);
-  const escapedSql = escapeHtml(options.sql);
-  const elapsedLine = hasStatusResult
-    ? `<p class="state-meta-line">Elapsed: ${String(options.result.elapsedMs)} ms</p>`
-    : '';
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SAP Tools SQL Result</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: var(--vscode-font-family, "Segoe WPC", "Segoe UI", sans-serif);
-        --saptools-bg: var(--vscode-editor-background, #1e1e1e);
-        --saptools-fg: var(--vscode-editor-foreground, #cccccc);
-        --saptools-border: var(--vscode-panel-border, var(--vscode-editorWidget-border, #3c3c3c));
-        --saptools-muted: var(
-          --vscode-descriptionForeground,
-          var(--vscode-editorLineNumber-foreground, #8b949e)
-        );
-        --saptools-surface: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
-        --saptools-surface-strong: var(--vscode-editor-selectionBackground, rgba(128, 128, 128, 0.18));
-        --saptools-success: var(--vscode-testing-iconPassed, #2ea043);
-        --saptools-error: var(--vscode-testing-iconFailed, #f85149);
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: var(--saptools-bg);
-        color: var(--saptools-fg);
-      }
-      .state-layout {
-        display: grid;
-        grid-template-rows: auto auto auto;
-        gap: 6px;
-        padding: 6px;
-      }
-      .state-card {
-        border: 1px solid var(--saptools-border);
-        border-radius: 6px;
-        background: var(--saptools-surface);
-        padding: 6px 8px;
-      }
-      .state-card.state-meta {
-        padding: 4px 8px;
-      }
-      .state-card h1 {
-        margin: 0;
-        font-size: 13px;
-      }
-      .state-meta-line {
-        margin: 0;
-        font-size: 12px;
-        line-height: 18px;
-        color: var(--saptools-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .state-message {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 12px;
-        line-height: 1.45;
-      }
-      .state-sql {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 12px;
-        line-height: 1.45;
-      }
-      .state-success h1 {
-        color: var(--saptools-success);
-      }
-      .state-error h1 {
-        color: var(--saptools-error);
-      }
-    </style>
-  </head>
-  <body>
-    <main class="state-layout">
-      <section class="state-card state-meta">
-        <p class="state-meta-line">App: ${escapedAppName} · Executed: ${escapedExecutedAt}</p>
-      </section>
-      <section class="state-card ${stateToneClass}">
-        <h1>${stateTitle}</h1>
-        <p class="state-message">${stateMessage}</p>
-        ${elapsedLine}
-      </section>
-      <section class="state-card">
-        <pre class="state-sql">${escapedSql}</pre>
-      </section>
-    </main>
-  </body>
-</html>`;
-}
-
-function buildResultSetHtml(
-  options: RenderSqlResultOptions,
-  result: HanaQueryResultSet
-): string {
-  const escapedAppName = escapeHtml(options.appName);
-  const escapedExecutedAt = escapeHtml(options.executedAt);
-  const rows = result.rows.slice(0, SQL_RESULT_ROWS_LIMIT);
-  const truncatedNote =
-    result.rows.length > SQL_RESULT_ROWS_LIMIT
-      ? `Showing first ${String(SQL_RESULT_ROWS_LIMIT)} rows of ${String(result.rows.length)}.`
-      : '';
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SAP Tools SQL Result</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: var(--vscode-font-family, "Segoe WPC", "Segoe UI", sans-serif);
-        --saptools-bg: var(--vscode-editor-background, #1e1e1e);
-        --saptools-fg: var(--vscode-editor-foreground, #cccccc);
-        --saptools-border: var(--vscode-panel-border, var(--vscode-editorWidget-border, #3c3c3c));
-        --saptools-muted: var(
-          --vscode-descriptionForeground,
-          var(--vscode-editorLineNumber-foreground, #8b949e)
-        );
-        --saptools-surface: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
-        --saptools-surface-strong: var(--vscode-editor-selectionBackground, rgba(128, 128, 128, 0.18));
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: var(--saptools-bg);
-        color: var(--saptools-fg);
-      }
-      .result-layout {
-        height: 100vh;
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-      }
-      .result-toolbar {
-        padding: 6px;
-        border-bottom: 1px solid var(--saptools-border);
-        background: var(--saptools-surface);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-      }
-      .result-chip {
-        border: 1px solid var(--saptools-border);
-        border-radius: 999px;
-        padding: 2px 8px;
-        font-size: 12px;
-        color: var(--saptools-fg);
-        background: var(--saptools-surface-strong);
-      }
-      .result-chip.note {
-        color: var(--saptools-muted);
-      }
-      .result-table-wrap {
-        min-height: 0;
-        overflow: auto;
-      }
-      table {
-        width: max-content;
-        min-width: 100%;
-        border-collapse: collapse;
-        table-layout: auto;
-        font-size: 12px;
-      }
-      th,
-      td {
-        border-bottom: 1px solid var(--saptools-border);
-        padding: 6px 8px;
-        text-align: left;
-        vertical-align: top;
-        white-space: pre;
-        overflow: visible;
-        text-overflow: clip;
-      }
-      th {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-        color: var(--saptools-fg);
-        background: var(--saptools-bg);
-        font-weight: 600;
-      }
-      tbody tr:nth-child(even) {
-        background: var(--saptools-surface);
-      }
-      .row-number {
-        width: 52px;
-        color: var(--saptools-muted);
-      }
-    </style>
-  </head>
-  <body>
-    <main class="result-layout">
-      <header class="result-toolbar">
-        <span class="result-chip">App: ${escapedAppName}</span>
-        <span class="result-chip">Rows: ${String(result.rowCount)}</span>
-        <span class="result-chip">Elapsed: ${String(result.elapsedMs)} ms</span>
-        <span class="result-chip">Executed: ${escapedExecutedAt}</span>
-        ${truncatedNote.length > 0 ? `<span class="result-chip note">${truncatedNote}</span>` : ''}
-      </header>
-      <div class="result-table-wrap">
-        ${renderResultTable(result.columns, rows)}
-      </div>
-    </main>
-  </body>
-</html>`;
-}
-
-function renderResultTable(columns: readonly string[], rows: readonly string[][]): string {
-  const headerCells = [
-    '<th class="row-number">#</th>',
-    ...columns.map((column) => `<th>${escapeHtml(column)}</th>`),
-  ].join('');
-  const bodyRows = rows
-    .map((row, rowIndex) => {
-      const rowCells = columns
-        .map((_, index) => `<td>${escapeHtml(row[index] ?? '')}</td>`)
-        .join('');
-      return `<tr><td class="row-number">${String(rowIndex + 1)}</td>${rowCells}</tr>`;
-    })
-    .join('');
-
-  return `
-    <table>
-      <thead>
-        <tr>${headerCells}</tr>
-      </thead>
-      <tbody>
-        ${bodyRows}
-      </tbody>
-    </table>
-  `;
-}
-
-export function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }

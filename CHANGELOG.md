@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.23 (pre-release)
+- Opened SQL result tabs immediately for manual SQL and table quick-select flows, showing a centered animated loading state before query data returns.
+- Added a result export menu with Copy CSV, Copy JSON, Export CSV, and Export JSON actions, backed by CSP-protected webview messaging and output-channel action logs.
+- Updated the SQL prototype and e2e coverage for immediate result loading, export-menu visibility, and clipboard CSV/JSON formatting.
+
 ## 0.7.22 (pre-release)
 - Fixed manual SQL execution for readable table names such as `Demo_App` by schema-qualifying selected-app display references even when the raw HANA name is uppercase-safe.
 - Hardened SQL table-reference resolution for quoted schema qualifiers, comma joins, derived-table aliases, CTE references, and ambiguous display/raw table-name collisions.

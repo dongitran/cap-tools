@@ -18,7 +18,6 @@ import {
   type HanaSqlScopeSession,
 } from './hanaSqlConnectionResolver';
 import {
-  buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
   buildQuickTableSelectSql,
   buildTableDiscoveryQueries,
@@ -29,16 +28,17 @@ import {
   filterTableEntryCandidates,
   filterKeywordCandidates,
   formatHanaTableDisplayEntries,
-  resolveSqlResultTargetColumn,
   resolveHanaDisplayTableReferences,
   sanitizeUntitledFileName,
   type HanaTableDisplayEntry,
-  type RenderSqlResultOptions,
 } from './hanaSqlWorkbenchSupport';
+import {
+  HanaSqlResultPanelManager,
+  type HanaSqlResultPanelSession,
+} from './hanaSqlResultPanel';
 export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWorkbenchSupport';
 export const RUN_HANA_SQL_COMMAND_ID = 'sapTools.runHanaSql';
 const HANA_SQL_EDITOR_CONTEXT_KEY = 'sapTools.hanaSqlEditor';
-const SQL_RESULT_VIEW_TYPE = 'sapTools.hanaSqlResult';
 interface HanaSqlAppContext {
   readonly appId: string;
   readonly appName: string;
@@ -100,10 +100,11 @@ export class HanaSqlWorkbench
   private readonly appContextsByAppId = new Map<string, HanaSqlAppContext>();
   private readonly appIdByDocumentUri = new Map<string, string>();
   private readonly disposables: vscode.Disposable[] = [];
-  private resultSequence = 0;
+  private readonly resultPanelManager: HanaSqlResultPanelManager;
 
   constructor(private readonly outputChannel: vscode.OutputChannel) {
     this.isTestMode = process.env['SAP_TOOLS_TEST_MODE'] === '1';
+    this.resultPanelManager = new HanaSqlResultPanelManager(outputChannel);
 
     this.disposables.push(
       vscode.commands.registerCommand(RUN_HANA_SQL_COMMAND_ID, async () => {
@@ -129,6 +130,7 @@ export class HanaSqlWorkbench
   }
 
   dispose(): void {
+    this.resultPanelManager.dispose();
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
@@ -193,42 +195,42 @@ export class HanaSqlWorkbench
 
     const statementKind: HanaSqlStatementKind = 'readonly';
     let sql = '';
+    const resultPanel = this.openLoadingResultPanel(
+      context.appName,
+      options.tableName,
+      this.resolveSqlSourceViewColumn(context)
+    );
 
     try {
       if (!this.isTestMode) {
         await this.ensureConnection(context);
       }
       sql = buildQuickTableSelectSql(context.schema, options.tableName);
+      this.updateLoadingResultPanel(resultPanel, context.appName, sql);
       this.logSql(
         `run quick SELECT for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(sql)}`
       );
       await delayE2eQuickSelectIfConfigured();
       const result = await this.executeSqlForContext(context, sql, statementKind);
       this.logSql(`quick SELECT completed for app ${sanitizeSqlLogValue(context.appName)}`);
-      this.openResultPanel(
-        {
-          appName: context.appName,
-          sql,
-          executedAt: new Date().toISOString(),
-          result,
-        },
-        this.resolveSqlSourceViewColumn(context)
-      );
+      resultPanel.update({
+        appName: context.appName,
+        sql,
+        executedAt: new Date().toISOString(),
+        result,
+      });
     } catch (error) {
       const message = this.toSafeErrorMessage(error, context);
       this.logSql(
         `quick SELECT failed for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
       );
       void vscode.window.showErrorMessage(message);
-      this.openResultPanel(
-        {
-          appName: context.appName,
-          sql: sql.length > 0 ? sql : options.tableName,
-          executedAt: new Date().toISOString(),
-          errorMessage: message,
-        },
-        this.resolveSqlSourceViewColumn(context)
-      );
+      resultPanel.update({
+        appName: context.appName,
+        sql: sql.length > 0 ? sql : options.tableName,
+        executedAt: new Date().toISOString(),
+        errorMessage: message,
+      });
     }
   }
 
@@ -309,7 +311,7 @@ export class HanaSqlWorkbench
     } catch (error) {
       const message = this.toSafeErrorMessage(error, context);
       void vscode.window.showErrorMessage(message);
-      this.openResultPanel(
+      this.resultPanelManager.openResultPanel(
         {
           appName: context.appName,
           sql: sqlInput,
@@ -352,6 +354,12 @@ export class HanaSqlWorkbench
       }
     }
 
+    const resultPanel = this.openLoadingResultPanel(
+      context.appName,
+      executionSql,
+      toPositiveViewColumnNumber(editor.viewColumn)
+    );
+
     try {
       await this.prefetchTableNames(context.appId);
       const resolution = resolveHanaDisplayTableReferences(
@@ -371,35 +379,30 @@ export class HanaSqlWorkbench
           `resolved ${String(resolution.replacements.length)} table display reference(s) for app ${sanitizeSqlLogValue(context.appName)}: ${preview.join(', ')}${suffix}`
         );
       }
+      this.updateLoadingResultPanel(resultPanel, context.appName, executionSql);
       this.logSql(
         `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlCommandLogValue(executionSql)}`
       );
       const result = await this.executeSqlForContext(context, executionSql, statementKind);
       this.logSql(`statement completed for app ${sanitizeSqlLogValue(context.appName)}`);
-      this.openResultPanel(
-        {
-          appName: context.appName,
-          sql: executionSql,
-          executedAt: new Date().toISOString(),
-          result,
-        },
-        toPositiveViewColumnNumber(editor.viewColumn)
-      );
+      resultPanel.update({
+        appName: context.appName,
+        sql: executionSql,
+        executedAt: new Date().toISOString(),
+        result,
+      });
     } catch (error) {
       const message = this.toSafeErrorMessage(error, context);
       this.logSql(
         `statement failed for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
       );
       void vscode.window.showErrorMessage(message);
-      this.openResultPanel(
-        {
-          appName: context.appName,
-          sql: executionSql,
-          executedAt: new Date().toISOString(),
-          errorMessage: message,
-        },
-        toPositiveViewColumnNumber(editor.viewColumn)
-      );
+      resultPanel.update({
+        appName: context.appName,
+        sql: executionSql,
+        executedAt: new Date().toISOString(),
+        errorMessage: message,
+      });
     }
   }
 
@@ -529,29 +532,6 @@ export class HanaSqlWorkbench
     );
   }
 
-  private openResultPanel(
-    options: RenderSqlResultOptions,
-    sourceViewColumn: number | undefined
-  ): void {
-    this.resultSequence += 1;
-    const target = this.resolveResultTargetViewColumn(sourceViewColumn);
-    this.logSql(
-      `open result panel ${target.logLabel} for app ${sanitizeSqlLogValue(options.appName)}`
-    );
-    const panel = vscode.window.createWebviewPanel(
-      SQL_RESULT_VIEW_TYPE,
-      `SAP Tools SQL Result ${String(this.resultSequence)} · ${options.appName}`,
-      {
-        preserveFocus: false,
-        viewColumn: target.viewColumn,
-      },
-      {
-        enableScripts: false,
-      }
-    );
-    panel.webview.html = buildHanaSqlResultHtml(options);
-  }
-
   private resolveSqlSourceViewColumn(
     context: HanaSqlAppContext
   ): number | undefined {
@@ -567,23 +547,29 @@ export class HanaSqlWorkbench
     return toPositiveViewColumnNumber(vscode.window.activeTextEditor?.viewColumn);
   }
 
-  private resolveResultTargetViewColumn(
+  private openLoadingResultPanel(
+    appName: string,
+    sql: string,
     sourceViewColumn: number | undefined
-  ): { readonly logLabel: string; readonly viewColumn: vscode.ViewColumn } {
-    const existingColumns = vscode.window.tabGroups.all
-      .map((group) => toPositiveViewColumnNumber(group.viewColumn))
-      .filter((column): column is number => column !== undefined);
-    const target = resolveSqlResultTargetColumn(sourceViewColumn, existingColumns);
-    if (target.kind === 'existing') {
-      return {
-        logLabel: `in existing editor column ${String(target.viewColumn)}`,
-        viewColumn: target.viewColumn as vscode.ViewColumn,
-      };
-    }
-    return {
-      logLabel: 'beside the SQL editor',
-      viewColumn: vscode.ViewColumn.Beside,
-    };
+  ): HanaSqlResultPanelSession {
+    this.logSql(`show loading result panel for app ${sanitizeSqlLogValue(appName)}`);
+    return this.resultPanelManager.openResultPanel(
+      { appName, sql, executedAt: new Date().toISOString(), isLoading: true },
+      sourceViewColumn
+    );
+  }
+
+  private updateLoadingResultPanel(
+    resultPanel: HanaSqlResultPanelSession,
+    appName: string,
+    sql: string
+  ): void {
+    resultPanel.update({
+      appName,
+      sql,
+      executedAt: new Date().toISOString(),
+      isLoading: true,
+    });
   }
 
   private toSafeErrorMessage(error: unknown, context: HanaSqlAppContext): string {

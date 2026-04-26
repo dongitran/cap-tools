@@ -204,6 +204,10 @@ let hanaTablesErrorByServiceId = new Map();
 let sqlTableSearchKeyword = '';
 let hanaTableSelectLoadingKeys = new Set();
 const hanaTableDisplayNameCache = new Map();
+let hanaSqlResultPreviewState = null;
+let hanaSqlResultExportMenuOpen = false;
+let hanaSqlResultFeedbackMessage = '';
+let hanaSqlResultFeedbackTimer = 0;
 const SQL_TABLE_NAME_WIDTH_TOLERANCE = 1;
 let sqlTableResultsRefreshTimer = 0;
 let sqlTableNameTruncationFrame = 0;
@@ -704,6 +708,7 @@ appElement.addEventListener('click', (event) => {
 
   if (shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction)) {
     updateHanaQueryStatusElement();
+    refreshSqlResultPreviewPanel();
     return;
   }
 
@@ -895,7 +900,14 @@ function shouldRefreshWorkspaceAppsOnly(action, modeBeforeAction, tabBeforeActio
 }
 
 function shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction) {
-  if (action !== 'run-hana-table-select') {
+  const isSqlOnlyAction =
+    action === 'run-hana-table-select' ||
+    action === 'toggle-sql-result-export-menu' ||
+    action === 'copy-sql-result-csv' ||
+    action === 'copy-sql-result-json' ||
+    action === 'export-sql-result-csv' ||
+    action === 'export-sql-result-json';
+  if (!isSqlOnlyAction) {
     return false;
   }
 
@@ -1261,6 +1273,20 @@ function handleAction(action, actionElement) {
 }
 
 function handleSqlTabAction(action, actionElement) {
+  if (action === 'toggle-sql-result-export-menu') {
+    hanaSqlResultExportMenuOpen = !hanaSqlResultExportMenuOpen;
+    return true;
+  }
+
+  if (
+    action === 'copy-sql-result-csv' ||
+    action === 'copy-sql-result-json' ||
+    action === 'export-sql-result-csv' ||
+    action === 'export-sql-result-json'
+  ) {
+    return triggerPrototypeSqlResultExportAction(action);
+  }
+
   if (action === 'select-hana-service') {
     const serviceId = actionElement.dataset.serviceId ?? '';
     if (serviceId.length === 0) {
@@ -1268,6 +1294,9 @@ function handleSqlTabAction(action, actionElement) {
     }
     if (selectedHanaServiceId !== serviceId) {
       sqlTableSearchKeyword = '';
+      hanaSqlResultPreviewState = null;
+      hanaSqlResultExportMenuOpen = false;
+      hanaSqlResultFeedbackMessage = '';
     }
     selectedHanaServiceId = serviceId;
     if (vscodeApi !== null && !hanaTablesByServiceId.has(serviceId)) {
@@ -1353,8 +1382,13 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
   setHanaTableSelectLoading(serviceId, tableName, true);
 
   if (vscodeApi === null) {
+    hanaSqlResultPreviewState = buildPrototypeSqlResultLoadingState(service.name, tableName);
+    hanaSqlResultExportMenuOpen = false;
+    hanaSqlResultFeedbackMessage = '';
     window.setTimeout(() => {
       setHanaTableSelectLoading(serviceId, tableName, false);
+      hanaSqlResultPreviewState = buildPrototypeSqlResultReadyState(service.name, tableName);
+      refreshSqlResultPreviewPanel();
     }, 700);
     return true;
   }
@@ -1366,6 +1400,90 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
     tableName,
   });
   return true;
+}
+
+function buildPrototypeSqlResultLoadingState(appName, tableName) {
+  return {
+    appName,
+    tableName,
+    phase: 'loading',
+    startedAt: new Date().toISOString(),
+  };
+}
+
+function buildPrototypeSqlResultReadyState(appName, tableName) {
+  const executedAt = new Date().toISOString();
+  return {
+    appName,
+    columns: ['ID', 'TABLE_NAME', 'STATUS', 'DESCRIPTION'],
+    elapsedMs: 128,
+    executedAt,
+    phase: 'ready',
+    rows: [
+      ['1', tableName, 'READY', 'Prototype row with comma, quote " and newline\nfor export checks.'],
+      ['2', tableName, 'SYNCED', 'Short value'],
+    ],
+    tableName,
+  };
+}
+
+function triggerPrototypeSqlResultExportAction(action) {
+  if (hanaSqlResultPreviewState?.phase !== 'ready') {
+    return true;
+  }
+
+  const isJson = action.endsWith('-json');
+  const isCopy = action.startsWith('copy-');
+  const formatLabel = isJson ? 'JSON' : 'CSV';
+  const content = isJson
+    ? buildPrototypeSqlResultJson(hanaSqlResultPreviewState)
+    : buildPrototypeSqlResultCsv(hanaSqlResultPreviewState);
+  hanaSqlResultExportMenuOpen = false;
+
+  if (isCopy && navigator.clipboard?.writeText !== undefined) {
+    navigator.clipboard.writeText(content).then(
+      () => setPrototypeSqlResultFeedback(`${formatLabel} copied to clipboard.`),
+      () => setPrototypeSqlResultFeedback(`${formatLabel} copy prepared for prototype.`)
+    );
+    return true;
+  }
+
+  setPrototypeSqlResultFeedback(`${formatLabel} export prepared for prototype.`);
+  return true;
+}
+
+function setPrototypeSqlResultFeedback(message) {
+  if (hanaSqlResultFeedbackTimer !== 0) {
+    window.clearTimeout(hanaSqlResultFeedbackTimer);
+  }
+  hanaSqlResultFeedbackMessage = message;
+  refreshSqlResultPreviewPanel();
+  hanaSqlResultFeedbackTimer = window.setTimeout(() => {
+    hanaSqlResultFeedbackTimer = 0;
+    hanaSqlResultFeedbackMessage = '';
+    refreshSqlResultPreviewPanel();
+  }, 2200);
+}
+
+function buildPrototypeSqlResultCsv(state) {
+  return [
+    state.columns.map(escapeCsvValue).join(','),
+    ...state.rows.map((row) => state.columns.map((_, index) => escapeCsvValue(row[index] ?? '')).join(',')),
+  ].join('\n');
+}
+
+function escapeCsvValue(value) {
+  if (!/[",\r\n]/.test(value)) {
+    return value;
+  }
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function buildPrototypeSqlResultJson(state) {
+  const rows = state.rows.map((row) => {
+    return Object.fromEntries(state.columns.map((column, index) => [column, row[index] ?? '']));
+  });
+  return JSON.stringify(rows, null, 2);
 }
 
 function requestHanaServicesIfNeeded() {
@@ -3674,6 +3792,27 @@ function refreshWorkspaceSqlView() {
   queueSqlTableNameTruncation();
 }
 
+function refreshSqlResultPreviewPanel() {
+  if (vscodeApi !== null || !isWorkspaceSqlMounted()) {
+    return;
+  }
+  const tabContainer = appElement.querySelector('.workspace-body-sql');
+  if (!(tabContainer instanceof HTMLElement)) {
+    return;
+  }
+  const existingPanel = tabContainer.querySelector('[data-role="sql-result-preview-panel"]');
+  const markup = renderSqlResultPreviewPanel();
+  if (markup.length === 0) {
+    existingPanel?.remove();
+    return;
+  }
+  if (existingPanel instanceof HTMLElement) {
+    existingPanel.outerHTML = markup;
+    return;
+  }
+  tabContainer.insertAdjacentHTML('beforeend', markup);
+}
+
 function updateHanaQueryStatusElement() {
   const statusElement = appElement.querySelector('[data-role="hana-query-status"]');
   if (!(statusElement instanceof HTMLElement)) {
@@ -3800,7 +3939,92 @@ function renderSqlWorkbenchTab() {
       ${renderHanaQueryStatus()}
     </section>
     ${tablesPanelMarkup}
+    ${renderSqlResultPreviewPanel()}
   `;
+}
+
+function renderSqlResultPreviewPanel() {
+  if (vscodeApi !== null || hanaSqlResultPreviewState === null) {
+    return '';
+  }
+
+  if (hanaSqlResultPreviewState.phase === 'loading') {
+    return `
+      <section class="group-card sql-result-preview-panel" data-role="sql-result-preview-panel" aria-label="SQL result preview">
+        <header class="sql-result-preview-toolbar">
+          <span class="sql-result-preview-chip">App: ${escapeHtml(hanaSqlResultPreviewState.appName)}</span>
+          <span class="sql-result-preview-chip">Started: ${escapeHtml(formatSqlResultPreviewTime(hanaSqlResultPreviewState.startedAt))}</span>
+        </header>
+        <div class="sql-result-preview-loading" role="status" aria-live="polite">
+          <span class="sql-result-preview-spinner" aria-hidden="true"></span>
+          <span>Running SQL query…</span>
+        </div>
+      </section>
+    `;
+  }
+
+  const state = hanaSqlResultPreviewState;
+  const feedbackMarkup = hanaSqlResultFeedbackMessage.length > 0
+    ? `<span class="sql-result-preview-feedback" role="status">${escapeHtml(hanaSqlResultFeedbackMessage)}</span>`
+    : '';
+  const menuClass = hanaSqlResultExportMenuOpen ? ' is-open' : '';
+  return `
+    <section class="group-card sql-result-preview-panel" data-role="sql-result-preview-panel" aria-label="SQL result preview">
+      <header class="sql-result-preview-toolbar">
+        <span class="sql-result-preview-chip">App: ${escapeHtml(state.appName)}</span>
+        <span class="sql-result-preview-chip">Rows: ${String(state.rows.length)}</span>
+        <span class="sql-result-preview-chip">Elapsed: ${String(state.elapsedMs)} ms</span>
+        <span class="sql-result-preview-chip">Executed: ${escapeHtml(formatSqlResultPreviewTime(state.executedAt))}</span>
+        <div class="sql-result-export-menu${menuClass}">
+          <button
+            type="button"
+            class="sql-result-export-trigger"
+            data-action="toggle-sql-result-export-menu"
+            aria-haspopup="menu"
+            aria-expanded="${hanaSqlResultExportMenuOpen ? 'true' : 'false'}"
+          >
+            Export result
+          </button>
+          <div class="sql-result-export-list" role="menu">
+            <button type="button" role="menuitem" data-action="copy-sql-result-csv">Copy CSV</button>
+            <button type="button" role="menuitem" data-action="copy-sql-result-json">Copy JSON</button>
+            <button type="button" role="menuitem" data-action="export-sql-result-csv">Export CSV</button>
+            <button type="button" role="menuitem" data-action="export-sql-result-json">Export JSON</button>
+          </div>
+        </div>
+        ${feedbackMarkup}
+      </header>
+      <div class="sql-result-preview-table-wrap">
+        ${renderSqlResultPreviewTable(state)}
+      </div>
+    </section>
+  `;
+}
+
+function renderSqlResultPreviewTable(state) {
+  const headerCells = [
+    '<th>#</th>',
+    ...state.columns.map((column) => `<th>${escapeHtml(column)}</th>`),
+  ].join('');
+  const bodyRows = state.rows
+    .map((row, rowIndex) => {
+      const cells = state.columns
+        .map((_, columnIndex) => `<td>${escapeHtml(row[columnIndex] ?? '')}</td>`)
+        .join('');
+      return `<tr><td>${String(rowIndex + 1)}</td>${cells}</tr>`;
+    })
+    .join('');
+
+  return `
+    <table>
+      <thead><tr>${headerCells}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  `;
+}
+
+function formatSqlResultPreviewTime(value) {
+  return value.replace('T', ' ').replace(/\.\d{3}Z$/, 'Z');
 }
 
 function renderHanaServiceRows(services) {
@@ -4691,6 +4915,9 @@ function resetSqlWorkbenchState() {
   hanaTablesByServiceId = new Map();
   hanaTablesLoadingByServiceId = new Map();
   hanaTablesErrorByServiceId = new Map();
+  hanaSqlResultPreviewState = null;
+  hanaSqlResultExportMenuOpen = false;
+  hanaSqlResultFeedbackMessage = '';
 }
 
 function resetActiveAppLoggingState() {

@@ -1,4 +1,11 @@
-import { test, expect, type Frame, type Locator, type Page } from '@playwright/test';
+import {
+  test,
+  expect,
+  type ElectronApplication,
+  type Frame,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 import {
   cleanupExtensionHost,
@@ -24,7 +31,9 @@ async function findSqlResultFrame(window: Page): Promise<Frame | undefined> {
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
   for (const frame of [...candidateFrames].reverse()) {
-    const resultLayout = frame.locator('.result-layout, .state-layout').first();
+    const resultLayout = frame
+      .locator('.result-layout, .state-layout, .result-loading-layout')
+      .first();
     const visible = await resultLayout.isVisible().catch(() => false);
     if (visible) {
       return frame;
@@ -32,6 +41,27 @@ async function findSqlResultFrame(window: Page): Promise<Frame | undefined> {
   }
 
   return undefined;
+}
+
+async function readElectronClipboardText(
+  electronApp: ElectronApplication
+): Promise<string> {
+  return electronApp.evaluate((electron): string => {
+    const electronRecord = electron as Record<string, unknown>;
+    const clipboard = electronRecord['clipboard'];
+    if (typeof clipboard !== 'object' || clipboard === null) {
+      return '';
+    }
+
+    const clipboardRecord = clipboard as Record<string, unknown>;
+    const readText = clipboardRecord['readText'];
+    if (typeof readText !== 'function') {
+      return '';
+    }
+
+    const text = (readText as () => unknown)();
+    return typeof text === 'string' ? text : '';
+  });
 }
 
 async function resolveSqlResultFrame(window: Page, timeoutMs = 20000): Promise<Frame> {
@@ -442,7 +472,7 @@ test.describe('SAP Tools SQL workbench', () => {
 
   test('User can search selected app tables and run a quick SELECT', async () => {
     const session = await launchExtensionHost({
-      extraEnv: { SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS: '900' },
+      extraEnv: { SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS: '2500' },
     });
 
     try {
@@ -754,6 +784,24 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(targetSelectAction).toBeDisabled();
       await expect(targetSelectAction.locator('.sql-table-select-spinner')).toBeVisible();
 
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { intervals: [100, 150, 250], timeout: 1000 }
+        )
+        .toBe(initialResultCount + 1);
+
+      const loadingResultFrame = await resolveSqlResultFrame(session.window, 3000);
+      await expect(
+        loadingResultFrame.getByRole('status').filter({ hasText: 'Running SQL query' })
+      ).toBeVisible();
+      await expect(loadingResultFrame.locator('.result-loading-spinner')).toBeVisible();
+      await expect(loadingResultFrame.getByRole('table')).toHaveCount(0);
+
       const secondTargetTableName = 'FINANCE_UAT_API_ENTITY_091';
       const secondTargetTableRow = tablesPanel.locator(
         `[data-role="hana-table-row"][data-table-name="${secondTargetTableName}"]`
@@ -819,6 +867,39 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(
         resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true })
       ).toBeVisible();
+
+      const exportButton = resultFrame.getByRole('button', { name: 'Export result' });
+      await expect(exportButton).toBeVisible();
+      await expect(exportButton).toHaveAttribute('aria-expanded', 'false');
+      await clickWithFallback(exportButton);
+      await expect(exportButton).toHaveAttribute('aria-expanded', 'true');
+      await expect(resultFrame.getByRole('menuitem', { name: 'Copy CSV' })).toBeVisible();
+      await expect(resultFrame.getByRole('menuitem', { name: 'Copy JSON' })).toBeVisible();
+      await expect(resultFrame.getByRole('menuitem', { name: 'Export CSV' })).toBeVisible();
+      await expect(resultFrame.getByRole('menuitem', { name: 'Export JSON' })).toBeVisible();
+
+      await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy CSV' }));
+      await expect(
+        resultFrame.getByRole('status').filter({ hasText: 'CSV copied to clipboard.' })
+      ).toBeVisible();
+      const csvClipboardText = await readElectronClipboardText(session.electronApp);
+      expect(csvClipboardText).toContain('APP_NAME,CURRENT_SCHEMA,EXECUTED_SQL');
+      expect(csvClipboardText).toContain('finance-uat-api,TEST_SCHEMA');
+
+      await clickWithFallback(exportButton);
+      await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy JSON' }));
+      await expect(
+        resultFrame.getByRole('status').filter({ hasText: 'JSON copied to clipboard.' })
+      ).toBeVisible();
+      const jsonClipboardText = await readElectronClipboardText(session.electronApp);
+      const parsedJson = JSON.parse(jsonClipboardText) as unknown;
+      expect(parsedJson).toEqual([
+        {
+          APP_NAME: 'finance-uat-api',
+          CURRENT_SCHEMA: 'TEST_SCHEMA',
+          EXECUTED_SQL: `SELECT * FROM "TEST_SCHEMA"."${targetTableName}" LIMIT 10`,
+        },
+      ]);
 
       const secondTargetSelectButton = secondTargetTableRow.getByRole('button', {
         name: `Select first 10 rows of ${secondTargetTableName}`,

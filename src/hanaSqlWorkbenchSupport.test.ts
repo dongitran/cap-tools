@@ -12,6 +12,8 @@ import {
   buildTestModeQueryResult,
   createTestModeTableNames,
   escapeHtml,
+  formatHanaSqlResultSetCsv,
+  formatHanaSqlResultSetJson,
   extractTableNames,
   filterKeywordCandidates,
   filterTableEntryCandidates,
@@ -433,12 +435,91 @@ describe('escapeHtml', () => {
   });
 });
 
+describe('SQL result export formatters', () => {
+  test('formats CSV with headers and escaped comma quote and newline values', () => {
+    const result: HanaQueryResultSet = {
+      kind: 'resultset',
+      columns: ['ID', 'DESCRIPTION', 'STATUS'],
+      rows: [
+        ['1', 'Value with comma, quote " and newline\ninside', 'READY'],
+        ['2', 'Plain', 'SYNCED'],
+      ],
+      rowCount: 2,
+      elapsedMs: 4,
+    };
+
+    expect(formatHanaSqlResultSetCsv(result)).toBe(
+      [
+        'ID,DESCRIPTION,STATUS',
+        '1,"Value with comma, quote "" and newline\ninside",READY',
+        '2,Plain,SYNCED',
+      ].join('\n')
+    );
+  });
+
+  test('formats JSON rows with stable unique keys for repeated columns', () => {
+    const result: HanaQueryResultSet = {
+      kind: 'resultset',
+      columns: ['ID', 'STATUS', 'STATUS', ''],
+      rows: [['1', 'OPEN', 'PAID', 'fallback']],
+      rowCount: 1,
+      elapsedMs: 4,
+    };
+
+    expect(formatHanaSqlResultSetJson(result)).toBe(
+      JSON.stringify(
+        [
+          {
+            ID: '1',
+            STATUS: 'OPEN',
+            STATUS_2: 'PAID',
+            COLUMN_4: 'fallback',
+          },
+        ],
+        null,
+        2
+      )
+    );
+  });
+
+  test('formats empty result sets safely', () => {
+    const result: HanaQueryResultSet = {
+      kind: 'resultset',
+      columns: ['ID', 'STATUS'],
+      rows: [],
+      rowCount: 0,
+      elapsedMs: 1,
+    };
+
+    expect(formatHanaSqlResultSetCsv(result)).toBe('ID,STATUS');
+    expect(formatHanaSqlResultSetJson(result)).toBe('[]');
+  });
+});
+
 describe('buildHanaSqlResultHtml', () => {
+  test('renders a centered loading state without showing an error card', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT ID FROM ORDERS',
+      executedAt: '2026-04-25T00:00:00Z',
+      isLoading: true,
+      nonce: 'test-nonce',
+    });
+
+    expect(html).toContain('result-loading-layout');
+    expect(html).toContain('result-loading-spinner');
+    expect(html).toContain('Running SQL query');
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('Execution Error');
+    expect(html).not.toContain('state-error');
+  });
+
   test('renders a result table with row numbers for a resultset', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
       sql: 'SELECT ID FROM ORDERS',
       executedAt: '2026-04-25T00:00:00Z',
+      nonce: 'test-nonce',
       result: {
         kind: 'resultset',
         columns: ['ID', 'STATUS'],
@@ -452,6 +533,14 @@ describe('buildHanaSqlResultHtml', () => {
     });
 
     expect(html).not.toContain('<h1>SAP Tools SQL Result</h1>');
+    expect(html).toContain("script-src 'nonce-test-nonce'");
+    expect(html).toContain('nonce="test-nonce"');
+    expect(html).toContain('Export result');
+    expect(html).toContain('Copy CSV');
+    expect(html).toContain('Copy JSON');
+    expect(html).toContain('Export CSV');
+    expect(html).toContain('Export JSON');
+    expect(html).toContain('data-action="copyCsv"');
     expect(html).toContain('App: finance-uat-api');
     expect(html).toContain('Rows: 2');
     expect(html).toContain('Elapsed: 12 ms');
@@ -520,6 +609,7 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('state-success');
     expect(html).toContain('1 row affected');
     expect(html).toContain('Elapsed: 7 ms');
+    expect(html).not.toContain('Export result');
   });
 
   test('renders an error card with the supplied message when no result is present', () => {
