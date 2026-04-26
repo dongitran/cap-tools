@@ -541,6 +541,10 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('Export CSV');
     expect(html).toContain('Export JSON');
     expect(html).toContain('data-action="copyCsv"');
+    expect(html).not.toContain('result-export-status');
+    expect(html).not.toContain('sapTools.sqlResultExportActionResult');
+    expect(html).not.toContain('Copying result');
+    expect(html).not.toContain('copied to clipboard');
     expect(html).toContain('App: finance-uat-api');
     expect(html).toContain('Rows: 2');
     expect(html).toContain('Elapsed: 12 ms');

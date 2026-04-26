@@ -12,8 +12,6 @@ import {
 
 const SQL_RESULT_VIEW_TYPE = 'sapTools.hanaSqlResult';
 const SQL_RESULT_EXPORT_ACTION_MESSAGE_TYPE = 'sapTools.sqlResultExportAction';
-const SQL_RESULT_EXPORT_ACTION_RESULT_MESSAGE_TYPE =
-  'sapTools.sqlResultExportActionResult';
 
 type SqlResultExportActionName = 'copyCsv' | 'copyJson' | 'exportCsv' | 'exportJson';
 
@@ -59,7 +57,7 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
       panel.webview.html = buildHanaSqlResultHtml(currentOptions);
     };
     const messageSubscription = panel.webview.onDidReceiveMessage((message: unknown) => {
-      void this.handlePanelMessage(panel, currentOptions, message);
+      void this.handlePanelMessage(currentOptions, message);
     });
     panel.onDidDispose(() => {
       messageSubscription.dispose();
@@ -75,7 +73,6 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
   }
 
   private async handlePanelMessage(
-    panel: vscode.WebviewPanel,
     options: RenderSqlResultOptions,
     message: unknown
   ): Promise<void> {
@@ -84,31 +81,27 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
     }
     const action = parseExportAction(message['action']);
     if (action === null) {
-      postExportActionResult(panel, false, '', 'Unsupported result export action.');
       return;
     }
-    await this.handleExportAction(panel, options, action);
+    await this.handleExportAction(options, action);
   }
 
   private async handleExportAction(
-    panel: vscode.WebviewPanel,
     options: RenderSqlResultOptions,
     action: SqlResultExportAction
   ): Promise<void> {
     if (options.result?.kind !== 'resultset') {
-      postExportActionResult(panel, false, action.name, 'No result set is available to export.');
       return;
     }
     const content = formatResultSet(options.result, action.format);
     if (action.mode === 'copy') {
-      await this.copyResult(panel, options.appName, action, content);
+      await this.copyResult(options.appName, action, content);
       return;
     }
-    await this.exportResult(panel, options, action, content);
+    await this.exportResult(options, action, content);
   }
 
   private async copyResult(
-    panel: vscode.WebviewPanel,
     appName: string,
     action: SqlResultExportAction,
     content: string
@@ -116,15 +109,15 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
     try {
       await vscode.env.clipboard.writeText(content);
       this.log(`copied ${action.format.toUpperCase()} result for app ${sanitizeLogValue(appName)}`);
-      postExportActionResult(panel, true, action.name, `${action.format.toUpperCase()} copied to clipboard.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to copy SQL result.';
-      postExportActionResult(panel, false, action.name, sanitizeLogValue(message));
+      this.log(
+        `failed to copy ${action.format.toUpperCase()} result for app ${sanitizeLogValue(appName)}: ${sanitizeLogValue(message)}`
+      );
     }
   }
 
   private async exportResult(
-    panel: vscode.WebviewPanel,
     options: RenderSqlResultOptions,
     action: SqlResultExportAction,
     content: string
@@ -141,18 +134,16 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
     try {
       const targetUri = await vscode.window.showSaveDialog(saveOptions);
       if (targetUri === undefined) {
-        postExportActionResult(panel, true, action.name, 'Export cancelled.');
+        this.log(`cancelled ${action.format.toUpperCase()} result export for app ${sanitizeLogValue(options.appName)}`);
         return;
       }
       await vscode.workspace.fs.writeFile(targetUri, new TextEncoder().encode(content));
       this.log(`exported ${action.format.toUpperCase()} result for app ${sanitizeLogValue(options.appName)}`);
-      postExportActionResult(panel, true, action.name, `${action.format.toUpperCase()} exported.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to export SQL result.';
       this.log(
         `failed to export ${action.format.toUpperCase()} result for app ${sanitizeLogValue(options.appName)}: ${sanitizeLogValue(message)}`
       );
-      postExportActionResult(panel, false, action.name, 'Failed to export SQL result.');
     }
   }
 
@@ -195,20 +186,6 @@ function formatResultSet(
   return format === 'csv'
     ? formatHanaSqlResultSetCsv(result)
     : formatHanaSqlResultSetJson(result);
-}
-
-function postExportActionResult(
-  panel: vscode.WebviewPanel,
-  success: boolean,
-  action: string,
-  message: string
-): void {
-  void panel.webview.postMessage({
-    type: SQL_RESULT_EXPORT_ACTION_RESULT_MESSAGE_TYPE,
-    action,
-    success,
-    message,
-  });
 }
 
 function buildDefaultExportUri(fileName: string): vscode.Uri | undefined {

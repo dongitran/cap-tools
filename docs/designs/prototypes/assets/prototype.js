@@ -206,8 +206,6 @@ let hanaTableSelectLoadingKeys = new Set();
 const hanaTableDisplayNameCache = new Map();
 let hanaSqlResultPreviewState = null;
 let hanaSqlResultExportMenuOpen = false;
-let hanaSqlResultFeedbackMessage = '';
-let hanaSqlResultFeedbackTimer = 0;
 const SQL_TABLE_NAME_WIDTH_TOLERANCE = 1;
 let sqlTableResultsRefreshTimer = 0;
 let sqlTableNameTruncationFrame = 0;
@@ -1296,7 +1294,6 @@ function handleSqlTabAction(action, actionElement) {
       sqlTableSearchKeyword = '';
       hanaSqlResultPreviewState = null;
       hanaSqlResultExportMenuOpen = false;
-      hanaSqlResultFeedbackMessage = '';
     }
     selectedHanaServiceId = serviceId;
     if (vscodeApi !== null && !hanaTablesByServiceId.has(serviceId)) {
@@ -1384,7 +1381,6 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
   if (vscodeApi === null) {
     hanaSqlResultPreviewState = buildPrototypeSqlResultLoadingState(service.name, tableName);
     hanaSqlResultExportMenuOpen = false;
-    hanaSqlResultFeedbackMessage = '';
     window.setTimeout(() => {
       setHanaTableSelectLoading(serviceId, tableName, false);
       hanaSqlResultPreviewState = buildPrototypeSqlResultReadyState(service.name, tableName);
@@ -1434,35 +1430,16 @@ function triggerPrototypeSqlResultExportAction(action) {
 
   const isJson = action.endsWith('-json');
   const isCopy = action.startsWith('copy-');
-  const formatLabel = isJson ? 'JSON' : 'CSV';
   const content = isJson
     ? buildPrototypeSqlResultJson(hanaSqlResultPreviewState)
     : buildPrototypeSqlResultCsv(hanaSqlResultPreviewState);
   hanaSqlResultExportMenuOpen = false;
 
   if (isCopy && navigator.clipboard?.writeText !== undefined) {
-    navigator.clipboard.writeText(content).then(
-      () => setPrototypeSqlResultFeedback(`${formatLabel} copied to clipboard.`),
-      () => setPrototypeSqlResultFeedback(`${formatLabel} copy prepared for prototype.`)
-    );
-    return true;
+    void navigator.clipboard.writeText(content);
   }
 
-  setPrototypeSqlResultFeedback(`${formatLabel} export prepared for prototype.`);
   return true;
-}
-
-function setPrototypeSqlResultFeedback(message) {
-  if (hanaSqlResultFeedbackTimer !== 0) {
-    window.clearTimeout(hanaSqlResultFeedbackTimer);
-  }
-  hanaSqlResultFeedbackMessage = message;
-  refreshSqlResultPreviewPanel();
-  hanaSqlResultFeedbackTimer = window.setTimeout(() => {
-    hanaSqlResultFeedbackTimer = 0;
-    hanaSqlResultFeedbackMessage = '';
-    refreshSqlResultPreviewPanel();
-  }, 2200);
 }
 
 function buildPrototypeSqlResultCsv(state) {
@@ -3964,9 +3941,6 @@ function renderSqlResultPreviewPanel() {
   }
 
   const state = hanaSqlResultPreviewState;
-  const feedbackMarkup = hanaSqlResultFeedbackMessage.length > 0
-    ? `<span class="sql-result-preview-feedback" role="status">${escapeHtml(hanaSqlResultFeedbackMessage)}</span>`
-    : '';
   const menuClass = hanaSqlResultExportMenuOpen ? ' is-open' : '';
   return `
     <section class="group-card sql-result-preview-panel" data-role="sql-result-preview-panel" aria-label="SQL result preview">
@@ -3992,7 +3966,6 @@ function renderSqlResultPreviewPanel() {
             <button type="button" role="menuitem" data-action="export-sql-result-json">Export JSON</button>
           </div>
         </div>
-        ${feedbackMarkup}
       </header>
       <div class="sql-result-preview-table-wrap">
         ${renderSqlResultPreviewTable(state)}
@@ -4917,7 +4890,6 @@ function resetSqlWorkbenchState() {
   hanaTablesErrorByServiceId = new Map();
   hanaSqlResultPreviewState = null;
   hanaSqlResultExportMenuOpen = false;
-  hanaSqlResultFeedbackMessage = '';
 }
 
 function resetActiveAppLoggingState() {

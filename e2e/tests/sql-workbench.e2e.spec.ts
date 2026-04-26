@@ -879,18 +879,14 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(resultFrame.getByRole('menuitem', { name: 'Export JSON' })).toBeVisible();
 
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy CSV' }));
-      await expect(
-        resultFrame.getByRole('status').filter({ hasText: 'CSV copied to clipboard.' })
-      ).toBeVisible();
+      await expect(resultFrame.getByText('CSV copied to clipboard.')).toHaveCount(0);
       const csvClipboardText = await readElectronClipboardText(session.electronApp);
       expect(csvClipboardText).toContain('APP_NAME,CURRENT_SCHEMA,EXECUTED_SQL');
       expect(csvClipboardText).toContain('finance-uat-api,TEST_SCHEMA');
 
       await clickWithFallback(exportButton);
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy JSON' }));
-      await expect(
-        resultFrame.getByRole('status').filter({ hasText: 'JSON copied to clipboard.' })
-      ).toBeVisible();
+      await expect(resultFrame.getByText('JSON copied to clipboard.')).toHaveCount(0);
       const jsonClipboardText = await readElectronClipboardText(session.electronApp);
       const parsedJson = JSON.parse(jsonClipboardText) as unknown;
       expect(parsedJson).toEqual([

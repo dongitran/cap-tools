@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.24 (pre-release)
+- Removed visible SQL result export/copy feedback text such as `JSON copied to clipboard.` while keeping clipboard and export actions functional.
+- Kept SQL result export/copy actions logged to the SAP Tools output channel without rendering transient status messages in the result webview.
+- Updated prototype, unit tests, and e2e coverage to verify silent copy behavior while still validating clipboard CSV/JSON output.
+
 ## 0.7.23 (pre-release)
 - Opened SQL result tabs immediately for manual SQL and table quick-select flows, showing a centered animated loading state before query data returns.
 - Added a result export menu with Copy CSV, Copy JSON, Export CSV, and Export JSON actions, backed by CSP-protected webview messaging and output-channel action logs.

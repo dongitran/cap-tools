@@ -2097,8 +2097,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   min-width: 0;
 }
 
-.sql-result-preview-chip,
-.sql-result-preview-feedback {
+.sql-result-preview-chip {
   border: 1px solid color-mix(in oklab, var(--border-color) 80%, var(--mix-base));
   border-radius: 999px;
   padding: 2px 8px;
@@ -2110,10 +2109,6 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.sql-result-preview-feedback {
-  color: var(--state-success-fg);
 }
 
 .sql-result-export-menu {

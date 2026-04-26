@@ -193,7 +193,6 @@ const RESULT_SET_STYLE = `${SHARED_THEME_STYLE}
         cursor: pointer;
       }
       .result-export-list button:hover { background: var(--saptools-surface-strong); }
-      .result-export-status { min-width: 0; color: var(--saptools-muted); font-size: 12px; }
       .result-table-wrap { min-height: 0; overflow: auto; }
       table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; font-size: 12px; }
       th,
@@ -223,14 +222,10 @@ const RESULT_EXPORT_SCRIPT = `
   const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
   const trigger = document.querySelector('[data-role="result-export-trigger"]');
   const list = document.querySelector('[data-role="result-export-list"]');
-  const status = document.querySelector('[data-role="result-export-status"]');
   if (!(trigger instanceof HTMLButtonElement) || !(list instanceof HTMLElement)) return;
   const setMenuOpen = (isOpen) => {
     list.hidden = !isOpen;
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-  };
-  const setStatus = (message) => {
-    if (status instanceof HTMLElement) status.textContent = message;
   };
   document.addEventListener('click', (event) => {
     const target = event.target;
@@ -243,17 +238,10 @@ const RESULT_EXPORT_SCRIPT = `
     if (actionButton instanceof HTMLButtonElement) {
       const action = actionButton.dataset.action ?? '';
       setMenuOpen(false);
-      setStatus(action.startsWith('copy') ? 'Copying result…' : 'Preparing export…');
       vscode?.postMessage({ type: 'sapTools.sqlResultExportAction', action });
       return;
     }
     setMenuOpen(false);
-  });
-  window.addEventListener('message', (event) => {
-    const message = event.data;
-    if (typeof message !== 'object' || message === null) return;
-    if (message.type !== 'sapTools.sqlResultExportActionResult') return;
-    setStatus(typeof message.message === 'string' ? message.message : '');
   });
 })();
 `;
@@ -351,7 +339,6 @@ function renderResultToolbar(
         ${note}
         <span class="result-toolbar-spacer" aria-hidden="true"></span>
         ${renderResultExportMenu()}
-        <span class="result-export-status" data-role="result-export-status" role="status" aria-live="polite"></span>
       </header>`;
 }
 
