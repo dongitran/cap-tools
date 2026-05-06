@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.7.29",
+  "version": "0.7.30",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -120,7 +120,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postbuild": "node ./scripts/vendor-cf-debugger.mjs && node ./scripts/vendor-hdb.mjs && node ./scripts/vendor-table-name-formatters.mjs",
+    "postbuild": "node ./scripts/vendor-hdb.mjs && node ./scripts/vendor-table-name-formatters.mjs",
     "watch": "tsc -watch -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
@@ -136,7 +136,6 @@
     "vscode:prepublish": "npm run build"
   },
   "dependencies": {
-    "@saptools/cf-debugger": "^0.1.2",
     "change-case": "^5.4.4",
     "hdb": "^2.27.1",
     "wordsninja": "^1.1.0"

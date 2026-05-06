@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.30 (pre-release)
+- Removed the workspace Debug tab from the extension and prototype so the workspace now exposes only `Logs`, `Apps`, and `SQL`.
+- Removed the Cloud Foundry debugger service, message bridge, e2e flow, vendoring script, and `@saptools/cf-debugger` runtime dependency from the packaged extension.
+- Added focused e2e and manifest coverage to prevent removed Debug UI controls or runtime packaging from returning.
+
 ## 0.7.29 (pre-release)
 - Reopened saved SQL editor files from their existing workspace file URI instead of recreating an associated `untitled:` document, avoiding `file already exists` errors after save.
 - Added e2e coverage for saving an app SQL editor and selecting the same app again without showing a reopen error.

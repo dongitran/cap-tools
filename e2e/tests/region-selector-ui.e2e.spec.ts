@@ -467,11 +467,11 @@ test.describe('SAP Tools region selector', () => {
       await expect(webviewFrame.getByRole('tab', { name: 'Logs' })).toBeVisible();
       await expect(webviewFrame.getByRole('tab', { name: 'Apps' })).toBeVisible();
       await expect(
-        webviewFrame.getByRole('tab', { name: 'Debug' })
-      ).toBeVisible();
-      await expect(
         webviewFrame.getByRole('tab', { name: 'SQL' })
       ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('tab', { name: 'Debug' })
+      ).toHaveCount(0);
 
       const workspaceHeaderLayout = await webviewFrame.evaluate(() => {
         const headerRow = document.querySelector('.workspace-header .shell-header-row');
