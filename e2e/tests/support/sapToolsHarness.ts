@@ -12,6 +12,7 @@ import {
 
 import {
   getExtensionRootDir,
+  getTemporaryExtensionsDir,
   getTemporaryUserDataDir,
   getTemporaryWorkspaceDir,
   resolveVscodeExecutablePath,
@@ -57,6 +58,7 @@ export const THEME_SCENARIOS: readonly ThemeScenario[] = [
 
 export interface ExtensionHostSession {
   readonly electronApp: ElectronApplication;
+  readonly extensionsDir: string;
   readonly window: Page;
   readonly workspaceDir: string;
   readonly userDataDir: string;
@@ -253,6 +255,7 @@ export async function launchExtensionHost(
   const extensionPath = getExtensionRootDir();
   const workspaceDir = getTemporaryWorkspaceDir();
   const userDataDir = getTemporaryUserDataDir();
+  const extensionsDir = getTemporaryExtensionsDir();
   ensureThemeSettings(userDataDir, options.colorTheme ?? DEFAULT_THEME_NAME);
 
   const withMockCredentials = options.withMockCredentials !== false;
@@ -263,6 +266,7 @@ export async function launchExtensionHost(
       workspaceDir,
       `--extensionDevelopmentPath=${extensionPath}`,
       `--user-data-dir=${userDataDir}`,
+      `--extensions-dir=${extensionsDir}`,
       '--skip-welcome',
       '--skip-release-notes',
       '--disable-workspace-trust',
@@ -278,6 +282,7 @@ export async function launchExtensionHost(
 
   return {
     electronApp,
+    extensionsDir,
     window,
     workspaceDir,
     userDataDir,
@@ -293,6 +298,7 @@ export async function relaunchExtensionHost(
   const extensionPath = getExtensionRootDir();
   const workspaceDir = previousSession.workspaceDir;
   const userDataDir = previousSession.userDataDir;
+  const extensionsDir = previousSession.extensionsDir;
   ensureThemeSettings(userDataDir, options.colorTheme ?? DEFAULT_THEME_NAME);
 
   const withMockCredentials = options.withMockCredentials !== false;
@@ -302,6 +308,7 @@ export async function relaunchExtensionHost(
       workspaceDir,
       `--extensionDevelopmentPath=${extensionPath}`,
       `--user-data-dir=${userDataDir}`,
+      `--extensions-dir=${extensionsDir}`,
       '--skip-welcome',
       '--skip-release-notes',
       '--disable-workspace-trust',
@@ -317,6 +324,7 @@ export async function relaunchExtensionHost(
 
   return {
     electronApp,
+    extensionsDir,
     window,
     workspaceDir,
     userDataDir,
@@ -325,6 +333,7 @@ export async function relaunchExtensionHost(
 
 export async function cleanupExtensionHost(session: ExtensionHostSession): Promise<void> {
   await session.electronApp.close();
+  fs.rmSync(session.extensionsDir, { recursive: true, force: true });
   fs.rmSync(session.workspaceDir, { recursive: true, force: true });
   fs.rmSync(session.userDataDir, { recursive: true, force: true });
 }

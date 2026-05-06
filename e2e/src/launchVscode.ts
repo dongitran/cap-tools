@@ -26,6 +26,10 @@ export function getTemporaryUserDataDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'sap-tools-user-data-'));
 }
 
+export function getTemporaryExtensionsDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'sap-tools-extensions-'));
+}
+
 export function resolveVscodeExecutablePath(): string {
   const envPath = process.env['VSCODE_EXECUTABLE_PATH'];
   if (envPath !== undefined && envPath.length > 0) {

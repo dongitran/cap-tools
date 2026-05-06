@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.28 (pre-release)
+- Fixed successful direct HANA DML callbacks that omit the error argument so `UPDATE`, `DELETE`, and `INSERT` render affected-row/status results instead of generic `hdb exec failed.` errors.
+- Kept mutating SQL execution popup-free while preserving sanitized output-channel command logs.
+- Isolated e2e VS Code extension hosts with a temporary extensions directory and hardened SQL suggest triggering so unrelated local extensions cannot steal editor focus.
+
 ## 0.7.27 (pre-release)
 - Changed SQL result metadata to show the resolved table name instead of the app name and removed final `Executed:` timestamp chips from result views.
 - Opened app SQL editors with workspace-associated untitled file paths so saving `saptools-*.sql` writes inside the current workspace instead of the filesystem root.

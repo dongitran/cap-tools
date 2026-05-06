@@ -25,6 +25,7 @@ interface FakeStatementOptions {
   readonly metadata?: readonly FakeStatementMetadata[];
   readonly rowsOrAffected?: HdbRowsOrAffected;
   readonly execError?: Error;
+  readonly omitSuccessError?: boolean;
 }
 
 interface FakeClientOptions {
@@ -52,6 +53,10 @@ function createFakeClient(
           callback(statementOptions.execError, 0);
           return;
         }
+        if (statementOptions.omitSuccessError === true) {
+          callback(undefined, statementOptions.rowsOrAffected ?? []);
+          return;
+        }
         callback(null, statementOptions.rowsOrAffected ?? []);
       });
     },
@@ -71,6 +76,10 @@ function createFakeClient(
       setImmediate(() => {
         if (statementOptions.execError !== undefined) {
           callback(statementOptions.execError, 0);
+          return;
+        }
+        if (statementOptions.omitSuccessError === true) {
+          callback(undefined, statementOptions.rowsOrAffected ?? []);
           return;
         }
         callback(null, statementOptions.rowsOrAffected ?? []);
@@ -225,6 +234,23 @@ describe('executeHanaQuery (status)', () => {
     expect(result.message).toBe('0 rows affected.');
     expect(log.events).toContain('client.exec:DELETE FROM ORDERS WHERE 1 = 0');
     expect(log.events).not.toContain('client.prepare:DELETE FROM ORDERS WHERE 1 = 0');
+  });
+
+  test('accepts direct DML success callbacks that omit the error argument', async () => {
+    const { client, log } = createFakeClient({
+      statement: { rowsOrAffected: 2, omitSuccessError: true },
+    });
+
+    const result = await executeHanaQuery(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      "UPDATE SAMPLE_ORDERS SET STATUS = 'OPEN'",
+      { clientFactory: () => client }
+    );
+
+    if (result.kind !== 'status') throw new Error('expected status');
+    expect(result.message).toBe('2 rows affected.');
+    expect(log.events).toContain("client.exec:UPDATE SAMPLE_ORDERS SET STATUS = 'OPEN'");
+    expect(log.events).not.toContain("client.prepare:UPDATE SAMPLE_ORDERS SET STATUS = 'OPEN'");
   });
 });
 

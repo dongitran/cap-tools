@@ -61,23 +61,27 @@ export interface HdbColumnMetadata {
 export interface HdbStatement {
   readonly resultSetMetadata?: readonly HdbColumnMetadata[];
   exec(values: readonly unknown[], callback: HdbExecCallback): void;
-  drop(callback?: (err: Error | null) => void): void;
+  drop(callback?: (err: HdbCallbackError) => void): void;
 }
 
 export interface HdbClient {
-  connect(callback: (err: Error | null) => void): void;
+  connect(callback: (err: HdbCallbackError) => void): void;
   exec?(sql: string, callback: HdbExecCallback): void;
-  prepare(sql: string, callback: (err: Error | null, statement: HdbStatement) => void): void;
-  disconnect(callback?: (err: Error | null) => void): void;
+  prepare(
+    sql: string,
+    callback: (err: HdbCallbackError, statement: HdbStatement | undefined) => void
+  ): void;
+  disconnect(callback?: (err: HdbCallbackError) => void): void;
   close(): void;
   on?(event: 'error', listener: (error: Error) => void): void;
 }
 
 export type HdbExecCallback = (
-  err: Error | null,
+  err: HdbCallbackError,
   rowsOrAffected: HdbStatementResult
 ) => void;
 
+export type HdbCallbackError = Error | null | undefined;
 export type HdbRow = Readonly<Record<string, unknown>>;
 export type HdbRowsOrAffected = number | readonly HdbRow[];
 export type HdbStatementResult = HdbRowsOrAffected | undefined;
@@ -290,7 +294,7 @@ async function connectClient(client: HdbClient, timeoutMs: number): Promise<void
     new Promise<undefined>((resolve, reject) => {
       try {
         client.connect((err) => {
-          if (err !== null) {
+          if (hasHdbCallbackError(err)) {
             reject(err);
             return;
           }
@@ -315,13 +319,17 @@ function runPreparedStatement(
     new Promise<HanaQueryResult>((resolve, reject) => {
       try {
         client.prepare(sql, (prepareErr, statement) => {
-          if (prepareErr !== null) {
+          if (hasHdbCallbackError(prepareErr)) {
             reject(prepareErr);
+            return;
+          }
+          if (statement === undefined) {
+            reject(new Error('hdb prepare returned no statement.'));
             return;
           }
           statement.exec([], (execErr, rowsOrAffected) => {
             const finishElapsed = elapsedAtCompletion();
-            if (execErr !== null) {
+            if (hasHdbCallbackError(execErr)) {
               statement.drop(() => {
                 reject(execErr);
               });
@@ -356,7 +364,7 @@ function runDirectStatement(
       }
       try {
         client.exec(sql, (execErr, rowsOrAffected) => {
-          if (execErr !== null) {
+          if (hasHdbCallbackError(execErr)) {
             reject(execErr);
             return;
           }
@@ -440,7 +448,7 @@ async function safeDisconnect(client: HdbClient): Promise<void> {
     };
     try {
       client.disconnect((err) => {
-        if (err !== null) {
+        if (hasHdbCallbackError(err)) {
           finish();
           return;
         }
@@ -459,6 +467,10 @@ function safeClose(client: HdbClient): void {
   } catch {
     /* ignore double close */
   }
+}
+
+function hasHdbCallbackError(error: HdbCallbackError): error is Error {
+  return error !== null && error !== undefined;
 }
 
 function toHanaQueryError(

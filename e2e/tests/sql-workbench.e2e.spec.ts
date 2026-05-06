@@ -87,7 +87,9 @@ async function resolveSqlResultFrame(window: Page, timeoutMs = 20000): Promise<F
 }
 
 async function focusActiveSqlEditor(window: Page): Promise<void> {
-  const editorSurface = window.locator('.monaco-editor .view-lines').first();
+  const editorSurface = window
+    .locator('.part.editor .editor-group-container.active .monaco-editor .view-lines')
+    .first();
   await expect(editorSurface).toBeVisible({ timeout: 10000 });
   await clickWithFallback(editorSurface);
 }
@@ -126,6 +128,19 @@ async function runActiveSqlEditorCommand(window: Page): Promise<void> {
   );
 }
 
+async function runTriggerSuggestCommand(window: Page): Promise<void> {
+  await window.keyboard.press('F1');
+  const quickInputWidget = window.locator('.quick-input-widget:visible').first();
+  await expect(quickInputWidget).toBeVisible({ timeout: 10000 });
+  const quickInputField = quickInputWidget.locator('input[type="text"]').first();
+  await expect(quickInputField).toBeVisible({ timeout: 10000 });
+  await quickInputField.fill('');
+  await window.keyboard.type('>Trigger Suggest');
+  const commandItem = quickInputWidget.getByText('Trigger Suggest', { exact: true }).first();
+  await expect(commandItem).toBeVisible({ timeout: 10000 });
+  await clickWithFallback(commandItem);
+}
+
 async function triggerActiveEditorSuggest(window: Page): Promise<Locator> {
   await focusActiveSqlEditor(window);
   await window.keyboard.press('Control+Space');
@@ -137,7 +152,7 @@ async function triggerActiveEditorSuggest(window: Page): Promise<Locator> {
     return suggestWidget;
   }
 
-  await runWorkbenchCommand(window, 'Trigger Suggest');
+  await runTriggerSuggestCommand(window);
   return suggestWidget;
 }
 
@@ -274,6 +289,10 @@ test.describe('SAP Tools SQL workbench', () => {
       const savedSql = await saveActiveSqlEditor(session.window, expectedSqlPath);
       expect(savedSql).toContain('-- SAP Tools SQL for finance-uat-api');
       await expect(session.window.getByText(/Unable to write file/i)).toHaveCount(0);
+      await clickWithFallback(sqlEditorTab);
+      await expect(sqlEditorTab).toHaveAttribute('aria-selected', 'true', {
+        timeout: 10000,
+      });
       await focusActiveSqlEditor(session.window);
       await replaceActiveSqlEditorText(session.window, 'SELECT * FROM Demo');
       const suggestWidget = await triggerActiveEditorSuggest(session.window);
