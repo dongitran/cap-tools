@@ -66,6 +66,7 @@ export interface HdbStatement {
 
 export interface HdbClient {
   connect(callback: (err: Error | null) => void): void;
+  exec?(sql: string, callback: HdbExecCallback): void;
   prepare(sql: string, callback: (err: Error | null, statement: HdbStatement) => void): void;
   disconnect(callback?: (err: Error | null) => void): void;
   close(): void;
@@ -74,11 +75,12 @@ export interface HdbClient {
 
 export type HdbExecCallback = (
   err: Error | null,
-  rowsOrAffected: HdbRowsOrAffected
+  rowsOrAffected: HdbStatementResult
 ) => void;
 
 export type HdbRow = Readonly<Record<string, unknown>>;
 export type HdbRowsOrAffected = number | readonly HdbRow[];
+export type HdbStatementResult = HdbRowsOrAffected | undefined;
 
 export interface HdbCreateClientArgs {
   readonly host: string;
@@ -99,6 +101,7 @@ export type HdbClientFactory = (connection: HanaConnection) => HdbClient;
 export interface ExecuteHanaQueryOptions {
   readonly timeoutMs?: number;
   readonly clientFactory?: HdbClientFactory;
+  readonly statementKind?: HanaSqlStatementKind;
 }
 
 export async function executeHanaQuery(
@@ -113,6 +116,7 @@ export async function executeHanaQuery(
 
   const timeoutMs = options.timeoutMs ?? HANA_QUERY_DEFAULT_TIMEOUT_MS;
   const factory = options.clientFactory ?? createDefaultHdbClient;
+  const statementKind = options.statementKind ?? classifyHanaSqlStatement(trimmedSql);
 
   let client: HdbClient;
   try {
@@ -135,7 +139,10 @@ export async function executeHanaQuery(
 
   let result: HanaQueryResult;
   try {
-    result = await runStatement(client, trimmedSql, timeoutMs, () => Date.now() - started);
+    result =
+      statementKind === 'mutating'
+        ? await runDirectStatement(client, trimmedSql, timeoutMs, () => Date.now() - started)
+        : await runPreparedStatement(client, trimmedSql, timeoutMs, () => Date.now() - started);
   } catch (error) {
     await safeDisconnect(client);
     throw toHanaQueryError(error, 'exec');
@@ -296,7 +303,7 @@ async function connectClient(client: HdbClient, timeoutMs: number): Promise<void
   );
 }
 
-function runStatement(
+function runPreparedStatement(
   client: HdbClient,
   sql: string,
   timeoutMs: number,
@@ -333,11 +340,43 @@ function runStatement(
   );
 }
 
+function runDirectStatement(
+  client: HdbClient,
+  sql: string,
+  timeoutMs: number,
+  elapsedAtCompletion: () => number
+): Promise<HanaQueryResult> {
+  return runWithTimeout<HanaQueryResult>(
+    'Query',
+    timeoutMs,
+    new Promise<HanaQueryResult>((resolve, reject) => {
+      if (client.exec === undefined) {
+        reject(new Error('hdb direct exec is unavailable.'));
+        return;
+      }
+      try {
+        client.exec(sql, (execErr, rowsOrAffected) => {
+          if (execErr !== null) {
+            reject(execErr);
+            return;
+          }
+          resolve(buildHanaQueryResult(undefined, rowsOrAffected, elapsedAtCompletion()));
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    })
+  );
+}
+
 function buildHanaQueryResult(
-  statement: HdbStatement,
-  rowsOrAffected: HdbRowsOrAffected,
+  statement: HdbStatement | undefined,
+  rowsOrAffected: HdbStatementResult,
   elapsedMs: number
 ): HanaQueryResult {
+  if (rowsOrAffected === undefined) {
+    return { kind: 'status', message: 'Statement executed.', elapsedMs };
+  }
   if (typeof rowsOrAffected === 'number') {
     const message =
       rowsOrAffected === 1
@@ -346,7 +385,10 @@ function buildHanaQueryResult(
     return { kind: 'status', message, elapsedMs };
   }
 
-  const columns = extractColumnNames(statement, rowsOrAffected);
+  const columns =
+    statement === undefined
+      ? extractColumnNamesFromRows(rowsOrAffected)
+      : extractColumnNames(statement, rowsOrAffected);
   const rows = rowsOrAffected.map((row) => {
     return columns.map((column) => formatHanaCellValue(row[column]));
   });
@@ -357,6 +399,13 @@ function buildHanaQueryResult(
     rowCount: rows.length,
     elapsedMs,
   };
+}
+
+function extractColumnNamesFromRows(rows: readonly HdbRow[]): string[] {
+  if (rows.length === 0) {
+    return [];
+  }
+  return Object.keys(rows[0] ?? {});
 }
 
 function runWithTimeout<T>(

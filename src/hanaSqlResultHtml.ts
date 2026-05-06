@@ -4,6 +4,7 @@ export const SQL_RESULT_ROWS_LIMIT = 250;
 
 export interface RenderSqlResultOptions {
   readonly appName: string;
+  readonly tableName?: string;
   readonly sql: string;
   readonly executedAt: string;
   readonly isLoading?: boolean;
@@ -343,6 +344,7 @@ export function buildHanaSqlResultHtml(options: RenderSqlResultOptions): string 
 
 function buildStateResultHtml(options: RenderSqlResultOptions): string {
   const hasStatusResult = options.result?.kind === 'status';
+  const tableName = resolveSqlResultTableName(options);
   const stateTitle = hasStatusResult ? 'Statement Executed' : 'Execution Error';
   const stateMessage = hasStatusResult
     ? escapeHtml(options.result.message)
@@ -355,7 +357,7 @@ function buildStateResultHtml(options: RenderSqlResultOptions): string {
   return wrapResultDocument(options.nonce, STATE_RESULT_STYLE, `
     <main class="state-layout">
       <section class="state-card state-meta">
-        <p class="state-meta-line">App: ${escapeHtml(options.appName)} · Executed: ${escapeHtml(options.executedAt)}</p>
+        <p class="state-meta-line">Table: ${escapeHtml(tableName)}</p>
       </section>
       <section class="state-card ${stateToneClass}">
         <h1>${stateTitle}</h1>
@@ -370,10 +372,11 @@ function buildStateResultHtml(options: RenderSqlResultOptions): string {
 }
 
 function buildLoadingResultHtml(options: RenderSqlResultOptions): string {
+  const tableName = resolveSqlResultTableName(options);
   return wrapResultDocument(options.nonce, LOADING_RESULT_STYLE, `
     <main class="result-loading-layout" aria-busy="true">
       <header class="result-loading-toolbar">
-        <span class="result-loading-chip">App: ${escapeHtml(options.appName)}</span>
+        <span class="result-loading-chip">Table: ${escapeHtml(tableName)}</span>
         <span class="result-loading-chip">Started: ${escapeHtml(options.executedAt)}</span>
       </header>
       <section class="result-loading-state" role="status" aria-live="polite">
@@ -410,6 +413,7 @@ function renderResultToolbar(
   options: RenderSqlResultOptions,
   result: HanaQueryResultSet
 ): string {
+  const tableName = resolveSqlResultTableName(options);
   const truncatedNote = result.rows.length > SQL_RESULT_ROWS_LIMIT
     ? `Showing first ${String(SQL_RESULT_ROWS_LIMIT)} rows of ${String(result.rows.length)}.`
     : '';
@@ -418,14 +422,18 @@ function renderResultToolbar(
     : '';
 
   return `<header class="result-toolbar">
-        <span class="result-chip">App: ${escapeHtml(options.appName)}</span>
+        <span class="result-chip">Table: ${escapeHtml(tableName)}</span>
         <span class="result-chip">Rows: ${String(result.rowCount)}</span>
         <span class="result-chip">Elapsed: ${String(result.elapsedMs)} ms</span>
-        <span class="result-chip">Executed: ${escapeHtml(options.executedAt)}</span>
         ${note}
         <span class="result-toolbar-spacer" aria-hidden="true"></span>
         ${renderResultExportMenu()}
       </header>`;
+}
+
+function resolveSqlResultTableName(options: RenderSqlResultOptions): string {
+  const tableName = options.tableName?.trim() ?? '';
+  return tableName.length > 0 ? tableName : 'SQL statement';
 }
 
 function renderResultExportMenu(): string {

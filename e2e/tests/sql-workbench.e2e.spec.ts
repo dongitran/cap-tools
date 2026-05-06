@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import {
   test,
   expect,
@@ -93,6 +96,23 @@ async function replaceActiveSqlEditorText(window: Page, sql: string): Promise<vo
   await focusActiveSqlEditor(window);
   await window.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
   await window.keyboard.insertText(sql);
+}
+
+function resolveExpectedSqlFilePath(workspaceDir: string, appName: string): string {
+  return path.join(workspaceDir, `saptools-${appName}.sql`);
+}
+
+async function saveActiveSqlEditor(window: Page, targetPath: string): Promise<string> {
+  await window.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S');
+  await expect
+    .poll(
+      () => {
+        return fs.existsSync(targetPath);
+      },
+      { timeout: 10000 }
+    )
+    .toBe(true);
+  return fs.readFileSync(targetPath, 'utf8');
 }
 
 async function selectActiveSqlEditorText(window: Page): Promise<void> {
@@ -247,6 +267,13 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(sqlEditorTab).toHaveAttribute('aria-selected', 'true', {
         timeout: 10000,
       });
+      const expectedSqlPath = resolveExpectedSqlFilePath(
+        session.workspaceDir,
+        'finance-uat-api'
+      );
+      const savedSql = await saveActiveSqlEditor(session.window, expectedSqlPath);
+      expect(savedSql).toContain('-- SAP Tools SQL for finance-uat-api');
+      await expect(session.window.getByText(/Unable to write file/i)).toHaveCount(0);
       await focusActiveSqlEditor(session.window);
       await replaceActiveSqlEditorText(session.window, 'SELECT * FROM Demo');
       const suggestWidget = await triggerActiveEditorSuggest(session.window);
@@ -274,7 +301,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(
         resultFrame.getByRole('heading', { name: 'SAP Tools SQL Result' })
       ).toHaveCount(0);
-      await expect(resultFrame.getByText(/^App:\s*finance-uat-api$/)).toBeVisible();
+      await expect(resultFrame.getByText(/^Table:\s*DUMMY$/)).toBeVisible();
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('columnheader', { name: '#' })).toBeVisible();
       await expect(
@@ -324,8 +351,9 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(tableLayout.cellTextOverflow).toBe('clip');
       expect(tableLayout.tableWidth).toBeGreaterThanOrEqual(tableLayout.wrapperWidth);
       const toolbarChips = resultFrame.locator('.result-toolbar .result-chip');
-      await expect(toolbarChips.filter({ hasText: 'App: finance-uat-api' })).toBeVisible();
-      await expect(toolbarChips.filter({ hasText: /^Executed: /i })).toBeVisible();
+      await expect(toolbarChips.filter({ hasText: 'Table: DUMMY' })).toBeVisible();
+      await expect(toolbarChips.filter({ hasText: 'App: finance-uat-api' })).toHaveCount(0);
+      await expect(toolbarChips.filter({ hasText: /^Executed: /i })).toHaveCount(0);
 
       await clickWithFallback(sqlEditorTab);
       await replaceActiveSqlEditorText(session.window, 'SELECT ID FROM DUMMY LIMIT 7');
@@ -446,7 +474,9 @@ test.describe('SAP Tools SQL workbench', () => {
         });
 
       const resultFrame = await resolveSqlResultFrame(session.window, 20000);
-      await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
+      await expect(resultFrame.getByText('Table: DEMO_APP')).toBeVisible();
+      await expect(resultFrame.getByText('App: finance-uat-api')).toHaveCount(0);
+      await expect(resultFrame.getByText(/^Executed: /i)).toHaveCount(0);
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(
         resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true })
@@ -465,6 +495,75 @@ test.describe('SAP Tools SQL workbench', () => {
       ).toHaveCount(0);
       await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
       await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can save an app SQL editor and run a mutating statement to a status result', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+      await expect(webviewFrame.locator('[data-role="hana-tables-count"]')).toHaveText('105', {
+        timeout: 15000,
+      });
+
+      const sqlEditorTab = session.window.getByRole('tab', {
+        name: /finance-uat-api\.sql/i,
+      });
+      await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
+      await clickWithFallback(sqlEditorTab);
+
+      const expectedSqlPath = resolveExpectedSqlFilePath(
+        session.workspaceDir,
+        'finance-uat-api'
+      );
+      const savedSql = await saveActiveSqlEditor(session.window, expectedSqlPath);
+      expect(savedSql).toContain('-- SAP Tools SQL for finance-uat-api');
+      await expect(session.window.getByText(/Unable to write file/i)).toHaveCount(0);
+
+      await replaceActiveSqlEditorText(
+        session.window,
+        'update "TEST_SCHEMA"."DEMO_APP" set CREATED_BY = \'system\' where ID = \'532806ba-15a1-4a0f-9321-31b62d691130\';'
+      );
+      await selectActiveSqlEditorText(session.window);
+
+      const resultTabsBeforeRun = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      await runActiveSqlEditorCommand(session.window);
+      await expect(
+        session.window.getByText(/Run mutating SQL statement for app "finance-uat-api"/)
+      ).toHaveCount(0, { timeout: 1000 });
+      await expect(session.window.getByRole('button', { name: 'Run SQL' })).toHaveCount(0, {
+        timeout: 1000,
+      });
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeRun + 1);
+
+      const resultFrame = await resolveSqlResultFrame(session.window, 20000);
+      await expect(resultFrame.getByText('Table: DEMO_APP')).toBeVisible();
+      await expect(resultFrame.getByText('App: finance-uat-api')).toHaveCount(0);
+      await expect(resultFrame.getByText(/^Executed: /i)).toHaveCount(0);
+      await expect(
+        resultFrame.getByRole('heading', { name: 'Statement Executed' })
+      ).toBeVisible();
+      await expect(resultFrame.getByText('Statement executed in SAP Tools test mode.')).toBeVisible();
+      await expect(resultFrame.getByText('Execution Error')).toHaveCount(0);
+      await expect(resultFrame.getByText(/hdb exec failed/i)).toHaveCount(0);
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -524,7 +623,9 @@ test.describe('SAP Tools SQL workbench', () => {
         });
 
       const resultFrame = await resolveSqlResultFrame(session.window, 20000);
-      await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
+      await expect(resultFrame.getByText('Table: DEMO_APP')).toBeVisible();
+      await expect(resultFrame.getByText('App: finance-uat-api')).toHaveCount(0);
+      await expect(resultFrame.getByText(/^Executed: /i)).toHaveCount(0);
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(resultFrame.getByRole('cell', { name: expectedPayload })).toBeVisible();
       await expect(resultFrame.getByText('0x7b2273746174757322')).toHaveCount(0);
@@ -1028,7 +1129,9 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(
         resultFrame.getByRole('heading', { name: 'SAP Tools SQL Result' })
       ).toHaveCount(0);
-      await expect(resultFrame.getByText('App: finance-uat-api')).toBeVisible();
+      await expect(resultFrame.getByText(`Table: ${targetTableName}`)).toBeVisible();
+      await expect(resultFrame.getByText('App: finance-uat-api')).toHaveCount(0);
+      await expect(resultFrame.getByText(/^Executed: /i)).toHaveCount(0);
       await expect(resultFrame.getByRole('table')).toBeVisible();
       await expect(
         resultFrame.getByRole('cell', { name: 'TEST_SCHEMA', exact: true })

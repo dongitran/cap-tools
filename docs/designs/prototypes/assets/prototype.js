@@ -4043,7 +4043,7 @@ function renderSqlResultPreviewPanel() {
     return `
       <section class="group-card sql-result-preview-panel" data-role="sql-result-preview-panel" aria-label="SQL result preview">
         <header class="sql-result-preview-toolbar">
-          <span class="sql-result-preview-chip">App: ${escapeHtml(hanaSqlResultPreviewState.appName)}</span>
+          <span class="sql-result-preview-chip">Table: ${escapeHtml(hanaSqlResultPreviewState.tableName)}</span>
           <span class="sql-result-preview-chip">Started: ${escapeHtml(formatSqlResultPreviewTime(hanaSqlResultPreviewState.startedAt))}</span>
         </header>
         <div class="sql-result-preview-loading" role="status" aria-live="polite">
@@ -4059,10 +4059,9 @@ function renderSqlResultPreviewPanel() {
   return `
     <section class="group-card sql-result-preview-panel" data-role="sql-result-preview-panel" aria-label="SQL result preview">
       <header class="sql-result-preview-toolbar">
-        <span class="sql-result-preview-chip">App: ${escapeHtml(state.appName)}</span>
+        <span class="sql-result-preview-chip">Table: ${escapeHtml(state.tableName)}</span>
         <span class="sql-result-preview-chip">Rows: ${String(state.rows.length)}</span>
         <span class="sql-result-preview-chip">Elapsed: ${String(state.elapsedMs)} ms</span>
-        <span class="sql-result-preview-chip">Executed: ${escapeHtml(formatSqlResultPreviewTime(state.executedAt))}</span>
         <div class="sql-result-export-menu${menuClass}">
           <button
             type="button"

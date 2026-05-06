@@ -24,6 +24,7 @@ import {
   formatHanaTableDisplayName,
   quoteHanaIdentifier,
   resolveHanaDisplayTableReferences,
+  resolveHanaSqlTargetTableName,
   resolveSqlResultTargetColumn,
   sanitizeUntitledFileName,
 } from './hanaSqlWorkbenchSupport';
@@ -431,6 +432,36 @@ describe('resolveHanaDisplayTableReferences', () => {
   });
 });
 
+describe('resolveHanaSqlTargetTableName', () => {
+  test('returns the first table from readonly statements', () => {
+    expect(resolveHanaSqlTargetTableName('SELECT * FROM DUMMY')).toBe('DUMMY');
+    expect(resolveHanaSqlTargetTableName('SELECT * FROM "db-test"."table-test"')).toBe(
+      'table-test'
+    );
+  });
+
+  test('returns the target table from mutating statements', () => {
+    expect(
+      resolveHanaSqlTargetTableName(
+        'update "db-test"."table-test" set CREATED_BY = \'system\' where ID = \'532806ba-15a1-4a0f-9321-31b62d691130\''
+      )
+    ).toBe('table-test');
+    expect(resolveHanaSqlTargetTableName('INSERT INTO ORDERS VALUES (1)')).toBe('ORDERS');
+    expect(resolveHanaSqlTargetTableName('DELETE FROM ORDER_ITEMS WHERE ID = 1')).toBe(
+      'ORDER_ITEMS'
+    );
+  });
+
+  test('skips derived tables and common table expressions', () => {
+    expect(resolveHanaSqlTargetTableName('SELECT * FROM (SELECT 1 AS ID) local_alias')).toBeNull();
+    expect(
+      resolveHanaSqlTargetTableName(
+        'WITH local_orders AS (SELECT * FROM ORDERS) SELECT * FROM local_orders'
+      )
+    ).toBeNull();
+  });
+});
+
 describe('extractTableNames', () => {
   test('deduplicates and drops blank values', () => {
     const rs: HanaQueryResultSet = {
@@ -559,6 +590,7 @@ describe('buildHanaSqlResultHtml', () => {
   test('renders a centered loading state without showing an error card', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
+      tableName: 'ORDERS',
       sql: 'SELECT ID FROM ORDERS',
       executedAt: '2026-04-25T00:00:00Z',
       isLoading: true,
@@ -569,6 +601,8 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('result-loading-spinner');
     expect(html).toContain('Running SQL query');
     expect(html).toContain('role="status"');
+    expect(html).toContain('Table: ORDERS');
+    expect(html).not.toContain('App: finance-uat-api');
     expect(html).not.toContain('Execution Error');
     expect(html).not.toContain('state-error');
   });
@@ -576,6 +610,7 @@ describe('buildHanaSqlResultHtml', () => {
   test('renders a result table with row numbers for a resultset', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
+      tableName: 'ORDERS',
       sql: 'SELECT ID FROM ORDERS',
       executedAt: '2026-04-25T00:00:00Z',
       nonce: 'test-nonce',
@@ -615,7 +650,9 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).not.toContain('sapTools.sqlResultExportActionResult');
     expect(html).not.toContain('Copying result');
     expect(html).not.toContain('copied to clipboard');
-    expect(html).toContain('App: finance-uat-api');
+    expect(html).toContain('Table: ORDERS');
+    expect(html).not.toContain('App: finance-uat-api');
+    expect(html).not.toContain('Executed: 2026-04-25T00:00:00Z');
     expect(html).toContain('Rows: 2');
     expect(html).toContain('Elapsed: 12 ms');
     expect(html).toContain('<th>ID</th>');
@@ -692,6 +729,7 @@ describe('buildHanaSqlResultHtml', () => {
   test('renders a success card for status results', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
+      tableName: 'ORDERS',
       sql: 'UPDATE ORDERS SET STATUS = \'OPEN\'',
       executedAt: '2026-04-25T00:00:00Z',
       result: {
@@ -702,6 +740,8 @@ describe('buildHanaSqlResultHtml', () => {
     });
 
     expect(html).toContain('Statement Executed');
+    expect(html).toContain('Table: ORDERS');
+    expect(html).not.toContain('Executed: 2026-04-25T00:00:00Z');
     expect(html).toContain('state-success');
     expect(html).toContain('1 row affected');
     expect(html).toContain('Elapsed: 7 ms');
@@ -711,19 +751,23 @@ describe('buildHanaSqlResultHtml', () => {
   test('renders an error card with the supplied message when no result is present', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
+      tableName: 'DUMMY',
       sql: 'SELECT broken',
       executedAt: '2026-04-25T00:00:00Z',
       errorMessage: 'syntax error near "broken"',
     });
 
     expect(html).toContain('Execution Error');
+    expect(html).toContain('Table: DUMMY');
+    expect(html).not.toContain('Executed: 2026-04-25T00:00:00Z');
     expect(html).toContain('state-error');
     expect(html).toContain('syntax error near &quot;broken&quot;');
   });
 
-  test('escapes app name, SQL, and error message to prevent HTML injection', () => {
+  test('escapes table name, SQL, and error message to prevent HTML injection', () => {
     const html = buildHanaSqlResultHtml({
       appName: '<script>alert(1)</script>',
+      tableName: '<script>alert(4)</script>',
       sql: '<script>alert(2)</script>',
       executedAt: '<evil>',
       errorMessage: '<script>alert(3)</script>',
@@ -732,39 +776,44 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).not.toContain('<script>alert(2)</script>');
     expect(html).not.toContain('<script>alert(3)</script>');
-    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>alert(4)</script>');
+    expect(html).toContain('&lt;script&gt;alert(4)&lt;/script&gt;');
     expect(html).toContain('&lt;script&gt;alert(2)&lt;/script&gt;');
     expect(html).toContain('&lt;script&gt;alert(3)&lt;/script&gt;');
   });
 });
 
 describe('buildHanaSqlResultHtml result meta layout', () => {
-  test('renders the App and Executed metadata as a single line for status results', () => {
+  test('renders table metadata without executed time for status results', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
+      tableName: 'ORDERS',
       sql: 'UPDATE T SET X = 1',
       executedAt: '2026-04-25T01:23:45.000Z',
       result: { kind: 'status', message: '1 row affected', elapsedMs: 4 },
     });
 
     expect(html).toContain(
-      '<p class="state-meta-line">App: finance-uat-api · Executed: 2026-04-25T01:23:45.000Z</p>'
+      '<p class="state-meta-line">Table: ORDERS</p>'
     );
-    expect(html).not.toContain('<p class="state-meta-line">App: finance-uat-api</p>');
+    expect(html).not.toContain('App: finance-uat-api');
     expect(html).not.toContain('<p class="state-meta-line">Executed: 2026-04-25T01:23:45.000Z</p>');
   });
 
-  test('renders the App and Executed metadata as a single line for error results', () => {
+  test('renders table metadata without executed time for error results', () => {
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
+      tableName: 'DUMMY',
       sql: 'SELECT broken',
       executedAt: '2026-04-25T02:00:00.000Z',
       errorMessage: 'syntax error',
     });
 
     expect(html).toContain(
-      '<p class="state-meta-line">App: finance-uat-api · Executed: 2026-04-25T02:00:00.000Z</p>'
+      '<p class="state-meta-line">Table: DUMMY</p>'
     );
+    expect(html).not.toContain('App: finance-uat-api');
+    expect(html).not.toContain('Executed: 2026-04-25T02:00:00.000Z');
   });
 
   test('uses compact padding to keep the result panel tight', () => {

@@ -266,6 +266,7 @@ export function quoteHanaIdentifier(identifier: string): string {
 
 export {
   resolveHanaDisplayTableReferences,
+  resolveHanaSqlTargetTableName,
   type HanaResolvedTableReference,
   type HanaTableReferenceResolution,
 } from './hanaSqlTableReferenceResolver';

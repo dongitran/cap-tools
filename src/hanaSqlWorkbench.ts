@@ -9,14 +9,9 @@ import {
   type HanaQueryResult,
   type HanaSqlStatementKind,
 } from './hanaSqlService';
-import {
-  HANA_SQL_DEFAULT_SELECT_LIMIT,
-  applyDefaultHanaSelectLimit,
-} from './hanaSqlLimitGuard';
-import {
-  resolveHanaConnectionFromApp,
-  type HanaSqlScopeSession,
-} from './hanaSqlConnectionResolver';
+import { HANA_SQL_DEFAULT_SELECT_LIMIT, applyDefaultHanaSelectLimit } from './hanaSqlLimitGuard';
+import { resolveHanaConnectionFromApp, type HanaSqlScopeSession } from './hanaSqlConnectionResolver';
+import { buildHanaSqlDocumentFileUri } from './hanaSqlDocumentUri';
 import {
   buildInitialHanaSqlTemplate,
   buildQuickTableSelectSql,
@@ -29,13 +24,11 @@ import {
   filterKeywordCandidates,
   formatHanaTableDisplayEntries,
   resolveHanaDisplayTableReferences,
+  resolveHanaSqlTargetTableName,
   sanitizeUntitledFileName,
   type HanaTableDisplayEntry,
 } from './hanaSqlWorkbenchSupport';
-import {
-  HanaSqlResultPanelManager,
-  type HanaSqlResultPanelSession,
-} from './hanaSqlResultPanel';
+import { HanaSqlResultPanelManager, type HanaSqlResultPanelSession } from './hanaSqlResultPanel';
 export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWorkbenchSupport';
 export const RUN_HANA_SQL_COMMAND_ID = 'sapTools.runHanaSql';
 const HANA_SQL_EDITOR_CONTEXT_KEY = 'sapTools.hanaSqlEditor';
@@ -46,6 +39,7 @@ interface HanaSqlAppContext {
   connection: HanaConnection | null;
   schema: string;
   sqlDocumentUri: string;
+  sqlDocumentFileUri: string;
   tableNames: readonly string[];
   tableEntries: readonly HanaTableDisplayEntry[];
   tableNamesPromise: Promise<void> | null;
@@ -139,7 +133,8 @@ export class HanaSqlWorkbench
   async openSqlDocumentForApp(options: OpenHanaSqlFileRequest): Promise<void> {
     this.logSql(`open editor for app ${sanitizeSqlLogValue(options.appName)}`);
     const fileName = sanitizeUntitledFileName(options.appName);
-    const uri = vscode.Uri.parse(`untitled:saptools-${fileName}.sql`);
+    const fileUri = buildHanaSqlDocumentFileUri(fileName);
+    const uri = fileUri.with({ scheme: 'untitled' });
     let document = await vscode.workspace.openTextDocument(uri);
     if (document.languageId !== 'sql') {
       document = await vscode.languages.setTextDocumentLanguage(document, 'sql');
@@ -161,7 +156,9 @@ export class HanaSqlWorkbench
 
     const context = this.ensureAppContext(options);
     context.sqlDocumentUri = document.uri.toString();
+    context.sqlDocumentFileUri = fileUri.toString();
     this.appIdByDocumentUri.set(document.uri.toString(), context.appId);
+    this.appIdByDocumentUri.set(fileUri.toString(), context.appId);
     this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
     this.logSql(`editor ready for app ${sanitizeSqlLogValue(context.appName)}`);
     void this.prefetchTableNames(context.appId);
@@ -198,6 +195,7 @@ export class HanaSqlWorkbench
     const resultPanel = this.openLoadingResultPanel(
       context.appName,
       options.tableName,
+      options.tableName,
       this.resolveSqlSourceViewColumn(context)
     );
 
@@ -206,15 +204,18 @@ export class HanaSqlWorkbench
         await this.ensureConnection(context);
       }
       sql = buildQuickTableSelectSql(context.schema, options.tableName);
-      this.updateLoadingResultPanel(resultPanel, context.appName, sql);
+      this.updateLoadingResultPanel(resultPanel, context.appName, options.tableName, sql);
       this.logSql(
-        `run quick SELECT for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(sql)}`
+        `run quick SELECT for app ${sanitizeSqlLogValue(context.appName)} table ${sanitizeSqlLogValue(options.tableName)}: ${sanitizeSqlLogValue(sql)}`
       );
       await delayE2eQuickSelectIfConfigured();
       const result = await this.executeSqlForContext(context, sql, statementKind);
-      this.logSql(`quick SELECT completed for app ${sanitizeSqlLogValue(context.appName)}`);
+      this.logSql(
+        `quick SELECT completed for app ${sanitizeSqlLogValue(context.appName)} table ${sanitizeSqlLogValue(options.tableName)} result ${result.kind}`
+      );
       resultPanel.update({
         appName: context.appName,
+        tableName: options.tableName,
         sql,
         executedAt: new Date().toISOString(),
         result,
@@ -227,6 +228,7 @@ export class HanaSqlWorkbench
       void vscode.window.showErrorMessage(message);
       resultPanel.update({
         appName: context.appName,
+        tableName: options.tableName,
         sql: sql.length > 0 ? sql : options.tableName,
         executedAt: new Date().toISOString(),
         errorMessage: message,
@@ -274,6 +276,7 @@ export class HanaSqlWorkbench
       connection: null,
       schema: '',
       sqlDocumentUri: '',
+      sqlDocumentFileUri: '',
       tableNames: [],
       tableEntries: [],
       tableNamesPromise: null,
@@ -298,12 +301,8 @@ export class HanaSqlWorkbench
       return;
     }
 
-    const selectedSql = editor.selection.isEmpty
-      ? ''
-      : editor.document.getText(editor.selection);
-    const sqlInput = selectedSql.trim().length > 0
-      ? selectedSql
-      : editor.document.getText();
+    const selectedSql = editor.selection.isEmpty ? '' : editor.document.getText(editor.selection);
+    const sqlInput = selectedSql.trim().length > 0 ? selectedSql : editor.document.getText();
 
     let normalizedSql = '';
     try {
@@ -314,6 +313,7 @@ export class HanaSqlWorkbench
       this.resultPanelManager.openResultPanel(
         {
           appName: context.appName,
+          tableName: resolveSqlResultTableName(sqlInput),
           sql: sqlInput,
           executedAt: new Date().toISOString(),
           errorMessage: message,
@@ -340,22 +340,10 @@ export class HanaSqlWorkbench
       );
     }
 
-    if (statementKind === 'mutating') {
-      const action = await vscode.window.showWarningMessage(
-        `Run mutating SQL statement for app "${context.appName}"?`,
-        {
-          modal: true,
-          detail: 'This statement can update S/4HANA data.',
-        },
-        'Run SQL'
-      );
-      if (action !== 'Run SQL') {
-        return;
-      }
-    }
-
+    let tableName = resolveSqlResultTableName(executionSql);
     const resultPanel = this.openLoadingResultPanel(
       context.appName,
+      tableName,
       executionSql,
       toPositiveViewColumnNumber(editor.viewColumn)
     );
@@ -368,6 +356,7 @@ export class HanaSqlWorkbench
         context.schema
       );
       executionSql = resolution.sql;
+      tableName = resolveSqlResultTableName(executionSql);
       if (resolution.replacements.length > 0) {
         const preview = resolution.replacements.slice(0, 4).map((replacement) => {
           return `${sanitizeSqlLogValue(replacement.displayName)} -> ${sanitizeSqlLogValue(replacement.identifier)}`;
@@ -379,14 +368,17 @@ export class HanaSqlWorkbench
           `resolved ${String(resolution.replacements.length)} table display reference(s) for app ${sanitizeSqlLogValue(context.appName)}: ${preview.join(', ')}${suffix}`
         );
       }
-      this.updateLoadingResultPanel(resultPanel, context.appName, executionSql);
+      this.updateLoadingResultPanel(resultPanel, context.appName, tableName, executionSql);
       this.logSql(
-        `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlCommandLogValue(executionSql)}`
+        `run ${statementKind} statement for app ${sanitizeSqlLogValue(context.appName)} table ${sanitizeSqlLogValue(tableName)}: ${sanitizeSqlCommandLogValue(executionSql)}`
       );
       const result = await this.executeSqlForContext(context, executionSql, statementKind);
-      this.logSql(`statement completed for app ${sanitizeSqlLogValue(context.appName)}`);
+      this.logSql(
+        `statement completed for app ${sanitizeSqlLogValue(context.appName)} table ${sanitizeSqlLogValue(tableName)} result ${result.kind}`
+      );
       resultPanel.update({
         appName: context.appName,
+        tableName,
         sql: executionSql,
         executedAt: new Date().toISOString(),
         result,
@@ -399,6 +391,7 @@ export class HanaSqlWorkbench
       void vscode.window.showErrorMessage(message);
       resultPanel.update({
         appName: context.appName,
+        tableName,
         sql: executionSql,
         executedAt: new Date().toISOString(),
         errorMessage: message,
@@ -420,7 +413,7 @@ export class HanaSqlWorkbench
       throw new Error('Unable to resolve HANA connection.');
     }
 
-    return executeHanaQuery(context.connection, sql);
+    return executeHanaQuery(context.connection, sql, { statementKind });
   }
 
   private async prefetchTableNames(appId: string): Promise<void> {
@@ -537,7 +530,8 @@ export class HanaSqlWorkbench
   ): number | undefined {
     if (context.sqlDocumentUri.length > 0) {
       const visibleSqlEditor = vscode.window.visibleTextEditors.find((editor) => {
-        return editor.document.uri.toString() === context.sqlDocumentUri;
+        const uri = editor.document.uri.toString();
+        return uri === context.sqlDocumentUri || uri === context.sqlDocumentFileUri;
       });
       const visibleColumn = toPositiveViewColumnNumber(visibleSqlEditor?.viewColumn);
       if (visibleColumn !== undefined) {
@@ -549,12 +543,13 @@ export class HanaSqlWorkbench
 
   private openLoadingResultPanel(
     appName: string,
+    tableName: string,
     sql: string,
     sourceViewColumn: number | undefined
   ): HanaSqlResultPanelSession {
     this.logSql(`show loading result panel for app ${sanitizeSqlLogValue(appName)}`);
     return this.resultPanelManager.openResultPanel(
-      { appName, sql, executedAt: new Date().toISOString(), isLoading: true },
+      { appName, tableName, sql, executedAt: new Date().toISOString(), isLoading: true },
       sourceViewColumn
     );
   }
@@ -562,10 +557,12 @@ export class HanaSqlWorkbench
   private updateLoadingResultPanel(
     resultPanel: HanaSqlResultPanelSession,
     appName: string,
+    tableName: string,
     sql: string
   ): void {
     resultPanel.update({
       appName,
+      tableName,
       sql,
       executedAt: new Date().toISOString(),
       isLoading: true,
@@ -610,6 +607,10 @@ function sanitizeSqlLogValue(value: string): string {
 
 function sanitizeSqlCommandLogValue(value: string): string {
   return sanitizeSqlLogValue(redactSqlStringLiteralsForLog(value));
+}
+
+function resolveSqlResultTableName(sql: string): string {
+  return resolveHanaSqlTargetTableName(sql) ?? 'SQL statement';
 }
 
 function toPositiveViewColumnNumber(

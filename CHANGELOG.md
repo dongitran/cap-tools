@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.27 (pre-release)
+- Changed SQL result metadata to show the resolved table name instead of the app name and removed final `Executed:` timestamp chips from result views.
+- Opened app SQL editors with workspace-associated untitled file paths so saving `saptools-*.sql` writes inside the current workspace instead of the filesystem root.
+- Executed mutating HANA SQL through direct `hdb` execution without a confirmation popup, rendering affected-row/status results while keeping output logs scrubbed for string literals.
+- Updated the SQL prototype, unit tests, and e2e coverage for table metadata, SQL editor save behavior, and direct update execution.
+
 ## 0.7.26 (pre-release)
 - Added SQL result row hover styling so data rows visibly respond without changing result table sizing.
 - Added a right-click result-cell context menu with silent `Copy row object` and `Copy cell value` actions.

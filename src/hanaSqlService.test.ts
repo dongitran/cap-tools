@@ -61,10 +61,20 @@ function createFakeClient(
     },
   };
 
-  const fakeClient: HdbClient = {
+  const fakeClient = {
     connect: (callback) => {
       events.push('client.connect');
       setImmediate(() => callback(options.connectError ?? null));
+    },
+    exec: (sql: string, callback: HdbExecCallback) => {
+      events.push(`client.exec:${sql}`);
+      setImmediate(() => {
+        if (statementOptions.execError !== undefined) {
+          callback(statementOptions.execError, 0);
+          return;
+        }
+        callback(null, statementOptions.rowsOrAffected ?? []);
+      });
     },
     prepare: (sql, callback) => {
       events.push(`client.prepare:${sql}`);
@@ -86,7 +96,7 @@ function createFakeClient(
     on: () => {
       // no-op
     },
-  };
+  } as HdbClient & { exec(command: string, callback: HdbExecCallback): void };
 
   return { client: fakeClient, log: { events } };
 }
@@ -183,7 +193,7 @@ describe('executeHanaQuery (rows)', () => {
 
 describe('executeHanaQuery (status)', () => {
   test('renders 1 row affected message for affected count of 1', async () => {
-    const { client } = createFakeClient({
+    const { client, log } = createFakeClient({
       statement: { rowsOrAffected: 1 },
     });
 
@@ -196,10 +206,12 @@ describe('executeHanaQuery (status)', () => {
     expect(result.kind).toBe('status');
     if (result.kind !== 'status') return;
     expect(result.message).toBe('1 row affected.');
+    expect(log.events).toContain("client.exec:UPDATE ORDERS SET STATUS = 'OPEN'");
+    expect(log.events).not.toContain("client.prepare:UPDATE ORDERS SET STATUS = 'OPEN'");
   });
 
   test('renders pluralized message for affected counts other than 1', async () => {
-    const { client } = createFakeClient({
+    const { client, log } = createFakeClient({
       statement: { rowsOrAffected: 0 },
     });
 
@@ -211,6 +223,8 @@ describe('executeHanaQuery (status)', () => {
 
     if (result.kind !== 'status') throw new Error('expected status');
     expect(result.message).toBe('0 rows affected.');
+    expect(log.events).toContain('client.exec:DELETE FROM ORDERS WHERE 1 = 0');
+    expect(log.events).not.toContain('client.prepare:DELETE FROM ORDERS WHERE 1 = 0');
   });
 });
 

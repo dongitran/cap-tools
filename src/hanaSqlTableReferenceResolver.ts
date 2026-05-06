@@ -74,6 +74,20 @@ export function resolveHanaDisplayTableReferences(
   return applyTableReferenceReplacements(sql, tokens, candidates, tableMap, schema);
 }
 
+export function resolveHanaSqlTargetTableName(sql: string): string | null {
+  const tokens = tokenizeSqlReferenceTokens(sql);
+  const cteNames = collectTopLevelCteNames(tokens);
+  const candidate = findTableReferenceCandidates(tokens, cteNames).find((entry) => {
+    return tokens[entry.tokenIndex]?.depth === 0;
+  });
+  const tableToken = candidate === undefined ? undefined : tokens[candidate.tokenIndex];
+  if (tableToken === undefined) {
+    return null;
+  }
+  const tableName = tableToken.text.trim();
+  return tableName.length > 0 ? tableName : null;
+}
+
 function buildTableReferenceMap(
   tableEntries: readonly HanaTableDisplayEntryLike[]
 ): Map<string, HanaTableDisplayEntryLike | null> {
@@ -225,7 +239,7 @@ function readTableFactorCandidate(
   const chain = readIdentifierChain(tokens, startIndex);
   if (chain === null) return { candidate: null, nextIndex: startIndex + 1 };
   const tableToken = tokens[chain.tableTokenIndex];
-  if (tableToken?.kind !== 'word' || cteNames.has(normalizeTableReferenceKey(tableToken.text))) {
+  if (!isIdentifierToken(tableToken) || cteNames.has(normalizeTableReferenceKey(tableToken.text))) {
     return { candidate: null, nextIndex: chain.nextIndex };
   }
   return {
@@ -237,7 +251,11 @@ function readTableFactorCandidate(
 function readIdentifierChain(
   tokens: readonly SqlReferenceToken[],
   startIndex: number
-): { readonly nextIndex: number; readonly qualified: boolean; readonly tableTokenIndex: number } | null {
+): {
+  readonly nextIndex: number;
+  readonly qualified: boolean;
+  readonly tableTokenIndex: number;
+} | null {
   if (!isIdentifierToken(tokens[startIndex])) return null;
   let cursor = startIndex;
   let tableTokenIndex = startIndex;
@@ -281,6 +299,7 @@ function buildTableReferenceReplacement(
 ): TableReferenceReplacement | null {
   const token = tokens[candidate.tokenIndex];
   if (token === undefined) return null;
+  if (token.kind !== 'word') return null;
   const entry = tableMap.get(normalizeTableReferenceKey(token.text));
   if (entry === undefined || entry === null || !shouldRewriteTableReference(token.text, entry)) {
     return null;
@@ -441,7 +460,7 @@ function isUppercaseHanaIdentifier(value: string): boolean {
   return /^[A-Z_][A-Z0-9_$#]*$/.test(value);
 }
 
-function isIdentifierToken(token: SqlReferenceToken | undefined): boolean {
+function isIdentifierToken(token: SqlReferenceToken | undefined): token is SqlReferenceToken {
   return token?.kind === 'word' || token?.kind === 'quotedWord';
 }
 

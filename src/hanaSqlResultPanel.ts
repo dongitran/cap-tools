@@ -52,10 +52,12 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
   ): HanaSqlResultPanelSession {
     this.resultSequence += 1;
     const target = resolveResultTargetViewColumn(sourceViewColumn);
+    const tableName = options.tableName?.trim() ?? '';
+    const titleTarget = tableName.length > 0 ? tableName : options.appName;
     this.log(`open result panel ${target.logLabel} for app ${sanitizeLogValue(options.appName)}`);
     const panel = vscode.window.createWebviewPanel(
       SQL_RESULT_VIEW_TYPE,
-      `SAP Tools SQL Result ${String(this.resultSequence)} · ${options.appName}`,
+      `SAP Tools SQL Result ${String(this.resultSequence)} · ${titleTarget}`,
       { preserveFocus: false, viewColumn: target.viewColumn },
       { enableScripts: true }
     );
