@@ -11,7 +11,10 @@ import {
 } from './hanaSqlService';
 import { HANA_SQL_DEFAULT_SELECT_LIMIT, applyDefaultHanaSelectLimit } from './hanaSqlLimitGuard';
 import { resolveHanaConnectionFromApp, type HanaSqlScopeSession } from './hanaSqlConnectionResolver';
-import { buildHanaSqlDocumentFileUri } from './hanaSqlDocumentUri';
+import {
+  buildHanaSqlDocumentFileUri,
+  resolveHanaSqlDocumentOpenUri,
+} from './hanaSqlDocumentUri';
 import {
   buildInitialHanaSqlTemplate,
   buildQuickTableSelectSql,
@@ -134,7 +137,7 @@ export class HanaSqlWorkbench
     this.logSql(`open editor for app ${sanitizeSqlLogValue(options.appName)}`);
     const fileName = sanitizeUntitledFileName(options.appName);
     const fileUri = buildHanaSqlDocumentFileUri(fileName);
-    const uri = fileUri.with({ scheme: 'untitled' });
+    const uri = resolveHanaSqlDocumentOpenUri(fileUri);
     let document = await vscode.workspace.openTextDocument(uri);
     if (document.languageId !== 'sql') {
       document = await vscode.languages.setTextDocumentLanguage(document, 'sql');

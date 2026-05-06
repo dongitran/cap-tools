@@ -289,6 +289,12 @@ test.describe('SAP Tools SQL workbench', () => {
       const savedSql = await saveActiveSqlEditor(session.window, expectedSqlPath);
       expect(savedSql).toContain('-- SAP Tools SQL for finance-uat-api');
       await expect(session.window.getByText(/Unable to write file/i)).toHaveCount(0);
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden({
+        timeout: 10000,
+      });
+      await expect(webviewFrame.locator('body')).not.toContainText(/file already exists/i);
+      await expect(session.window.getByText(/file already exists/i)).toHaveCount(0);
       await clickWithFallback(sqlEditorTab);
       await expect(sqlEditorTab).toHaveAttribute('aria-selected', 'true', {
         timeout: 10000,

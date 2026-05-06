@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.29 (pre-release)
+- Reopened saved SQL editor files from their existing workspace file URI instead of recreating an associated `untitled:` document, avoiding `file already exists` errors after save.
+- Added e2e coverage for saving an app SQL editor and selecting the same app again without showing a reopen error.
+
 ## 0.7.28 (pre-release)
 - Fixed successful direct HANA DML callbacks that omit the error argument so `UPDATE`, `DELETE`, and `INSERT` render affected-row/status results instead of generic `hdb exec failed.` errors.
 - Kept mutating SQL execution popup-free while preserving sanitized output-channel command logs.
