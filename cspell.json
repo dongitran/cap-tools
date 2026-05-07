@@ -75,6 +75,7 @@
     "iconv",
     "databasename",
     "EAUTH",
+    "eu10",
     "hdbsql",
     "hdbclient"
   ]

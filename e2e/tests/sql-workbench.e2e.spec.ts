@@ -67,6 +67,23 @@ async function readElectronClipboardText(
   });
 }
 
+async function waitForElectronClipboardText(
+  electronApp: ElectronApplication,
+  isExpectedText: (text: string) => boolean
+): Promise<string> {
+  let latestText = '';
+  await expect
+    .poll(
+      async () => {
+        latestText = await readElectronClipboardText(electronApp);
+        return isExpectedText(latestText);
+      },
+      { timeout: 10000 }
+    )
+    .toBe(true);
+  return latestText;
+}
+
 async function resolveSqlResultFrame(window: Page, timeoutMs = 20000): Promise<Frame> {
   await expect
     .poll(
@@ -658,7 +675,17 @@ test.describe('SAP Tools SQL workbench', () => {
       const exportButton = resultFrame.getByRole('button', { name: 'Export result' });
       await clickWithFallback(exportButton);
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy JSON' }));
-      const jsonClipboardText = await readElectronClipboardText(session.electronApp);
+      const jsonClipboardText = await waitForElectronClipboardText(
+        session.electronApp,
+        (text) => {
+          try {
+            JSON.parse(text);
+            return text.includes('SAMPLE_JSON_PAYLOAD');
+          } catch {
+            return false;
+          }
+        }
+      );
       const parsedJson = JSON.parse(jsonClipboardText) as unknown;
       expect(parsedJson).toEqual([
         {
@@ -742,7 +769,10 @@ test.describe('SAP Tools SQL workbench', () => {
 
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy row object' }));
       await expect(resultFrame.getByRole('menu')).toHaveCount(0);
-      const rowObjectClipboardText = await readElectronClipboardText(session.electronApp);
+      const rowObjectClipboardText = await waitForElectronClipboardText(
+        session.electronApp,
+        (text) => text.includes('"CURRENT_SCHEMA": "TEST_SCHEMA"')
+      );
       const parsedRowObject = JSON.parse(rowObjectClipboardText) as unknown;
       expect(parsedRowObject).toEqual({
         APP_NAME: 'finance-uat-api',
@@ -754,7 +784,10 @@ test.describe('SAP Tools SQL workbench', () => {
       await schemaCell.click({ button: 'right' });
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy cell value' }));
       await expect(resultFrame.getByRole('menu')).toHaveCount(0);
-      const cellClipboardText = await readElectronClipboardText(session.electronApp);
+      const cellClipboardText = await waitForElectronClipboardText(
+        session.electronApp,
+        (text) => text === 'TEST_SCHEMA'
+      );
       expect(cellClipboardText).toBe('TEST_SCHEMA');
       await expect(resultFrame.getByText('copied to clipboard')).toHaveCount(0);
     } finally {
@@ -1174,14 +1207,29 @@ test.describe('SAP Tools SQL workbench', () => {
 
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy CSV' }));
       await expect(resultFrame.getByText('CSV copied to clipboard.')).toHaveCount(0);
-      const csvClipboardText = await readElectronClipboardText(session.electronApp);
+      const csvClipboardText = await waitForElectronClipboardText(
+        session.electronApp,
+        (text) =>
+          text.includes('APP_NAME,CURRENT_SCHEMA,EXECUTED_SQL') &&
+          text.includes('finance-uat-api,TEST_SCHEMA')
+      );
       expect(csvClipboardText).toContain('APP_NAME,CURRENT_SCHEMA,EXECUTED_SQL');
       expect(csvClipboardText).toContain('finance-uat-api,TEST_SCHEMA');
 
       await clickWithFallback(exportButton);
       await clickWithFallback(resultFrame.getByRole('menuitem', { name: 'Copy JSON' }));
       await expect(resultFrame.getByText('JSON copied to clipboard.')).toHaveCount(0);
-      const jsonClipboardText = await readElectronClipboardText(session.electronApp);
+      const jsonClipboardText = await waitForElectronClipboardText(
+        session.electronApp,
+        (text) => {
+          try {
+            JSON.parse(text);
+            return text.includes('EXECUTED_SQL');
+          } catch {
+            return false;
+          }
+        }
+      );
       const parsedJson = JSON.parse(jsonClipboardText) as unknown;
       expect(parsedJson).toEqual([
         {

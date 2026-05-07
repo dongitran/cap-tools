@@ -37,6 +37,12 @@ export const SAP_BTP_REGIONS: readonly SapBtpRegion[] = [
   { id: 'br10', displayName: 'Brazil (Sao Paulo)', area: 'Americas', provider: 'AWS' },
   { id: 'br20', displayName: 'Brazil (Sao Paulo) - Azure', area: 'Americas', provider: 'Azure' },
   { id: 'br30', displayName: 'Brazil (Sao Paulo) - GCP', area: 'Americas', provider: 'GCP' },
+  {
+    id: 'eu10-004',
+    displayName: 'Europe (Frankfurt) - AWS Extension',
+    area: 'Americas',
+    provider: 'AWS',
+  },
 
   { id: 'eu01', displayName: 'Europe (Frankfurt) - EU Access', area: 'Europe', provider: 'SAP' },
   { id: 'eu02', displayName: 'Europe (Rot) - SAP EU Access', area: 'Europe', provider: 'SAP' },
@@ -103,6 +109,15 @@ export const SAP_BTP_REGIONS: readonly SapBtpRegion[] = [
 export function toHyphenatedRegionCode(regionId: string): string {
   const normalized = regionId.trim().toLowerCase();
   if (normalized.length < 3) {
+    return normalized;
+  }
+
+  const compact = normalized.replaceAll('-', '');
+  if (/^[a-z]{2}\d{5}$/.test(compact)) {
+    return `${compact.slice(0, 4)}-${compact.slice(4)}`;
+  }
+
+  if (normalized.includes('-')) {
     return normalized;
   }
 

@@ -3,6 +3,12 @@ import { execFile, spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { parseCfAppsOutput } from './cfAppsParser';
+import { logCfCommand } from './cfCommandLogger';
+export { parseCfAppsOutput } from './cfAppsParser';
+export { configureCfCommandLogger } from './cfCommandLogger';
+export { getCfApiEndpoint } from './cfEndpoint';
+
 const execFileAsync = promisify(execFile);
 
 const CF_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
@@ -17,12 +23,6 @@ interface CfCliExecutionOptions {
   readonly envOverrides?: Record<string, string>;
   readonly timeoutMs?: number;
   readonly failureMessage: string;
-}
-
-interface ParsedCfAppRow {
-  readonly name: string;
-  readonly requestedState: string;
-  readonly runningInstances: number;
 }
 
 interface CfCliTargetParams {
@@ -67,18 +67,6 @@ export interface CfRunningApp {
 export interface CfLogStreamHandle {
   readonly process: ChildProcessWithoutNullStreams;
   stop(): void;
-}
-
-/**
- * Derive the SAP BTP Cloud Foundry API endpoint from a region code.
- * Region codes may be either the catalog form (e.g. "us-10") or the raw form (e.g. "us10").
- */
-export function getCfApiEndpoint(regionCode: string): string {
-  const regionId = regionCode.replace('-', '').toLowerCase();
-  if (regionId.startsWith('cn')) {
-    return `https://api.cf.${regionId}.platform.sapcloud.cn`;
-  }
-  return `https://api.cf.${regionId}.hana.ondemand.com`;
 }
 
 /**
@@ -176,49 +164,6 @@ export async function fetchSpaces(session: CfSession, orgGuid: string): Promise<
     'Failed to fetch CF spaces'
   );
   return mapV3NamedResources(v3Resources);
-}
-
-/**
- * Parse `cf apps` output and keep each app row with calculated running instances.
- * Supports both:
- * - CF v8 style `processes` column: `web:1/1, worker:0/1`
- * - CF v7 style `instances` column: `1/1`
- */
-export function parseCfAppsOutput(stdout: string): ParsedCfAppRow[] {
-  const lines = stdout.split(/\r?\n/);
-  const headerIndex = lines.findIndex((line) => line.includes('requested state'));
-  if (headerIndex < 0) {
-    return [];
-  }
-
-  const rows: ParsedCfAppRow[] = [];
-
-  for (const rawLine of lines.slice(headerIndex + 1)) {
-    const line = rawLine.trim();
-    if (line.length === 0) {
-      continue;
-    }
-
-    const parts = line.split(/\s{2,}/);
-    const name = parts[0]?.trim() ?? '';
-    const requestedState = (parts[1]?.trim() ?? '').toLowerCase();
-    const instancesToken = parts[2]?.trim() ?? '';
-
-    if (name.length === 0 || requestedState.length === 0) {
-      continue;
-    }
-
-    const runningInstances =
-      requestedState === 'started' ? parseRunningInstances(instancesToken) : 0;
-
-    rows.push({
-      name,
-      requestedState,
-      runningInstances,
-    });
-  }
-
-  return rows;
 }
 
 /**
@@ -409,6 +354,7 @@ async function runCfCommand(
   const maxAttempts = CF_RETRY_MAX_ATTEMPTS;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    logCfCommand(args);
     try {
       const { stdout } = await execFileAsync('cf', args, {
         env,
@@ -445,26 +391,6 @@ function buildCfCliEnv(
     }
   }
   return env;
-}
-
-function parseRunningInstances(instancesToken: string): number {
-  if (instancesToken.length === 0) {
-    return 0;
-  }
-
-  const regex = /(?:^|[, ])(?:[a-zA-Z0-9_-]+:)?(\d+)\/\d+/g;
-  let totalRunningInstances = 0;
-  let match = regex.exec(instancesToken);
-
-  while (match !== null) {
-    const parsedCount = Number.parseInt(match[1] ?? '0', 10);
-    if (!Number.isNaN(parsedCount) && parsedCount > 0) {
-      totalRunningInstances += parsedCount;
-    }
-    match = regex.exec(instancesToken);
-  }
-
-  return totalRunningInstances;
 }
 
 function extractSafeCliDetail(error: unknown): string {

@@ -15,6 +15,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import {
+  configureCfCommandLogger,
   fetchDefaultEnvJsonFromTarget,
   fetchOrgs,
   fetchPnpmLockFromTarget,
@@ -37,12 +38,22 @@ function jsonResponse(payload: unknown, status = 200): Response {
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockReset();
+  configureCfCommandLogger(null);
 });
 
 describe('getCfApiEndpoint', () => {
   it('resolves default Cloud Foundry endpoint for non-China regions', () => {
     expect(getCfApiEndpoint('us-10')).toBe('https://api.cf.us10.hana.ondemand.com');
     expect(getCfApiEndpoint('eu22')).toBe('https://api.cf.eu22.hana.ondemand.com');
+  });
+
+  it('resolves extension landscape endpoint without removing landscape hyphen', () => {
+    expect(getCfApiEndpoint('eu10-004')).toBe(
+      'https://api.cf.eu10-004.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu10004')).toBe(
+      'https://api.cf.eu10-004.hana.ondemand.com'
+    );
   });
 
   it('resolves China Cloud Foundry endpoint on sapcloud domain', () => {
@@ -149,6 +160,41 @@ describe('fetchStartedAppsViaCfCli', () => {
       expect.any(Object)
     );
     expect(execFileAsyncMock).toHaveBeenNthCalledWith(4, 'cf', ['apps'], expect.any(Object));
+  });
+
+  it('logs sanitized CF CLI command shape without credentials', async () => {
+    const commandLogs: string[] = [];
+    configureCfCommandLogger((message) => {
+      commandLogs.push(message);
+    });
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({
+        stdout: [
+          'name  requested state  processes  routes',
+          'orders-api  started  web:1/1  orders-api.cfapps.example.com',
+        ].join('\n'),
+      });
+
+    await fetchStartedAppsViaCfCli({
+      apiEndpoint: 'https://api.cf.eu10-004.hana.ondemand.com',
+      email: 'test@example.com',
+      password: 'super-secret-password',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    expect(commandLogs).toEqual([
+      '[cf-cli] cf api https://api.cf.eu10-004.hana.ondemand.com',
+      '[cf-cli] cf auth',
+      '[cf-cli] cf target -o finance-services-prod -s uat',
+      '[cf-cli] cf apps',
+    ]);
+    expect(commandLogs.join('\n')).not.toContain('super-secret-password');
+    expect(commandLogs.join('\n')).not.toContain('test@example.com');
   });
 
   it('returns safe auth error message without leaking password from command args', async () => {

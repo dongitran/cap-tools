@@ -7,20 +7,32 @@ function countByArea(area: string): number {
 }
 
 describe('SAP_BTP_REGIONS', () => {
-  it('contains 41 regions', () => {
-    expect(SAP_BTP_REGIONS).toHaveLength(41);
+  it('contains 42 regions', () => {
+    expect(SAP_BTP_REGIONS).toHaveLength(42);
   });
 
   it('keeps grouped distribution across areas', () => {
-    expect(countByArea('Americas')).toBe(12);
+    expect(countByArea('Americas')).toBe(13);
     expect(countByArea('Europe')).toBe(10);
     expect(countByArea('Middle East and Africa')).toBe(4);
     expect(countByArea('Asia Pacific')).toBe(13);
     expect(countByArea('China')).toBe(2);
   });
 
+  it('lists eu10-004 extension landscape in Americas picker group', () => {
+    expect(SAP_BTP_REGIONS).toContainEqual({
+      id: 'eu10-004',
+      displayName: 'Europe (Frankfurt) - AWS Extension',
+      area: 'Americas',
+      provider: 'AWS',
+    });
+  });
+
   it('formats region code into hyphen form', () => {
     expect(toHyphenatedRegionCode('us10')).toBe('us-10');
+    expect(toHyphenatedRegionCode('us-10')).toBe('us-10');
     expect(toHyphenatedRegionCode('CN40')).toBe('cn-40');
+    expect(toHyphenatedRegionCode('eu10004')).toBe('eu10-004');
+    expect(toHyphenatedRegionCode('EU10-004')).toBe('eu10-004');
   });
 });

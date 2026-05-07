@@ -5,6 +5,7 @@ import { test, expect } from '@playwright/test';
 import {
   AREA_TO_SELECT,
   BR10_REGION_TO_SELECT,
+  EU10004_REGION_TO_SELECT,
   ORG_TO_SELECT,
   PROOF_ORG_TO_SELECT,
   REGION_TO_SELECT,
@@ -114,6 +115,85 @@ test.describe('SAP Tools region selector', () => {
       const regionLabel = await regionButton.innerText();
       expect(regionLabel).toMatch(/^\s*us-10\s+US East \(VA\)/i);
       expect(regionLabel).not.toMatch(/\b(aws|azure|gcp)\b/i);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can select EU10 extension landscape from Americas area', async () => {
+    let session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+
+      const regionButton = webviewFrame.getByRole('button', {
+        name: EU10004_REGION_TO_SELECT,
+      });
+      await expect(regionButton).toBeVisible({ timeout: 10000 });
+      await expect(regionButton).toBeEnabled();
+      await clickWithFallback(regionButton);
+
+      const selectedRegionState = await webviewFrame.evaluate(() => {
+        const selectedRegionElement = document.querySelector('.region-option.is-selected');
+        const selectedRegionText =
+          selectedRegionElement === null
+            ? ''
+            : selectedRegionElement.textContent.replace(/\s+/g, ' ').trim();
+        return {
+          selectedRegionId:
+            selectedRegionElement?.getAttribute('data-region-id') ?? '',
+          visibleRegionCount: document.querySelectorAll(
+            '.region-option:not(.is-hidden)'
+          ).length,
+          hiddenRegionCount: document.querySelectorAll('.region-option.is-hidden')
+            .length,
+          stageErrorCount: document.querySelectorAll('.stage-error').length,
+          loadingCount: document.querySelectorAll('.stage-loading').length,
+          selectedRegionText,
+        };
+      });
+      expect(selectedRegionState).toEqual({
+        selectedRegionId: 'eu10-004',
+        visibleRegionCount: 1,
+        hiddenRegionCount: 12,
+        stageErrorCount: 0,
+        loadingCount: 0,
+        selectedRegionText: 'eu10-004 Europe (Frankfurt) Extension',
+      });
+
+      await expect(
+        webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(webviewFrame.getByRole('button', { name: ORG_TO_SELECT }));
+      await expect(
+        webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: eu10-004. Org: finance-services-prod. Space: uat'
+      );
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+
+      session = await relaunchExtensionHost(session);
+      const reopenedFrame = await openSapToolsSidebar(session.window, 60000);
+      await expect(
+        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 20000 });
+      await expect(reopenedFrame.locator('.workspace-context')).toContainText(
+        'Region: eu10-004. Org: finance-services-prod. Space: uat'
+      );
+      await expect(reopenedFrame.getByRole('button', { name: 'Confirm Scope' })).toHaveCount(0);
+      await expect(reopenedFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }

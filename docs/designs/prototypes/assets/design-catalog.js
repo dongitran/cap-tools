@@ -1,7 +1,7 @@
 export const REGION_GROUPS = [
   {
     id: 'americas',
-    label: 'Americas (br - ca - us)',
+    label: 'Americas (br - ca - eu - us)',
     regions: [
       { id: 'us01', name: 'US (Sterling)', code: 'us-01' },
       { id: 'us02', name: 'US West (Colorado)', code: 'us-02' },
@@ -15,6 +15,7 @@ export const REGION_GROUPS = [
       { id: 'br10', name: 'Brazil (Sao Paulo)', code: 'br-10' },
       { id: 'br20', name: 'Brazil (Sao Paulo)', code: 'br-20' },
       { id: 'br30', name: 'Brazil (Sao Paulo)', code: 'br-30' },
+      { id: 'eu10-004', name: 'Europe (Frankfurt) Extension', code: 'eu10-004' },
     ],
   },
   {

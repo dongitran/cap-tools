@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.32 (pre-release)
+- Added the `eu10-004` Cloud Foundry extension landscape to the Americas region picker while preserving its Europe (Frankfurt) label and endpoint shape.
+- Preserved extension landscape API endpoints such as `https://api.cf.eu10-004.hana.ondemand.com` and restored confirmed `eu10-004` scopes across extension host reloads.
+- Added sanitized SAP Tools output logs for CF CLI command execution without logging SAP credentials.
+
 ## 0.7.31 (pre-release)
 - Expanded the three workspace tabs so `Logs`, `Apps`, and `SQL` divide the full tab bar width evenly after removing Debug.
 - Kept the equal-width tab layout in compact sidebars and added e2e layout assertions for full-row coverage.

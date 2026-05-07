@@ -1,4 +1,4 @@
-import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260412q';
+import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260507b';
 
 const TAB_ITEMS = [
   { id: 'logs', label: 'Logs' },

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { CF_LOGS_VIEW_ID, CfLogsPanelProvider } from './cfLogsPanel';
 import { CacheStore } from './cacheStore';
 import { CacheSyncService } from './cacheSyncService';
+import { configureCfCommandLogger } from './cfClient';
 import { getEffectiveCredentials } from './credentialStore';
 import { HanaSqlWorkbench } from './hanaSqlWorkbench';
 import { REGION_VIEW_ID, RegionSidebarProvider } from './sidebarProvider';
@@ -13,6 +14,9 @@ const OUTPUT_CHANNEL_NAME = 'SAP Tools';
 
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME);
+  configureCfCommandLogger((message) => {
+    outputChannel.appendLine(message);
+  });
   const cacheStore = new CacheStore(context);
   const cacheSyncService = new CacheSyncService(cacheStore, context, outputChannel);
 
@@ -69,6 +73,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     outputChannel,
+    new vscode.Disposable(() => {
+      configureCfCommandLogger(null);
+    }),
     cacheSyncService,
     regionSidebarProvider,
     cfLogsPanel,
