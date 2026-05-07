@@ -38,6 +38,49 @@ test.describe('SAP Tools workspace tabs', () => {
         webviewFrame.getByRole('tab', { name: 'Debug' })
       ).toHaveCount(0);
 
+      const tabLayout = await webviewFrame.evaluate(() => {
+        const tablist = document.querySelector('.workspace-tabs');
+        const tabs = Array.from(
+          document.querySelectorAll<HTMLElement>('.workspace-tabs .tab-button')
+        );
+        if (!(tablist instanceof HTMLElement) || tabs.length !== 3) {
+          return null;
+        }
+        const tablistRect = tablist.getBoundingClientRect();
+        const tabRects = tabs.map((tab) => tab.getBoundingClientRect());
+        const styles = window.getComputedStyle(tablist);
+        const gapRaw = Number.parseFloat(styles.columnGap);
+        const paddingLeftRaw = Number.parseFloat(styles.paddingLeft);
+        const paddingRightRaw = Number.parseFloat(styles.paddingRight);
+        const gap = Number.isFinite(gapRaw) ? gapRaw : 0;
+        const paddingLeft = Number.isFinite(paddingLeftRaw) ? paddingLeftRaw : 0;
+        const paddingRight = Number.isFinite(paddingRightRaw) ? paddingRightRaw : 0;
+        const innerWidth = tablistRect.width - paddingLeft - paddingRight;
+        const expectedTabWidth = (innerWidth - gap * 2) / 3;
+        const widths = tabRects.map((rect) => rect.width);
+        const firstTabRect = tabRects[0];
+        const lastTabRect = tabRects[2];
+        if (firstTabRect === undefined || lastTabRect === undefined) {
+          return null;
+        }
+        return {
+          firstLeftDelta: Math.abs(firstTabRect.left - (tablistRect.left + paddingLeft)),
+          lastRightDelta: Math.abs(lastTabRect.right - (tablistRect.right - paddingRight)),
+          maxExpectedDelta: Math.max(
+            ...widths.map((width) => Math.abs(width - expectedTabWidth))
+          ),
+          widthDelta: Math.max(...widths) - Math.min(...widths),
+        };
+      });
+
+      if (tabLayout === null) {
+        throw new Error('Workspace tab layout was not rendered.');
+      }
+      expect(tabLayout.widthDelta).toBeLessThanOrEqual(2);
+      expect(tabLayout.maxExpectedDelta).toBeLessThanOrEqual(2);
+      expect(tabLayout.firstLeftDelta).toBeLessThanOrEqual(2);
+      expect(tabLayout.lastRightDelta).toBeLessThanOrEqual(2);
+
       const removedSurface = await webviewFrame.evaluate(() => {
         const selectors = [
           '[data-tab-id="debug"]',

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.31 (pre-release)
+- Expanded the three workspace tabs so `Logs`, `Apps`, and `SQL` divide the full tab bar width evenly after removing Debug.
+- Kept the equal-width tab layout in compact sidebars and added e2e layout assertions for full-row coverage.
+
 ## 0.7.30 (pre-release)
 - Removed the workspace Debug tab from the extension and prototype so the workspace now exposes only `Logs`, `Apps`, and `SQL`.
 - Removed the Cloud Foundry debugger service, message bridge, e2e flow, vendoring script, and `@saptools/cf-debugger` runtime dependency from the packaged extension.
