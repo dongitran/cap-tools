@@ -17,6 +17,7 @@ import {
 } from './hanaSqlDocumentUri';
 import {
   buildInitialHanaSqlTemplate,
+  buildHanaTableReferenceResolutionMissLog,
   buildQuickTableSelectSql,
   buildTableDiscoveryQueries,
   buildTestModeQueryResult,
@@ -353,9 +354,13 @@ export class HanaSqlWorkbench
 
     try {
       await this.prefetchTableNames(context.appId);
+      const tableEntries = resolveCompletionTableEntries(context);
+      this.logSql(
+        `manual statement table context app ${sanitizeSqlLogValue(context.appName)} schema ${sanitizeSqlLogValue(context.schema)} loadedTables=${String(tableEntries.length)}`
+      );
       const resolution = resolveHanaDisplayTableReferences(
         executionSql,
-        resolveCompletionTableEntries(context),
+        tableEntries,
         context.schema
       );
       executionSql = resolution.sql;
@@ -370,6 +375,11 @@ export class HanaSqlWorkbench
         this.logSql(
           `resolved ${String(resolution.replacements.length)} table display reference(s) for app ${sanitizeSqlLogValue(context.appName)}: ${preview.join(', ')}${suffix}`
         );
+      } else {
+        const missLog = buildHanaTableReferenceResolutionMissLog(executionSql, tableEntries);
+        if (missLog !== null) {
+          this.logSql(sanitizeSqlLogValue(missLog));
+        }
       }
       this.updateLoadingResultPanel(resultPanel, context.appName, tableName, executionSql);
       this.logSql(

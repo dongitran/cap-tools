@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.35 (pre-release)
+- Resolved SQL Workbench manual table execution so lower-case app table references are logged and resolved against the selected app schema before HANA execution.
+- Preserved the SQL app-list scroll position when selecting lower apps and when the selected app's table list finishes loading.
+- Expanded the Logs and Apps workspace tabs so their main lists use the full available sidebar height.
+
 ## 0.7.34 (pre-release)
 - Added the missing SAP Help Cloud Foundry extension landscapes `us10-002`, `eu10-002`, `eu10-003`, `eu10-005`, `eu20-001`, and `eu20-002` to the region picker with endpoint coverage.
 

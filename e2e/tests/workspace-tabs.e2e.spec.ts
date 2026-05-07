@@ -24,6 +24,40 @@ async function openConfirmedWorkspace(): Promise<{
   return { session, webviewFrame };
 }
 
+interface WorkspaceTabHeightSnapshot {
+  readonly bodyHeight: number;
+  readonly listHeight: number;
+  readonly listMaxHeight: string;
+  readonly panelHeight: number;
+}
+
+async function readWorkspaceTabHeightSnapshot(
+  webviewFrame: Frame,
+  selectors: {
+    readonly list: string;
+    readonly panel: string;
+  }
+): Promise<WorkspaceTabHeightSnapshot> {
+  return webviewFrame.evaluate((input) => {
+    const body = document.querySelector('.workspace-body');
+    const panel = document.querySelector(input.panel);
+    const list = document.querySelector(input.list);
+    if (
+      !(body instanceof HTMLElement) ||
+      !(panel instanceof HTMLElement) ||
+      !(list instanceof HTMLElement)
+    ) {
+      throw new Error('Workspace tab layout elements are missing.');
+    }
+    return {
+      bodyHeight: body.getBoundingClientRect().height,
+      listHeight: list.getBoundingClientRect().height,
+      listMaxHeight: window.getComputedStyle(list).maxHeight,
+      panelHeight: panel.getBoundingClientRect().height,
+    };
+  }, selectors);
+}
+
 test.describe('SAP Tools workspace tabs', () => {
   test('User can open the workspace with only the supported tabs', async () => {
     const { session, webviewFrame } = await openConfirmedWorkspace();
@@ -143,6 +177,36 @@ test.describe('SAP Tools workspace tabs', () => {
       await expect(
         webviewFrame.getByRole('tab', { name: 'Debug' })
       ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can use full-height Logs and Apps workspace panels', async () => {
+    const { session, webviewFrame } = await openConfirmedWorkspace();
+
+    try {
+      const logsSnapshot = await readWorkspaceTabHeightSnapshot(webviewFrame, {
+        list: '[data-role="app-log-catalog"]',
+        panel: '.app-logs-panel',
+      });
+      expect(logsSnapshot.bodyHeight).toBeGreaterThan(120);
+      expect(logsSnapshot.panelHeight / logsSnapshot.bodyHeight).toBeGreaterThan(0.95);
+      expect(logsSnapshot.listHeight / logsSnapshot.bodyHeight).toBeGreaterThan(0.35);
+      expect(logsSnapshot.listMaxHeight).toBe('none');
+
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Service Artifacts' })
+      ).toBeVisible();
+      const appsSnapshot = await readWorkspaceTabHeightSnapshot(webviewFrame, {
+        list: '[data-role="service-mapping-list"]',
+        panel: '.service-export-tab',
+      });
+      expect(appsSnapshot.bodyHeight).toBeGreaterThan(120);
+      expect(appsSnapshot.panelHeight / appsSnapshot.bodyHeight).toBeGreaterThan(0.95);
+      expect(appsSnapshot.listHeight / appsSnapshot.bodyHeight).toBeGreaterThan(0.35);
+      expect(appsSnapshot.listMaxHeight).toBe('none');
     } finally {
       await cleanupExtensionHost(session);
     }

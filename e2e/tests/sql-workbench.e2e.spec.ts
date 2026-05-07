@@ -542,6 +542,79 @@ test.describe('SAP Tools SQL workbench', () => {
     }
   });
 
+  test('User can run manual SQL with lower-case app table references in selected schema', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+
+      const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
+      await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
+      await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+
+      const sqlEditorTab = session.window.getByRole('tab', {
+        name: /finance-uat-api\.sql/i,
+      });
+      await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
+      await clickWithFallback(sqlEditorTab);
+      await replaceActiveSqlEditorText(session.window, 'select * from demo_app LIMIT 100');
+      await selectActiveSqlEditorText(session.window);
+
+      const resultTabsBeforeRun = await session.window
+        .getByRole('tab', { name: /SAP Tools SQL Result/i })
+        .count();
+      await runActiveSqlEditorCommand(session.window);
+      await expect
+        .poll(
+          async () => {
+            return session.window
+              .getByRole('tab', { name: /SAP Tools SQL Result/i })
+              .count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeRun + 1)
+        .catch(async () => {
+          await runWorkbenchCommand(session.window, 'Run HANA SQL');
+          await expect
+            .poll(
+              async () => {
+                return session.window
+                  .getByRole('tab', { name: /SAP Tools SQL Result/i })
+                  .count();
+              },
+              { timeout: 20000 }
+            )
+            .toBe(resultTabsBeforeRun + 1);
+        });
+
+      const resultFrame = await resolveSqlResultFrame(session.window, 20000);
+      await expect(resultFrame.getByText('Table: DEMO_APP')).toBeVisible();
+      await expect(resultFrame.getByText('App: finance-uat-api')).toHaveCount(0);
+      await expect(resultFrame.getByText('Execution Error')).toHaveCount(0);
+      await expect(resultFrame.getByRole('table')).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /select \* from "TEST_SCHEMA"\."DEMO_APP" LIMIT 100/i })
+          .first()
+      ).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /select \* from demo_app LIMIT 100/i })
+          .first()
+      ).toHaveCount(0);
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can save an app SQL editor and run a mutating statement to a status result', async () => {
     const session = await launchExtensionHost();
 
@@ -1379,6 +1452,75 @@ test.describe('SAP Tools SQL workbench', () => {
       expect(layoutSnapshot.iconLeft).toBe('12px');
       await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
       await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can select a lower SQL app while preserving the app list position', async () => {
+    const session = await launchExtensionHost({
+      extraEnv: { SAP_TOOLS_E2E_SQL_MANY_APPS: '1' },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+      await expect(webviewFrame.locator('.sql-service-row')).toHaveCount(12);
+
+      const serviceList = webviewFrame.getByRole('region', { name: 'Discovered apps' });
+      const scrollBeforeSelection = await serviceList.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('SQL service list is missing.');
+        }
+        element.scrollTop = element.scrollHeight;
+        return {
+          clientHeight: element.clientHeight,
+          scrollHeight: element.scrollHeight,
+          scrollTop: element.scrollTop,
+        };
+      });
+      expect(scrollBeforeSelection.scrollHeight).toBeGreaterThan(
+        scrollBeforeSelection.clientHeight
+      );
+      expect(scrollBeforeSelection.scrollTop).toBeGreaterThan(0);
+
+      const targetAppName = 'finance-uat-archive';
+      await clickWithFallback(webviewFrame.getByRole('button', { name: targetAppName }));
+      const scrollAfterSelection = await serviceList.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('SQL service list is missing.');
+        }
+        return element.scrollTop;
+      });
+      expect(scrollAfterSelection).toBeGreaterThanOrEqual(
+        scrollBeforeSelection.scrollTop - 2
+      );
+
+      const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
+      await expect(
+        tablesPanel.getByRole('heading', { name: /Tables · finance-uat-archive/i })
+      ).toBeVisible();
+      await expect(tablesPanel.locator('[data-role="hana-tables-count"]')).toHaveText('105', {
+        timeout: 15000,
+      });
+      await expect(tableRows(tablesPanel)).toHaveCount(105);
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
+
+      const scrollAfterTablesLoaded = await serviceList.evaluate((element) => {
+        if (!(element instanceof HTMLElement)) {
+          throw new Error('SQL service list is missing.');
+        }
+        const selectedRow = element.querySelector('.sql-service-row.is-selected');
+        return {
+          selectedText: selectedRow instanceof HTMLElement ? selectedRow.innerText.trim() : '',
+          scrollTop: element.scrollTop,
+        };
+      });
+      expect(scrollAfterTablesLoaded.selectedText).toContain(targetAppName);
+      expect(scrollAfterTablesLoaded.scrollTop).toBeGreaterThanOrEqual(
+        scrollBeforeSelection.scrollTop - 2
+      );
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
     } finally {
       await cleanupExtensionHost(session);
     }

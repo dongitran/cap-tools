@@ -6,6 +6,7 @@ import {
   SQL_KEYWORDS,
   TABLE_SUGGESTION_LIMIT,
   buildTableDiscoveryQueries,
+  buildHanaTableReferenceResolutionMissLog,
   buildHanaSqlResultHtml,
   buildInitialHanaSqlTemplate,
   buildQuickTableSelectSql,
@@ -288,6 +289,33 @@ describe('resolveHanaDisplayTableReferences', () => {
     ]);
   });
 
+  test('resolves lower-case raw table names to quoted selected-schema identifiers', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'select * from table_test LIMIT 100',
+      [{ displayName: 'table_test', name: 'table_test' }],
+      'db_test'
+    );
+
+    expect(result.sql).toBe('select * from "db_test"."table_test" LIMIT 100');
+    expect(result.replacements).toEqual([
+      {
+        displayName: 'table_test',
+        identifier: '"db_test"."table_test"',
+        tableName: 'table_test',
+      },
+    ]);
+  });
+
+  test('resolves lower-case typed raw names for uppercase tables to the selected app schema', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'select * from demo_app limit 100',
+      [{ displayName: 'Demo_App', name: 'DEMO_APP' }],
+      'TEST_SCHEMA'
+    );
+
+    expect(result.sql).toBe('select * from "TEST_SCHEMA"."DEMO_APP" limit 100');
+  });
+
   test('resolves readable aliases when the display name uppercases to a different raw table', () => {
     const result = resolveHanaDisplayTableReferences(
       'SELECT * FROM Demo_CompactName',
@@ -458,6 +486,24 @@ describe('resolveHanaSqlTargetTableName', () => {
       resolveHanaSqlTargetTableName(
         'WITH local_orders AS (SELECT * FROM ORDERS) SELECT * FROM local_orders'
       )
+    ).toBeNull();
+  });
+});
+
+describe('buildHanaTableReferenceResolutionMissLog', () => {
+  test('describes unresolved lower-case table references for output diagnostics', () => {
+    expect(
+      buildHanaTableReferenceResolutionMissLog('select * from table_test LIMIT 100', [])
+    ).toBe(
+      'no table reference rewrite for target table_test; no matching loaded table entry; loadedTables=0'
+    );
+  });
+
+  test('stays quiet for exact uppercase table references that HANA can resolve directly', () => {
+    expect(
+      buildHanaTableReferenceResolutionMissLog('SELECT * FROM DUMMY', [
+        { displayName: 'Dummy', name: 'DUMMY' },
+      ])
     ).toBeNull();
   });
 });

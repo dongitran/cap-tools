@@ -19,6 +19,7 @@ export {
   type RenderSqlResultOptions,
 } from './hanaSqlResultHtml';
 import type { HanaTableDisplayEntry } from './hanaTableDisplayNameFormatter';
+import { resolveHanaSqlTargetTableName } from './hanaSqlTableReferenceResolver';
 export {
   buildRawHanaTableDisplayEntries,
   formatHanaTableDisplayEntries,
@@ -270,6 +271,52 @@ export {
   type HanaResolvedTableReference,
   type HanaTableReferenceResolution,
 } from './hanaSqlTableReferenceResolver';
+
+export function buildHanaTableReferenceResolutionMissLog(
+  sql: string,
+  tableEntries: readonly HanaTableDisplayEntry[]
+): string | null {
+  const targetTableName = resolveHanaSqlTargetTableName(sql);
+  if (targetTableName === null) {
+    return null;
+  }
+  if (!shouldReportHanaTableResolutionMiss(targetTableName, tableEntries)) {
+    return null;
+  }
+
+  const normalizedTarget = normalizeHanaTableLogKey(targetTableName);
+  const matchedEntry = tableEntries.find((entry) => {
+    return (
+      normalizeHanaTableLogKey(entry.name) === normalizedTarget ||
+      normalizeHanaTableLogKey(entry.displayName) === normalizedTarget
+    );
+  });
+  const matchDetail =
+    matchedEntry === undefined
+      ? 'no matching loaded table entry'
+      : `matched loaded table ${matchedEntry.name}`;
+  return `no table reference rewrite for target ${targetTableName}; ${matchDetail}; loadedTables=${String(tableEntries.length)}`;
+}
+
+function shouldReportHanaTableResolutionMiss(
+  targetTableName: string,
+  tableEntries: readonly HanaTableDisplayEntry[]
+): boolean {
+  if (!isUppercaseHanaIdentifierForLog(targetTableName)) {
+    return true;
+  }
+  return tableEntries.some((entry) => {
+    return normalizeHanaTableLogKey(entry.name) === targetTableName && entry.name !== targetTableName;
+  });
+}
+
+function normalizeHanaTableLogKey(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function isUppercaseHanaIdentifierForLog(value: string): boolean {
+  return /^[A-Z_][A-Z0-9_$#]*$/.test(value);
+}
 
 export function buildQuickTableSelectSql(schema: string, tableName: string): string {
   const trimmedTable = tableName.trim();

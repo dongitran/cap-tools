@@ -309,7 +309,7 @@ window.addEventListener('message', (event) => {
       return;
     }
     if (isWorkspaceSqlMounted()) {
-      refreshWorkspaceSqlView();
+      refreshMountedSqlWorkbench();
       return;
     }
     if (mode === 'selection') {
@@ -366,7 +366,7 @@ window.addEventListener('message', (event) => {
     hanaQueryStatusMessage = msg.success === true ? '' : message;
     if (isWorkspaceSqlMounted()) {
       if (previousServiceId !== selectedHanaServiceId) {
-        refreshWorkspaceSqlView();
+        refreshMountedSqlWorkbench();
         return;
       }
       updateHanaQueryStatusElement();
@@ -686,8 +686,12 @@ appElement.addEventListener('click', (event) => {
   }
 
   if (shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction)) {
-    updateHanaQueryStatusElement();
-    refreshSqlResultPreviewPanel();
+    if (action === 'select-hana-service') {
+      refreshMountedSqlWorkbench();
+    } else {
+      updateHanaQueryStatusElement();
+      refreshSqlResultPreviewPanel();
+    }
     return;
   }
 
@@ -899,6 +903,7 @@ function shouldRefreshWorkspaceAppsOnly(action, modeBeforeAction, tabBeforeActio
 
 function shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction) {
   const isSqlOnlyAction =
+    action === 'select-hana-service' ||
     action === 'run-hana-table-select' ||
     action === 'toggle-sql-result-export-menu' ||
     action === 'copy-sql-result-csv' ||
@@ -3460,7 +3465,7 @@ function renderEmptyLogDetails() {
 
 function refreshUiAfterSqlStateChange() {
   if (isWorkspaceSqlMounted()) {
-    refreshWorkspaceSqlView();
+    refreshMountedSqlWorkbench();
     return;
   }
   if (mode === 'workspace') {
@@ -3476,6 +3481,64 @@ function refreshWorkspaceSqlView() {
   }
   tabContainer.innerHTML = renderSqlWorkbenchTab();
   queueSqlTableNameTruncation();
+}
+
+function refreshMountedSqlWorkbench() {
+  const serviceSelectionRefreshed = refreshSqlServiceSelectionState();
+  const tablesPanelRefreshed = refreshSqlTablesPanelContainer();
+  if (!serviceSelectionRefreshed || !tablesPanelRefreshed) {
+    refreshWorkspaceSqlView();
+    return;
+  }
+  updateHanaQueryStatusElement();
+  refreshSqlResultPreviewPanel();
+  queueSqlTableNameTruncation();
+}
+
+function refreshSqlServiceSelectionState() {
+  const serviceRows = appElement.querySelectorAll('.sql-service-row[data-service-id]');
+  if (serviceRows.length === 0) {
+    return false;
+  }
+  for (const row of serviceRows) {
+    if (!(row instanceof HTMLButtonElement)) {
+      continue;
+    }
+    const isSelected = row.dataset.serviceId === selectedHanaServiceId;
+    row.classList.toggle('is-selected', isSelected);
+    row.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  }
+  return true;
+}
+
+function refreshSqlTablesPanelContainer() {
+  const tablesPanel = appElement.querySelector('[data-role="hana-tables-panel"]');
+  if (!(tablesPanel instanceof HTMLElement)) {
+    return false;
+  }
+  const previousServiceId = tablesPanel.dataset.serviceId ?? '';
+  const previousScrollTop = readSqlTablesListScrollTop(tablesPanel);
+  tablesPanel.outerHTML = renderSqlTablesPanel();
+  const nextTablesPanel = appElement.querySelector('[data-role="hana-tables-panel"]');
+  if (!(nextTablesPanel instanceof HTMLElement)) {
+    return false;
+  }
+  if (previousServiceId === (nextTablesPanel.dataset.serviceId ?? '')) {
+    restoreSqlTablesListScrollTop(nextTablesPanel, previousScrollTop);
+  }
+  return true;
+}
+
+function readSqlTablesListScrollTop(tablesPanel) {
+  const tablesList = tablesPanel.querySelector('[data-role="hana-tables-list"]');
+  return tablesList instanceof HTMLElement ? tablesList.scrollTop : 0;
+}
+
+function restoreSqlTablesListScrollTop(tablesPanel, scrollTop) {
+  const tablesList = tablesPanel.querySelector('[data-role="hana-tables-list"]');
+  if (tablesList instanceof HTMLElement && scrollTop > 0) {
+    tablesList.scrollTop = scrollTop;
+  }
 }
 
 function refreshSqlResultPreviewPanel() {
