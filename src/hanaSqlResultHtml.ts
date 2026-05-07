@@ -1,7 +1,5 @@
 import type { HanaQueryResult, HanaQueryResultSet } from './hanaSqlService';
 
-export const SQL_RESULT_ROWS_LIMIT = 250;
-
 export interface RenderSqlResultOptions {
   readonly appName: string;
   readonly tableName?: string;
@@ -392,7 +390,6 @@ function buildResultSetHtml(
   options: RenderSqlResultOptions,
   result: HanaQueryResultSet
 ): string {
-  const rows = result.rows.slice(0, SQL_RESULT_ROWS_LIMIT);
   return wrapResultDocument(
     options.nonce,
     RESULT_SET_STYLE,
@@ -400,7 +397,7 @@ function buildResultSetHtml(
     <main class="result-layout">
       ${renderResultToolbar(options, result)}
       <div class="result-table-wrap">
-        ${renderResultTable(result.columns, rows)}
+        ${renderResultTable(result.columns, result.rows)}
       </div>
       ${renderResultContextMenu()}
     </main>
@@ -414,18 +411,11 @@ function renderResultToolbar(
   result: HanaQueryResultSet
 ): string {
   const tableName = resolveSqlResultTableName(options);
-  const truncatedNote = result.rows.length > SQL_RESULT_ROWS_LIMIT
-    ? `Showing first ${String(SQL_RESULT_ROWS_LIMIT)} rows of ${String(result.rows.length)}.`
-    : '';
-  const note = truncatedNote.length > 0
-    ? `<span class="result-chip note">${truncatedNote}</span>`
-    : '';
 
   return `<header class="result-toolbar">
         <span class="result-chip">Table: ${escapeHtml(tableName)}</span>
         <span class="result-chip">Rows: ${String(result.rowCount)}</span>
         <span class="result-chip">Elapsed: ${String(result.elapsedMs)} ms</span>
-        ${note}
         <span class="result-toolbar-spacer" aria-hidden="true"></span>
         ${renderResultExportMenu()}
       </header>`;

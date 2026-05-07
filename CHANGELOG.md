@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.37 (pre-release)
+- Removed the SQL result panel's 250-row render cap so queries display all returned rows in the result table.
+
 ## 0.7.36 (pre-release)
 - Resolved SQL Workbench manual execution so exact uppercase app table names are schema-qualified against the selected app, matching readable display-name behavior.
 

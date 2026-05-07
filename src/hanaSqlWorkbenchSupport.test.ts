@@ -727,7 +727,7 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).not.toContain('Showing first');
   });
 
-  test('announces truncation when rows exceed the display cap', () => {
+  test('renders all returned rows without a display cap notice', () => {
     const rows = Array.from({ length: 260 }, (_, index) => [String(index)]);
     const html = buildHanaSqlResultHtml({
       appName: 'finance-uat-api',
@@ -742,7 +742,9 @@ describe('buildHanaSqlResultHtml', () => {
       },
     });
 
-    expect(html).toContain('Showing first 250 rows of 260');
+    expect(html).not.toContain('Showing first');
+    expect(html).toContain('<td class="row-number">260</td>');
+    expect(html).toContain('>259</td>');
   });
 
   test('keeps very long cell content renderable without ellipsis clipping', () => {

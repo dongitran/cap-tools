@@ -15,7 +15,6 @@ export {
 export {
   buildHanaSqlResultHtml,
   escapeHtml,
-  SQL_RESULT_ROWS_LIMIT,
   type RenderSqlResultOptions,
 } from './hanaSqlResultHtml';
 import type { HanaTableDisplayEntry } from './hanaTableDisplayNameFormatter';
