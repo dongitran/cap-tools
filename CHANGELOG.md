@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.34 (pre-release)
+- Added the missing SAP Help Cloud Foundry extension landscapes `us10-002`, `eu10-002`, `eu10-003`, `eu10-005`, `eu20-001`, and `eu20-002` to the region picker with endpoint coverage.
+
 ## 0.7.33 (pre-release)
 - Added the `us10-001` Cloud Foundry extension landscape to the Americas region picker with endpoint support for `https://api.cf.us10-001.hana.ondemand.com`.
 

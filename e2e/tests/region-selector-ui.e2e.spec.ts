@@ -6,12 +6,15 @@ import {
   AREA_TO_SELECT,
   BR10_REGION_TO_SELECT,
   EU10004_REGION_TO_SELECT,
+  EU20002_REGION_TO_SELECT,
+  EUROPE_AREA_TO_SELECT,
   ORG_TO_SELECT,
   PROOF_ORG_TO_SELECT,
   REGION_TO_SELECT,
   SPACE_TO_SELECT,
   THEME_SCENARIOS,
   US10001_REGION_TO_SELECT,
+  US10002_REGION_TO_SELECT,
   cleanupExtensionHost,
   clickWithFallback,
   createHeavyServiceRootMappingFixture,
@@ -131,6 +134,9 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByRole('button', { name: US10001_REGION_TO_SELECT })
       ).toBeVisible({ timeout: 10000 });
+      await expect(
+        webviewFrame.getByRole('button', { name: US10002_REGION_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
 
       const regionButton = webviewFrame.getByRole('button', {
         name: EU10004_REGION_TO_SELECT,
@@ -138,6 +144,10 @@ test.describe('SAP Tools region selector', () => {
       await expect(regionButton).toBeVisible({ timeout: 10000 });
       await expect(regionButton).toBeEnabled();
       await clickWithFallback(regionButton);
+      await expect(
+        webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
 
       const selectedRegionState = await webviewFrame.evaluate(() => {
         const selectedRegionElement = document.querySelector('.region-option.is-selected');
@@ -161,7 +171,7 @@ test.describe('SAP Tools region selector', () => {
       expect(selectedRegionState).toEqual({
         selectedRegionId: 'eu10-004',
         visibleRegionCount: 1,
-        hiddenRegionCount: 13,
+        hiddenRegionCount: 14,
         stageErrorCount: 0,
         loadingCount: 0,
         selectedRegionText: 'eu10-004 Europe (Frankfurt) Extension',
@@ -199,6 +209,60 @@ test.describe('SAP Tools region selector', () => {
       );
       await expect(reopenedFrame.getByRole('button', { name: 'Confirm Scope' })).toHaveCount(0);
       await expect(reopenedFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can select EU20 extension landscape from Europe area', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(
+        webviewFrame.getByRole('button', { name: EUROPE_AREA_TO_SELECT })
+      );
+
+      const regionButton = webviewFrame.getByRole('button', {
+        name: EU20002_REGION_TO_SELECT,
+      });
+      await expect(regionButton).toBeVisible({ timeout: 10000 });
+      await expect(regionButton).toBeEnabled();
+      await clickWithFallback(regionButton);
+      await expect(
+        webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
+
+      const selectedRegionState = await webviewFrame.evaluate(() => {
+        const selectedRegionElement = document.querySelector('.region-option.is-selected');
+        const selectedRegionText =
+          selectedRegionElement === null
+            ? ''
+            : selectedRegionElement.textContent.replace(/\s+/g, ' ').trim();
+        return {
+          selectedRegionId:
+            selectedRegionElement?.getAttribute('data-region-id') ?? '',
+          visibleRegionCount: document.querySelectorAll(
+            '.region-option:not(.is-hidden)'
+          ).length,
+          hiddenRegionCount: document.querySelectorAll('.region-option.is-hidden')
+            .length,
+          stageErrorCount: document.querySelectorAll('.stage-error').length,
+          loadingCount: document.querySelectorAll('.stage-loading').length,
+          selectedRegionText,
+        };
+      });
+      expect(selectedRegionState).toEqual({
+        selectedRegionId: 'eu20-002',
+        visibleRegionCount: 1,
+        hiddenRegionCount: 14,
+        stageErrorCount: 0,
+        loadingCount: 0,
+        selectedRegionText: 'eu20-002 Europe (Netherlands) Extension',
+      });
+
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }

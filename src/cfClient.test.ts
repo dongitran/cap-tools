@@ -54,11 +54,35 @@ describe('getCfApiEndpoint', () => {
     expect(getCfApiEndpoint('us10001')).toBe(
       'https://api.cf.us10-001.hana.ondemand.com'
     );
+    expect(getCfApiEndpoint('us10-002')).toBe(
+      'https://api.cf.us10-002.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('us10002')).toBe(
+      'https://api.cf.us10-002.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu10-002')).toBe(
+      'https://api.cf.eu10-002.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu10002')).toBe(
+      'https://api.cf.eu10-002.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu10-003')).toBe(
+      'https://api.cf.eu10-003.hana.ondemand.com'
+    );
     expect(getCfApiEndpoint('eu10-004')).toBe(
       'https://api.cf.eu10-004.hana.ondemand.com'
     );
     expect(getCfApiEndpoint('eu10004')).toBe(
       'https://api.cf.eu10-004.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu10-005')).toBe(
+      'https://api.cf.eu10-005.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu20-001')).toBe(
+      'https://api.cf.eu20-001.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('eu20002')).toBe(
+      'https://api.cf.eu20-002.hana.ondemand.com'
     );
   });
 

@@ -20,9 +20,12 @@ import {
 
 export const ACTIVITY_BAR_TITLE = 'SAP Tools';
 export const AREA_TO_SELECT = /Americas\s+br - ca - eu - us/i;
+export const EUROPE_AREA_TO_SELECT = /Europe\s+ch - eu - uk/i;
 export const REGION_TO_SELECT = /us-10\s+US East \(VA\)/i;
 export const US10001_REGION_TO_SELECT = /us10-001\s+US East \(VA\) Extension/i;
+export const US10002_REGION_TO_SELECT = /us10-002\s+US East \(VA\) Extension/i;
 export const EU10004_REGION_TO_SELECT = /eu10-004\s+Europe \(Frankfurt\) Extension/i;
+export const EU20002_REGION_TO_SELECT = /eu20-002\s+Europe \(Netherlands\) Extension/i;
 export const BR10_REGION_TO_SELECT = /br-10\s+Brazil \(Sao Paulo\)/i;
 export const ORG_TO_SELECT = /finance-services-prod/i;
 export const PROOF_ORG_TO_SELECT = /apps-proof-prod/i;
