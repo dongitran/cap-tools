@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.36 (pre-release)
+- Resolved SQL Workbench manual execution so exact uppercase app table names are schema-qualified against the selected app, matching readable display-name behavior.
+
 ## 0.7.35 (pre-release)
 - Resolved SQL Workbench manual table execution so lower-case app table references are logged and resolved against the selected app schema before HANA execution.
 - Preserved the SQL app-list scroll position when selecting lower apps and when the selected app's table list finishes loading.

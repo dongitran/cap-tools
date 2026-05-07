@@ -145,6 +145,32 @@ async function runActiveSqlEditorCommand(window: Page): Promise<void> {
   );
 }
 
+async function runActiveSqlEditorAndWaitForNewResult(window: Page): Promise<void> {
+  const resultTabsBeforeRun = await window
+    .getByRole('tab', { name: /SAP Tools SQL Result/i })
+    .count();
+  await runActiveSqlEditorCommand(window);
+  await expect
+    .poll(
+      async () => {
+        return window.getByRole('tab', { name: /SAP Tools SQL Result/i }).count();
+      },
+      { timeout: 20000 }
+    )
+    .toBe(resultTabsBeforeRun + 1)
+    .catch(async () => {
+      await runWorkbenchCommand(window, 'Run HANA SQL');
+      await expect
+        .poll(
+          async () => {
+            return window.getByRole('tab', { name: /SAP Tools SQL Result/i }).count();
+          },
+          { timeout: 20000 }
+        )
+        .toBe(resultTabsBeforeRun + 1);
+    });
+}
+
 async function runTriggerSuggestCommand(window: Page): Promise<void> {
   await window.keyboard.press('F1');
   const quickInputWidget = window.locator('.quick-input-widget:visible').first();
@@ -607,6 +633,50 @@ test.describe('SAP Tools SQL workbench', () => {
         resultFrame
           .getByRole('cell')
           .filter({ hasText: /select \* from demo_app LIMIT 100/i })
+          .first()
+      ).toHaveCount(0);
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can run manual SQL with uppercase app table references in selected schema', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openSqlTabForDefaultScope(webviewFrame);
+      await selectSqlApp(webviewFrame, 'finance-uat-api');
+
+      const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
+      await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
+      await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+
+      const sqlEditorTab = session.window.getByRole('tab', {
+        name: /finance-uat-api\.sql/i,
+      });
+      await expect(sqlEditorTab).toBeVisible({ timeout: 15000 });
+      await clickWithFallback(sqlEditorTab);
+      await replaceActiveSqlEditorText(session.window, 'select * from DEMO_APP LIMIT 100');
+      await selectActiveSqlEditorText(session.window);
+      await runActiveSqlEditorAndWaitForNewResult(session.window);
+
+      const resultFrame = await resolveSqlResultFrame(session.window, 20000);
+      await expect(resultFrame.getByText('Table: DEMO_APP')).toBeVisible();
+      await expect(resultFrame.getByText('Execution Error')).toHaveCount(0);
+      await expect(resultFrame.getByRole('table')).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /select \* from "TEST_SCHEMA"\."DEMO_APP" LIMIT 100/i })
+          .first()
+      ).toBeVisible();
+      await expect(
+        resultFrame
+          .getByRole('cell')
+          .filter({ hasText: /select \* from DEMO_APP LIMIT 100/i })
           .first()
       ).toHaveCount(0);
       await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();

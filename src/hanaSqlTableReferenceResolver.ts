@@ -58,6 +58,8 @@ const TABLE_FACTOR_STOP_WORDS = new Set([
   'WITH',
 ]);
 
+const HANA_UNQUALIFIED_SYSTEM_TABLES = new Set(['DUMMY', 'M_TABLES']);
+
 export function resolveHanaDisplayTableReferences(
   sql: string,
   tableEntries: readonly HanaTableDisplayEntryLike[],
@@ -316,8 +318,11 @@ function buildTableReferenceReplacement(
 }
 
 function shouldRewriteTableReference(tokenText: string, entry: HanaTableDisplayEntryLike): boolean {
+  if (tokenText === entry.name && HANA_UNQUALIFIED_SYSTEM_TABLES.has(entry.name)) {
+    return false;
+  }
   if (!isUppercaseHanaIdentifier(entry.name)) return true;
-  return tokenText !== entry.name;
+  return true;
 }
 
 function skipTableReferenceTail(

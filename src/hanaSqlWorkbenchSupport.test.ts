@@ -336,14 +336,31 @@ describe('resolveHanaDisplayTableReferences', () => {
     expect(result.sql).toBe('select * from "APP_SCHEMA"."DEMO_APP" limit 100');
   });
 
-  test('keeps exact raw uppercase table references unchanged', () => {
+  test('schema-qualifies exact raw uppercase table references from the selected app', () => {
     const result = resolveHanaDisplayTableReferences(
       'SELECT * FROM DEMO_APP',
       [{ displayName: 'Demo_App', name: 'DEMO_APP' }],
       'APP_SCHEMA'
     );
 
-    expect(result.sql).toBe('SELECT * FROM DEMO_APP');
+    expect(result.sql).toBe('SELECT * FROM "APP_SCHEMA"."DEMO_APP"');
+    expect(result.replacements).toEqual([
+      {
+        displayName: 'Demo_App',
+        identifier: '"APP_SCHEMA"."DEMO_APP"',
+        tableName: 'DEMO_APP',
+      },
+    ]);
+  });
+
+  test('keeps known unqualified HANA system table references unchanged', () => {
+    const result = resolveHanaDisplayTableReferences(
+      'SELECT CURRENT_SCHEMA FROM DUMMY',
+      [{ displayName: 'Dummy', name: 'DUMMY' }],
+      'APP_SCHEMA'
+    );
+
+    expect(result.sql).toBe('SELECT CURRENT_SCHEMA FROM DUMMY');
     expect(result.replacements).toEqual([]);
   });
 
