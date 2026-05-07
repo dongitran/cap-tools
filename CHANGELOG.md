@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.33 (pre-release)
+- Added the `us10-001` Cloud Foundry extension landscape to the Americas region picker with endpoint support for `https://api.cf.us10-001.hana.ondemand.com`.
+
 ## 0.7.32 (pre-release)
 - Added the `eu10-004` Cloud Foundry extension landscape to the Americas region picker while preserving its Europe (Frankfurt) label and endpoint shape.
 - Preserved extension landscape API endpoints such as `https://api.cf.eu10-004.hana.ondemand.com` and restored confirmed `eu10-004` scopes across extension host reloads.

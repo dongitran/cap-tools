@@ -6,6 +6,7 @@ export const REGION_GROUPS = [
       { id: 'us01', name: 'US (Sterling)', code: 'us-01' },
       { id: 'us02', name: 'US West (Colorado)', code: 'us-02' },
       { id: 'us10', name: 'US East (VA)', code: 'us-10' },
+      { id: 'us10-001', name: 'US East (VA) Extension', code: 'us10-001' },
       { id: 'us11', name: 'US West (Oregon)', code: 'us-11' },
       { id: 'us20', name: 'US West (WA)', code: 'us-20' },
       { id: 'us21', name: 'US East (VA)', code: 'us-21' },

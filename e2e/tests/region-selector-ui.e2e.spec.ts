@@ -11,6 +11,7 @@ import {
   REGION_TO_SELECT,
   SPACE_TO_SELECT,
   THEME_SCENARIOS,
+  US10001_REGION_TO_SELECT,
   cleanupExtensionHost,
   clickWithFallback,
   createHeavyServiceRootMappingFixture,
@@ -127,6 +128,10 @@ test.describe('SAP Tools region selector', () => {
       const webviewFrame = await openSapToolsSidebar(session.window);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
 
+      await expect(
+        webviewFrame.getByRole('button', { name: US10001_REGION_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+
       const regionButton = webviewFrame.getByRole('button', {
         name: EU10004_REGION_TO_SELECT,
       });
@@ -156,7 +161,7 @@ test.describe('SAP Tools region selector', () => {
       expect(selectedRegionState).toEqual({
         selectedRegionId: 'eu10-004',
         visibleRegionCount: 1,
-        hiddenRegionCount: 12,
+        hiddenRegionCount: 13,
         stageErrorCount: 0,
         loadingCount: 0,
         selectedRegionText: 'eu10-004 Europe (Frankfurt) Extension',

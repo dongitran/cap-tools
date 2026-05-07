@@ -144,8 +144,9 @@ describe('CacheSyncService', () => {
     const snapshot = await service.triggerSyncNow();
 
     expect(snapshot.activeUserEmail).toBe('dev@example.com');
-    expect(Object.keys(snapshot.regionAccessById)).toHaveLength(42);
+    expect(Object.keys(snapshot.regionAccessById)).toHaveLength(43);
     expect(snapshot.regionAccessById['us10']).toBe('accessible');
+    expect(snapshot.regionAccessById['us10-001']).toBe('accessible');
     expect(snapshot.regionAccessById['eu10-004']).toBe('accessible');
     expect(snapshot.syncInProgress).toBe(false);
   });

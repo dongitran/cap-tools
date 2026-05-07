@@ -23,6 +23,12 @@ export const SAP_BTP_REGIONS: readonly SapBtpRegion[] = [
   { id: 'us01', displayName: 'US (Sterling)', area: 'Americas', provider: 'SAP' },
   { id: 'us02', displayName: 'US West (Colorado)', area: 'Americas', provider: 'SAP' },
   { id: 'us10', displayName: 'US East (VA)', area: 'Americas', provider: 'AWS' },
+  {
+    id: 'us10-001',
+    displayName: 'US East (VA) - AWS Extension',
+    area: 'Americas',
+    provider: 'AWS',
+  },
   { id: 'us11', displayName: 'US West (Oregon)', area: 'Americas', provider: 'AWS' },
   { id: 'us20', displayName: 'US West (WA)', area: 'Americas', provider: 'Azure' },
   { id: 'us21', displayName: 'US East (VA) - Azure', area: 'Americas', provider: 'Azure' },

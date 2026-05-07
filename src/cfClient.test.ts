@@ -48,6 +48,12 @@ describe('getCfApiEndpoint', () => {
   });
 
   it('resolves extension landscape endpoint without removing landscape hyphen', () => {
+    expect(getCfApiEndpoint('us10-001')).toBe(
+      'https://api.cf.us10-001.hana.ondemand.com'
+    );
+    expect(getCfApiEndpoint('us10001')).toBe(
+      'https://api.cf.us10-001.hana.ondemand.com'
+    );
     expect(getCfApiEndpoint('eu10-004')).toBe(
       'https://api.cf.eu10-004.hana.ondemand.com'
     );

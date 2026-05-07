@@ -76,6 +76,8 @@
     "databasename",
     "EAUTH",
     "eu10",
+    "us10",
+    "us10001",
     "hdbsql",
     "hdbclient"
   ]
