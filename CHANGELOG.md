@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.38 (pre-release)
+- Added a Quick Org Search panel above the area selector that lists every org synced by `@saptools/cf-sync` across regions so users can pick an org by name without first stepping through area, region, and org screens.
+- Wired `@saptools/cf-sync` topology into the SAP Tools sidebar with a snapshot push and a refresh after scope confirmation, plus output-channel logs tagged `[topology]` and `[scope]` for visibility into each command.
+- Hid the topology panel automatically once a region is selected (or when no `cf-structure.json` snapshot exists) so the legacy area/region/org/space cards stay as the fallback path.
+- Validated topology selections against the SAP Tools region catalog and resolved org GUIDs from the cache or live CF API before posting the resolved scope back to the webview.
+
 ## 0.7.37 (pre-release)
 - Removed the SQL result panel's 250-row render cap so queries display all returned rows in the result table.
 

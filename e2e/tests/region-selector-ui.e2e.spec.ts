@@ -1656,4 +1656,209 @@ test.describe('SAP Tools region selector', () => {
       await cleanupExtensionHost(session);
     }
   });
+
+  test('User sees Quick Org Search panel when cf-sync topology is ready', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await expect(
+        webviewFrame.locator('[data-role="topology-search-panel"]')
+      ).toBeVisible({ timeout: 15000 });
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Quick Org Search' })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.locator('[data-role="topology-org-search"]')
+      ).toBeVisible();
+
+      const rowCount = await webviewFrame
+        .locator('[data-role="topology-org-results"] .topology-org-row')
+        .count();
+      expect(rowCount).toBeGreaterThan(0);
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Choose Area' })
+      ).toBeVisible();
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can filter Quick Org Search results by typing a query', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      const searchInput = webviewFrame.locator('[data-role="topology-org-search"]');
+      await expect(searchInput).toBeVisible({ timeout: 15000 });
+
+      await searchInput.fill('finance');
+      await expect
+        .poll(async () => {
+          return webviewFrame
+            .locator('[data-role="topology-org-results"] .topology-org-row')
+            .count();
+        })
+        .toBeGreaterThan(0);
+
+      const rowsAfterFilter = webviewFrame.locator(
+        '[data-role="topology-org-results"] .topology-org-row'
+      );
+      const filteredNames = await rowsAfterFilter.locator('.topology-org-name').allInnerTexts();
+      for (const name of filteredNames) {
+        expect(name.toLowerCase()).toContain('finance');
+      }
+
+      await searchInput.fill('this-org-does-not-exist-anywhere');
+      await expect(
+        webviewFrame.locator('[data-role="topology-org-empty"]')
+      ).toBeVisible();
+      await expect(
+        webviewFrame.locator('[data-role="topology-org-results"]')
+      ).toHaveCount(0);
+
+      await searchInput.fill('');
+      await expect(
+        webviewFrame.locator('[data-role="topology-org-results"] .topology-org-row').first()
+      ).toBeVisible();
+      await expect(
+        webviewFrame.locator('[data-role="topology-org-empty"]')
+      ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User skips area and region steps by picking an org from Quick Org Search', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      const searchInput = webviewFrame.locator('[data-role="topology-org-search"]');
+      await expect(searchInput).toBeVisible({ timeout: 15000 });
+
+      await searchInput.fill('finance-services-prod');
+      const targetRow = webviewFrame
+        .locator('[data-role="topology-org-results"] .topology-org-row')
+        .filter({ has: webviewFrame.locator('.topology-org-name', { hasText: /^finance-services-prod$/ }) })
+        .filter({ has: webviewFrame.locator('.topology-org-meta', { hasText: /us10/i }) })
+        .first();
+      await expect(targetRow).toBeVisible();
+      await clickWithFallback(targetRow);
+
+      const selectionState = await webviewFrame.evaluate(async () => {
+        const waitForSelectedSpace = async (): Promise<boolean> => {
+          const deadline = Date.now() + 10000;
+          while (Date.now() < deadline) {
+            const stage = document.querySelector('[data-stage-id="space"]');
+            if (stage instanceof HTMLElement) {
+              return true;
+            }
+            await new Promise<void>((resolve) => {
+              window.setTimeout(resolve, 50);
+            });
+          }
+          return false;
+        };
+        const spaceVisible = await waitForSelectedSpace();
+        const selectedRegionElement = document.querySelector('.region-option.is-selected');
+        const selectedOrgElement = document.querySelector('.org-option.is-selected');
+        return {
+          spaceVisible,
+          selectedRegionId: selectedRegionElement?.getAttribute('data-region-id') ?? '',
+          selectedOrgId: selectedOrgElement?.getAttribute('data-org-id') ?? '',
+        };
+      });
+
+      expect(selectionState.spaceVisible).toBe(true);
+      expect(selectionState.selectedRegionId).toBe('us10');
+      expect(selectionState.selectedOrgId.length).toBeGreaterThan(0);
+
+      await expect(
+        webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
+      ).toBeVisible();
+      await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible();
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: us-10. Org: finance-services-prod. Space: uat'
+      );
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('Quick Org Search row carries region key in meta and stays usable across regions', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      const searchInput = webviewFrame.locator('[data-role="topology-org-search"]');
+      await expect(searchInput).toBeVisible({ timeout: 15000 });
+
+      await searchInput.fill('finance-services-prod');
+      const allRows = webviewFrame.locator('[data-role="topology-org-results"] .topology-org-row');
+      await expect(allRows.first()).toBeVisible();
+
+      const regionKeysShown = await allRows
+        .locator('.topology-org-meta')
+        .allInnerTexts();
+      const regionKeySet = new Set(
+        regionKeysShown.map((text) => text.trim().split(' ')[0])
+      );
+      expect(regionKeySet.has('us10')).toBe(true);
+      expect(regionKeySet.has('br10')).toBe(true);
+
+      const br10Row = allRows
+        .filter({
+          has: webviewFrame.locator('.topology-org-meta', { hasText: /^br10\b/i }),
+        })
+        .first();
+      await expect(br10Row).toBeVisible();
+      await clickWithFallback(br10Row);
+
+      await expect
+        .poll(async () => {
+          return webviewFrame.evaluate(() => {
+            const selected = document.querySelector('.region-option.is-selected');
+            return selected?.getAttribute('data-region-id') ?? '';
+          });
+        }, { timeout: 10000 })
+        .toBe('br10');
+      await expect(
+        webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('Quick Org Search panel hides when cf-sync topology is unavailable', async () => {
+    const session = await launchExtensionHost({
+      extraEnv: { SAP_TOOLS_E2E_DISABLE_TOPOLOGY: '1' },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Choose Area' })
+      ).toBeVisible({ timeout: 15000 });
+      await expect(
+        webviewFrame.locator('[data-role="topology-search-panel"]')
+      ).toHaveCount(0);
+      await expect(
+        webviewFrame.locator('[data-role="topology-org-search"]')
+      ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
 });

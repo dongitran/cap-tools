@@ -1,3 +1,5 @@
+import type { CfTopology, CfTopologyOrg } from './cfTopology';
+
 interface MockOrg {
   readonly guid: string;
   readonly name: string;
@@ -103,6 +105,59 @@ export function resolveMockSpacesForOrg(org: {
     return spacesByName;
   }
   return MOCK_SPACES['core-platform-prod'] ?? [];
+}
+
+interface MockRegionDefinition {
+  readonly regionKey: string;
+  readonly regionLabel: string;
+  readonly apiEndpoint: string;
+  readonly orgs: readonly MockOrg[];
+}
+
+const MOCK_TOPOLOGY_REGIONS: readonly MockRegionDefinition[] = [
+  {
+    regionKey: 'us10',
+    regionLabel: 'US East (VA) - AWS (us10)',
+    apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+    orgs: DEFAULT_MOCK_ORGS,
+  },
+  {
+    regionKey: 'br10',
+    regionLabel: 'Brazil (Sao Paulo) - AWS (br10)',
+    apiEndpoint: 'https://api.cf.br10.hana.ondemand.com',
+    orgs: BR10_MOCK_ORGS,
+  },
+];
+
+export function resolveMockCfTopology(): CfTopology {
+  if (process.env['SAP_TOOLS_E2E_DISABLE_TOPOLOGY'] === '1') {
+    return { ready: false, accounts: [] };
+  }
+
+  const accounts: CfTopologyOrg[] = [];
+  for (const region of MOCK_TOPOLOGY_REGIONS) {
+    for (const org of region.orgs) {
+      const spaces = (MOCK_SPACES[org.name] ?? []).map((space) => space.name);
+      accounts.push({
+        regionKey: region.regionKey,
+        regionLabel: region.regionLabel,
+        apiEndpoint: region.apiEndpoint,
+        orgName: org.name,
+        spaces,
+      });
+    }
+  }
+
+  accounts.sort((left, right) => {
+    const orgCompare = left.orgName.localeCompare(right.orgName);
+    if (orgCompare !== 0) return orgCompare;
+    return left.regionKey.localeCompare(right.regionKey);
+  });
+
+  return {
+    ready: accounts.length > 0,
+    accounts,
+  };
 }
 
 export function resolveMockApps(spaceName: string): string[] {

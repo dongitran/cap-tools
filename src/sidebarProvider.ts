@@ -26,8 +26,20 @@ import {
   type ServiceExportSession,
 } from './serviceArtifactExporter';
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
-import { resolveMockApps, resolveMockOrgsForRegion, resolveMockSpacesForOrg } from './testModeData';
-import { SAP_BTP_REGIONS } from './regions';
+import {
+  resolveMockApps,
+  resolveMockCfTopology,
+  resolveMockOrgsForRegion,
+  resolveMockSpacesForOrg,
+} from './testModeData';
+import { SAP_BTP_REGIONS, toHyphenatedRegionCode } from './regions';
+import {
+  EMPTY_CF_TOPOLOGY,
+  getCfTopologySnapshot,
+  getCfTopologySnapshotSync,
+  type CfTopology,
+} from './cfTopology';
+import { refreshCfSyncSpace } from './cfSpaceRefresh';
 import type { HanaSqlWorkbench } from './hanaSqlWorkbench';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
@@ -44,6 +56,8 @@ const MSG_REGION_SELECTED = 'sapTools.regionSelected';
 const MSG_ORG_SELECTED = 'sapTools.orgSelected';
 const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
 const MSG_CONFIRM_SCOPE = 'sapTools.confirmScope';
+const MSG_TOPOLOGY_ORG_SELECTED = 'sapTools.topologyOrgSelected';
+const MSG_REQUEST_CF_TOPOLOGY = 'sapTools.requestCfTopology';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
 const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
 const MSG_UPDATE_SYNC_INTERVAL = 'sapTools.updateSyncInterval';
@@ -83,6 +97,8 @@ const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
 const MSG_HANA_SQL_FILE_OPEN_RESULT = 'sapTools.hanaSqlFileOpenResult';
 const MSG_HANA_TABLES_LOADED = 'sapTools.hanaTablesLoaded';
 const MSG_HANA_TABLE_SELECT_RESULT = 'sapTools.hanaTableSelectResult';
+const MSG_CF_TOPOLOGY = 'sapTools.cfTopology';
+const MSG_TOPOLOGY_SCOPE_RESOLVED = 'sapTools.topologyScopeResolved';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -112,6 +128,11 @@ interface ConfirmScopePayload {
   readonly orgGuid: string;
   readonly orgName: string;
   readonly spaceName: string;
+}
+
+interface TopologyOrgSelectedPayload {
+  readonly regionKey: string;
+  readonly orgName: string;
 }
 
 interface ActiveAppsChangedPayload {
@@ -249,6 +270,9 @@ export class RegionSidebarProvider
   ) {
     const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
       this.postCacheState(snapshot);
+      if (!snapshot.syncInProgress) {
+        void this.pushCfTopology();
+      }
     });
     this.disposables.push(cacheSubscription);
   }
@@ -348,6 +372,17 @@ export class RegionSidebarProvider
     if (type === MSG_CONFIRM_SCOPE && isConfirmScopeMessage(message)) {
       const payload = readConfirmScopePayload(message);
       await this.handleConfirmScope(payload);
+      return;
+    }
+
+    if (type === MSG_TOPOLOGY_ORG_SELECTED && isTopologyOrgSelectedMessage(message)) {
+      const payload = readTopologyOrgSelectedPayload(message);
+      await this.handleTopologyOrgSelected(payload);
+      return;
+    }
+
+    if (type === MSG_REQUEST_CF_TOPOLOGY) {
+      await this.pushCfTopology();
       return;
     }
 
@@ -455,14 +490,188 @@ export class RegionSidebarProvider
       mappings: this.serviceFolderMappings,
     });
 
+    this.postCfTopologySnapshot(this.resolveCfTopologySync());
+    void this.pushCfTopology();
+
     if (!this.hasAttemptedConfirmedScopeRestore) {
       this.hasAttemptedConfirmedScopeRestore = true;
       await this.restoreConfirmedScopeForCurrentUser();
     }
   }
 
+  private resolveCfTopologySync(): CfTopology {
+    if (isTestMode()) {
+      return resolveMockCfTopology();
+    }
+    return getCfTopologySnapshotSync();
+  }
+
+  private async resolveCfTopologyAsync(): Promise<CfTopology> {
+    if (isTestMode()) {
+      return resolveMockCfTopology();
+    }
+    return getCfTopologySnapshot();
+  }
+
+  private async pushCfTopology(): Promise<void> {
+    try {
+      const topology = await this.resolveCfTopologyAsync();
+      this.postCfTopologySnapshot(topology);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to read CF topology snapshot.';
+      this.outputChannel.appendLine(
+        `[topology] Failed to read cf-sync topology: ${sanitizeForLog(errorMessage)}`
+      );
+      this.postCfTopologySnapshot(EMPTY_CF_TOPOLOGY);
+    }
+  }
+
+  private postCfTopologySnapshot(topology: CfTopology): void {
+    this.outputChannel.appendLine(
+      `[topology] Pushed snapshot ready=${topology.ready ? 'true' : 'false'} accounts=${String(topology.accounts.length)}`
+    );
+    this.postMessage({
+      type: MSG_CF_TOPOLOGY,
+      topology: {
+        ready: topology.ready,
+        accounts: topology.accounts.map((account) => ({
+          regionKey: account.regionKey,
+          regionLabel: account.regionLabel,
+          apiEndpoint: account.apiEndpoint,
+          orgName: account.orgName,
+          spaces: [...account.spaces],
+        })),
+      },
+    });
+  }
+
   private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
     await this.persistConfirmedScopeForCurrentUser(payload);
+    this.outputChannel.appendLine(
+      `[scope] Confirmed scope region=${sanitizeForLog(payload.regionCode)} org=${sanitizeForLog(payload.orgName)} space=${sanitizeForLog(payload.spaceName)}`
+    );
+    void this.refreshTopologyForConfirmedScope(payload).catch(() => undefined);
+  }
+
+  private async refreshTopologyForConfirmedScope(
+    payload: ConfirmScopePayload
+  ): Promise<void> {
+    if (isTestMode()) {
+      return;
+    }
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return;
+    }
+    const apiEndpoint = getCfApiEndpoint(payload.regionCode);
+    const result = await refreshCfSyncSpace({
+      apiEndpoint,
+      orgName: payload.orgName,
+      spaceName: payload.spaceName,
+      email: credentials.email,
+      password: credentials.password,
+    });
+    if (result.status === 'refreshed') {
+      this.outputChannel.appendLine(
+        `[topology] Refreshed ${result.regionKey}/${sanitizeForLog(payload.orgName)}/${sanitizeForLog(payload.spaceName)} (${String(result.appCount)} apps)`
+      );
+      void this.pushCfTopology();
+    } else if (result.status === 'failed') {
+      const errorMessage =
+        result.error instanceof Error ? result.error.message : String(result.error);
+      this.outputChannel.appendLine(
+        `[topology] Refresh failed for ${result.regionKey}/${sanitizeForLog(payload.orgName)}/${sanitizeForLog(payload.spaceName)}: ${sanitizeForLog(errorMessage)}`
+      );
+    } else {
+      this.outputChannel.appendLine(
+        `[topology] Refresh skipped (${result.reason}) for region=${sanitizeForLog(payload.regionCode)}`
+      );
+    }
+  }
+
+  private async handleTopologyOrgSelected(
+    payload: TopologyOrgSelectedPayload
+  ): Promise<void> {
+    const region = SAP_BTP_REGIONS.find((entry) => entry.id === payload.regionKey);
+    if (region === undefined) {
+      this.outputChannel.appendLine(
+        `[topology] Quick org pick rejected: unknown region key=${sanitizeForLog(payload.regionKey)}`
+      );
+      this.postOrgsError(`Region "${payload.regionKey}" is not known to SAP Tools.`);
+      return;
+    }
+
+    this.outputChannel.appendLine(
+      `[topology] Quick org pick region=${region.id} org=${sanitizeForLog(payload.orgName)}`
+    );
+
+    const regionPayload: RegionSelectionPayload = {
+      id: region.id,
+      name: region.displayName,
+      code: toHyphenatedRegionCode(region.id),
+      area: region.area,
+    };
+    this.logRegionSelection(regionPayload);
+    await this.handleRegionSelected(regionPayload);
+    if (this.selectedRegionId !== region.id) {
+      return;
+    }
+
+    let orgGuid = '';
+    if (isTestMode()) {
+      const mockOrg = resolveMockOrgsForRegion(regionPayload.code).find(
+        (entry) => entry.name === payload.orgName
+      );
+      orgGuid = mockOrg?.guid ?? '';
+    } else {
+      orgGuid = await this.resolveOrgGuidByName(region.id, payload.orgName);
+    }
+
+    if (orgGuid.length === 0) {
+      this.outputChannel.appendLine(
+        `[topology] Quick org pick failed: org "${sanitizeForLog(payload.orgName)}" not found in region ${region.id}`
+      );
+      this.postSpacesError(
+        `Org "${payload.orgName}" was not found in region ${region.id}.`
+      );
+      return;
+    }
+
+    this.postMessage({
+      type: MSG_TOPOLOGY_SCOPE_RESOLVED,
+      scope: {
+        regionId: region.id,
+        regionCode: regionPayload.code,
+        regionName: region.displayName,
+        regionArea: region.area,
+        orgGuid,
+        orgName: payload.orgName,
+      },
+    });
+
+    await this.handleOrgSelected({ guid: orgGuid, name: payload.orgName });
+  }
+
+  private async resolveOrgGuidByName(
+    regionId: string,
+    orgName: string
+  ): Promise<string> {
+    const cachedOrgs = await this.cacheSyncService.getCachedOrgs(regionId);
+    const cachedMatch = cachedOrgs?.find((org) => org.name === orgName);
+    if (cachedMatch !== undefined) {
+      return cachedMatch.guid;
+    }
+    if (this.cfSession === null) {
+      return '';
+    }
+    try {
+      const liveOrgs = await fetchOrgs(this.cfSession);
+      const liveMatch = liveOrgs.find((org) => org.name === orgName);
+      return liveMatch?.guid ?? '';
+    } catch {
+      return '';
+    }
   }
 
   private async preloadRootFolderForPersistedScope(): Promise<void> {
@@ -2695,6 +2904,27 @@ function readSpaceSelectionPayload(value: Record<string, unknown>): SpaceSelecti
     spaceName: String(scope['spaceName']),
     orgGuid: String(scope['orgGuid']),
     orgName: String(scope['orgName']),
+  };
+}
+
+function isTopologyOrgSelectedMessage(value: Record<string, unknown>): boolean {
+  const payload = value['payload'];
+  if (!isRecord(payload)) {
+    return false;
+  }
+  return (
+    isNonEmptyString(payload['regionKey'], 32) &&
+    isNonEmptyString(payload['orgName'], 128)
+  );
+}
+
+function readTopologyOrgSelectedPayload(
+  value: Record<string, unknown>
+): TopologyOrgSelectedPayload {
+  const payload = value['payload'] as Record<string, unknown>;
+  return {
+    regionKey: String(payload['regionKey']).trim(),
+    orgName: String(payload['orgName']).trim(),
   };
 }
 

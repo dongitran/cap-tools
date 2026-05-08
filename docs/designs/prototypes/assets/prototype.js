@@ -149,6 +149,10 @@ const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE = 'sapTools.hanaSqlFileOpenResult';
 const HANA_TABLES_LOADED_MESSAGE_TYPE = 'sapTools.hanaTablesLoaded';
 const HANA_TABLE_SELECT_RESULT_MESSAGE_TYPE = 'sapTools.hanaTableSelectResult';
+const CF_TOPOLOGY_MESSAGE_TYPE = 'sapTools.cfTopology';
+const TOPOLOGY_SCOPE_RESOLVED_MESSAGE_TYPE = 'sapTools.topologyScopeResolved';
+const TOPOLOGY_ORG_SELECTED_MESSAGE_TYPE = 'sapTools.topologyOrgSelected';
+const TOPOLOGY_ORG_SEARCH_LIMIT = 50;
 const vscodeApi = resolveVscodeApi();
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
@@ -202,6 +206,9 @@ let sqlTableNameTruncationFrame = 0;
 let sqlTableNameResizeObserver = null;
 let sqlTableNamePanelWidth = -1;
 let sqlTableNameMeasureContext = null;
+let cfTopology = { ready: false, accounts: [] };
+let topologyOrgSearchQuery = '';
+let topologyPickInProgress = false;
 
 // Listen for messages from the extension host (org/space data, scope updates).
 window.addEventListener('message', (event) => {
@@ -417,6 +424,16 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  if (msg.type === CF_TOPOLOGY_MESSAGE_TYPE) {
+    applyCfTopologySnapshot(msg.topology);
+    return;
+  }
+
+  if (msg.type === TOPOLOGY_SCOPE_RESOLVED_MESSAGE_TYPE) {
+    applyTopologyScopeResolved(msg.scope);
+    return;
+  }
+
   if (msg.type === 'sapTools.cacheState') {
     applyCacheStateSnapshot(msg.snapshot);
     return;
@@ -606,6 +623,21 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  const topologyOrgButton = target.closest('[data-topology-region-key]');
+  if (topologyOrgButton instanceof HTMLButtonElement) {
+    if (topologyOrgButton.disabled || topologyPickInProgress) {
+      return;
+    }
+    const regionKey = topologyOrgButton.dataset.topologyRegionKey ?? '';
+    const orgName = topologyOrgButton.dataset.topologyOrg ?? '';
+    if (regionKey.length === 0 || orgName.length === 0) {
+      return;
+    }
+    topologyPickInProgress = true;
+    postTopologyOrgSelection(regionKey, orgName);
+    return;
+  }
+
   const areaButton = target.closest('[data-group-id]');
   if (areaButton instanceof HTMLButtonElement) {
     if (areaButton.disabled) {
@@ -631,7 +663,7 @@ appElement.addEventListener('click', (event) => {
     }
     queueSelectionMotion(regionButton, buildDataSelector('data-region-id', nextRegionId));
     handleRegionSelection(nextRegionId);
-    rerenderSelectionStageSlotsWithMotion(['region', 'org', 'space', 'confirm']);
+    rerenderSelectionStageSlotsWithMotion(['area', 'region', 'org', 'space', 'confirm']);
     return;
   }
 
@@ -778,8 +810,74 @@ appElement.addEventListener('input', (event) => {
       return;
     }
     renderPrototype();
+    return;
+  }
+
+  if (role === 'topology-org-search') {
+    topologyOrgSearchQuery = target.value;
+    updateTopologyOrgSearchResults();
   }
 });
+
+function updateTopologyOrgSearchResults() {
+  const panel = appElement.querySelector('[data-role="topology-search-panel"]');
+  if (!(panel instanceof HTMLElement)) {
+    return;
+  }
+
+  const filtered = filterTopologyOrgEntries();
+  const existingResults = panel.querySelector('[data-role="topology-org-results"]');
+  const existingEmpty = panel.querySelector('[data-role="topology-org-empty"]');
+
+  if (filtered.length === 0) {
+    const queryLabel = escapeHtml(topologyOrgSearchQuery.trim());
+    const emptyMarkup = `<div class="topology-org-empty" data-role="topology-org-empty">No org matches "${queryLabel}"</div>`;
+    if (existingResults instanceof HTMLElement) {
+      existingResults.outerHTML = emptyMarkup;
+    } else if (existingEmpty instanceof HTMLElement) {
+      existingEmpty.outerHTML = emptyMarkup;
+    } else {
+      panel.insertAdjacentHTML('beforeend', emptyMarkup);
+    }
+    return;
+  }
+
+  const rowsMarkup = filtered
+    .map((account) => {
+      const knownRegion = isKnownTopologyRegion(account.regionKey);
+      const spaceCount = Array.isArray(account.spaces) ? account.spaces.length : 0;
+      const meta =
+        spaceCount === 1
+          ? `${escapeHtml(account.regionKey)} - 1 space`
+          : `${escapeHtml(account.regionKey)} - ${String(spaceCount)} spaces`;
+      const disabledAttr = knownRegion ? '' : ' disabled aria-disabled="true"';
+      const disabledClass = knownRegion ? '' : ' is-disabled';
+      return `
+        <button
+          type="button"
+          class="topology-org-row${disabledClass}"
+          data-topology-region-key="${escapeHtml(account.regionKey)}"
+          data-topology-org="${escapeHtml(account.orgName)}"
+          ${disabledAttr}
+          title="${escapeHtml(account.orgName)} - ${escapeHtml(account.regionLabel)}"
+        >
+          <span class="topology-org-name">${escapeHtml(account.orgName)}</span>
+          <span class="topology-org-meta">${meta}</span>
+        </button>
+      `;
+    })
+    .join('');
+
+  const resultsMarkup = `<div class="topology-org-results" data-role="topology-org-results">${rowsMarkup}</div>`;
+
+  if (existingResults instanceof HTMLElement) {
+    existingResults.outerHTML = resultsMarkup;
+  } else if (existingEmpty instanceof HTMLElement) {
+    existingEmpty.outerHTML = resultsMarkup;
+  } else {
+    panel.insertAdjacentHTML('beforeend', resultsMarkup);
+  }
+}
 
 appElement.addEventListener('change', (event) => {
   const target = event.target;
@@ -2427,6 +2525,247 @@ function postLogout() {
   });
 }
 
+function applyCfTopologySnapshot(rawTopology) {
+  if (!isRecord(rawTopology)) {
+    cfTopology = { ready: false, accounts: [] };
+  } else {
+    const ready = rawTopology.ready === true;
+    const rawAccounts = Array.isArray(rawTopology.accounts)
+      ? rawTopology.accounts
+      : [];
+    const accounts = rawAccounts
+      .filter(
+        (account) =>
+          isRecord(account) &&
+          typeof account.regionKey === 'string' &&
+          account.regionKey.length > 0 &&
+          typeof account.orgName === 'string' &&
+          account.orgName.length > 0
+      )
+      .map((account) => ({
+        regionKey: account.regionKey,
+        regionLabel:
+          typeof account.regionLabel === 'string' && account.regionLabel.length > 0
+            ? account.regionLabel
+            : account.regionKey,
+        apiEndpoint:
+          typeof account.apiEndpoint === 'string' ? account.apiEndpoint : '',
+        orgName: account.orgName,
+        spaces: Array.isArray(account.spaces)
+          ? account.spaces.filter(
+              (space) => typeof space === 'string' && space.length > 0
+            )
+          : [],
+      }));
+    cfTopology = { ready, accounts };
+  }
+
+  if (mode !== 'selection') {
+    return;
+  }
+
+  if (!isSelectionShellMounted()) {
+    renderPrototype();
+    return;
+  }
+
+  updateTopologySearchInPlace();
+}
+
+function updateTopologySearchInPlace() {
+  const slot = appElement.querySelector('[data-stage-slot="area"]');
+  if (!(slot instanceof HTMLElement)) {
+    return;
+  }
+
+  const existingPanel = slot.querySelector('[data-role="topology-search-panel"]');
+  const newMarkup = renderTopologyOrgSearchPanel();
+
+  if (newMarkup.length === 0) {
+    if (existingPanel instanceof HTMLElement) {
+      existingPanel.remove();
+    }
+    return;
+  }
+
+  if (existingPanel instanceof HTMLElement) {
+    const focusedRole =
+      document.activeElement instanceof HTMLInputElement
+        ? document.activeElement.dataset.role ?? ''
+        : '';
+    const focusedSelectionStart =
+      document.activeElement instanceof HTMLInputElement
+        ? document.activeElement.selectionStart
+        : null;
+    existingPanel.outerHTML = newMarkup;
+    if (focusedRole === 'topology-org-search') {
+      const refocused = appElement.querySelector(
+        '[data-role="topology-org-search"]'
+      );
+      if (refocused instanceof HTMLInputElement) {
+        refocused.focus();
+        if (focusedSelectionStart !== null) {
+          refocused.setSelectionRange(focusedSelectionStart, focusedSelectionStart);
+        }
+      }
+    }
+    return;
+  }
+
+  slot.insertAdjacentHTML('afterbegin', newMarkup);
+}
+
+function applyTopologyScopeResolved(scope) {
+  if (!isRecord(scope)) {
+    return;
+  }
+
+  const regionId = typeof scope.regionId === 'string' ? scope.regionId.trim() : '';
+  const orgGuid = typeof scope.orgGuid === 'string' ? scope.orgGuid.trim() : '';
+  if (regionId.length === 0 || orgGuid.length === 0) {
+    topologyPickInProgress = false;
+    return;
+  }
+
+  const region = regionLookup.get(regionId);
+  const groupId = regionGroupLookup.get(regionId);
+  if (region === undefined || groupId === undefined) {
+    topologyPickInProgress = false;
+    return;
+  }
+
+  selectedGroupId = groupId;
+  selectedRegionId = region.id;
+  selectedOrgId = orgGuid;
+  selectedSpaceId = '';
+  topologyPickInProgress = false;
+
+  if (mode !== 'selection') {
+    mode = 'selection';
+    renderPrototype();
+    return;
+  }
+
+  rerenderSelectionStageSlotsWithMotion(SELECTION_STAGE_SLOT_IDS);
+}
+
+function postTopologyOrgSelection(regionKey, orgName) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: TOPOLOGY_ORG_SELECTED_MESSAGE_TYPE,
+    payload: { regionKey, orgName },
+  });
+}
+
+function filterTopologyOrgEntries() {
+  const accounts = Array.isArray(cfTopology.accounts) ? cfTopology.accounts : [];
+  const query = topologyOrgSearchQuery.trim().toLowerCase();
+  if (query.length === 0) {
+    return accounts.slice(0, TOPOLOGY_ORG_SEARCH_LIMIT);
+  }
+  const matches = [];
+  for (const account of accounts) {
+    const haystack = [
+      account.orgName,
+      account.regionKey,
+      account.regionLabel,
+    ]
+      .join(' ')
+      .toLowerCase();
+    if (haystack.indexOf(query) !== -1) {
+      matches.push(account);
+    }
+    if (matches.length >= TOPOLOGY_ORG_SEARCH_LIMIT) {
+      break;
+    }
+  }
+  return matches;
+}
+
+function isKnownTopologyRegion(regionKey) {
+  return regionLookup.has(regionKey);
+}
+
+function renderTopologyOrgSearchPanel() {
+  if (!cfTopology.ready) {
+    return '';
+  }
+  if (!Array.isArray(cfTopology.accounts) || cfTopology.accounts.length === 0) {
+    return '';
+  }
+  if (selectedRegionId.length > 0) {
+    return '';
+  }
+
+  const filtered = filterTopologyOrgEntries();
+  const totalLabel =
+    cfTopology.accounts.length === 1
+      ? '1 org synced across regions'
+      : `${cfTopology.accounts.length} orgs synced across regions`;
+
+  let resultsMarkup = '';
+  if (filtered.length === 0) {
+    const queryLabel = escapeHtml(topologyOrgSearchQuery.trim());
+    resultsMarkup = `
+      <div class="topology-org-empty" data-role="topology-org-empty">
+        No org matches "${queryLabel}"
+      </div>
+    `;
+  } else {
+    resultsMarkup = filtered
+      .map((account) => {
+        const knownRegion = isKnownTopologyRegion(account.regionKey);
+        const spaceCount = Array.isArray(account.spaces) ? account.spaces.length : 0;
+        const meta =
+          spaceCount === 1
+            ? `${escapeHtml(account.regionKey)} - 1 space`
+            : `${escapeHtml(account.regionKey)} - ${String(spaceCount)} spaces`;
+        const disabledAttr = knownRegion ? '' : ' disabled aria-disabled="true"';
+        const disabledClass = knownRegion ? '' : ' is-disabled';
+        return `
+          <button
+            type="button"
+            class="topology-org-row${disabledClass}"
+            data-topology-region-key="${escapeHtml(account.regionKey)}"
+            data-topology-org="${escapeHtml(account.orgName)}"
+            ${disabledAttr}
+            title="${escapeHtml(account.orgName)} - ${escapeHtml(account.regionLabel)}"
+          >
+            <span class="topology-org-name">${escapeHtml(account.orgName)}</span>
+            <span class="topology-org-meta">${meta}</span>
+          </button>
+        `;
+      })
+      .join('');
+    resultsMarkup = `<div class="topology-org-results" data-role="topology-org-results">${resultsMarkup}</div>`;
+  }
+
+  return `
+    <section class="group-card topology-org-panel" data-role="topology-search-panel" aria-label="Quick org search">
+      <div class="group-head">
+        <h2>Quick Org Search</h2>
+        <span class="group-count">${escapeHtml(totalLabel)}</span>
+      </div>
+      <p class="topology-org-hint">Search across all synced regions and jump straight to space selection.</p>
+      <div class="topology-org-search-row">
+        <input
+          type="search"
+          class="topology-org-search-input"
+          data-role="topology-org-search"
+          placeholder="Type org name, region key, or label..."
+          autocomplete="off"
+          spellcheck="false"
+          value="${escapeHtml(topologyOrgSearchQuery)}"
+        />
+      </div>
+      ${resultsMarkup}
+    </section>
+  `;
+}
+
 function applyRestoredConfirmedScope(scope) {
   const regionId =
     typeof scope.regionId === 'string' ? scope.regionId.trim() : '';
@@ -2561,7 +2900,7 @@ function resolveSelectionStageSlotsForAction(action) {
   }
 
   if (action === 'reset-region-selection') {
-    return ['region', 'org', 'space', 'confirm'];
+    return ['area', 'region', 'org', 'space', 'confirm'];
   }
 
   if (action === 'reset-org-selection') {
@@ -2658,8 +2997,10 @@ function isSelectionShellMounted() {
 function renderAreaStage(selectedGroup) {
   const isCollapsed = selectedGroup !== undefined;
   const orderedGroups = resolveOrderedGroups();
+  const topologyPanel = renderTopologyOrgSearchPanel();
 
   return `
+    ${topologyPanel}
     <section class="group-card area-stage" aria-label="Area selector" data-stage-id="area">
       <div class="group-head">
         <h2>Choose Area</h2>
