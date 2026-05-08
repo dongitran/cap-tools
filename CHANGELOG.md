@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.40 (pre-release)
+- Kept Quick Org Search visible throughout the selection screen after area/region selection, topology org picks, stage changes, and returning from the workspace with Change Region.
+- Added selected-state treatment for Quick Org Search rows so the current topology-picked org is visible while users can still switch to another org in one click.
+- Logged live `cf logs <app>` stream commands to the SAP Tools output channel, matching existing sanitized CF CLI command visibility.
+
 ## 0.7.39
 - Promoted the current SAP Tools workflow surface to a stable release covering scope selection, CFLogs, service artifact exports, SQLTools export, and the S/4HANA SQL Workbench.
 - Added the What News prototype page with four release cards for Scope, Logs, Apps, and SQL so the stable feature set is easy to review before publishing.

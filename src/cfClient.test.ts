@@ -1,9 +1,18 @@
 // cspell:words guids
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { execFileAsyncMock, fetchMock } = vi.hoisted(() => ({
+const { execFileAsyncMock, fetchMock, spawnedProcessMock, spawnMock } = vi.hoisted(() => ({
   execFileAsyncMock: vi.fn(),
   fetchMock: vi.fn(),
+  spawnedProcessMock: {
+    killed: false,
+    kill: vi.fn(),
+    stdout: { on: vi.fn() },
+    stderr: { on: vi.fn() },
+    stdin: { end: vi.fn() },
+    on: vi.fn(),
+  },
+  spawnMock: vi.fn(),
 }));
 
 vi.mock('node:util', () => ({
@@ -12,6 +21,7 @@ vi.mock('node:util', () => ({
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
+  spawn: spawnMock,
 }));
 
 import {
@@ -24,6 +34,7 @@ import {
   fetchStartedAppsViaCfCli,
   getCfApiEndpoint,
   parseCfAppsOutput,
+  spawnAppLogStreamFromTarget,
 } from './cfClient';
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -38,6 +49,10 @@ function jsonResponse(payload: unknown, status = 200): Response {
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockReset();
+  spawnMock.mockReset();
+  spawnedProcessMock.kill.mockReset();
+  spawnedProcessMock.killed = false;
+  spawnMock.mockReturnValue(spawnedProcessMock);
   configureCfCommandLogger(null);
 });
 
@@ -336,6 +351,35 @@ describe('fetchRecentAppLogs', () => {
         appName: 'unknown-app',
       })
     ).rejects.toThrow('Failed to fetch recent logs for app "unknown-app".');
+  });
+});
+
+describe('spawnAppLogStreamFromTarget', () => {
+  it('logs live CF log stream command without credentials', () => {
+    const commandLogs: string[] = [];
+    configureCfCommandLogger((message) => {
+      commandLogs.push(message);
+    });
+
+    const streamHandle = spawnAppLogStreamFromTarget({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    expect(commandLogs).toEqual(['[cf-cli] cf logs finance-uat-api']);
+    expect(spawnMock).toHaveBeenCalledWith(
+      'cf',
+      ['logs', 'finance-uat-api'],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          CF_HOME: '/tmp/sap-tools-cf-home',
+        }),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    );
+
+    streamHandle.stop();
+    expect(spawnedProcessMock.kill).toHaveBeenCalledTimes(1);
   });
 });
 

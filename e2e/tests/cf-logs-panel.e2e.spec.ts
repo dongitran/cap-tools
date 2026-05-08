@@ -6,6 +6,7 @@ import {
   cleanupExtensionHost,
   clickWithFallback,
   findCfLogsPanelFrame,
+  getOrgStageOption,
   launchExtensionHost,
   openCfLogsPanel,
   openSapToolsSidebar,
@@ -580,9 +581,9 @@ test.describe('SAP Tools CF logs panel', () => {
       await clickWithFallback(sidebarFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(sidebarFrame.getByRole('button', { name: REGION_TO_SELECT }));
       await expect(
-        sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG })
+        getOrgStageOption(sidebarFrame, DATA_FOUNDATION_ORG)
       ).toBeVisible({ timeout: 10000 });
-      await clickWithFallback(sidebarFrame.getByRole('button', { name: DATA_FOUNDATION_ORG }));
+      await clickWithFallback(getOrgStageOption(sidebarFrame, DATA_FOUNDATION_ORG));
       await expect(
         sidebarFrame.getByRole('button', { name: NOAPPS_SPACE })
       ).toBeVisible({ timeout: 10000 });

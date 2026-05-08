@@ -487,6 +487,12 @@ body.pattern-dots::before {
   background: var(--accent-soft-color);
 }
 
+.topology-org-row.is-selected {
+  border-color: color-mix(in oklab, var(--accent-color) 62%, var(--mix-base));
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent-color);
+}
+
 .topology-org-row.is-disabled {
   opacity: 0.55;
   cursor: not-allowed;

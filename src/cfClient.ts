@@ -331,6 +331,7 @@ export function spawnAppLogStreamFromTarget(params: {
   readonly cfHomeDir?: string;
 }): CfLogStreamHandle {
   const env = buildCfCliEnv(params.cfHomeDir, undefined);
+  logCfCommand(['logs', params.appName]);
   const process = spawn('cf', ['logs', params.appName], {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],

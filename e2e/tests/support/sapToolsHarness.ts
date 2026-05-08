@@ -536,16 +536,19 @@ export async function openSapToolsSidebar(
 export async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
   await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
   await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
-  // In test mode, orgs are fetched asynchronously via the extension; wait for them.
-  await expect(
-    webviewFrame.getByRole('button', { name: ORG_TO_SELECT })
-  ).toBeVisible({ timeout: 10000 });
-  await clickWithFallback(webviewFrame.getByRole('button', { name: ORG_TO_SELECT }));
-  // Spaces are also fetched asynchronously; wait before clicking.
+  const orgOption = getOrgStageOption(webviewFrame, ORG_TO_SELECT);
+  await expect(orgOption).toBeVisible({ timeout: 10000 });
+  await clickWithFallback(orgOption);
   await expect(
     webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
   ).toBeVisible({ timeout: 10000 });
   await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
+}
+
+export function getOrgStageOption(webviewFrame: Frame, name: string | RegExp): Locator {
+  return webviewFrame
+    .getByRole('region', { name: 'Organization list' })
+    .getByRole('button', { name });
 }
 
 export async function clickWithFallback(locator: Locator): Promise<void> {

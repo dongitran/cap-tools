@@ -23,7 +23,7 @@ const PROTOTYPE_VARIANTS = [
     id: 'design',
     hash: 'design',
     label: 'Prototype: Region Menu',
-    framePath: './variants/design.html?v=20260507d',
+    framePath: './variants/design.html?v=20260508b',
   },
   {
     id: 'cf-logs-panel',

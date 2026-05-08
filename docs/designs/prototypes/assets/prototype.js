@@ -206,7 +206,7 @@ let sqlTableNameTruncationFrame = 0;
 let sqlTableNameResizeObserver = null;
 let sqlTableNamePanelWidth = -1;
 let sqlTableNameMeasureContext = null;
-let cfTopology = { ready: false, accounts: [] };
+let cfTopology = resolveInitialCfTopology();
 let topologyOrgSearchQuery = '';
 let topologyPickInProgress = false;
 
@@ -854,12 +854,17 @@ function updateTopologyOrgSearchResults() {
           : `${escapeHtml(account.regionKey)} - ${String(spaceCount)} spaces`;
       const disabledAttr = knownRegion ? '' : ' disabled aria-disabled="true"';
       const disabledClass = knownRegion ? '' : ' is-disabled';
+      const selectedOrg = resolveSelectedOrg();
+      const isSelected =
+        selectedRegionId === account.regionKey && selectedOrg?.name === account.orgName;
       return `
         <button
           type="button"
-          class="topology-org-row${disabledClass}"
+          class="topology-org-row${disabledClass}${isSelected ? ' is-selected' : ''}"
           data-topology-region-key="${escapeHtml(account.regionKey)}"
           data-topology-org="${escapeHtml(account.orgName)}"
+          aria-label="Quick org search pick ${escapeHtml(account.orgName)} in ${escapeHtml(account.regionKey)}"
+          aria-pressed="${isSelected}"
           ${disabledAttr}
           title="${escapeHtml(account.orgName)} - ${escapeHtml(account.regionLabel)}"
         >
@@ -2653,6 +2658,15 @@ function applyTopologyScopeResolved(scope) {
 
 function postTopologyOrgSelection(regionKey, orgName) {
   if (vscodeApi === null) {
+    const org = resolvePrototypeTopologyOrg(regionKey, orgName);
+    if (org === undefined) {
+      topologyPickInProgress = false;
+      return;
+    }
+    applyTopologyScopeResolved({
+      regionId: regionKey,
+      orgGuid: org.id,
+    });
     return;
   }
 
@@ -2691,14 +2705,43 @@ function isKnownTopologyRegion(regionKey) {
   return regionLookup.has(regionKey);
 }
 
+function resolveInitialCfTopology() {
+  if (vscodeApi !== null) {
+    return { ready: false, accounts: [] };
+  }
+
+  const accounts = [
+    ...buildPrototypeTopologyAccounts('us10', 'US East (VA) - AWS (us10)', DEFAULT_ORG_OPTIONS),
+    ...buildPrototypeTopologyAccounts('br10', 'Brazil (Sao Paulo) - AWS (br10)', BR10_ORG_OPTIONS),
+  ];
+  accounts.sort((left, right) => {
+    const orgCompare = left.orgName.localeCompare(right.orgName);
+    if (orgCompare !== 0) return orgCompare;
+    return left.regionKey.localeCompare(right.regionKey);
+  });
+  return { ready: accounts.length > 0, accounts };
+}
+
+function buildPrototypeTopologyAccounts(regionKey, regionLabel, orgOptions) {
+  return orgOptions.map((org) => ({
+    regionKey,
+    regionLabel,
+    apiEndpoint: `https://api.cf.${regionKey}.hana.ondemand.com`,
+    orgName: org.name,
+    spaces: org.spaces,
+  }));
+}
+
+function resolvePrototypeTopologyOrg(regionKey, orgName) {
+  const orgOptions = regionKey === 'br10' ? BR10_ORG_OPTIONS : DEFAULT_ORG_OPTIONS;
+  return orgOptions.find((org) => org.name === orgName);
+}
+
 function renderTopologyOrgSearchPanel() {
   if (!cfTopology.ready) {
     return '';
   }
   if (!Array.isArray(cfTopology.accounts) || cfTopology.accounts.length === 0) {
-    return '';
-  }
-  if (selectedRegionId.length > 0) {
     return '';
   }
 
@@ -2727,12 +2770,17 @@ function renderTopologyOrgSearchPanel() {
             : `${escapeHtml(account.regionKey)} - ${String(spaceCount)} spaces`;
         const disabledAttr = knownRegion ? '' : ' disabled aria-disabled="true"';
         const disabledClass = knownRegion ? '' : ' is-disabled';
+        const selectedOrg = resolveSelectedOrg();
+        const isSelected =
+          selectedRegionId === account.regionKey && selectedOrg?.name === account.orgName;
         return `
           <button
             type="button"
-            class="topology-org-row${disabledClass}"
+            class="topology-org-row${disabledClass}${isSelected ? ' is-selected' : ''}"
             data-topology-region-key="${escapeHtml(account.regionKey)}"
             data-topology-org="${escapeHtml(account.orgName)}"
+            aria-label="Quick org search pick ${escapeHtml(account.orgName)} in ${escapeHtml(account.regionKey)}"
+            aria-pressed="${isSelected}"
             ${disabledAttr}
             title="${escapeHtml(account.orgName)} - ${escapeHtml(account.regionLabel)}"
           >
