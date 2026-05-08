@@ -614,6 +614,10 @@ export class RegionSidebarProvider
     };
     this.logRegionSelection(regionPayload);
     await this.handleRegionSelected(regionPayload);
+    // Snapshot the region request id after handleRegionSelected resolves: any
+    // subsequent manual region click bumps it, and we must not stomp on the
+    // user's newer choice with our resolved scope.
+    const regionRequestId = this.regionSelectionRequestId;
     if (this.selectedRegionId !== region.id) {
       return;
     }
@@ -626,6 +630,10 @@ export class RegionSidebarProvider
       orgGuid = mockOrg?.guid ?? '';
     } else {
       orgGuid = await this.resolveOrgGuidByName(region.id, payload.orgName);
+    }
+
+    if (!this.isCurrentRegionRequest(regionRequestId)) {
+      return;
     }
 
     if (orgGuid.length === 0) {

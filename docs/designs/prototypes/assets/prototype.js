@@ -240,6 +240,7 @@ window.addEventListener('message', (event) => {
     orgsLoadingState = 'error';
     orgsErrorMessage =
       typeof msg.message === 'string' ? msg.message : 'Failed to load organizations.';
+    topologyPickInProgress = false;
     rerenderSelectionStageSlotsWithMotion(['org', 'space', 'confirm']);
     return;
   }
@@ -276,6 +277,7 @@ window.addEventListener('message', (event) => {
     liveAppOptions = null;
     appsLoadingState = 'idle';
     appsErrorMessage = '';
+    topologyPickInProgress = false;
     rerenderSelectionStageSlotsWithMotion(['space', 'confirm']);
     return;
   }

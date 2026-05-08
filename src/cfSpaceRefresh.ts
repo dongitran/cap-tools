@@ -34,7 +34,13 @@ function resolveVendoredCfSyncEntry(): string {
 }
 
 async function loadCfSyncModule(): Promise<CfSyncModule> {
-  cachedModulePromise ??= import(resolveVendoredCfSyncEntry()) as Promise<CfSyncModule>;
+  if (cachedModulePromise === null) {
+    const promise = import(resolveVendoredCfSyncEntry()) as Promise<CfSyncModule>;
+    promise.catch(() => {
+      cachedModulePromise = null;
+    });
+    cachedModulePromise = promise;
+  }
   return cachedModulePromise;
 }
 
