@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.42 (pre-release)
+- Fixed the Settings screen so Cache Sync Interval and Sync Status use compact natural vertical flow instead of inheriting full-height workspace grid stretching.
+- Kept Logs and Apps full-height workspace panels unchanged while adding e2e coverage for Settings from both selection and workspace headers.
+- Verified Settings layout in the prototype gallery across dark, light, high-contrast, and narrow viewport states with long account/status text.
+
 ## 0.7.41 (pre-release)
 - Hardened E2E coverage around login-gate validation, app-catalog failure states, and SAP Tools output-channel log visibility.
 - Standardized E2E test titles so they describe user-facing behavior consistently.

@@ -2905,7 +2905,7 @@ function renderSettingsScreen() {
       </div>
     </header>
 
-    <section class="workspace-body settings-body">
+    <section class="settings-body">
       <section class="group-card settings-section">
         <h2>Cache Sync Interval</h2>
         <div class="sync-interval-picker">
