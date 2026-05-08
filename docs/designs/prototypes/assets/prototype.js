@@ -371,8 +371,13 @@ window.addEventListener('message', (event) => {
     if (serviceId.length > 0) {
       selectedHanaServiceId = serviceId;
     }
-    hanaQueryStatusTone = msg.success === true ? 'success' : 'error';
-    hanaQueryStatusMessage = msg.success === true ? '' : message;
+    if (msg.success === true) {
+      hanaQueryStatusTone = 'info';
+      hanaQueryStatusMessage = '';
+    } else {
+      hanaQueryStatusTone = 'error';
+      hanaQueryStatusMessage = message;
+    }
     if (isWorkspaceSqlMounted()) {
       if (previousServiceId !== selectedHanaServiceId) {
         refreshMountedSqlWorkbench();
@@ -1649,11 +1654,9 @@ function triggerOpenHanaSqlFile() {
   }
 
   hanaQueryStatusTone = 'info';
-  hanaQueryStatusMessage = `Opening SQL file for app ${selectedService.name}...`;
+  hanaQueryStatusMessage = '';
 
   if (vscodeApi === null) {
-    hanaQueryStatusTone = 'success';
-    hanaQueryStatusMessage = '';
     return true;
   }
 

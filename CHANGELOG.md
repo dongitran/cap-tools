@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.44 (pre-release)
+- Removed the transient SQL Workbench `Opening SQL file for app...` status text so app selection relies on the existing animated table-loading indicator.
+- Kept SQL status messages reserved for error states while preserving table-load spinner, row rendering, and quick-select feedback behavior.
+- Strengthened SQL Workbench E2E coverage to catch transient opening text during delayed table loading.
+
 ## 0.7.43 (pre-release)
 - Moved the `eu10-004` Europe (Frankfurt) AWS extension landscape into the Europe region group and sorted regions within each area by display name, then region id.
 - Renamed the Organization stage heading and added an organization search input that filters org options, clears on empty input, and resets when users choose another region.

@@ -1605,13 +1605,20 @@ test.describe('SAP Tools SQL workbench', () => {
       const webviewFrame = await openSapToolsSidebar(session.window);
       await openSqlTabForDefaultScope(webviewFrame);
 
+      await installSqlWorkbenchTextRecorder(webviewFrame);
       await selectSqlApp(webviewFrame, 'finance-uat-api');
 
       const tablesPanel = webviewFrame.locator('[data-role="hana-tables-panel"]');
       const loadingState = tablesPanel.locator('[data-role="hana-tables-loading"]');
       await expect(loadingState).toBeVisible();
       await expect(loadingState).toHaveText('Loading tables…');
+      await expect(loadingState.locator('.sql-tables-spinner')).toBeVisible();
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toHaveText('');
+      await expect(webviewFrame.locator('body')).not.toContainText('Opening SQL file for app');
+      await expect(tableRows(tablesPanel)).toHaveCount(0);
       await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
 
       const loadingSnapshot = await loadingState.evaluate((element) => {
         const list = element.closest('[data-role="hana-tables-list"]');
@@ -1632,6 +1639,11 @@ test.describe('SAP Tools SQL workbench', () => {
 
       await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
       await expect(loadingState).toHaveCount(0);
+      await expect(tablesPanel.locator('[data-role="hana-tables-error"]')).toHaveCount(0);
+      await expect(tablesPanel.locator('[data-role="hana-tables-empty"]')).toHaveCount(0);
+      await expect(webviewFrame.locator('[data-role="hana-query-status"]')).toBeHidden();
+      const sqlWorkbenchTextRecords = await readSqlWorkbenchTextRecords(webviewFrame);
+      expect(sqlWorkbenchTextRecords.join('\n')).not.toContain('Opening SQL file for app');
     } finally {
       await cleanupExtensionHost(session);
     }
