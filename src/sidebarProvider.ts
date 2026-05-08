@@ -1555,7 +1555,7 @@ export class RegionSidebarProvider
       });
 
       this.outputChannel.appendLine(
-        `[sqltools] ${sanitizeForLog(payload.appName)} -> ${sanitizeForLog(result.settingsPath)}`
+        `[export] SQLTools ${sanitizeForLog(payload.appName)} -> ${sanitizeForLog(result.settingsPath)}`
       );
       this.postMessage({
         type: MSG_EXPORT_SQLTOOLS_RESULT,

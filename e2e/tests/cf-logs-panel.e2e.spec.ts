@@ -14,7 +14,7 @@ import {
 } from './support/sapToolsHarness';
 
 test.describe('SAP Tools CF logs panel', () => {
-  test('CF logs panel renders log table and filter controls', async () => {
+  test('User can open CF logs panel with table and filter controls', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -38,7 +38,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel keeps app selector empty until user starts app logging', async () => {
+  test('User can keep CF logs app selector empty until app logging starts', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -63,7 +63,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel dropdown includes only apps started for logging', async () => {
+  test('User can choose only apps started for logging in CF logs panel', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -107,7 +107,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel endpoint and event column uses wrapped text layout while raw message stays hidden by default', async () => {
+  test('User can read wrapped endpoint events while raw log messages stay hidden', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -152,7 +152,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel time column shows only clock time', async () => {
+  test('User can read clock-only timestamps in CF logs panel', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -181,7 +181,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel copies row message on click and shows Copied toast', async () => {
+  test('User can copy a CF log row message by clicking the row', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -221,7 +221,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel keeps endpoint and event column dominant while HTTP detail columns remain compact', async () => {
+  test('User can inspect dominant endpoint events with compact HTTP details', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -344,7 +344,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel lets user filter logs by level and search text', async () => {
+  test('User can filter CF logs by level and search text', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -392,7 +392,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel classifies RTR access logs by HTTP status code', async () => {
+  test('User can see RTR access logs classified by HTTP status code', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -437,7 +437,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel escalates multiline stack traces to error level', async () => {
+  test('User can see multiline stack traces escalated to error level', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -492,7 +492,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel silently drops CF CLI infrastructure messages from the log table', async () => {
+  test('User can keep CF CLI infrastructure messages out of the log table', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -523,7 +523,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel dropdown removes app after stop logging from sidebar', async () => {
+  test('User can remove a stopped app from the CF logs dropdown', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -568,7 +568,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel shows empty state when selected space has no running apps', async () => {
+  test('User can see CF logs empty state when selected space has no running apps', async () => {
     const session = await launchExtensionHost();
     const DATA_FOUNDATION_ORG = /data-foundation-prod/i;
     const NOAPPS_SPACE = /^noapps$/i;
@@ -610,7 +610,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel resets to empty state when apps fetch fails for selected space', async () => {
+  test('User can see CF logs reset to empty state when apps fetch fails', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -670,7 +670,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel gear button opens settings panel with correct default column state', async () => {
+  test('User can open CF logs settings with default column state', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -729,7 +729,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel keeps canonical header order when Level column is toggled', async () => {
+  test('User can keep canonical CF logs header order when toggling Level', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -771,7 +771,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel settings toggle Source and Stream columns in table header', async () => {
+  test('User can toggle Source and Stream columns in CF logs settings', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -834,7 +834,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel shows concise row count summary', async () => {
+  test('User can see concise CF logs row count summary', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -864,7 +864,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel settings include font size options and update table typography', async () => {
+  test('User can update CF logs table typography from font size settings', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -918,7 +918,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel settings include log limit options and enforce selected row cap', async () => {
+  test('User can enforce CF logs row cap from log limit settings', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1005,7 +1005,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel keeps 6px horizontal padding and expected filter layout order', async () => {
+  test('User can use CF logs filters with compact panel padding', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1078,7 +1078,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel switches filters into two rows on narrow window width', async () => {
+  test('User can use CF logs filters across two rows on narrow windows', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1129,7 +1129,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel coalesces stream burst rerenders during live updates', async () => {
+  test('User can stream CF log bursts without excessive table rerenders', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1209,7 +1209,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel table fills remaining height on first open and stays stable after settings close', async () => {
+  test('User can use full-height CF logs table after opening and closing settings', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1272,7 +1272,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel table area is not capped to legacy half-height limit', async () => {
+  test('User can use CF logs table area beyond the legacy half-height limit', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1294,7 +1294,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel preserves row selection when streaming append does not affect the active filtered view', async () => {
+  test('User can keep selected CF log row while unrelated stream lines append', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1364,7 +1364,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('CF logs panel scope updates when sidebar workspace is confirmed', async () => {
+  test('User can see CF logs scope update after confirming sidebar workspace', async () => {
     const session = await launchExtensionHost();
 
     try {

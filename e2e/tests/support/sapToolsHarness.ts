@@ -660,6 +660,39 @@ export async function runWorkbenchCommand(window: Page, commandTitle: string): P
   await window.keyboard.press('Enter');
 }
 
+export async function openSapToolsOutputChannel(window: Page): Promise<void> {
+  await runWorkbenchCommand(window, 'Output: Show Output Channels');
+
+  const quickInputWidget = window.locator('.quick-input-widget:visible').first();
+  const quickPickVisible = await quickInputWidget
+    .isVisible({ timeout: 5000 })
+    .catch((): false => false);
+  if (quickPickVisible) {
+    const quickInputField = quickInputWidget.locator('input[type="text"]').first();
+    await expect(quickInputField).toBeVisible({ timeout: 10000 });
+    await quickInputField.fill('SAP Tools');
+    await clickWithFallback(quickInputWidget.getByText('SAP Tools', { exact: true }).first());
+  }
+
+  await expect
+    .poll(
+      async () => readVisibleOutputChannelText(window),
+      { timeout: 15000 }
+    )
+    .not.toBe('');
+}
+
+export async function readVisibleOutputChannelText(window: Page): Promise<string> {
+  return window.evaluate(() => {
+    const panelElement = document.querySelector('[id="workbench.parts.panel"]');
+    const rootElement = panelElement ?? document.body;
+    return Array.from(rootElement.querySelectorAll('.monaco-editor .view-lines .view-line'))
+      .map((line) => line.textContent)
+      .join('\n')
+      .replaceAll('\u00a0', ' ');
+  });
+}
+
 export async function readWebviewBodyClasses(webviewFrame: Frame): Promise<string[]> {
   return webviewFrame.evaluate(() => {
     return Array.from(document.body.classList);

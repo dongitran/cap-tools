@@ -1596,7 +1596,7 @@ test.describe('SAP Tools SQL workbench', () => {
     }
   });
 
-  test('User sees centered loading state while selected app tables load', async () => {
+  test('User can see centered loading state while selected app tables load', async () => {
     const session = await launchExtensionHost({
       extraEnv: { SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS: '1200' },
     });

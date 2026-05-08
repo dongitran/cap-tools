@@ -97,7 +97,7 @@ test.describe('SAP Tools region selector', () => {
     });
   }
 
-  test('User keeps VS Code webview theme classes during interactions', async () => {
+  test('User can keep VS Code webview theme classes during interactions', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -132,7 +132,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees code-first region labels without cloud provider suffix', async () => {
+  test('User can see code-first region labels without cloud provider suffix', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -296,114 +296,114 @@ test.describe('SAP Tools region selector', () => {
   test(
     'User can select area region and organization without recreating selection shell nodes',
     async () => {
-    const session = await launchExtensionHost();
+      const session = await launchExtensionHost();
 
-    try {
-      const webviewFrame = await openSapToolsSidebar(session.window);
-      const hasInitialStageSlots = await webviewFrame.evaluate(() => {
-        const shellElement = document.querySelector('.prototype-shell');
-        const headerElement = document.querySelector('.shell-header');
-        const groupsElement = document.querySelector('.groups');
-        const areaSlotElement = document.querySelector('[data-stage-slot="area"]');
-        const regionSlotElement = document.querySelector(
-          '[data-stage-slot="region"]'
-        );
-        const orgSlotElement = document.querySelector('[data-stage-slot="org"]');
+      try {
+        const webviewFrame = await openSapToolsSidebar(session.window);
+        const hasInitialStageSlots = await webviewFrame.evaluate(() => {
+          const shellElement = document.querySelector('.prototype-shell');
+          const headerElement = document.querySelector('.shell-header');
+          const groupsElement = document.querySelector('.groups');
+          const areaSlotElement = document.querySelector('[data-stage-slot="area"]');
+          const regionSlotElement = document.querySelector(
+            '[data-stage-slot="region"]'
+          );
+          const orgSlotElement = document.querySelector('[data-stage-slot="org"]');
 
-        if (
-          !(shellElement instanceof HTMLElement) ||
-          !(headerElement instanceof HTMLElement) ||
-          !(groupsElement instanceof HTMLElement) ||
-          !(areaSlotElement instanceof HTMLElement) ||
-          !(regionSlotElement instanceof HTMLElement) ||
-          !(orgSlotElement instanceof HTMLElement)
-        ) {
-          return false;
-        }
+          if (
+            !(shellElement instanceof HTMLElement) ||
+            !(headerElement instanceof HTMLElement) ||
+            !(groupsElement instanceof HTMLElement) ||
+            !(areaSlotElement instanceof HTMLElement) ||
+            !(regionSlotElement instanceof HTMLElement) ||
+            !(orgSlotElement instanceof HTMLElement)
+          ) {
+            return false;
+          }
 
-        const runtimeWindow = window as Window & {
-          __sapToolsSelectionRefs?: {
-            shell: HTMLElement;
-            header: HTMLElement;
-            groups: HTMLElement;
-            areaSlot: HTMLElement;
-            regionSlot: HTMLElement;
-            orgSlot: HTMLElement;
+          const runtimeWindow = window as Window & {
+            __sapToolsSelectionRefs?: {
+              shell: HTMLElement;
+              header: HTMLElement;
+              groups: HTMLElement;
+              areaSlot: HTMLElement;
+              regionSlot: HTMLElement;
+              orgSlot: HTMLElement;
+            };
           };
-        };
 
-        runtimeWindow.__sapToolsSelectionRefs = {
-          shell: shellElement,
-          header: headerElement,
-          groups: groupsElement,
-          areaSlot: areaSlotElement,
-          regionSlot: regionSlotElement,
-          orgSlot: orgSlotElement,
-        };
-
-        return true;
-      });
-      expect(hasInitialStageSlots).toBe(true);
-
-      await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
-      await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
-      await expect(
-        getOrgStageOption(webviewFrame, ORG_TO_SELECT)
-      ).toBeVisible({ timeout: 10000 });
-      await getOrgStageOption(webviewFrame, ORG_TO_SELECT).click();
-
-      const shellNodeStability = await webviewFrame.evaluate(() => {
-        const runtimeWindow = window as Window & {
-          __sapToolsSelectionRefs?: {
-            shell: HTMLElement;
-            header: HTMLElement;
-            groups: HTMLElement;
-            areaSlot: HTMLElement;
-            regionSlot: HTMLElement;
-            orgSlot: HTMLElement;
+          runtimeWindow.__sapToolsSelectionRefs = {
+            shell: shellElement,
+            header: headerElement,
+            groups: groupsElement,
+            areaSlot: areaSlotElement,
+            regionSlot: regionSlotElement,
+            orgSlot: orgSlotElement,
           };
+
+          return true;
+        });
+        expect(hasInitialStageSlots).toBe(true);
+
+        await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
+        await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
+        await expect(
+          getOrgStageOption(webviewFrame, ORG_TO_SELECT)
+        ).toBeVisible({ timeout: 10000 });
+        await getOrgStageOption(webviewFrame, ORG_TO_SELECT).click();
+
+        const shellNodeStability = await webviewFrame.evaluate(() => {
+          const runtimeWindow = window as Window & {
+            __sapToolsSelectionRefs?: {
+              shell: HTMLElement;
+              header: HTMLElement;
+              groups: HTMLElement;
+              areaSlot: HTMLElement;
+              regionSlot: HTMLElement;
+              orgSlot: HTMLElement;
+            };
+          };
+
+          const refs = runtimeWindow.__sapToolsSelectionRefs;
+          if (refs === undefined) {
+            throw new Error('Selection shell references are missing.');
+          }
+
+          const shellElement = document.querySelector('.prototype-shell');
+          const headerElement = document.querySelector('.shell-header');
+          const groupsElement = document.querySelector('.groups');
+          const areaSlotElement = document.querySelector('[data-stage-slot="area"]');
+          const regionSlotElement = document.querySelector(
+            '[data-stage-slot="region"]'
+          );
+          const orgSlotElement = document.querySelector('[data-stage-slot="org"]');
+
+          return {
+            sameShellNode: shellElement === refs.shell,
+            sameHeaderNode: headerElement === refs.header,
+            sameGroupsNode: groupsElement === refs.groups,
+            sameAreaSlotNode: areaSlotElement === refs.areaSlot,
+            sameRegionSlotNode: regionSlotElement === refs.regionSlot,
+            sameOrgSlotNode: orgSlotElement === refs.orgSlot,
+          };
+        });
+
+        const expectedStabilitySnapshot: ShellNodeStabilitySnapshot = {
+          sameShellNode: true,
+          sameHeaderNode: true,
+          sameGroupsNode: true,
+          sameAreaSlotNode: true,
+          sameRegionSlotNode: true,
+          sameOrgSlotNode: true,
         };
-
-        const refs = runtimeWindow.__sapToolsSelectionRefs;
-        if (refs === undefined) {
-          throw new Error('Selection shell references are missing.');
-        }
-
-        const shellElement = document.querySelector('.prototype-shell');
-        const headerElement = document.querySelector('.shell-header');
-        const groupsElement = document.querySelector('.groups');
-        const areaSlotElement = document.querySelector('[data-stage-slot="area"]');
-        const regionSlotElement = document.querySelector(
-          '[data-stage-slot="region"]'
-        );
-        const orgSlotElement = document.querySelector('[data-stage-slot="org"]');
-
-        return {
-          sameShellNode: shellElement === refs.shell,
-          sameHeaderNode: headerElement === refs.header,
-          sameGroupsNode: groupsElement === refs.groups,
-          sameAreaSlotNode: areaSlotElement === refs.areaSlot,
-          sameRegionSlotNode: regionSlotElement === refs.regionSlot,
-          sameOrgSlotNode: orgSlotElement === refs.orgSlot,
-        };
-      });
-
-      const expectedStabilitySnapshot: ShellNodeStabilitySnapshot = {
-        sameShellNode: true,
-        sameHeaderNode: true,
-        sameGroupsNode: true,
-        sameAreaSlotNode: true,
-        sameRegionSlotNode: true,
-        sameOrgSlotNode: true,
-      };
-      expect(shellNodeStability).toEqual(expectedStabilitySnapshot);
-    } finally {
-      await cleanupExtensionHost(session);
-    }
+        expect(shellNodeStability).toEqual(expectedStabilitySnapshot);
+      } finally {
+        await cleanupExtensionHost(session);
+      }
     }
   );
 
-  test('User can load fourteen organizations when selecting br-10 in test mode', async () => {
+  test('User can load fourteen organizations when selecting br-10 from local fixtures', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -424,7 +424,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees stable selection cards without entry animation while choosing scope', async () => {
+  test('User can see stable selection cards without entry animation while choosing scope', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -466,7 +466,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees app catalog from extension host data for selected space', async () => {
+  test('User can see app catalog from extension host data for selected space', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -501,6 +501,47 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByText('apps-proof-prod-proofspace-jobs')
       ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can see app catalog failure state for an unreachable selected space', async () => {
+    const session = await launchExtensionHost();
+    const DATA_FOUNDATION_ORG = /data-foundation-prod/i;
+    const FAILSPACE_TO_SELECT = /^failspace$/i;
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await expect(getOrgStageOption(webviewFrame, DATA_FOUNDATION_ORG)).toBeVisible({
+        timeout: 10000,
+      });
+      await clickWithFallback(getOrgStageOption(webviewFrame, DATA_FOUNDATION_ORG));
+      await expect(
+        webviewFrame.getByRole('button', { name: FAILSPACE_TO_SELECT })
+      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(webviewFrame.getByRole('button', { name: FAILSPACE_TO_SELECT }));
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+
+      const appError = webviewFrame.getByRole('alert').filter({
+        hasText: /Simulated CF CLI failure/i,
+      });
+      await expect(appError).toBeVisible({ timeout: 10000 });
+      await expect(webviewFrame.locator('.app-log-item')).toHaveCount(0);
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Start App Logging' })
+      ).toBeDisabled();
+      await expect(webviewFrame.getByText('finance-uat-api')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -694,7 +735,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User keeps confirmed scope after closing and reopening extension host', async () => {
+  test('User can keep confirmed scope after closing and reopening extension host', async () => {
     let session = await launchExtensionHost();
 
     try {
@@ -729,7 +770,7 @@ test.describe('SAP Tools region selector', () => {
   });
 
   test(
-    'User reopens extension and reaches monitoring workspace before delayed app hydration completes',
+    'User can reopen extension and reach monitoring workspace before delayed app hydration completes',
     async () => {
       let session = await launchExtensionHost();
 
@@ -772,7 +813,7 @@ test.describe('SAP Tools region selector', () => {
     }
   );
 
-  test('User restores confirmed scope after logging out and logging in again in same session', async () => {
+  test('User can restore confirmed scope after logging out and logging in again in same session', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -816,7 +857,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees smooth region hover without notch clipping artifacts', async () => {
+  test('User can see smooth region hover without notch clipping artifacts', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -870,7 +911,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees smooth organization and space hover without top border clipping', async () => {
+  test('User can see smooth organization and space hover without top border clipping', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1052,7 +1093,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('Export SQLTools Config button is enabled after a mapped service is selected', async () => {
+  test('User can enable SQLTools Config export after selecting a mapped service', async () => {
     const fixtureRootPath = createServiceRootMappingFixture();
     const session = await launchExtensionHost({
       extraEnv: {
@@ -1152,7 +1193,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User keeps current Apps export state when Select Root Folder is cancelled initially', async () => {
+  test('User can keep current Apps export state when Select Root Folder is cancelled initially', async () => {
     const session = await launchExtensionHost({
       extraEnv: {
         SAP_TOOLS_E2E_ROOT_DIALOG_STEPS: 'cancel',
@@ -1285,7 +1326,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User reopens extension and sees mapped services immediately in Apps export table', async () => {
+  test('User can reopen extension and see mapped services immediately in Apps export table', async () => {
     const fixtureRootPath = createHeavyServiceRootMappingFixture();
     let session = await launchExtensionHost({
       extraEnv: {
@@ -1348,7 +1389,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User confirms same scope after Change Region and keeps mapped services', async () => {
+  test('User can confirm same scope after Change Region and keep mapped services', async () => {
     const fixtureRootPath = createHeavyServiceRootMappingFixture();
     const session = await launchExtensionHost({
       extraEnv: {
@@ -1480,7 +1521,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees consistent Apps and export typography with front-truncated service paths', async () => {
+  test('User can see consistent Apps and export typography with front-truncated service paths', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1552,7 +1593,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees leading ellipsis in service mapping path when root path is long', async () => {
+  test('User can see leading ellipsis in service mapping path when root path is long', async () => {
     const fixtureRootPath = createLongServiceRootMappingFixture();
     const session = await launchExtensionHost({
       extraEnv: {
@@ -1643,7 +1684,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees interrupted sync status after stale cache sync recovery on launch', async () => {
+  test('User can see interrupted sync status after stale cache sync recovery on launch', async () => {
     const session = await launchExtensionHost({
       extraEnv: {
         SAP_TOOLS_TEST_MODE: '0',
@@ -1682,7 +1723,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees Quick Org Search panel when cf-sync topology is ready', async () => {
+  test('User can see Quick Org Search panel when cf-sync topology is ready', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1711,7 +1752,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User keeps Quick Org Search visible after selecting an area and region', async () => {
+  test('User can keep Quick Org Search visible after selecting an area and region', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1779,7 +1820,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User keeps Quick Org Search input focus while topology refreshes', async () => {
+  test('User can keep Quick Org Search input focus while topology refreshes', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1842,7 +1883,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User skips area and region steps by picking an org from Quick Org Search', async () => {
+  test('User can skip area and region steps by picking an org from Quick Org Search', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1907,7 +1948,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User keeps Quick Org Search visible after picking an org from topology', async () => {
+  test('User can keep Quick Org Search visible after picking an org from topology', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -1990,7 +2031,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User sees Quick Org Search after returning from workspace to selection', async () => {
+  test('User can see Quick Org Search after returning from workspace to selection', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -2020,7 +2061,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('Quick Org Search row carries region key in meta and stays usable across regions', async () => {
+  test('User can use Quick Org Search rows across regions with region metadata', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -2065,7 +2106,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('Quick Org Search panel hides when cf-sync topology is unavailable', async () => {
+  test('User can use area selector when cf-sync topology is unavailable', async () => {
     const session = await launchExtensionHost({
       extraEnv: { SAP_TOOLS_E2E_DISABLE_TOPOLOGY: '1' },
     });

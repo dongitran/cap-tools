@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.41 (pre-release)
+- Hardened E2E coverage around login-gate validation, app-catalog failure states, and SAP Tools output-channel log visibility.
+- Standardized E2E test titles so they describe user-facing behavior consistently.
+- Aligned SQLTools config export success logs with the `[export]` output-channel bucket.
+
 ## 0.7.40 (pre-release)
 - Kept Quick Org Search visible throughout the selection screen after area/region selection, topology org picks, stage changes, and returning from the workspace with Change Region.
 - Added selected-state treatment for Quick Org Search rows so the current topology-picked org is visible while users can still switch to another org in one click.
