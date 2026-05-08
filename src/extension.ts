@@ -7,6 +7,7 @@ import { configureCfCommandLogger } from './cfClient';
 import { getEffectiveCredentials } from './credentialStore';
 import { HanaSqlWorkbench } from './hanaSqlWorkbench';
 import { REGION_VIEW_ID, RegionSidebarProvider } from './sidebarProvider';
+import { readCurrentScope } from './scopeSync';
 
 const OPEN_REGION_MENU_COMMAND = 'sapTools.selectSapBtpRegion';
 const OPEN_CF_LOGS_PANEL_COMMAND = 'sapTools.openCfLogsPanel';
@@ -71,6 +72,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const scopeConfigurationSubscription = vscode.workspace.onDidChangeConfiguration(
+    (event): void => {
+      if (!event.affectsConfiguration('sapCap.currentScope')) {
+        return;
+      }
+
+      const newScope = readCurrentScope();
+      if (newScope === undefined) {
+        return;
+      }
+
+      void regionSidebarProvider.handleExternalScopeChange(newScope);
+    }
+  );
+
   context.subscriptions.push(
     outputChannel,
     new vscode.Disposable(() => {
@@ -83,6 +99,7 @@ export function activate(context: vscode.ExtensionContext): void {
     webviewProviderRegistration,
     cfLogsPanelRegistration,
     openRegionMenuCommand,
-    openCfLogsPanelCommand
+    openCfLogsPanelCommand,
+    scopeConfigurationSubscription
   );
 }

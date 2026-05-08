@@ -41,6 +41,7 @@ import {
 } from './cfTopology';
 import { refreshCfSyncSpace } from './cfSpaceRefresh';
 import type { HanaSqlWorkbench } from './hanaSqlWorkbench';
+import { writeScopeIfChanged, type SharedCfScope } from './scopeSync';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
@@ -257,6 +258,8 @@ export class RegionSidebarProvider
   private exportInProgress = false;
   private hasAttemptedConfirmedScopeRestore = false;
   private lastLoadedScope: LoadedScopeState | null = null;
+  private lastWrittenScope: SharedCfScope | undefined;
+  private currentConfirmedScope: SharedCfScope | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -293,6 +296,8 @@ export class RegionSidebarProvider
     this.exportInProgress = false;
     this.hasAttemptedConfirmedScopeRestore = false;
     this.lastLoadedScope = null;
+    this.lastWrittenScope = undefined;
+    this.currentConfirmedScope = undefined;
 
     const assetsRoot = vscode.Uri.joinPath(
       this.extensionUri,
@@ -548,10 +553,90 @@ export class RegionSidebarProvider
 
   private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
     await this.persistConfirmedScopeForCurrentUser(payload);
+    const sharedScope = buildSharedScopeFromConfirmPayload(payload);
+    this.lastWrittenScope = sharedScope;
+    this.currentConfirmedScope = sharedScope;
+    try {
+      await writeScopeIfChanged(sharedScope);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to write shared scope setting.';
+      this.outputChannel.appendLine(
+        `[scope] Shared setting update failed: ${sanitizeForLog(errorMessage)}`
+      );
+    }
     this.outputChannel.appendLine(
       `[scope] Confirmed scope region=${sanitizeForLog(payload.regionCode)} org=${sanitizeForLog(payload.orgName)} space=${sanitizeForLog(payload.spaceName)}`
     );
     void this.refreshTopologyForConfirmedScope(payload).catch(() => undefined);
+  }
+
+  public async handleExternalScopeChange(scope: SharedCfScope): Promise<void> {
+    if (areSharedScopesEqual(scope, this.lastWrittenScope)) {
+      return;
+    }
+
+    if (this.cfSession === null) {
+      return;
+    }
+
+    const region = SAP_BTP_REGIONS.find((entry) => entry.id === scope.regionCode);
+    if (region === undefined) {
+      return;
+    }
+
+    if (areSharedScopesEqual(scope, this.currentConfirmedScope)) {
+      return;
+    }
+
+    try {
+      await this.restoreExternalScope(scope);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to restore external scope.';
+      this.outputChannel.appendLine(
+        `[scope] External scope restore failed: ${sanitizeForLog(errorMessage)}`
+      );
+    }
+  }
+
+  private async restoreExternalScope(scope: SharedCfScope): Promise<void> {
+    const region = SAP_BTP_REGIONS.find((entry) => entry.id === scope.regionCode);
+    if (region === undefined || this.cfSession === null) {
+      return;
+    }
+
+    const orgGuid = await this.resolveOrgGuidByName(scope.regionCode, scope.orgName);
+    if (orgGuid.length === 0) {
+      return;
+    }
+
+    const payload: ConfirmScopePayload = {
+      regionId: region.id,
+      regionCode: toHyphenatedRegionCode(region.id),
+      regionName: region.displayName,
+      regionArea: region.area,
+      orgGuid,
+      orgName: scope.orgName,
+      spaceName: scope.spaceName,
+    };
+
+    await this.handleConfirmScope(payload);
+    this.cfLogsPanel.updateScope(
+      buildScopeLabel(payload.regionCode, payload.orgName, payload.spaceName)
+    );
+    this.postMessage({
+      type: MSG_RESTORE_CONFIRMED_SCOPE,
+      scope: {
+        regionId: payload.regionId,
+        orgGuid: payload.orgGuid,
+        spaceName: payload.spaceName,
+      },
+    });
+    await this.hydrateRestoredScope({
+      ...payload,
+      confirmedAt: new Date().toISOString(),
+    });
   }
 
   private async refreshTopologyForConfirmedScope(
@@ -670,7 +755,16 @@ export class RegionSidebarProvider
     if (cachedMatch !== undefined) {
       return cachedMatch.guid;
     }
+    if (isTestMode()) {
+      const mockOrg = resolveMockOrgsForRegion(toHyphenatedRegionCode(regionId)).find(
+        (entry) => entry.name === orgName
+      );
+      return mockOrg?.guid ?? '';
+    }
     if (this.cfSession === null) {
+      return '';
+    }
+    if (this.cfSessionRegionCode !== toHyphenatedRegionCode(regionId)) {
       return '';
     }
     try {
@@ -733,6 +827,11 @@ export class RegionSidebarProvider
       return;
     }
 
+    this.currentConfirmedScope = {
+      regionCode: persistedScope.regionId,
+      orgName: persistedScope.orgName,
+      spaceName: persistedScope.spaceName,
+    };
     this.cfLogsPanel.updateScope(
       buildScopeLabel(
         persistedScope.regionCode,
@@ -1056,11 +1155,11 @@ export class RegionSidebarProvider
         this.currentApps.map((app) => app.name)
       );
       this.serviceFolderMappings = this.applyServiceFolderSelections(mappings);
+      await this.persistServiceFolderMappingsForCurrentScope(this.serviceFolderMappings);
       this.postMessage({
         type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
         mappings: this.serviceFolderMappings,
       });
-      await this.persistServiceFolderMappingsForCurrentScope(this.serviceFolderMappings);
     } catch (error) {
       this.serviceFolderMappings = [];
       this.serviceFolderSelections.clear();
@@ -1867,6 +1966,8 @@ export class RegionSidebarProvider
       this.exportInProgress = false;
       this.hasAttemptedConfirmedScopeRestore = false;
       this.lastLoadedScope = null;
+      this.lastWrittenScope = undefined;
+      this.currentConfirmedScope = undefined;
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
       this.reloadToLoginView();
@@ -1948,6 +2049,15 @@ export class RegionSidebarProvider
     });
 
     if (isTestMode()) {
+      this.cfSession = {
+        apiEndpoint: getCfApiEndpoint(region.code),
+        token: {
+          accessToken: 'sap-tools-test-token',
+          expiresAt: Number.MAX_SAFE_INTEGER,
+          refreshToken: '',
+        },
+      };
+      this.cfSessionRegionCode = region.code;
       this.postMessage({
         type: MSG_ORGS_LOADED,
         orgs: resolveMockOrgsForRegion(region.code),
@@ -2562,6 +2672,31 @@ export class RegionSidebarProvider
 
 function isTestMode(): boolean {
   return process.env['SAP_TOOLS_TEST_MODE'] === '1';
+}
+
+function buildSharedScopeFromConfirmPayload(
+  payload: ConfirmScopePayload
+): SharedCfScope {
+  return {
+    regionCode: payload.regionId,
+    orgName: payload.orgName,
+    spaceName: payload.spaceName,
+  };
+}
+
+function areSharedScopesEqual(
+  left: SharedCfScope | undefined,
+  right: SharedCfScope | undefined
+): boolean {
+  if (left === undefined || right === undefined) {
+    return false;
+  }
+
+  return (
+    left.regionCode === right.regionCode &&
+    left.orgName === right.orgName &&
+    left.spaceName === right.spaceName
+  );
 }
 
 function resolveE2eTestModeAppsDelayMs(): number {

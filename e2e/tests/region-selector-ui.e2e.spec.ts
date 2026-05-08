@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 import { test, expect, type Frame, type Locator } from '@playwright/test';
 
@@ -63,6 +64,29 @@ function getOrgStageButtons(webviewFrame: Frame): Locator {
   return webviewFrame
     .getByRole('region', { name: 'Organization list' })
     .getByTestId('org-option');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readUserSettings(userDataDir: string): Record<string, unknown> {
+  const settingsPath = path.join(userDataDir, 'User', 'settings.json');
+  if (!fs.existsSync(settingsPath)) {
+    return {};
+  }
+
+  const parsed: unknown = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  return isRecord(parsed) ? parsed : {};
+}
+
+function writeUserSettings(
+  userDataDir: string,
+  settings: Record<string, unknown>
+): void {
+  const settingsPath = path.join(userDataDir, 'User', 'settings.json');
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
 test.describe('SAP Tools region selector', () => {
@@ -824,6 +848,61 @@ test.describe('SAP Tools region selector', () => {
       );
       await expect(
         reopenedFrame.getByRole('button', { name: 'Confirm Scope' })
+      ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can sync confirmed scope through the global SAP CAP setting', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: us-10. Org: finance-services-prod. Space: uat'
+      );
+
+      await expect
+        .poll(() => readUserSettings(session.userDataDir)['sapCap.currentScope'], {
+          timeout: 10000,
+        })
+        .toEqual({
+          regionCode: 'us10',
+          orgName: 'finance-services-prod',
+          spaceName: 'uat',
+        });
+
+      const currentSettings = readUserSettings(session.userDataDir);
+      writeUserSettings(session.userDataDir, {
+        ...currentSettings,
+        'sapCap.currentScope': {
+          regionCode: 'br10',
+          orgName: 'billing-reconciliation-prod',
+          spaceName: 'etl',
+        },
+      });
+
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: br-10. Org: billing-reconciliation-prod. Space: etl',
+        { timeout: 20000 }
+      );
+      await expect(webviewFrame.getByText('etl-scheduler')).toBeVisible({
+        timeout: 20000,
+      });
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Confirm Scope' })
       ).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);

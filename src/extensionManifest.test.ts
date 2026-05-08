@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 interface ExtensionManifest {
+  readonly contributes: Record<string, unknown>;
   readonly dependencies: Record<string, unknown>;
   readonly scripts: Record<string, unknown>;
   readonly version: string;
@@ -12,9 +13,10 @@ function readExtensionManifest(): ExtensionManifest {
   const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
   const parsed: unknown = JSON.parse(raw);
   if (!isRecord(parsed)) {
-    return { dependencies: {}, scripts: {}, version: '' };
+    return { contributes: {}, dependencies: {}, scripts: {}, version: '' };
   }
   return {
+    contributes: readRecord(parsed['contributes']),
     dependencies: readRecord(parsed['dependencies']),
     scripts: readRecord(parsed['scripts']),
     version: typeof parsed['version'] === 'string' ? parsed['version'] : '',
@@ -59,5 +61,23 @@ describe('Extension manifest feature surface', () => {
     expect(Number.isInteger(minorVersion)).toBe(true);
     expect(minorVersion % 2).toBe(1);
     expect(publishPreScript).toContain('--pre-release');
+  });
+
+  it('contributes the shared SAP CAP current scope setting', () => {
+    const manifest = readExtensionManifest();
+    const configuration = manifest.contributes['configuration'];
+    expect(Array.isArray(configuration)).toBe(true);
+
+    const properties = configuration
+      .filter(isRecord)
+      .map((entry) => readRecord(entry['properties']))
+      .find((entry) => entry['sapCap.currentScope'] !== undefined);
+
+    expect(properties?.['sapCap.currentScope']).toEqual(
+      expect.objectContaining({
+        scope: 'application',
+        type: 'object',
+      })
+    );
   });
 });

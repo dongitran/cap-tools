@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.7.44",
+  "version": "0.7.45",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -26,6 +26,29 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": [
+      {
+        "title": "SAP Tools",
+        "properties": {
+          "sapCap.currentScope": {
+            "type": "object",
+            "scope": "application",
+            "markdownDescription": "Currently active SAP BTP scope managed by SAP Tools.",
+            "properties": {
+              "regionCode": {
+                "type": "string"
+              },
+              "orgName": {
+                "type": "string"
+              },
+              "spaceName": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    ],
     "commands": [
       {
         "command": "sapTools.selectSapBtpRegion",

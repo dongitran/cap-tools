@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.45 (pre-release)
+- Added the shared `sapCap.currentScope` VS Code global setting so confirmed SAP BTP scopes can be read by other extensions.
+- Restored SAP Tools scope from external `sapCap.currentScope` changes when a CF session is active, reusing the existing confirmed-scope hydration path.
+- Hardened service mapping persistence so mapped services are durable before the Apps export table reports them as mapped.
+
 ## 0.7.44 (pre-release)
 - Removed the transient SQL Workbench `Opening SQL file for app...` status text so app selection relies on the existing animated table-loading indicator.
 - Kept SQL status messages reserved for error states while preserving table-load spinner, row rendering, and quick-select feedback behavior.
