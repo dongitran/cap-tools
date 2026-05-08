@@ -9,6 +9,8 @@ const GALLERY_THEME_CLASS_PREFIX = 'gallery-theme-';
 const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
 const REGION_LAYOUT_CLASS = 'mode-region-menu';
 const CF_LOGS_LAYOUT_CLASS = 'mode-cf-logs-panel';
+const WHAT_NEWS_LAYOUT_CLASS = 'mode-what-news';
+const FULL_WIDTH_VARIANT_IDS = new Set(['cf-logs-panel', 'what-news']);
 
 const PROTOTYPE_VARIANTS = [
   {
@@ -28,6 +30,12 @@ const PROTOTYPE_VARIANTS = [
     hash: 'cf-logs-panel',
     label: 'Prototype: CFLogs Panel',
     framePath: './variants/cf-logs-panel.html?v=20260414n',
+  },
+  {
+    id: 'what-news',
+    hash: 'what-news',
+    label: 'Prototype: What News',
+    framePath: './variants/what-news.html?v=20260508c',
   },
   {
     id: 'brand-gallery',
@@ -215,8 +223,10 @@ function switchVariantById(variantId) {
 
 function applyLayoutForVariant(variantId) {
   const isCfLogsPanel = variantId === 'cf-logs-panel';
-  document.body.classList.toggle(REGION_LAYOUT_CLASS, !isCfLogsPanel);
+  const isWhatNews = variantId === 'what-news';
+  document.body.classList.toggle(REGION_LAYOUT_CLASS, !FULL_WIDTH_VARIANT_IDS.has(variantId));
   document.body.classList.toggle(CF_LOGS_LAYOUT_CLASS, isCfLogsPanel);
+  document.body.classList.toggle(WHAT_NEWS_LAYOUT_CLASS, isWhatNews);
 }
 
 function resolveInitialThemeIndex() {

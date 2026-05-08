@@ -1,0 +1,304 @@
+:root {
+  --wn-bg: #171717;
+  --wn-surface: #202020;
+  --wn-border: #3f3f3f;
+  --wn-text: #f3f3f3;
+  --wn-muted: #b8b8b8;
+  --wn-green: #45bd78;
+  --wn-blue: #5aa9e6;
+  --wn-amber: #d8a546;
+  --wn-red: #e26d5a;
+  --wn-shadow: rgba(0, 0, 0, 0.32);
+}
+
+body.vscode-light.what-news-page {
+  --wn-bg: #f7f7f4;
+  --wn-surface: #ffffff;
+  --wn-border: #d8d7cf;
+  --wn-text: #242424;
+  --wn-muted: #62615b;
+  --wn-green: #207b50;
+  --wn-blue: #286f9f;
+  --wn-amber: #876117;
+  --wn-red: #aa4939;
+  --wn-shadow: rgba(77, 77, 68, 0.12);
+}
+
+body.vscode-high-contrast.what-news-page,
+body.vscode-high-contrast-light.what-news-page {
+  --wn-bg: #000000;
+  --wn-surface: #000000;
+  --wn-border: #ffffff;
+  --wn-text: #ffffff;
+  --wn-muted: #ffffff;
+  --wn-green: #7ee081;
+  --wn-blue: #75beff;
+  --wn-amber: #f8d66d;
+  --wn-red: #ff9f9f;
+  --wn-shadow: rgba(0, 0, 0, 0);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body.what-news-page {
+  min-height: 100dvh;
+  background: var(--wn-bg);
+  color: var(--wn-text);
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  line-height: 1.45;
+  overflow: auto;
+}
+
+.release-shell {
+  width: min(1180px, 100%);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.release-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.product-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.product-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in oklab, var(--wn-green) 62%, var(--wn-border));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--wn-green) 18%, var(--wn-surface));
+  color: var(--wn-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.product-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.product-copy strong {
+  color: var(--wn-text);
+  font-size: 0.98rem;
+}
+
+.product-copy span,
+.release-channel span {
+  color: var(--wn-muted);
+  font-size: 0.78rem;
+}
+
+.release-channel {
+  display: grid;
+  justify-items: end;
+  min-width: 0;
+  text-align: right;
+}
+
+.release-channel strong {
+  color: var(--wn-text);
+  font-size: 0.9rem;
+}
+
+.release-intro {
+  padding: 44px 0 28px;
+  border-bottom: 1px solid var(--wn-border);
+}
+
+.release-kicker {
+  margin: 0 0 8px;
+  color: var(--wn-green);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.release-intro h1 {
+  margin: 0;
+  color: var(--wn-text);
+  font-size: 3.35rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.release-summary {
+  width: min(760px, 100%);
+  margin: 18px 0 0;
+  color: var(--wn-muted);
+  font-size: 1rem;
+}
+
+.feature-tab-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 24px 0 34px;
+}
+
+.feature-tab {
+  --tab-accent: var(--wn-green);
+  display: flex;
+  min-width: 0;
+  min-height: 486px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid color-mix(in oklab, var(--tab-accent) 42%, var(--wn-border));
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      155deg,
+      color-mix(in oklab, var(--tab-accent) 16%, transparent) 0%,
+      transparent 38%
+    ),
+    var(--wn-surface);
+  box-shadow: 0 16px 36px var(--wn-shadow);
+}
+
+.scope-tab {
+  --tab-accent: var(--wn-green);
+}
+
+.logs-tab {
+  --tab-accent: var(--wn-blue);
+}
+
+.apps-tab {
+  --tab-accent: var(--wn-amber);
+}
+
+.sql-tab {
+  --tab-accent: var(--wn-red);
+}
+
+.feature-tab-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feature-tab-number {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--wn-border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--wn-surface) 84%, #000000);
+  color: var(--tab-accent);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.feature-tab-head p {
+  margin: 0;
+  color: var(--tab-accent);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feature-tab h2 {
+  margin: 0;
+  color: var(--wn-text);
+  font-size: 1.28rem;
+  line-height: 1.18;
+}
+
+.feature-tab > p {
+  margin: 0;
+  color: var(--wn-muted);
+  font-size: 0.92rem;
+}
+
+.feature-tab ul {
+  display: grid;
+  gap: 10px;
+  margin: auto 0 0;
+  padding: 0;
+  color: var(--wn-text);
+  font-size: 0.86rem;
+  list-style: none;
+}
+
+.feature-tab li {
+  position: relative;
+  padding-left: 16px;
+}
+
+.feature-tab li::before {
+  content: '';
+  position: absolute;
+  top: 0.62em;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--tab-accent);
+}
+
+@media (max-width: 1040px) {
+  .feature-tab-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .feature-tab {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 680px) {
+  .release-shell {
+    padding: 16px;
+  }
+
+  .release-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .release-channel {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .release-intro {
+    padding: 28px 0 22px;
+  }
+
+  .release-intro h1 {
+    font-size: 2.45rem;
+  }
+
+  .feature-tab-row {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-tab {
+    min-height: 0;
+  }
+}

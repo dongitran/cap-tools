@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.39
+- Promoted the current SAP Tools workflow surface to a stable release covering scope selection, CFLogs, service artifact exports, SQLTools export, and the S/4HANA SQL Workbench.
+- Added the What News prototype page with four release cards for Scope, Logs, Apps, and SQL so the stable feature set is easy to review before publishing.
+- Refreshed release-facing documentation for the stable feature set.
+
 ## 0.7.38 (pre-release)
 - Added a Quick Org Search panel above the area selector that lists every org synced by `@saptools/cf-sync` across regions so users can pick an org by name without first stepping through area, region, and org screens.
 - Wired `@saptools/cf-sync` topology into the SAP Tools sidebar with a snapshot push and a refresh after scope confirmation, plus output-channel logs tagged `[topology]` and `[scope]` for visibility into each command.

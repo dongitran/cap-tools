@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAP Tools What News Prototype</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="../assets/what-news.css?v=20260508c" />
+  </head>
+  <body class="what-news-page vscode-dark">
+    <main class="release-shell">
+      <header class="release-topbar">
+        <div class="product-lockup" aria-label="SAP Tools stable release">
+          <span class="product-mark" aria-hidden="true">ST</span>
+          <span class="product-copy">
+            <strong>SAP Tools</strong>
+            <span>0.7.39 stable release</span>
+          </span>
+        </div>
+        <div class="release-channel" aria-label="Release channel">
+          <span>Stable channel</span>
+          <strong>Ready for BTP workflows</strong>
+        </div>
+      </header>
+
+      <section class="release-intro" aria-labelledby="release-title">
+        <p class="release-kicker">Current capability map</p>
+        <h1 id="release-title">What News</h1>
+        <p class="release-summary">
+          SAP Tools brings the core SAP BTP developer workflow into one VS Code
+          surface: pick scope, stream logs, map apps, export artifacts, and run
+          HANA SQL from the selected app context.
+        </p>
+      </section>
+
+      <section class="feature-tab-row" aria-label="SAP Tools current feature areas">
+        <article class="feature-tab scope-tab" aria-labelledby="scope-title">
+          <div class="feature-tab-head">
+            <span class="feature-tab-number">01</span>
+            <p>Scope</p>
+          </div>
+          <h2 id="scope-title">Select and restore BTP scope</h2>
+          <p>
+            Login once, pick area, region, org, and space, or jump through
+            Quick Org Search when synced topology is available.
+          </p>
+          <ul>
+            <li>Region catalog with extension landscapes</li>
+            <li>Cached org, space, and app loading</li>
+            <li>Confirmed scope restore after reload</li>
+            <li>Sync interval, manual sync, and logout settings</li>
+          </ul>
+        </article>
+
+        <article class="feature-tab logs-tab" aria-labelledby="logs-title">
+          <div class="feature-tab-head">
+            <span class="feature-tab-number">02</span>
+            <p>Logs</p>
+          </div>
+          <h2 id="logs-title">Stream app logs in CFLogs</h2>
+          <p>
+            Start logging from the sidebar and inspect app output in a dedicated
+            bottom panel beside Output and Terminal.
+          </p>
+          <ul>
+            <li>App, level, and message filters</li>
+            <li>Recent fetch and live stream states</li>
+            <li>Column, font size, and log limit controls</li>
+            <li>Click a row to copy its message</li>
+          </ul>
+        </article>
+
+        <article class="feature-tab apps-tab" aria-labelledby="apps-title">
+          <div class="feature-tab-head">
+            <span class="feature-tab-number">03</span>
+            <p>Apps</p>
+          </div>
+          <h2 id="apps-title">Map services to local folders</h2>
+          <p>
+            Connect running CF services to local workspace folders so generated
+            files land next to the matching service code.
+          </p>
+          <ul>
+            <li>Root folder scan and conflict selection</li>
+            <li>default-env.json and pnpm-lock.yaml export</li>
+            <li>SQLTools HANA connection export</li>
+            <li>Confirmation before writing sensitive files</li>
+          </ul>
+        </article>
+
+        <article class="feature-tab sql-tab" aria-labelledby="sql-title">
+          <div class="feature-tab-head">
+            <span class="feature-tab-number">04</span>
+            <p>SQL</p>
+          </div>
+          <h2 id="sql-title">Run app-scoped HANA SQL</h2>
+          <p>
+            Open app-specific SQL files, discover HANA tables, run selected SQL,
+            and review result tabs without leaving VS Code.
+          </p>
+          <ul>
+            <li>Table discovery and readable table names</li>
+            <li>Completions for SQL keywords and tables</li>
+            <li>Quick SELECT plus manual run shortcuts</li>
+            <li>CSV, JSON, row, and cell copy actions</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
