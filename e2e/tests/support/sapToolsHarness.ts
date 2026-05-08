@@ -19,7 +19,7 @@ import {
 } from '../../src/launchVscode';
 
 export const ACTIVITY_BAR_TITLE = 'SAP Tools';
-export const AREA_TO_SELECT = /Americas\s+br - ca - eu - us/i;
+export const AREA_TO_SELECT = /Americas\s+br - ca - us/i;
 export const EUROPE_AREA_TO_SELECT = /Europe\s+ch - eu - uk/i;
 export const REGION_TO_SELECT = /us-10\s+US East \(VA\)/i;
 export const US10001_REGION_TO_SELECT = /us10-001\s+US East \(VA\) Extension/i;
@@ -549,6 +549,12 @@ export function getOrgStageOption(webviewFrame: Frame, name: string | RegExp): L
   return webviewFrame
     .getByRole('region', { name: 'Organization list' })
     .getByRole('button', { name });
+}
+
+export function getOrgSearchInput(webviewFrame: Frame): Locator {
+  return webviewFrame
+    .getByRole('region', { name: 'Organization list' })
+    .getByRole('searchbox', { name: 'Search organizations' });
 }
 
 export async function clickWithFallback(locator: Locator): Promise<void> {

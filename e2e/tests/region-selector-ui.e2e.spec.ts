@@ -22,6 +22,7 @@ import {
   createServiceRootMappingFixture,
   expectNoOuterGutter,
   getOrgStageOption,
+  getOrgSearchInput,
   launchExtensionHost,
   openSapToolsSidebar,
   readPaletteSnapshot,
@@ -56,6 +57,12 @@ function getTopologyOrgRow(
       has: webviewFrame.locator('.topology-org-meta', { hasText: regionKey }),
     })
     .first();
+}
+
+function getOrgStageButtons(webviewFrame: Frame): Locator {
+  return webviewFrame
+    .getByRole('region', { name: 'Organization list' })
+    .getByTestId('org-option');
 }
 
 test.describe('SAP Tools region selector', () => {
@@ -141,6 +148,15 @@ test.describe('SAP Tools region selector', () => {
 
       const regionButton = webviewFrame.getByRole('button', { name: REGION_TO_SELECT });
       await expect(regionButton).toBeVisible({ timeout: 10000 });
+      await expect(
+        webviewFrame.getByRole('button', { name: US10001_REGION_TO_SELECT })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: US10002_REGION_TO_SELECT })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: EU10004_REGION_TO_SELECT })
+      ).toHaveCount(0);
       const regionLabel = await regionButton.innerText();
       expect(regionLabel).toMatch(/^\s*us-10\s+US East \(VA\)/i);
       expect(regionLabel).not.toMatch(/\b(aws|azure|gcp)\b/i);
@@ -149,19 +165,14 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can select EU10 extension landscape from Americas area', async () => {
+  test('User can select EU10 extension landscape from Europe area', async () => {
     let session = await launchExtensionHost();
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
-      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
-
-      await expect(
-        webviewFrame.getByRole('button', { name: US10001_REGION_TO_SELECT })
-      ).toBeVisible({ timeout: 10000 });
-      await expect(
-        webviewFrame.getByRole('button', { name: US10002_REGION_TO_SELECT })
-      ).toBeVisible({ timeout: 10000 });
+      await clickWithFallback(
+        webviewFrame.getByRole('button', { name: EUROPE_AREA_TO_SELECT })
+      );
 
       const regionButton = webviewFrame.getByRole('button', {
         name: EU10004_REGION_TO_SELECT,
@@ -196,7 +207,7 @@ test.describe('SAP Tools region selector', () => {
       expect(selectedRegionState).toEqual({
         selectedRegionId: 'eu10-004',
         visibleRegionCount: 1,
-        hiddenRegionCount: 14,
+        hiddenRegionCount: 15,
         stageErrorCount: 0,
         loadingCount: 0,
         selectedRegionText: 'eu10-004 Europe (Frankfurt) Extension',
@@ -281,7 +292,7 @@ test.describe('SAP Tools region selector', () => {
       expect(selectedRegionState).toEqual({
         selectedRegionId: 'eu20-002',
         visibleRegionCount: 1,
-        hiddenRegionCount: 14,
+        hiddenRegionCount: 15,
         stageErrorCount: 0,
         loadingCount: 0,
         selectedRegionText: 'eu20-002 Europe (Netherlands) Extension',
@@ -410,15 +421,65 @@ test.describe('SAP Tools region selector', () => {
       const webviewFrame = await openSapToolsSidebar(session.window);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: BR10_REGION_TO_SELECT }));
+      await expect(getOrgSearchInput(webviewFrame)).toBeVisible({ timeout: 10000 });
+      await expect(getOrgSearchInput(webviewFrame)).toHaveValue('');
 
       await expect
         .poll(
           async () => {
-            return webviewFrame.locator('.org-picker .org-option').count();
+            return getOrgStageButtons(webviewFrame).count();
           },
           { timeout: 10000 }
         )
         .toBe(14);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can filter organizations and reset search after changing region', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: BR10_REGION_TO_SELECT }));
+
+      const orgSearchInput = getOrgSearchInput(webviewFrame);
+      await expect(orgSearchInput).toBeVisible({ timeout: 10000 });
+      await expect(orgSearchInput).toHaveValue('');
+      await expect(webviewFrame.getByRole('heading', { name: 'Organization' })).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Choose Organization' })
+      ).toHaveCount(0);
+      await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+
+      await orgSearchInput.fill('billing');
+      await expect(
+        getOrgStageOption(webviewFrame, /billing-reconciliation-prod/i)
+      ).toBeVisible();
+      await expect(getOrgStageButtons(webviewFrame)).toHaveCount(1);
+      await expect(getOrgStageOption(webviewFrame, /finance-services-prod/i)).toHaveCount(0);
+
+      await orgSearchInput.fill('');
+      await expect(getOrgStageButtons(webviewFrame)).toHaveCount(14);
+      await expect(getOrgStageOption(webviewFrame, /finance-services-prod/i)).toBeVisible();
+
+      await orgSearchInput.fill('billing');
+      await clickWithFallback(
+        webviewFrame
+          .getByRole('region', { name: 'Region list' })
+          .getByRole('button', { name: 'Change' })
+      );
+      await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
+
+      const resetSearchInput = getOrgSearchInput(webviewFrame);
+      await expect(resetSearchInput).toBeVisible({ timeout: 10000 });
+      await expect(resetSearchInput).toHaveValue('');
+      await expect(getOrgStageButtons(webviewFrame)).toHaveCount(5);
+      await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }

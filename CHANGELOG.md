@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.43 (pre-release)
+- Moved the `eu10-004` Europe (Frankfurt) AWS extension landscape into the Europe region group and sorted regions within each area by display name, then region id.
+- Renamed the Organization stage heading and added an organization search input that filters org options, clears on empty input, and resets when users choose another region.
+- Updated prototype and E2E coverage for Organization search, Europe extension landscape selection, and BR10 organization counts.
+
 ## 0.7.42 (pre-release)
 - Fixed the Settings screen so Cache Sync Interval and Sync Status use compact natural vertical flow instead of inheriting full-height workspace grid stretching.
 - Kept Logs and Apps full-height workspace panels unchanged while adding e2e coverage for Settings from both selection and workspace headers.

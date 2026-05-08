@@ -1,4 +1,4 @@
-import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260507d';
+import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260509a';
 
 const TAB_ITEMS = [
   { id: 'logs', label: 'Logs' },
@@ -564,6 +564,7 @@ let selectedGroupId = '';
 let selectedRegionId = '';
 let selectedOrgId = '';
 let selectedSpaceId = '';
+let orgSearchQuery = '';
 let activeTabId = 'logs';
 let isConnected = false;
 let isLiveMode = false;
@@ -812,6 +813,12 @@ appElement.addEventListener('input', (event) => {
       return;
     }
     renderPrototype();
+    return;
+  }
+
+  if (role === 'org-search') {
+    orgSearchQuery = target.value;
+    updateOrgSearchResults();
     return;
   }
 
@@ -1248,6 +1255,7 @@ function handleGroupSelection(nextGroupId) {
   selectedRegionId = '';
   selectedOrgId = '';
   selectedSpaceId = '';
+  orgSearchQuery = '';
   resetWorkspaceLoggingState();
 }
 
@@ -1268,6 +1276,7 @@ function handleRegionSelection(nextRegionId) {
   selectedRegionId = nextRegionId;
   selectedOrgId = '';
   selectedSpaceId = '';
+  orgSearchQuery = '';
   resetWorkspaceLoggingState();
 
   // Reset live data state so the org stage starts fresh.
@@ -1686,6 +1695,7 @@ function handleSelectionFlowAction(action) {
     selectedRegionId = '';
     selectedOrgId = '';
     selectedSpaceId = '';
+    orgSearchQuery = '';
     resetWorkspaceLoggingState();
     return true;
   }
@@ -1694,6 +1704,7 @@ function handleSelectionFlowAction(action) {
     selectedRegionId = '';
     selectedOrgId = '';
     selectedSpaceId = '';
+    orgSearchQuery = '';
     resetWorkspaceLoggingState();
     return true;
   }
@@ -2000,6 +2011,7 @@ function applyCacheStateSnapshot(snapshot) {
     selectedRegionId = '';
     selectedOrgId = '';
     selectedSpaceId = '';
+    orgSearchQuery = '';
     resetWorkspaceLoggingState();
   }
 
@@ -2090,13 +2102,12 @@ function resolveGroupAccessRank(group) {
 function resolveOrderedRegions(group) {
   const orderedRegions = group.regions.slice();
   orderedRegions.sort((leftRegion, rightRegion) => {
-    const leftRank = resolveRegionAccessRank(leftRegion.id);
-    const rightRank = resolveRegionAccessRank(rightRegion.id);
-    if (leftRank !== rightRank) {
-      return leftRank - rightRank;
+    const nameCompare = leftRegion.name.localeCompare(rightRegion.name);
+    if (nameCompare !== 0) {
+      return nameCompare;
     }
 
-    return leftRegion.code.localeCompare(rightRegion.code);
+    return leftRegion.id.localeCompare(rightRegion.id);
   });
   return orderedRegions;
 }
@@ -2645,6 +2656,7 @@ function applyTopologyScopeResolved(scope) {
   selectedRegionId = region.id;
   selectedOrgId = orgGuid;
   selectedSpaceId = '';
+  orgSearchQuery = '';
   topologyPickInProgress = false;
 
   if (mode !== 'selection') {
@@ -3163,7 +3175,7 @@ function renderOrgStage() {
   if (vscodeApi !== null && orgsLoadingState === 'loading') {
     return `
       <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
-        <div class="group-head"><h2>Choose Organization</h2></div>
+        <div class="group-head"><h2>Organization</h2></div>
         <p class="stage-loading" aria-live="polite">Loading organizations&#8230;</p>
       </section>
     `;
@@ -3172,40 +3184,22 @@ function renderOrgStage() {
   if (vscodeApi !== null && orgsLoadingState === 'error') {
     return `
       <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
-        <div class="group-head"><h2>Choose Organization</h2></div>
+        <div class="group-head"><h2>Organization</h2></div>
         <p class="stage-error" role="alert">${escapeHtml(orgsErrorMessage)}</p>
       </section>
     `;
   }
 
-  const activeOrgs =
-    vscodeApi !== null && liveOrgOptions !== null
-      ? liveOrgOptions.map((o) => ({ id: o.guid, name: o.name }))
-      : resolveCurrentMockOrgOptions().map((o) => ({ id: o.id, name: o.name }));
-
+  const activeOrgs = resolveActiveOrgOptions();
   const isCollapsed = selectedOrgId.length > 0;
-  const orgButtons = activeOrgs
-    .map((org) => {
-      const isSelected = org.id === selectedOrgId;
-      const isHidden = isCollapsed && !isSelected;
-      return `
-        <button
-          type="button"
-          class="org-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
-          data-org-id="${escapeHtml(org.id)}"
-          aria-pressed="${isSelected}"
-          aria-hidden="${isHidden}"
-        >
-          ${escapeHtml(org.name)}
-        </button>
-      `;
-    })
-    .join('');
+  const visibleOrgs = isCollapsed ? activeOrgs : filterOrgOptions(activeOrgs);
+  const searchInputMarkup = isCollapsed ? '' : renderOrgSearchInput();
+  const orgButtons = renderOrgButtons(visibleOrgs, isCollapsed);
 
   return `
     <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
       <div class="group-head">
-        <h2>Choose Organization</h2>
+        <h2>Organization</h2>
         <button
           type="button"
           class="stage-reset"
@@ -3215,11 +3209,75 @@ function renderOrgStage() {
           Change
         </button>
       </div>
+      ${searchInputMarkup}
       <div class="org-picker">
         ${orgButtons}
       </div>
     </section>
   `;
+}
+
+function resolveActiveOrgOptions() {
+  if (vscodeApi !== null && liveOrgOptions !== null) {
+    return liveOrgOptions.map((org) => ({ id: org.guid, name: org.name }));
+  }
+
+  return resolveCurrentMockOrgOptions().map((org) => ({ id: org.id, name: org.name }));
+}
+
+function filterOrgOptions(orgOptions) {
+  const normalizedQuery = orgSearchQuery.trim().toLowerCase();
+  if (normalizedQuery.length === 0) {
+    return orgOptions;
+  }
+
+  return orgOptions.filter((org) => {
+    return org.name.toLowerCase().includes(normalizedQuery);
+  });
+}
+
+function renderOrgSearchInput() {
+  return `
+    <input
+      type="search"
+      class="org-search-input"
+      data-role="org-search"
+      aria-label="Search organizations"
+      placeholder="Search organizations..."
+      autocomplete="off"
+      value="${escapeHtml(orgSearchQuery)}"
+    />
+  `;
+}
+
+function renderOrgButtons(orgOptions, isCollapsed) {
+  return orgOptions
+    .map((org) => {
+      const isSelected = org.id === selectedOrgId;
+      const isHidden = isCollapsed && !isSelected;
+      return `
+        <button
+          type="button"
+          class="org-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}"
+          data-org-id="${escapeHtml(org.id)}"
+          data-testid="org-option"
+          aria-pressed="${isSelected}"
+          aria-hidden="${isHidden}"
+        >
+          ${escapeHtml(org.name)}
+        </button>
+      `;
+    })
+    .join('');
+}
+
+function updateOrgSearchResults() {
+  const picker = appElement.querySelector('[data-stage-id="org"] .org-picker');
+  if (!(picker instanceof HTMLElement)) {
+    return;
+  }
+
+  picker.innerHTML = renderOrgButtons(filterOrgOptions(resolveActiveOrgOptions()), false);
 }
 
 function renderSpaceStage() {

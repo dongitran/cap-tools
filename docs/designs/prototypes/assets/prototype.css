@@ -856,6 +856,34 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   gap: 6px;
 }
 
+.org-search-input,
+[data-role="org-search"] {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 4px;
+  box-sizing: border-box;
+  border: 1px solid var(--vscode-input-border, var(--border-color));
+  border-radius: 8px;
+  background: var(--vscode-input-background, var(--frame-bg));
+  color: var(--vscode-input-foreground, var(--text-color));
+  font-family: var(--body-font);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  padding: 7px 9px;
+  outline: none;
+}
+
+.org-search-input::placeholder,
+[data-role="org-search"]::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--muted-color));
+}
+
+.org-search-input:focus,
+[data-role="org-search"]:focus {
+  border-color: var(--vscode-focusBorder, var(--accent-color));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 24%, transparent);
+}
+
 .org-picker,
 .space-picker {
   display: grid;

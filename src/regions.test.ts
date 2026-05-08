@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { SAP_BTP_REGIONS, toHyphenatedRegionCode } from './regions';
+import { REGION_AREAS, SAP_BTP_REGIONS, toHyphenatedRegionCode } from './regions';
+
+type SapBtpRegion = (typeof SAP_BTP_REGIONS)[number];
 
 function countByArea(area: string): number {
   return SAP_BTP_REGIONS.filter((region) => region.area === area).length;
@@ -12,18 +14,28 @@ describe('SAP_BTP_REGIONS', () => {
   });
 
   it('keeps grouped distribution across areas', () => {
-    expect(countByArea('Americas')).toBe(15);
-    expect(countByArea('Europe')).toBe(15);
+    expect(countByArea('Americas')).toBe(14);
+    expect(countByArea('Europe')).toBe(16);
     expect(countByArea('Middle East and Africa')).toBe(4);
     expect(countByArea('Asia Pacific')).toBe(13);
     expect(countByArea('China')).toBe(2);
   });
 
-  it('lists eu10-004 extension landscape in Americas picker group', () => {
+  it('orders regions within each area by display name and id', () => {
+    for (const area of REGION_AREAS) {
+      const areaRegions = SAP_BTP_REGIONS.filter((region) => region.area === area);
+      const sortedAreaRegions = [...areaRegions].sort(compareRegionDisplayOrder);
+      expect(areaRegions.map((region) => region.id)).toEqual(
+        sortedAreaRegions.map((region) => region.id)
+      );
+    }
+  });
+
+  it('lists eu10-004 extension landscape in Europe picker group', () => {
     expect(SAP_BTP_REGIONS).toContainEqual({
       id: 'eu10-004',
       displayName: 'Europe (Frankfurt) - AWS Extension',
-      area: 'Americas',
+      area: 'Europe',
       provider: 'AWS',
     });
   });
@@ -53,6 +65,12 @@ describe('SAP_BTP_REGIONS', () => {
       },
       {
         id: 'eu10-003',
+        displayName: 'Europe (Frankfurt) - AWS Extension',
+        area: 'Europe',
+        provider: 'AWS',
+      },
+      {
+        id: 'eu10-004',
         displayName: 'Europe (Frankfurt) - AWS Extension',
         area: 'Europe',
         provider: 'AWS',
@@ -98,3 +116,12 @@ describe('SAP_BTP_REGIONS', () => {
     expect(toHyphenatedRegionCode('EU20-002')).toBe('eu20-002');
   });
 });
+
+function compareRegionDisplayOrder(left: SapBtpRegion, right: SapBtpRegion): number {
+  const displayNameCompare = left.displayName.localeCompare(right.displayName);
+  if (displayNameCompare !== 0) {
+    return displayNameCompare;
+  }
+
+  return left.id.localeCompare(right.id);
+}
