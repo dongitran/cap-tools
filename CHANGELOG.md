@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.49 (pre-release)
+- Matched the Quick Org Search Back button width to Confirm Scope in the space selection step.
+- Strengthened E2E coverage so Back and Confirm Scope rendered widths must stay aligned.
+
 ## 0.7.48 (pre-release)
 - Auto-selected the only available space after picking a one-space org in Quick Org Search.
 - Added inline Region and Organization search controls inside Custom selection headers.

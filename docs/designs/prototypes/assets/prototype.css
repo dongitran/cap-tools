@@ -606,7 +606,8 @@ body.pattern-dots::before {
 }
 
 .quick-back-button {
-  align-self: flex-start;
+  align-self: stretch;
+  width: 100%;
   min-width: 80px;
 }
 

@@ -2252,7 +2252,15 @@ test.describe('SAP Tools region selector', () => {
         );
 
         if (!(spaceStage instanceof HTMLElement) || !(backButton instanceof HTMLElement)) {
-          return { backBelowSpace: false, backMinWidth: 0 };
+          return { backBelowSpace: false, backMinWidth: 0, backWidth: 0, confirmWidth: 0 };
+        }
+
+        const confirmButton = quickPanelElement?.querySelector(
+          '[data-action="quick-confirm-scope"]'
+        );
+
+        if (!(confirmButton instanceof HTMLElement)) {
+          return { backBelowSpace: false, backMinWidth: 0, backWidth: 0, confirmWidth: 0 };
         }
 
         return {
@@ -2260,10 +2268,14 @@ test.describe('SAP Tools region selector', () => {
             backButton.getBoundingClientRect().top >=
             spaceStage.getBoundingClientRect().bottom - 1,
           backMinWidth: Number.parseFloat(getComputedStyle(backButton).minWidth),
+          backWidth: backButton.getBoundingClientRect().width,
+          confirmWidth: confirmButton.getBoundingClientRect().width,
         };
       });
       expect(quickBackLayout.backBelowSpace).toBe(true);
       expect(quickBackLayout.backMinWidth).toBeGreaterThanOrEqual(80);
+      expect(Math.abs(quickBackLayout.backWidth - quickBackLayout.confirmWidth))
+        .toBeLessThanOrEqual(1);
       const confirmButton = webviewFrame.getByRole('button', {
         name: 'Confirm Scope',
       });
