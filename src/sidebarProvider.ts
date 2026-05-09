@@ -58,6 +58,7 @@ const MSG_ORG_SELECTED = 'sapTools.orgSelected';
 const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
 const MSG_CONFIRM_SCOPE = 'sapTools.confirmScope';
 const MSG_TOPOLOGY_ORG_SELECTED = 'sapTools.topologyOrgSelected';
+const MSG_QUICK_SCOPE_CONFIRM = 'sapTools.quickScopeConfirm';
 const MSG_REQUEST_CF_TOPOLOGY = 'sapTools.requestCfTopology';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
 const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
@@ -134,6 +135,12 @@ interface ConfirmScopePayload {
 interface TopologyOrgSelectedPayload {
   readonly regionKey: string;
   readonly orgName: string;
+}
+
+interface QuickScopeConfirmPayload {
+  readonly regionKey: string;
+  readonly orgName: string;
+  readonly spaceName: string;
 }
 
 interface ActiveAppsChangedPayload {
@@ -383,6 +390,12 @@ export class RegionSidebarProvider
     if (type === MSG_TOPOLOGY_ORG_SELECTED && isTopologyOrgSelectedMessage(message)) {
       const payload = readTopologyOrgSelectedPayload(message);
       await this.handleTopologyOrgSelected(payload);
+      return;
+    }
+
+    if (type === MSG_QUICK_SCOPE_CONFIRM && isQuickScopeConfirmMessage(message)) {
+      const payload = readQuickScopeConfirmPayload(message);
+      await this.handleQuickScopeConfirm(payload);
       return;
     }
 
@@ -744,6 +757,111 @@ export class RegionSidebarProvider
     });
 
     await this.handleOrgSelected({ guid: orgGuid, name: payload.orgName });
+  }
+
+  private async handleQuickScopeConfirm(
+    payload: QuickScopeConfirmPayload
+  ): Promise<void> {
+    const region = SAP_BTP_REGIONS.find((entry) => entry.id === payload.regionKey);
+    if (region === undefined) {
+      this.postSpacesError(`Region "${payload.regionKey}" is not known to SAP Tools.`);
+      return;
+    }
+
+    let orgGuid = '';
+    try {
+      orgGuid = await this.resolveQuickScopeOrgGuid(region, payload.orgName);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Could not confirm scope.';
+      this.outputChannel.appendLine(
+        `[scope] Quick scope confirm failed: ${sanitizeForLog(errorMessage)}`
+      );
+      this.postSpacesError(
+        'Could not confirm scope. Please try again or use Custom tab.'
+      );
+      return;
+    }
+
+    if (orgGuid.length === 0) {
+      this.postSpacesError(
+        `Org "${payload.orgName}" was not found in region ${region.id}. It may have been removed.`
+      );
+      return;
+    }
+
+    const confirmPayload: ConfirmScopePayload = {
+      regionId: region.id,
+      regionCode: toHyphenatedRegionCode(region.id),
+      regionName: region.displayName,
+      regionArea: region.area,
+      orgGuid,
+      orgName: payload.orgName,
+      spaceName: payload.spaceName,
+    };
+    await this.handleConfirmScope(confirmPayload);
+    await this.hydrateQuickConfirmedScope(confirmPayload);
+  }
+
+  private async resolveQuickScopeOrgGuid(
+    region: (typeof SAP_BTP_REGIONS)[number],
+    orgName: string
+  ): Promise<string> {
+    const cachedOrgs = await this.cacheSyncService.getCachedOrgs(region.id);
+    const cachedMatch = cachedOrgs?.find((org) => org.name === orgName);
+    if (cachedMatch !== undefined) {
+      return cachedMatch.guid;
+    }
+
+    const regionCode = toHyphenatedRegionCode(region.id);
+    if (isTestMode()) {
+      const mockOrg = resolveMockOrgsForRegion(regionCode).find(
+        (entry) => entry.name === orgName
+      );
+      return mockOrg?.guid ?? '';
+    }
+
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      throw new Error('No credentials found. Please re-open SAP Tools and log in.');
+    }
+
+    this.selectedRegionId = region.id;
+    this.selectedRegionCode = regionCode;
+    this.selectedOrgGuid = '';
+    if (this.cfSessionRegionCode !== regionCode) {
+      this.cfSession = null;
+      this.cfSessionRegionCode = '';
+    }
+    const session = await this.ensureRegionSession(credentials);
+    const liveOrgs = await fetchOrgs(session);
+    const liveMatch = liveOrgs.find((org) => org.name === orgName);
+    return liveMatch?.guid ?? '';
+  }
+
+  private async hydrateQuickConfirmedScope(
+    payload: ConfirmScopePayload
+  ): Promise<void> {
+    this.bumpRegionSelectionRequestId();
+    this.selectedRegionId = payload.regionId;
+    this.selectedRegionCode = payload.regionCode;
+    this.selectedOrgGuid = payload.orgGuid;
+    this.cfLogsPanel.updateScope(
+      buildScopeLabel(payload.regionCode, payload.orgName, payload.spaceName)
+    );
+    this.postMessage({
+      type: MSG_RESTORE_CONFIRMED_SCOPE,
+      scope: {
+        regionId: payload.regionId,
+        orgGuid: payload.orgGuid,
+        spaceName: payload.spaceName,
+      },
+    });
+    await this.handleSpaceSelected({
+      spaceName: payload.spaceName,
+      orgGuid: payload.orgGuid,
+      orgName: payload.orgName,
+    });
   }
 
   private async resolveOrgGuidByName(
@@ -3068,6 +3186,29 @@ function readTopologyOrgSelectedPayload(
   return {
     regionKey: String(payload['regionKey']).trim(),
     orgName: String(payload['orgName']).trim(),
+  };
+}
+
+function isQuickScopeConfirmMessage(value: Record<string, unknown>): boolean {
+  const payload = value['payload'];
+  if (!isRecord(payload)) {
+    return false;
+  }
+  return (
+    isNonEmptyString(payload['regionKey'], 32) &&
+    isNonEmptyString(payload['orgName'], 128) &&
+    isNonEmptyString(payload['spaceName'], 128)
+  );
+}
+
+function readQuickScopeConfirmPayload(
+  value: Record<string, unknown>
+): QuickScopeConfirmPayload {
+  const payload = value['payload'] as Record<string, unknown>;
+  return {
+    regionKey: String(payload['regionKey']).trim(),
+    orgName: String(payload['orgName']).trim(),
+    spaceName: String(payload['spaceName']).trim(),
   };
 }
 

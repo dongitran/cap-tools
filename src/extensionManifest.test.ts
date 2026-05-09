@@ -51,6 +51,14 @@ describe('Extension manifest feature surface', () => {
     );
   });
 
+  it('pins cf-sync to the verified package line instead of a floating tag', () => {
+    const manifest = readExtensionManifest();
+    const cfSyncVersion = String(manifest.dependencies['@saptools/cf-sync'] ?? '');
+
+    expect(cfSyncVersion).not.toBe('latest');
+    expect(cfSyncVersion).toBe('^0.4.6');
+  });
+
   it('keeps Marketplace pre-release metadata aligned with the release workflow', () => {
     const manifest = readExtensionManifest();
     const topHeading = readChangelogTopHeading();

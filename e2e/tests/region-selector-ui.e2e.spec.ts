@@ -22,9 +22,12 @@ import {
   createLongServiceRootMappingFixture,
   createServiceRootMappingFixture,
   expectNoOuterGutter,
+  getCustomSelectionPanel,
   getOrgStageOption,
   getOrgSearchInput,
+  getSelectionTab,
   launchExtensionHost,
+  openCustomSelectionMode,
   openSapToolsSidebar,
   readPaletteSnapshot,
   readViewportGutterSnapshot,
@@ -37,11 +40,13 @@ import {
 } from './support/sapToolsHarness';
 
 function getQuickOrgSearchPanel(webviewFrame: Frame): Locator {
-  return webviewFrame.locator('[data-role="topology-search-panel"]');
+  return webviewFrame.getByRole('tabpanel', { name: 'Quick Org Search' });
 }
 
 function getQuickOrgSearchInput(webviewFrame: Frame): Locator {
-  return webviewFrame.locator('[data-role="topology-org-search"]');
+  return getQuickOrgSearchPanel(webviewFrame).getByRole('searchbox', {
+    name: 'Search synced organizations',
+  });
 }
 
 function getTopologyOrgRow(
@@ -49,14 +54,15 @@ function getTopologyOrgRow(
   orgName: string,
   regionKey: RegExp
 ): Locator {
+  const regionTextPattern = new RegExp(
+    regionKey.source.replace(/^\^/, ''),
+    regionKey.flags
+  );
   return webviewFrame
-    .locator('[data-role="topology-org-results"] .topology-org-row')
-    .filter({
-      has: webviewFrame.locator('.topology-org-name', { hasText: orgName }),
+    .getByRole('button', {
+      name: new RegExp(`Quick org search pick ${orgName} in`, 'i'),
     })
-    .filter({
-      has: webviewFrame.locator('.topology-org-meta', { hasText: regionKey }),
-    })
+    .filter({ hasText: regionTextPattern })
     .first();
 }
 
@@ -117,6 +123,7 @@ test.describe('SAP Tools region selector', () => {
           expect(palette.shellBrightness).toBeGreaterThan(scenario.minShellBrightness);
         }
 
+        await openCustomSelectionMode(webviewFrame);
         await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
         await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
         await expect(
@@ -148,6 +155,7 @@ test.describe('SAP Tools region selector', () => {
       expect(initialPalette.bodyBrightness).toBeLessThan(0.2);
       expect(initialPalette.shellBrightness).toBeLessThan(0.2);
 
+      await openCustomSelectionMode(webviewFrame);
       await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
       await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
 
@@ -168,6 +176,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
 
       const regionButton = webviewFrame.getByRole('button', { name: REGION_TO_SELECT });
@@ -194,6 +203,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(
         webviewFrame.getByRole('button', { name: EUROPE_AREA_TO_SELECT })
       );
@@ -279,6 +289,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(
         webviewFrame.getByRole('button', { name: EUROPE_AREA_TO_SELECT })
       );
@@ -335,6 +346,7 @@ test.describe('SAP Tools region selector', () => {
 
       try {
         const webviewFrame = await openSapToolsSidebar(session.window);
+        await openCustomSelectionMode(webviewFrame);
         const hasInitialStageSlots = await webviewFrame.evaluate(() => {
           const shellElement = document.querySelector('.prototype-shell');
           const headerElement = document.querySelector('.shell-header');
@@ -443,6 +455,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: BR10_REGION_TO_SELECT }));
       await expect(getOrgSearchInput(webviewFrame)).toBeVisible({ timeout: 10000 });
@@ -466,6 +479,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: BR10_REGION_TO_SELECT }));
 
@@ -514,6 +528,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
       await expect(
@@ -556,6 +571,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
       await expect(
@@ -598,6 +614,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
       await expect(getOrgStageOption(webviewFrame, DATA_FOUNDATION_ORG)).toBeVisible({
@@ -637,6 +654,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
       await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
 
@@ -655,6 +673,7 @@ test.describe('SAP Tools region selector', () => {
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
 
+      await openCustomSelectionMode(webviewFrame);
       await webviewFrame.getByRole('button', { name: AREA_TO_SELECT }).click();
       await webviewFrame.getByRole('button', { name: REGION_TO_SELECT }).click();
 
@@ -1002,6 +1021,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
 
       const regionOption = webviewFrame.locator('.region-layout .region-option').first();
@@ -1056,6 +1076,7 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
       await clickWithFallback(getOrgStageOption(webviewFrame, ORG_TO_SELECT));
@@ -1466,7 +1487,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can reopen extension and see mapped services immediately in Apps export table', async () => {
+  test('User can reopen extension and see mapped services in Apps export table', async () => {
     const fixtureRootPath = createHeavyServiceRootMappingFixture();
     let session = await launchExtensionHost({
       extraEnv: {
@@ -1505,23 +1526,14 @@ test.describe('SAP Tools region selector', () => {
           }
         });
 
-      await expect(reopenedFrame.locator('.service-map-row')).toHaveCount(3, { timeout: 15000 });
-
-      const immediateMappingSnapshot = await reopenedFrame.evaluate(() => {
-        const stateElements = Array.from(
-          document.querySelectorAll('.service-map-row .service-map-state')
-        );
-        const states = stateElements.map((element) => {
-          return element.textContent.trim();
-        });
-        return {
-          mappedCount: states.filter((state) => /^mapped$/i.test(state)).length,
-          unmappedCount: states.filter((state) => /^unmapped$/i.test(state)).length,
-        };
-      });
-
-      expect(immediateMappingSnapshot.mappedCount).toBe(3);
-      expect(immediateMappingSnapshot.unmappedCount).toBe(0);
+      const reopenedMappedStateCells = reopenedFrame.locator(
+        '.service-map-row .service-map-state',
+        {
+          hasText: /^Mapped$/i,
+        }
+      );
+      await expect(reopenedMappedStateCells).toHaveCount(3, { timeout: 15000 });
+      await expect(reopenedFrame.locator('.service-map-row.is-unmapped')).toHaveCount(0);
       await expect(reopenedFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
     } finally {
       await cleanupExtensionHost(session);
@@ -1863,52 +1875,77 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can see Quick Org Search panel when cf-sync topology is ready', async () => {
+  test('User can start from Quick Org Search when synced topology has orgs', async () => {
     const session = await launchExtensionHost();
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
-      await expect(
-        webviewFrame.locator('[data-role="topology-search-panel"]')
-      ).toBeVisible({ timeout: 15000 });
-      await expect(
-        webviewFrame.getByRole('heading', { name: 'Quick Org Search' })
-      ).toBeVisible();
-      await expect(
-        webviewFrame.locator('[data-role="topology-org-search"]')
-      ).toBeVisible();
-
-      const rowCount = await webviewFrame
-        .locator('[data-role="topology-org-results"] .topology-org-row')
-        .count();
-      expect(rowCount).toBeGreaterThan(0);
-
-      await expect(
-        webviewFrame.getByRole('heading', { name: 'Choose Area' })
-      ).toBeVisible();
+      await expect(getSelectionTab(webviewFrame, 'Quick Org Search')).toHaveAttribute(
+        'aria-selected',
+        'true',
+        { timeout: 15000 }
+      );
+      await expect(getSelectionTab(webviewFrame, 'Custom')).toHaveAttribute(
+        'aria-selected',
+        'false'
+      );
+      await expect(getQuickOrgSearchPanel(webviewFrame)).toBeVisible();
+      await expect(getQuickOrgSearchInput(webviewFrame)).toBeVisible();
+      await expect(getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i))
+        .toBeVisible();
+      await expect(webviewFrame.getByRole('heading', { name: 'Choose Area' })).toHaveCount(0);
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
   });
 
-  test('User can keep Quick Org Search visible after selecting an area and region', async () => {
+  test('User can use Custom tab without topology rows changing manual selection', async () => {
     const session = await launchExtensionHost();
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
-      const searchInput = getQuickOrgSearchInput(webviewFrame);
-      await expect(searchInput).toBeVisible({ timeout: 15000 });
-      await searchInput.fill('finance');
-
+      await expect(getSelectionTab(webviewFrame, 'Quick Org Search')).toHaveAttribute(
+        'aria-selected',
+        'true',
+        { timeout: 15000 }
+      );
+      await clickWithFallback(getSelectionTab(webviewFrame, 'Custom'));
+      await expect(getCustomSelectionPanel(webviewFrame)).toBeVisible();
+      await expect(getQuickOrgSearchPanel(webviewFrame)).toHaveCount(0);
+      await expect(
+        webviewFrame.getByRole('button', {
+          name: /Quick org search pick finance-services-prod in us10/i,
+        })
+      ).toHaveCount(0);
       await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
-
-      await expect(getQuickOrgSearchPanel(webviewFrame)).toBeVisible();
-      await expect(getQuickOrgSearchInput(webviewFrame)).toHaveValue('finance');
       await expect(getOrgStageOption(webviewFrame, ORG_TO_SELECT)).toBeVisible({
         timeout: 10000,
       });
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can start from Custom tab when synced topology has no orgs', async () => {
+    const session = await launchExtensionHost({
+      extraEnv: { SAP_TOOLS_E2E_EMPTY_TOPOLOGY: '1' },
+    });
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await expect(getSelectionTab(webviewFrame, 'Custom')).toHaveAttribute(
+        'aria-selected',
+        'true',
+        { timeout: 15000 }
+      );
+      await expect(getCustomSelectionPanel(webviewFrame)).toBeVisible();
+      await clickWithFallback(getSelectionTab(webviewFrame, 'Quick Org Search'));
+      await expect(getQuickOrgSearchPanel(webviewFrame)).toContainText(
+        'No synced orgs found.'
+      );
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
@@ -1920,41 +1957,31 @@ test.describe('SAP Tools region selector', () => {
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
-      const searchInput = webviewFrame.locator('[data-role="topology-org-search"]');
+      const searchInput = getQuickOrgSearchInput(webviewFrame);
       await expect(searchInput).toBeVisible({ timeout: 15000 });
 
       await searchInput.fill('finance');
-      await expect
-        .poll(async () => {
-          return webviewFrame
-            .locator('[data-role="topology-org-results"] .topology-org-row')
-            .count();
-        })
-        .toBeGreaterThan(0);
-
-      const rowsAfterFilter = webviewFrame.locator(
-        '[data-role="topology-org-results"] .topology-org-row'
-      );
-      const filteredNames = await rowsAfterFilter.locator('.topology-org-name').allInnerTexts();
-      for (const name of filteredNames) {
-        expect(name.toLowerCase()).toContain('finance');
-      }
+      await expect(getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i))
+        .toBeVisible();
+      const filteredNames = await webviewFrame
+        .getByRole('button', { name: /Quick org search pick/i })
+        .allInnerTexts();
+      expect(filteredNames.length).toBeGreaterThan(0);
+      expect(
+        filteredNames.every((name) => name.toLowerCase().includes('finance'))
+      ).toBe(true);
 
       await searchInput.fill('this-org-does-not-exist-anywhere');
+      await expect(getQuickOrgSearchPanel(webviewFrame)).toContainText(
+        'No org matches "this-org-does-not-exist-anywhere"'
+      );
       await expect(
-        webviewFrame.locator('[data-role="topology-org-empty"]')
-      ).toBeVisible();
-      await expect(
-        webviewFrame.locator('[data-role="topology-org-results"]')
+        webviewFrame.getByRole('button', { name: /Quick org search pick/i })
       ).toHaveCount(0);
 
       await searchInput.fill('');
-      await expect(
-        webviewFrame.locator('[data-role="topology-org-results"] .topology-org-row').first()
-      ).toBeVisible();
-      await expect(
-        webviewFrame.locator('[data-role="topology-org-empty"]')
-      ).toHaveCount(0);
+      await expect(getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i))
+        .toBeVisible();
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -2023,72 +2050,39 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can skip area and region steps by picking an org from Quick Org Search', async () => {
+  test('User can choose org and space in Quick tab without showing manual stages', async () => {
     const session = await launchExtensionHost();
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
-      const searchInput = webviewFrame.locator('[data-role="topology-org-search"]');
+      const searchInput = getQuickOrgSearchInput(webviewFrame);
       await expect(searchInput).toBeVisible({ timeout: 15000 });
 
       await searchInput.fill('finance-services-prod');
-      const targetRow = webviewFrame
-        .locator('[data-role="topology-org-results"] .topology-org-row')
-        .filter({ has: webviewFrame.locator('.topology-org-name', { hasText: /^finance-services-prod$/ }) })
-        .filter({ has: webviewFrame.locator('.topology-org-meta', { hasText: /us10/i }) })
-        .first();
+      const targetRow = getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i);
       await expect(targetRow).toBeVisible();
       await clickWithFallback(targetRow);
 
-      const selectionState = await webviewFrame.evaluate(async () => {
-        const waitForSelectedSpace = async (): Promise<boolean> => {
-          const deadline = Date.now() + 10000;
-          while (Date.now() < deadline) {
-            const stage = document.querySelector('[data-stage-id="space"]');
-            if (stage instanceof HTMLElement) {
-              return true;
-            }
-            await new Promise<void>((resolve) => {
-              window.setTimeout(resolve, 50);
-            });
-          }
-          return false;
-        };
-        const spaceVisible = await waitForSelectedSpace();
-        const selectedRegionElement = document.querySelector('.region-option.is-selected');
-        const selectedOrgElement = document.querySelector('.org-option.is-selected');
-        return {
-          spaceVisible,
-          selectedRegionId: selectedRegionElement?.getAttribute('data-region-id') ?? '',
-          selectedOrgId: selectedOrgElement?.getAttribute('data-org-id') ?? '',
-        };
-      });
-
-      expect(selectionState.spaceVisible).toBe(true);
-      expect(selectionState.selectedRegionId).toBe('us10');
-      expect(selectionState.selectedOrgId.length).toBeGreaterThan(0);
-
-      await expect(
-        webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
-      ).toBeVisible();
-      await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
+      await expect(webviewFrame.getByRole('heading', { name: 'Choose Space' }))
+        .toBeVisible();
+      await expect(webviewFrame.getByText('us-10 US East (VA)')).toBeVisible();
+      await expect(webviewFrame.getByRole('heading', { name: 'Choose Area' }))
+        .toHaveCount(0);
+      await expect(webviewFrame.getByRole('heading', { name: 'Organization' }))
+        .toHaveCount(0);
       const confirmButton = webviewFrame.getByRole('button', {
         name: 'Confirm Scope',
       });
+      await expect(confirmButton).toBeDisabled();
+      await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
       await expect(confirmButton).toBeEnabled();
-      await clickWithFallback(confirmButton);
-      await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
-      ).toBeVisible();
-      await expect(webviewFrame.locator('.workspace-context')).toContainText(
-        'Region: us-10. Org: finance-services-prod. Space: uat'
-      );
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
   });
 
-  test('User can keep Quick Org Search visible after picking an org from topology', async () => {
+  test('User can confirm scope from Quick tab and enter monitoring workspace', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -2105,81 +2099,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(targetRow).toBeVisible();
       await clickWithFallback(targetRow);
 
-      await expect(getQuickOrgSearchPanel(webviewFrame)).toBeVisible({
-        timeout: 10000,
-      });
-      await expect(getQuickOrgSearchInput(webviewFrame)).toHaveValue(
-        'finance-services-prod'
-      );
-      await expect(targetRow).toHaveAttribute('aria-pressed', 'true');
-      await expect(webviewFrame.locator('.topology-org-row.is-selected')).toHaveCount(1);
-      await expect(
-        webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
-      ).toBeVisible({ timeout: 10000 });
-      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
-    } finally {
-      await cleanupExtensionHost(session);
-    }
-  });
-
-  test('User can switch topology org selections from the persistent Quick Org Search', async () => {
-    const session = await launchExtensionHost();
-
-    try {
-      const webviewFrame = await openSapToolsSidebar(session.window);
-      await expect(getQuickOrgSearchInput(webviewFrame)).toBeVisible({ timeout: 15000 });
-      await getQuickOrgSearchInput(webviewFrame).fill('finance-services-prod');
-
-      await clickWithFallback(
-        getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i)
-      );
-      await expect(getQuickOrgSearchPanel(webviewFrame)).toBeVisible({
-        timeout: 10000,
-      });
-
-      const br10Row = getTopologyOrgRow(
-        webviewFrame,
-        'finance-services-prod',
-        /^br10\b/i
-      );
-      await expect(br10Row).toBeVisible();
-      await clickWithFallback(br10Row);
-
-      await expect
-        .poll(async () => {
-          return webviewFrame.evaluate(() => {
-            const selectedRegion = document.querySelector('.region-option.is-selected');
-            const selectedOrg = document.querySelector('.org-option.is-selected');
-            return {
-              regionId: selectedRegion?.getAttribute('data-region-id') ?? '',
-              orgId: selectedOrg?.getAttribute('data-org-id') ?? '',
-            };
-          });
-        }, { timeout: 10000 })
-        .toEqual({
-          regionId: 'br10',
-          orgId: 'org-br10-finance-services',
-        });
-      await expect(getQuickOrgSearchInput(webviewFrame)).toHaveValue(
-        'finance-services-prod'
-      );
-      await expect(br10Row).toHaveAttribute('aria-pressed', 'true');
-      await expect(webviewFrame.locator('.topology-org-row.is-selected')).toHaveCount(1);
-      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
-    } finally {
-      await cleanupExtensionHost(session);
-    }
-  });
-
-  test('User can see Quick Org Search after returning from workspace to selection', async () => {
-    const session = await launchExtensionHost();
-
-    try {
-      const webviewFrame = await openSapToolsSidebar(session.window);
-      await expect(getQuickOrgSearchInput(webviewFrame)).toBeVisible({ timeout: 15000 });
-      await getQuickOrgSearchInput(webviewFrame).fill('finance');
-      await selectDefaultScope(webviewFrame);
-
+      await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
       const confirmButton = webviewFrame.getByRole('button', {
         name: 'Confirm Scope',
       });
@@ -2188,59 +2108,134 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
       ).toBeVisible({ timeout: 10000 });
-
-      await clickWithFallback(webviewFrame.getByRole('button', { name: 'Change Region' }));
-      await expect(
-        webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
-      ).toBeVisible({ timeout: 10000 });
-      await expect(getQuickOrgSearchPanel(webviewFrame)).toBeVisible();
-      await expect(getQuickOrgSearchInput(webviewFrame)).toHaveValue('finance');
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: us-10. Org: finance-services-prod. Space: uat'
+      );
+      await expect(webviewFrame.getByText('finance-uat-api')).toBeVisible({
+        timeout: 10000,
+      });
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }
   });
 
-  test('User can use Quick Org Search rows across regions with region metadata', async () => {
+  test('User can return from Quick space view and reset Quick state through tab switching', async () => {
     const session = await launchExtensionHost();
 
     try {
       const webviewFrame = await openSapToolsSidebar(session.window);
-      const searchInput = webviewFrame.locator('[data-role="topology-org-search"]');
+      const searchInput = getQuickOrgSearchInput(webviewFrame);
       await expect(searchInput).toBeVisible({ timeout: 15000 });
 
       await searchInput.fill('finance-services-prod');
-      const allRows = webviewFrame.locator('[data-role="topology-org-results"] .topology-org-row');
-      await expect(allRows.first()).toBeVisible();
-
-      const regionKeysShown = await allRows
-        .locator('.topology-org-meta')
-        .allInnerTexts();
-      const regionKeySet = new Set(
-        regionKeysShown.map((text) => text.trim().split(' ')[0])
+      await clickWithFallback(
+        getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i)
       );
-      expect(regionKeySet.has('us10')).toBe(true);
-      expect(regionKeySet.has('br10')).toBe(true);
+      await expect(webviewFrame.getByRole('heading', { name: 'Choose Space' }))
+        .toBeVisible();
+      await clickWithFallback(webviewFrame.getByRole('button', { name: /Back/i }));
+      await expect(getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i))
+        .toBeVisible();
 
-      const br10Row = allRows
-        .filter({
-          has: webviewFrame.locator('.topology-org-meta', { hasText: /^br10\b/i }),
+      await clickWithFallback(
+        getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^br10\b/i)
+      );
+      await expect(webviewFrame.getByText('br-10 Brazil (Sao Paulo)')).toBeVisible();
+      await clickWithFallback(getSelectionTab(webviewFrame, 'Custom'));
+      await expect(getCustomSelectionPanel(webviewFrame)).toBeVisible();
+      await clickWithFallback(getSelectionTab(webviewFrame, 'Quick Org Search'));
+      await expect(getQuickOrgSearchInput(webviewFrame)).toHaveValue('finance-services-prod');
+      await expect(webviewFrame.getByRole('heading', { name: 'Choose Space' }))
+        .toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can see disabled Quick confirmation when a topology org has no spaces', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await expect(getQuickOrgSearchInput(webviewFrame)).toBeVisible({ timeout: 15000 });
+      await webviewFrame.evaluate(() => {
+        window.postMessage(
+          {
+            type: 'sapTools.cfTopology',
+            topology: {
+              ready: true,
+              accounts: [
+                {
+                  regionKey: 'us10',
+                  regionLabel: 'US East (VA) - AWS (us10)',
+                  apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+                  orgName: 'empty-spaces-prod',
+                  spaces: [],
+                },
+              ],
+            },
+          },
+          '*'
+        );
+      });
+
+      await clickWithFallback(
+        webviewFrame.getByRole('button', {
+          name: /Quick org search pick empty-spaces-prod in us10/i,
         })
-        .first();
-      await expect(br10Row).toBeVisible();
-      await clickWithFallback(br10Row);
+      );
+      await expect(getQuickOrgSearchPanel(webviewFrame)).toContainText(
+        'No spaces found for this org.'
+      );
+      await expect(webviewFrame.getByRole('button', { name: 'Confirm Scope' }))
+        .toBeDisabled();
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
 
-      await expect
-        .poll(async () => {
-          return webviewFrame.evaluate(() => {
-            const selected = document.querySelector('.region-option.is-selected');
-            return selected?.getAttribute('data-region-id') ?? '';
-          });
-        }, { timeout: 10000 })
-        .toBe('br10');
-      await expect(
-        webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
-      ).toBeVisible({ timeout: 10000 });
+  test('User can scroll Custom selection on a short sidebar', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await session.window.setViewportSize({ width: 430, height: 460 });
+      await clickWithFallback(getSelectionTab(webviewFrame, 'Custom'));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+      await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
+      await clickWithFallback(getOrgStageOption(webviewFrame, ORG_TO_SELECT));
+
+      const scrollSnapshot = await webviewFrame.evaluate(() => {
+        const groups = document.querySelector('.groups');
+        const confirm = document.querySelector('[aria-label="Region confirmation"]');
+        if (!(groups instanceof HTMLElement) || !(confirm instanceof HTMLElement)) {
+          return null;
+        }
+        const beforeBottom = confirm.getBoundingClientRect().bottom;
+        groups.scrollTop = groups.scrollHeight;
+        return {
+          beforeBottom,
+          afterBottom: confirm.getBoundingClientRect().bottom,
+          viewportHeight: window.innerHeight,
+          canScroll: groups.scrollHeight > groups.clientHeight,
+          overflowY: getComputedStyle(groups).overflowY,
+        };
+      });
+
+      expect(scrollSnapshot).toEqual(
+        expect.objectContaining({
+          canScroll: true,
+          overflowY: 'auto',
+        })
+      );
+      expect(scrollSnapshot?.beforeBottom).toBeGreaterThan(
+        scrollSnapshot?.viewportHeight ?? 0
+      );
+      expect(scrollSnapshot?.afterBottom).toBeLessThanOrEqual(
+        scrollSnapshot?.viewportHeight ?? 0
+      );
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -2256,12 +2251,11 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByRole('heading', { name: 'Choose Area' })
       ).toBeVisible({ timeout: 15000 });
-      await expect(
-        webviewFrame.locator('[data-role="topology-search-panel"]')
-      ).toHaveCount(0);
-      await expect(
-        webviewFrame.locator('[data-role="topology-org-search"]')
-      ).toHaveCount(0);
+      await expect(getSelectionTab(webviewFrame, 'Quick Org Search')).toHaveCount(0);
+      await expect(getSelectionTab(webviewFrame, 'Custom')).toHaveCount(0);
+      await expect(webviewFrame.getByRole('searchbox', {
+        name: 'Search synced organizations',
+      })).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
     }

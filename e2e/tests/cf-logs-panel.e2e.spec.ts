@@ -9,6 +9,7 @@ import {
   getOrgStageOption,
   launchExtensionHost,
   openCfLogsPanel,
+  openCustomSelectionMode,
   openSapToolsSidebar,
   selectDefaultScope,
 } from './support/sapToolsHarness';
@@ -577,7 +578,7 @@ test.describe('SAP Tools CF logs panel', () => {
       const sidebarFrame = await openSapToolsSidebar(session.window);
       const logsFrame = await openCfLogsPanel(session.window);
 
-      // Navigate: area → region → data-foundation-prod → noapps (space with zero apps).
+      await openCustomSelectionMode(sidebarFrame);
       await clickWithFallback(sidebarFrame.getByRole('button', { name: AREA_TO_SELECT }));
       await clickWithFallback(sidebarFrame.getByRole('button', { name: REGION_TO_SELECT }));
       await expect(

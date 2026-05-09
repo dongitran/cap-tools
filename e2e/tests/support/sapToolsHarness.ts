@@ -534,6 +534,7 @@ export async function openSapToolsSidebar(
 }
 
 export async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
+  await openCustomSelectionMode(webviewFrame);
   await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
   await clickWithFallback(webviewFrame.getByRole('button', { name: REGION_TO_SELECT }));
   const orgOption = getOrgStageOption(webviewFrame, ORG_TO_SELECT);
@@ -543,6 +544,29 @@ export async function selectDefaultScope(webviewFrame: Frame): Promise<void> {
     webviewFrame.getByRole('button', { name: SPACE_TO_SELECT })
   ).toBeVisible({ timeout: 10000 });
   await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
+}
+
+export function getSelectionTab(
+  webviewFrame: Frame,
+  name: 'Quick Org Search' | 'Custom'
+): Locator {
+  return webviewFrame.getByRole('tab', { name });
+}
+
+export function getCustomSelectionPanel(webviewFrame: Frame): Locator {
+  return webviewFrame.getByRole('list', { name: 'Custom' });
+}
+
+export async function openCustomSelectionMode(webviewFrame: Frame): Promise<void> {
+  const customTab = getSelectionTab(webviewFrame, 'Custom');
+  if ((await customTab.count()) === 0) {
+    return;
+  }
+  if ((await customTab.getAttribute('aria-selected')) === 'true') {
+    return;
+  }
+  await clickWithFallback(customTab);
+  await expect(getCustomSelectionPanel(webviewFrame)).toBeVisible({ timeout: 10000 });
 }
 
 export function getOrgStageOption(webviewFrame: Frame, name: string | RegExp): Locator {

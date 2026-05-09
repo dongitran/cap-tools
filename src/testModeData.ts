@@ -133,6 +133,9 @@ export function resolveMockCfTopology(): CfTopology {
   if (process.env['SAP_TOOLS_E2E_DISABLE_TOPOLOGY'] === '1') {
     return { ready: false, accounts: [] };
   }
+  if (process.env['SAP_TOOLS_E2E_EMPTY_TOPOLOGY'] === '1') {
+    return { ready: true, accounts: [] };
+  }
 
   const accounts: CfTopologyOrg[] = [];
   for (const region of MOCK_TOPOLOGY_REGIONS) {

@@ -46,13 +46,22 @@ interface ConfirmScopePayloadForTest {
   readonly spaceName: string;
 }
 
+interface QuickScopeConfirmPayloadForTest {
+  readonly regionKey: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+}
+
 interface SidebarProviderTestAccess {
   cfSession: CfSession | null;
   currentConfirmedScope: SharedCfScope | undefined;
+  handleQuickScopeConfirm(payload: QuickScopeConfirmPayloadForTest): Promise<void>;
   handleConfirmScope(payload: ConfirmScopePayloadForTest): Promise<void>;
   handleExternalScopeChange(scope: SharedCfScope): Promise<void>;
+  hydrateQuickConfirmedScope(payload: ConfirmScopePayloadForTest): Promise<void>;
   hydrateRestoredScope(scope: unknown): Promise<void>;
   lastWrittenScope: SharedCfScope | undefined;
+  postSpacesError(message: string): void;
   resolveOrgGuidByName(regionId: string, orgName: string): Promise<string>;
   restoreExternalScope(scope: SharedCfScope): Promise<void>;
 }
@@ -274,6 +283,87 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
         spaceName: 'uat',
       },
       'global-target'
+    );
+  });
+
+  it('confirms quick scope selection with org GUID resolved from test mode topology', async () => {
+    const { access } = createProviderFixture();
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const confirmSpy = vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
+    const hydrateSpy = vi
+      .spyOn(access, 'hydrateQuickConfirmedScope')
+      .mockResolvedValue();
+
+    await access.handleQuickScopeConfirm({
+      regionKey: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    const expectedPayload = {
+      regionId: 'us10',
+      regionCode: 'us-10',
+      regionName: 'US East (VA)',
+      regionArea: 'Americas',
+      orgGuid: 'org-finance-prod',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    };
+    expect(confirmSpy).toHaveBeenCalledWith(expectedPayload);
+    expect(hydrateSpy).toHaveBeenCalledWith(expectedPayload);
+  });
+
+  it('rejects quick scope selection for unknown regions', async () => {
+    const { access } = createProviderFixture();
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const confirmSpy = vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
+    const spacesErrorSpy = vi.spyOn(access, 'postSpacesError');
+
+    await access.handleQuickScopeConfirm({
+      regionKey: 'zz99',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(spacesErrorSpy).toHaveBeenCalledWith(
+      'Region "zz99" is not known to SAP Tools.'
+    );
+  });
+
+  it('rejects quick scope selection when the org cannot be resolved', async () => {
+    const { access } = createProviderFixture();
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const confirmSpy = vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
+    const spacesErrorSpy = vi.spyOn(access, 'postSpacesError');
+
+    await access.handleQuickScopeConfirm({
+      regionKey: 'us10',
+      orgName: 'missing-org',
+      spaceName: 'uat',
+    });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(spacesErrorSpy).toHaveBeenCalledWith(
+      'Org "missing-org" was not found in region us10. It may have been removed.'
+    );
+  });
+
+  it('shows a generic quick scope confirmation failure when live resolution cannot start', async () => {
+    const { access } = createProviderFixture();
+    getEffectiveCredentialsMock.mockResolvedValue(null);
+    const confirmSpy = vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
+    const spacesErrorSpy = vi.spyOn(access, 'postSpacesError');
+
+    await access.handleQuickScopeConfirm({
+      regionKey: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(spacesErrorSpy).toHaveBeenCalledWith(
+      'Could not confirm scope. Please try again or use Custom tab.'
     );
   });
 });

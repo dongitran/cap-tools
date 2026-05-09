@@ -184,7 +184,7 @@ export function getCfTopologySnapshotSync(): CfTopology {
   }
   const accounts = buildOrgEntries(structure);
   return {
-    ready: accounts.length > 0,
+    ready: true,
     accounts,
   };
 }
@@ -196,7 +196,7 @@ export async function getCfTopologySnapshot(): Promise<CfTopology> {
   }
   const accounts = buildOrgEntries(structure);
   return {
-    ready: accounts.length > 0,
+    ready: true,
     accounts,
   };
 }

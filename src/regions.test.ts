@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REGION_KEYS } from '@saptools/cf-sync';
 
 import { REGION_AREAS, SAP_BTP_REGIONS, toHyphenatedRegionCode } from './regions';
 
@@ -98,6 +99,15 @@ describe('SAP_BTP_REGIONS', () => {
     for (const extensionRegion of extensionRegions) {
       expect(SAP_BTP_REGIONS).toContainEqual(extensionRegion);
     }
+  });
+
+  it('keeps SAP Tools region catalog covered by cf-sync', () => {
+    const cfSyncRegionKeys = new Set<string>(REGION_KEYS);
+    const missingFromCfSync = SAP_BTP_REGIONS.map((region) => region.id).filter(
+      (regionId) => !cfSyncRegionKeys.has(regionId)
+    );
+
+    expect(missingFromCfSync).toEqual([]);
   });
 
   it('formats region code into hyphen form', () => {

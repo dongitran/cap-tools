@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.46 (pre-release)
+- Reworked Select SAP BTP Region into Quick Org Search and Custom tabs when synced topology is available.
+- Made Quick Org Search org picks instant by resolving spaces from the local topology snapshot and confirming scope only after a space is chosen.
+- Fixed Custom selection scrolling on short sidebars and expanded E2E coverage for topology-ready, empty-topology, no-topology, no-space, and quick-confirm flows.
+
 ## 0.7.45 (pre-release)
 - Added the shared `sapCap.currentScope` VS Code global setting so confirmed SAP BTP scopes can be read by other extensions.
 - Restored SAP Tools scope from external `sapCap.currentScope` changes when a CF session is active, reusing the existing confirmed-scope hydration path.
