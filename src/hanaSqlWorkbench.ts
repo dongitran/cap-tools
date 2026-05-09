@@ -458,9 +458,16 @@ export class HanaSqlWorkbench
     if (context === undefined) {
       return;
     }
-    if (context.tableNamesPromise != null) {
+
+    while (context.tableNamesPromise != null) {
+      const cacheVersionBeforeWait = context.cacheVersion;
       await context.tableNamesPromise;
-      return;
+      if (this.appContextsByAppId.get(appId) !== context) {
+        return;
+      }
+      if (context.cacheVersion === cacheVersionBeforeWait) {
+        return;
+      }
     }
 
     const cacheVersion = context.cacheVersion;

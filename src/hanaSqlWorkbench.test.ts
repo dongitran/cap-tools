@@ -62,6 +62,7 @@ interface HanaSqlAppContextForTest {
   tableNames: readonly string[];
   tableEntries: readonly HanaTableDisplayEntry[];
   tableNamesPromise: Promise<void> | null;
+  cacheVersion: number;
 }
 
 interface HanaSqlWorkbenchTestAccess {
@@ -157,5 +158,37 @@ describe('HanaSqlWorkbench scope cache invalidation', () => {
     expect(freshEntries.length).toBeGreaterThan(0);
     expect(context.tableNames.length).toBeGreaterThan(0);
     expect(context.tableEntries.length).toBeGreaterThan(0);
+  });
+
+  test('loads fresh table metadata for a caller waiting through invalidation', async () => {
+    process.env['SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS'] = '25';
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+
+    const staleLoad = workbench.loadTableNamesForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: null,
+    });
+    const context = access.appContextsByAppId.get('finance-uat-api');
+    expect(context).toBeDefined();
+    if (context === undefined) {
+      throw new Error('Expected test app context.');
+    }
+    expect(context.tableNamesPromise).not.toBeNull();
+
+    const waitingLoad = workbench.loadTableNamesForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: null,
+    });
+    access.invalidateAllAppContexts();
+
+    await staleLoad;
+    const tableNames = await waitingLoad;
+
+    expect(tableNames.length).toBeGreaterThan(0);
+    expect(context.tableNames.length).toBeGreaterThan(0);
+    expect(context.cacheVersion).toBeGreaterThan(0);
   });
 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.51 (pre-release)
+- Avoided duplicate S/4HANA SQL Workbench cache invalidation during successful external scope restore.
+- Reloaded SQL Workbench table metadata for callers that were waiting while scope invalidation happened.
+- Detached CF logs stream listeners before stopping requested log processes.
+
 ## 0.7.50 (pre-release)
 - Cleared CF logs apps and active logging state immediately when an external shared scope change cannot be restored.
 - Invalidated S/4HANA SQL Workbench app credentials and table metadata when the confirmed scope changes.

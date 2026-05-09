@@ -58,12 +58,19 @@ interface SpaceSelectionPayloadForTest {
   readonly orgName: string;
 }
 
+interface ConfirmScopeOptionsForTest {
+  readonly invalidateHanaAppContexts?: boolean;
+}
+
 interface SidebarProviderTestAccess {
   cfSession: CfSession | null;
   currentConfirmedScope: SharedCfScope | undefined;
   handleSpaceSelected(payload: SpaceSelectionPayloadForTest): Promise<void>;
   handleQuickScopeConfirm(payload: QuickScopeConfirmPayloadForTest): Promise<void>;
-  handleConfirmScope(payload: ConfirmScopePayloadForTest): Promise<void>;
+  handleConfirmScope(
+    payload: ConfirmScopePayloadForTest,
+    options?: ConfirmScopeOptionsForTest
+  ): Promise<void>;
   handleExternalScopeChange(scope: SharedCfScope): Promise<void>;
   hydrateQuickConfirmedScope(payload: ConfirmScopePayloadForTest): Promise<void>;
   hydrateRestoredScope(scope: unknown): Promise<void>;
@@ -279,6 +286,22 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
   });
 
+  it('invalidates HANA app contexts once while restoring an external scope', async () => {
+    const { access, hanaInvalidateAllAppContextsMock } = createProviderFixture();
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    access.cfSession = createMockSession();
+    vi.spyOn(access, 'resolveOrgGuidByName').mockResolvedValue('org-finance-prod');
+    vi.spyOn(access, 'hydrateRestoredScope').mockResolvedValue(undefined);
+
+    await access.restoreExternalScope({
+      regionCode: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('confirms an external scope with compact region id and hyphenated region code', async () => {
     const { access } = createProviderFixture();
     access.cfSession = createMockSession();
@@ -292,15 +315,18 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
       spaceName: 'uat',
     });
 
-    expect(confirmSpy).toHaveBeenCalledWith({
-      regionId: 'us10',
-      regionCode: 'us-10',
-      regionName: 'US East (VA)',
-      regionArea: 'Americas',
-      orgGuid: 'org-finance-prod',
-      orgName: 'finance-services-prod',
-      spaceName: 'uat',
-    });
+    expect(confirmSpy).toHaveBeenCalledWith(
+      {
+        regionId: 'us10',
+        regionCode: 'us-10',
+        regionName: 'US East (VA)',
+        regionArea: 'Americas',
+        orgGuid: 'org-finance-prod',
+        orgName: 'finance-services-prod',
+        spaceName: 'uat',
+      },
+      { invalidateHanaAppContexts: false }
+    );
   });
 
   it('writes confirmed scope with compact regionCode from payload.regionId', async () => {
@@ -348,6 +374,27 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     });
 
     expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps HANA app contexts when the confirmed scope is unchanged', async () => {
+    const { access, hanaInvalidateAllAppContextsMock } = createProviderFixture();
+    access.currentConfirmedScope = {
+      regionCode: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    };
+
+    await access.handleConfirmScope({
+      regionId: 'us10',
+      regionCode: 'us-10',
+      regionName: 'US East (VA)',
+      regionArea: 'Americas',
+      orgGuid: 'org-finance-prod',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(hanaInvalidateAllAppContextsMock).not.toHaveBeenCalled();
   });
 
   it('confirms quick scope selection with org GUID resolved from test mode topology', async () => {

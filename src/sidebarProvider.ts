@@ -132,6 +132,10 @@ interface ConfirmScopePayload {
   readonly spaceName: string;
 }
 
+interface ConfirmScopeOptions {
+  readonly invalidateHanaAppContexts?: boolean;
+}
+
 interface TopologyOrgSelectedPayload {
   readonly regionKey: string;
   readonly orgName: string;
@@ -564,13 +568,17 @@ export class RegionSidebarProvider
     });
   }
 
-  private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
+  private async handleConfirmScope(
+    payload: ConfirmScopePayload,
+    options: ConfirmScopeOptions = {}
+  ): Promise<void> {
     await this.persistConfirmedScopeForCurrentUser(payload);
     const sharedScope = buildSharedScopeFromConfirmPayload(payload);
     const isChangedScope = !areSharedScopesEqual(sharedScope, this.currentConfirmedScope);
     this.lastWrittenScope = sharedScope;
     this.currentConfirmedScope = sharedScope;
-    if (isChangedScope) {
+    const shouldInvalidateHanaAppContexts = options.invalidateHanaAppContexts ?? true;
+    if (isChangedScope && shouldInvalidateHanaAppContexts) {
       this.hanaSqlWorkbench.invalidateAllAppContexts();
     }
     try {
@@ -639,7 +647,7 @@ export class RegionSidebarProvider
       spaceName: scope.spaceName,
     };
 
-    await this.handleConfirmScope(payload);
+    await this.handleConfirmScope(payload, { invalidateHanaAppContexts: false });
     this.cfLogsPanel.updateScope(
       buildScopeLabel(payload.regionCode, payload.orgName, payload.spaceName)
     );

@@ -600,12 +600,19 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     this.clearStreamTimers(stream);
     this.clearReconnectTimer(appName);
     this.reconnectDelays.delete(appName);
+    this.detachStreamListeners(stream);
     stream.handle.stop();
     this.runningStreams.delete(appName);
 
     if (notify) {
       this.postStreamState(appName, 'stopped');
     }
+  }
+
+  private detachStreamListeners(stream: AppStreamRuntime): void {
+    stream.handle.process.stdout.removeAllListeners('data');
+    stream.handle.process.stderr.removeAllListeners('data');
+    stream.handle.process.removeAllListeners();
   }
 
   private clearStreamTimers(stream: AppStreamRuntime): void {
