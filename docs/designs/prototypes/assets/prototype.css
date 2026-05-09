@@ -607,6 +607,7 @@ body.pattern-dots::before {
 
 .quick-back-button {
   align-self: flex-start;
+  min-width: 80px;
 }
 
 .group-head {
@@ -621,6 +622,35 @@ body.pattern-dots::before {
   margin: 0;
   font-family: var(--title-font);
   font-size: 0.82rem;
+}
+
+.group-head-search-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-head-search-input {
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid var(--vscode-input-border, var(--border-color));
+  border-radius: 8px;
+  background: var(--vscode-input-background, var(--frame-bg));
+  color: var(--vscode-input-foreground, var(--text-color));
+  font-family: var(--body-font);
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0 8px 0 28px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.group-head-search-input:focus {
+  border-color: var(--vscode-focusBorder, var(--accent-color));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 24%, transparent);
+}
+
+.group-head-search-input::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--muted-color));
 }
 
 .area-picker {
@@ -958,8 +988,7 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   gap: 6px;
 }
 
-.org-search-input,
-[data-role="org-search"] {
+.org-search-input {
   width: 100%;
   min-width: 0;
   margin: 0 0 4px;
@@ -975,13 +1004,11 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   outline: none;
 }
 
-.org-search-input::placeholder,
-[data-role="org-search"]::placeholder {
+.org-search-input::placeholder {
   color: var(--vscode-input-placeholderForeground, var(--muted-color));
 }
 
-.org-search-input:focus,
-[data-role="org-search"]:focus {
+.org-search-input:focus {
   border-color: var(--vscode-focusBorder, var(--accent-color));
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color) 24%, transparent);
 }

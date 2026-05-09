@@ -591,6 +591,7 @@ let selectedOrgId = '';
 let selectedOrgName = '';
 let selectedSpaceId = '';
 let orgSearchQuery = '';
+let regionSearchQuery = '';
 let activeTabId = 'logs';
 let isConnected = false;
 let isLiveMode = false;
@@ -678,7 +679,7 @@ appElement.addEventListener('click', (event) => {
       quickPickRegionKey = regionKey;
       quickPickOrgName = orgName;
       quickPickOrgSpaces = Array.isArray(account?.spaces) ? [...account.spaces] : [];
-      quickPickSpaceName = '';
+      quickPickSpaceName = quickPickOrgSpaces.length === 1 ? quickPickOrgSpaces[0] : '';
       quickConfirmInProgress = false;
       quickConfirmError = '';
       updateQuickPanelInPlace();
@@ -882,6 +883,12 @@ appElement.addEventListener('input', (event) => {
   if (role === 'org-search') {
     orgSearchQuery = target.value;
     updateOrgSearchResults();
+    return;
+  }
+
+  if (role === 'region-search') {
+    regionSearchQuery = target.value;
+    updateRegionSearchResults();
     return;
   }
 
@@ -1324,6 +1331,7 @@ function handleGroupSelection(nextGroupId) {
   selectedOrgName = '';
   selectedSpaceId = '';
   orgSearchQuery = '';
+  regionSearchQuery = '';
   resetWorkspaceLoggingState();
 }
 
@@ -1346,6 +1354,7 @@ function handleRegionSelection(nextRegionId) {
   selectedOrgName = '';
   selectedSpaceId = '';
   orgSearchQuery = '';
+  regionSearchQuery = '';
   resetWorkspaceLoggingState();
 
   // Reset live data state so the org stage starts fresh.
@@ -1764,6 +1773,7 @@ function handleSelectionFlowAction(action) {
     selectedOrgName = '';
     selectedSpaceId = '';
     orgSearchQuery = '';
+    regionSearchQuery = '';
     resetWorkspaceLoggingState();
     return true;
   }
@@ -1774,6 +1784,7 @@ function handleSelectionFlowAction(action) {
     selectedOrgName = '';
     selectedSpaceId = '';
     orgSearchQuery = '';
+    regionSearchQuery = '';
     resetWorkspaceLoggingState();
     return true;
   }
@@ -2103,6 +2114,7 @@ function applyCacheStateSnapshot(snapshot) {
     selectedOrgName = '';
     selectedSpaceId = '';
     orgSearchQuery = '';
+    regionSearchQuery = '';
     resetWorkspaceLoggingState();
   }
 
@@ -2770,6 +2782,7 @@ function applyTopologyScopeResolved(scope) {
   selectedOrgName = orgName;
   selectedSpaceId = '';
   orgSearchQuery = '';
+  regionSearchQuery = '';
   topologyPickInProgress = false;
 
   if (mode !== 'selection') {
@@ -2901,6 +2914,9 @@ function reconcileQuickSelectionWithTopology() {
     !quickPickOrgSpaces.includes(quickPickSpaceName)
   ) {
     quickPickSpaceName = '';
+  }
+  if (quickPickSpaceName.length === 0 && quickPickOrgSpaces.length === 1) {
+    quickPickSpaceName = quickPickOrgSpaces[0];
   }
 }
 
@@ -3556,7 +3572,8 @@ function splitAreaLabel(label) {
 function renderSelectedGroupPanel(group) {
   const isCollapsed = selectedRegionId.length > 0;
   const orderedRegions = resolveOrderedRegions(group);
-  const regionOptionsMarkup = orderedRegions
+  const filteredRegions = isCollapsed ? orderedRegions : filterRegionOptions(orderedRegions);
+  const regionOptionsMarkup = filteredRegions
     .map((region) => {
       const isSelected = region.id === selectedRegionId;
       const isHidden = isCollapsed && !isSelected;
@@ -3582,6 +3599,7 @@ function renderSelectedGroupPanel(group) {
     <section class="group-card" aria-label="Region list" data-stage-id="region">
       <div class="group-head">
         <h2>Choose Region</h2>
+        ${!isCollapsed ? renderRegionSearchInput() : ''}
         <button
           type="button"
           class="stage-reset"
@@ -3595,6 +3613,23 @@ function renderSelectedGroupPanel(group) {
         ${regionOptionsMarkup}
       </div>
     </section>
+  `;
+}
+
+function renderRegionSearchInput() {
+  return `
+    <label class="group-head-search-wrapper search-input-with-icon">
+      <span class="search-input-icon" aria-hidden="true">&#128269;</span>
+      <input
+        type="search"
+        class="group-head-search-input"
+        data-role="region-search"
+        aria-label="Search regions"
+        placeholder="Search..."
+        autocomplete="off"
+        value="${escapeHtml(regionSearchQuery)}"
+      />
+    </label>
   `;
 }
 
@@ -3627,6 +3662,7 @@ function renderOrgStage() {
     <section class="group-card org-stage" aria-label="Organization list" data-stage-id="org">
       <div class="group-head">
         <h2>Organization</h2>
+        ${searchInputMarkup}
         <button
           type="button"
           class="stage-reset"
@@ -3636,7 +3672,6 @@ function renderOrgStage() {
           Change
         </button>
       </div>
-      ${searchInputMarkup}
       <div class="org-picker">
         ${orgButtons}
       </div>
@@ -3663,17 +3698,34 @@ function filterOrgOptions(orgOptions) {
   });
 }
 
+function filterRegionOptions(regions) {
+  const normalizedQuery = regionSearchQuery.trim().toLowerCase();
+  if (normalizedQuery.length === 0) {
+    return regions;
+  }
+
+  return regions.filter((region) => {
+    return (
+      region.name.toLowerCase().includes(normalizedQuery) ||
+      region.code.toLowerCase().includes(normalizedQuery)
+    );
+  });
+}
+
 function renderOrgSearchInput() {
   return `
-    <input
-      type="search"
-      class="org-search-input"
-      data-role="org-search"
-      aria-label="Search organizations"
-      placeholder="Search organizations..."
-      autocomplete="off"
-      value="${escapeHtml(orgSearchQuery)}"
-    />
+    <label class="group-head-search-wrapper search-input-with-icon">
+      <span class="search-input-icon" aria-hidden="true">&#128269;</span>
+      <input
+        type="search"
+        class="group-head-search-input"
+        data-role="org-search"
+        aria-label="Search organizations"
+        placeholder="Search..."
+        autocomplete="off"
+        value="${escapeHtml(orgSearchQuery)}"
+      />
+    </label>
   `;
 }
 
@@ -3705,6 +3757,43 @@ function updateOrgSearchResults() {
   }
 
   picker.innerHTML = renderOrgButtons(filterOrgOptions(resolveActiveOrgOptions()), false);
+}
+
+function updateRegionSearchResults() {
+  const layout = appElement.querySelector('[data-stage-id="region"] .region-layout');
+  if (!(layout instanceof HTMLElement)) {
+    return;
+  }
+
+  const group = groupLookup.get(selectedGroupId);
+  if (group === undefined) {
+    return;
+  }
+
+  const isCollapsed = selectedRegionId.length > 0;
+  const orderedRegions = resolveOrderedRegions(group);
+  const filteredRegions = isCollapsed ? orderedRegions : filterRegionOptions(orderedRegions);
+  layout.innerHTML = filteredRegions
+    .map((region) => {
+      const isSelected = region.id === selectedRegionId;
+      const isHidden = isCollapsed && !isSelected;
+      const isDisabled = isRegionDisabled(region.id) && !isSelected;
+      return `
+        <button
+          type="button"
+          class="region-option${isSelected ? ' is-selected' : ''}${isHidden ? ' is-hidden' : ''}${isDisabled ? ' is-disabled' : ''}"
+          data-region-id="${region.id}"
+          aria-pressed="${isSelected}"
+          aria-hidden="${isHidden}"
+          aria-disabled="${isDisabled}"
+          ${isDisabled ? 'disabled' : ''}
+        >
+          <span class="region-code">${region.code}</span>
+          <span class="region-name">${region.name}</span>
+        </button>
+      `;
+    })
+    .join('');
 }
 
 function renderSpaceStage() {

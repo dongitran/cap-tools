@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.48 (pre-release)
+- Auto-selected the only available space after picking a one-space org in Quick Org Search.
+- Added inline Region and Organization search controls inside Custom selection headers.
+- Increased the Quick Org Search Back button tap target and covered the updated selection flows with E2E tests.
+
 ## 0.7.47 (pre-release)
 - Kept Quick-confirmed workspaces showing the selected organization name even when the manual organization list has not been loaded.
 - Reworked the Quick Org Search selected-org view to mirror Custom selection with focused Organization and Choose Space sections.

@@ -49,6 +49,12 @@ function getQuickOrgSearchInput(webviewFrame: Frame): Locator {
   });
 }
 
+function getRegionSearchInput(webviewFrame: Frame): Locator {
+  return webviewFrame
+    .getByRole('region', { name: 'Region list' })
+    .getByRole('searchbox', { name: 'Search regions' });
+}
+
 function getTopologyOrgRow(
   webviewFrame: Frame,
   orgName: string,
@@ -486,6 +492,37 @@ test.describe('SAP Tools region selector', () => {
       const orgSearchInput = getOrgSearchInput(webviewFrame);
       await expect(orgSearchInput).toBeVisible({ timeout: 10000 });
       await expect(orgSearchInput).toHaveValue('');
+      const orgSearchLayout = await webviewFrame.evaluate(() => {
+        const stage = document.querySelector('[data-stage-id="org"]');
+        const head = stage?.querySelector('.group-head');
+        const heading = head?.querySelector('h2');
+        const search = head?.querySelector('[data-role="org-search"]');
+        const changeButton = head?.querySelector('[data-action="reset-org-selection"]');
+        const directStageSearch = Array.from(stage?.children ?? []).some((child) => {
+          return (
+            child instanceof HTMLInputElement &&
+            child.getAttribute('data-role') === 'org-search'
+          );
+        });
+
+        return {
+          hasInlineSearch:
+            search instanceof HTMLInputElement &&
+            search.closest('.group-head-search-wrapper') instanceof HTMLElement,
+          isBetweenHeadingAndChange:
+            heading instanceof HTMLElement &&
+            search instanceof HTMLElement &&
+            changeButton instanceof HTMLElement &&
+            heading.compareDocumentPosition(search) === Node.DOCUMENT_POSITION_FOLLOWING &&
+            search.compareDocumentPosition(changeButton) === Node.DOCUMENT_POSITION_FOLLOWING,
+          hasDirectStageSearch: directStageSearch,
+        };
+      });
+      expect(orgSearchLayout).toEqual({
+        hasInlineSearch: true,
+        isBetweenHeadingAndChange: true,
+        hasDirectStageSearch: false,
+      });
       await expect(webviewFrame.getByRole('heading', { name: 'Organization' })).toBeVisible();
       await expect(
         webviewFrame.getByRole('heading', { name: 'Choose Organization' })
@@ -518,6 +555,89 @@ test.describe('SAP Tools region selector', () => {
       await expect(getOrgStageButtons(webviewFrame)).toHaveCount(5);
       await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can filter regions inline while choosing a custom region', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await openCustomSelectionMode(webviewFrame);
+      await clickWithFallback(webviewFrame.getByRole('button', { name: AREA_TO_SELECT }));
+
+      const regionSearchInput = getRegionSearchInput(webviewFrame);
+      await expect(regionSearchInput).toBeVisible({ timeout: 10000 });
+      await expect(regionSearchInput).toHaveValue('');
+      const regionSearchLayout = await webviewFrame.evaluate(() => {
+        const stage = document.querySelector('[data-stage-id="region"]');
+        const head = stage?.querySelector('.group-head');
+        const heading = head?.querySelector('h2');
+        const search = head?.querySelector('[data-role="region-search"]');
+        const changeButton = head?.querySelector('[data-action="reset-region-selection"]');
+        const regionLabels = Array.from(
+          stage?.querySelectorAll('.region-layout .region-option') ?? []
+        ).map((element) => element.textContent.replace(/\s+/g, ' ').trim());
+
+        return {
+          hasInlineSearch:
+            search instanceof HTMLInputElement &&
+            search.closest('.group-head-search-wrapper') instanceof HTMLElement,
+          isBetweenHeadingAndChange:
+            heading instanceof HTMLElement &&
+            search instanceof HTMLElement &&
+            changeButton instanceof HTMLElement &&
+            heading.compareDocumentPosition(search) === Node.DOCUMENT_POSITION_FOLLOWING &&
+            search.compareDocumentPosition(changeButton) === Node.DOCUMENT_POSITION_FOLLOWING,
+          firstFiveRegionLabels: regionLabels.slice(0, 5),
+        };
+      });
+      expect(regionSearchLayout).toEqual({
+        hasInlineSearch: true,
+        isBetweenHeadingAndChange: true,
+        firstFiveRegionLabels: [
+          'br-10 Brazil (Sao Paulo)',
+          'br-20 Brazil (Sao Paulo)',
+          'br-30 Brazil (Sao Paulo)',
+          'ca-10 Canada (Montreal)',
+          'ca-20 Canada Central (Toronto)',
+        ],
+      });
+
+      await regionSearchInput.fill('extension');
+      await expect(
+        webviewFrame.getByRole('button', { name: US10001_REGION_TO_SELECT })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: US10002_REGION_TO_SELECT })
+      ).toBeVisible();
+      await expect(
+        webviewFrame.getByRole('button', { name: REGION_TO_SELECT })
+      ).toHaveCount(0);
+      await expect(
+        webviewFrame.getByRole('button', { name: /US East \(VA\) Extension/i })
+      ).toHaveCount(2);
+      await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+
+      await clickWithFallback(
+        webviewFrame.getByRole('button', { name: US10001_REGION_TO_SELECT })
+      );
+      await expect(getRegionSearchInput(webviewFrame)).toHaveCount(0);
+      await clickWithFallback(
+        webviewFrame
+          .getByRole('region', { name: 'Region list' })
+          .getByRole('button', { name: 'Change' })
+      );
+
+      const resetRegionSearchInput = getRegionSearchInput(webviewFrame);
+      await expect(resetRegionSearchInput).toBeVisible({ timeout: 10000 });
+      await expect(resetRegionSearchInput).toHaveValue('');
+      await expect(
+        webviewFrame.getByRole('button', { name: REGION_TO_SELECT })
+      ).toBeVisible();
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -2132,16 +2252,18 @@ test.describe('SAP Tools region selector', () => {
         );
 
         if (!(spaceStage instanceof HTMLElement) || !(backButton instanceof HTMLElement)) {
-          return { backBelowSpace: false };
+          return { backBelowSpace: false, backMinWidth: 0 };
         }
 
         return {
           backBelowSpace:
             backButton.getBoundingClientRect().top >=
             spaceStage.getBoundingClientRect().bottom - 1,
+          backMinWidth: Number.parseFloat(getComputedStyle(backButton).minWidth),
         };
       });
-      expect(quickBackLayout).toEqual({ backBelowSpace: true });
+      expect(quickBackLayout.backBelowSpace).toBe(true);
+      expect(quickBackLayout.backMinWidth).toBeGreaterThanOrEqual(80);
       const confirmButton = webviewFrame.getByRole('button', {
         name: 'Confirm Scope',
       });
@@ -2151,6 +2273,40 @@ test.describe('SAP Tools region selector', () => {
         .toBe(true);
       await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
       await expect(confirmButton).toBeEnabled();
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can continue immediately when Quick Org Search finds one space', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      const searchInput = getQuickOrgSearchInput(webviewFrame);
+      await expect(searchInput).toBeVisible({ timeout: 15000 });
+
+      await searchInput.fill('apps-proof-prod');
+      const targetRow = getTopologyOrgRow(webviewFrame, 'apps-proof-prod', /^us10\b/i);
+      await expect(targetRow).toBeVisible();
+      await clickWithFallback(targetRow);
+
+      const quickPanel = getQuickOrgSearchPanel(webviewFrame);
+      await expect(
+        quickPanel.getByRole('region', { name: 'Quick space list' })
+      ).toBeVisible();
+      const proofspaceButton = quickPanel.getByRole('button', { name: /^proofspace$/i });
+      await expect(proofspaceButton).toBeVisible();
+      await expect(proofspaceButton).toHaveAttribute('aria-pressed', 'true');
+      await expect(quickPanel.getByRole('button', { name: /^proofspace$/i }))
+        .toHaveCount(1);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await expect(webviewFrame.locator('.stage-loading')).toHaveCount(0);
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
     } finally {
       await cleanupExtensionHost(session);
