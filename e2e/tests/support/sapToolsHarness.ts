@@ -566,6 +566,7 @@ export async function openCustomSelectionMode(webviewFrame: Frame): Promise<void
     return;
   }
   await clickWithFallback(customTab);
+  await expect(customTab).toHaveAttribute('aria-selected', 'true', { timeout: 10000 });
   await expect(getCustomSelectionPanel(webviewFrame)).toBeVisible({ timeout: 10000 });
 }
 
@@ -599,8 +600,11 @@ export async function clickWithFallback(locator: Locator): Promise<void> {
 
       const detachedFromDom =
         errorMessage.includes('Element is not attached to the DOM') ||
-        errorMessage.includes('element is not attached');
-      if (detachedFromDom) {
+        errorMessage.includes('element is not attached') ||
+        errorMessage.includes('element was detached from the DOM');
+      const transientDomState =
+        detachedFromDom || errorMessage.includes('element is not stable');
+      if (transientDomState) {
         continue;
       }
 

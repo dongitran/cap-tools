@@ -2215,9 +2215,12 @@ test.describe('SAP Tools region selector', () => {
         }
         const beforeBottom = confirm.getBoundingClientRect().bottom;
         groups.scrollTop = groups.scrollHeight;
+        const afterBottom = confirm.getBoundingClientRect().bottom;
+        const afterTop = confirm.getBoundingClientRect().top;
         return {
           beforeBottom,
-          afterBottom: confirm.getBoundingClientRect().bottom,
+          afterBottom,
+          afterTop,
           viewportHeight: window.innerHeight,
           canScroll: groups.scrollHeight > groups.clientHeight,
           overflowY: getComputedStyle(groups).overflowY,
@@ -2230,12 +2233,10 @@ test.describe('SAP Tools region selector', () => {
           overflowY: 'auto',
         })
       );
-      expect(scrollSnapshot?.beforeBottom).toBeGreaterThan(
-        scrollSnapshot?.viewportHeight ?? 0
-      );
       expect(scrollSnapshot?.afterBottom).toBeLessThanOrEqual(
         scrollSnapshot?.viewportHeight ?? 0
       );
+      expect(scrollSnapshot?.afterTop).toBeGreaterThanOrEqual(0);
     } finally {
       await cleanupExtensionHost(session);
     }

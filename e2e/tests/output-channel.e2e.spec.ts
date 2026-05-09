@@ -36,12 +36,17 @@ test.describe('SAP Tools output channel', () => {
         )
         .toContain('[topology] Pushed snapshot ready=true');
       const outputText = await readVisibleOutputChannelText(session.window);
+      const normalizedOutputText = outputText.replace(/\s+/g, ' ');
 
-      expect(outputText).toContain(
+      expect(normalizedOutputText).toContain(
         '[scope] Confirmed scope region=us-10 org=finance-services-prod space=uat'
       );
-      expect(outputText).toContain('[sql-ui] open sql file requested app=finance-uat-api');
-      expect(outputText).toContain('[sql-ui] load tables succeeded app=finance-uat-api count=105');
+      expect(normalizedOutputText).toContain(
+        '[sql-ui] open sql file requested app=finance-uat-api'
+      );
+      expect(normalizedOutputText).toContain(
+        '[sql-ui] load tables succeeded app=finance-uat-api count=105'
+      );
       expect(outputText).not.toContain('test-password');
     } finally {
       await cleanupExtensionHost(session);
