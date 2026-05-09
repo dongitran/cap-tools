@@ -578,16 +578,24 @@ body.pattern-dots::before {
   min-height: 0;
 }
 
-.quick-selected-org-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.quick-org-picker {
+  max-height: none;
+  overflow: visible;
 }
 
-.quick-space-view h3 {
-  margin: 0;
-  font-family: var(--title-font);
-  font-size: 0.82rem;
+.quick-org-option {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  cursor: default;
+  min-height: 44px;
+}
+
+.quick-org-option:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: color-mix(in oklab, var(--accent-color) 60%, var(--mix-base));
 }
 
 .quick-space-picker {
@@ -595,6 +603,10 @@ body.pattern-dots::before {
   flex-wrap: wrap;
   gap: 6px;
   max-height: none;
+}
+
+.quick-back-button {
+  align-self: flex-start;
 }
 
 .group-head {

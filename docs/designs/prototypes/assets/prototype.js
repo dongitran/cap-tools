@@ -3231,6 +3231,57 @@ function renderQuickOrgResultsMarkup(filtered) {
 function renderQuickSpaceView() {
   const region = regionLookup.get(quickPickRegionKey);
   const regionLabel = region ? `${region.code} ${region.name}` : quickPickRegionKey;
+  const canConfirm = quickPickSpaceName.length > 0 && !quickConfirmInProgress;
+  const errorMarkup =
+    quickConfirmError.length > 0
+      ? `<p class="stage-error" role="alert">${escapeHtml(quickConfirmError)}</p>`
+      : '';
+
+  return `
+    <div class="quick-space-view">
+      ${renderQuickOrganizationCard(regionLabel)}
+      ${renderQuickSpaceCard()}
+      <button type="button" class="stage-reset quick-back-button" data-action="quick-back-to-orgs">
+        ← Back
+      </button>
+      ${errorMarkup}
+      ${renderQuickConfirmPanel(canConfirm)}
+    </div>
+  `;
+}
+
+function renderQuickOrganizationCard(regionLabel) {
+  return `
+    <section class="group-card org-stage quick-org-stage" aria-label="Quick organization" data-stage-id="quick-org">
+      <div class="group-head"><h2>Organization</h2></div>
+      <div class="org-picker quick-org-picker">
+        <button
+          type="button"
+          class="org-option is-selected quick-org-option"
+          aria-pressed="true"
+          aria-label="${escapeHtml(quickPickOrgName)} in ${escapeHtml(regionLabel)}"
+        >
+          <span class="topology-org-name">${escapeHtml(quickPickOrgName)}</span>
+          <span class="topology-org-meta">${escapeHtml(regionLabel)}</span>
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderQuickSpaceCard() {
+  const spacesMarkup = renderQuickSpaceButtons();
+  return `
+    <section class="group-card space-stage quick-space-stage" aria-label="Quick space list" data-stage-id="quick-space">
+      <div class="group-head"><h2>Choose Space</h2></div>
+      <div class="space-picker quick-space-picker">
+        ${spacesMarkup}
+      </div>
+    </section>
+  `;
+}
+
+function renderQuickSpaceButtons() {
   const spaceButtons = quickPickOrgSpaces
     .map((space) => {
       const isSelected = space === quickPickSpaceName;
@@ -3246,40 +3297,23 @@ function renderQuickSpaceView() {
       `;
     })
     .join('');
-  const spacesMarkup =
-    spaceButtons.length > 0
-      ? spaceButtons
-      : '<div class="topology-org-empty" data-role="quick-space-empty">No spaces found for this org.</div>';
-  const canConfirm = quickPickSpaceName.length > 0 && !quickConfirmInProgress;
-  const errorMarkup =
-    quickConfirmError.length > 0
-      ? `<p class="stage-error" role="alert">${escapeHtml(quickConfirmError)}</p>`
-      : '';
 
+  return spaceButtons.length > 0
+    ? spaceButtons
+    : '<div class="topology-org-empty" data-role="quick-space-empty">No spaces found for this org.</div>';
+}
+
+function renderQuickConfirmPanel(canConfirm) {
   return `
-    <div class="quick-space-view">
-      <button type="button" class="stage-reset" data-action="quick-back-to-orgs">
-        ← Back
+    <div class="confirm-stage" aria-label="Region confirmation">
+      <button
+        type="button"
+        class="confirm-button"
+        data-action="quick-confirm-scope"
+        ${canConfirm ? '' : 'disabled'}
+      >
+        ${quickConfirmInProgress ? 'Confirming…' : 'Confirm Scope'}
       </button>
-      <div class="quick-selected-org-label">
-        <span class="topology-org-name">${escapeHtml(quickPickOrgName)}</span>
-        <span class="topology-org-meta">${escapeHtml(regionLabel)}</span>
-      </div>
-      <h3>Choose Space</h3>
-      <div class="space-picker quick-space-picker">
-        ${spacesMarkup}
-      </div>
-      ${errorMarkup}
-      <section class="group-card confirm-stage">
-        <button
-          type="button"
-          class="confirm-button"
-          data-action="quick-confirm-scope"
-          ${canConfirm ? '' : 'disabled'}
-        >
-          ${quickConfirmInProgress ? 'Confirming…' : 'Confirm Scope'}
-        </button>
-      </section>
     </div>
   `;
 }
@@ -3738,7 +3772,7 @@ function renderConfirmPanel() {
   const isReady = selectedRegion !== undefined && selectedOrg !== undefined && selectedSpaceId.length > 0;
 
   return `
-    <section class="group-card confirm-stage" aria-label="Region confirmation">
+    <div class="confirm-stage" aria-label="Region confirmation">
       <button
         type="button"
         class="confirm-button"
@@ -3747,7 +3781,7 @@ function renderConfirmPanel() {
       >
         Confirm Scope
       </button>
-    </section>
+    </div>
   `;
 }
 

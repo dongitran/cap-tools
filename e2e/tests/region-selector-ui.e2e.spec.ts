@@ -2089,7 +2089,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can choose org and space in Quick tab without showing manual stages', async () => {
+  test('User can choose org and space in Quick tab with focused organization and space sections', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -2102,17 +2102,53 @@ test.describe('SAP Tools region selector', () => {
       await expect(targetRow).toBeVisible();
       await clickWithFallback(targetRow);
 
-      await expect(webviewFrame.getByRole('heading', { name: 'Choose Space' }))
+      const quickPanel = getQuickOrgSearchPanel(webviewFrame);
+      await expect(
+        quickPanel.getByRole('region', { name: 'Quick organization' })
+      ).toBeVisible();
+      await expect(quickPanel.getByRole('heading', { name: 'Organization' }))
         .toBeVisible();
-      await expect(webviewFrame.getByText('us-10 US East (VA)')).toBeVisible();
+      await expect(
+        quickPanel.getByRole('button', {
+          name: /finance-services-prod in us-10 US East \(VA\)/i,
+        })
+      ).toBeVisible();
+      await expect(
+        quickPanel.getByRole('region', { name: 'Quick space list' })
+      ).toBeVisible();
+      await expect(quickPanel.getByRole('heading', { name: 'Choose Space' }))
+        .toBeVisible();
       await expect(webviewFrame.getByRole('heading', { name: 'Choose Area' }))
         .toHaveCount(0);
-      await expect(webviewFrame.getByRole('heading', { name: 'Organization' }))
+      await expect(webviewFrame.getByRole('heading', { name: 'Choose Region' }))
         .toHaveCount(0);
+      const quickBackLayout = await webviewFrame.evaluate(() => {
+        const quickPanelElement = document.querySelector('.selection-quick-panel');
+        const spaceStage = quickPanelElement?.querySelector(
+          '[data-stage-id="quick-space"]'
+        );
+        const backButton = quickPanelElement?.querySelector(
+          '[data-action="quick-back-to-orgs"]'
+        );
+
+        if (!(spaceStage instanceof HTMLElement) || !(backButton instanceof HTMLElement)) {
+          return { backBelowSpace: false };
+        }
+
+        return {
+          backBelowSpace:
+            backButton.getBoundingClientRect().top >=
+            spaceStage.getBoundingClientRect().bottom - 1,
+        };
+      });
+      expect(quickBackLayout).toEqual({ backBelowSpace: true });
       const confirmButton = webviewFrame.getByRole('button', {
         name: 'Confirm Scope',
       });
       await expect(confirmButton).toBeDisabled();
+      await expect
+        .poll(() => confirmButton.evaluate((button) => button.closest('.group-card') === null))
+        .toBe(true);
       await clickWithFallback(webviewFrame.getByRole('button', { name: SPACE_TO_SELECT }));
       await expect(confirmButton).toBeEnabled();
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
@@ -2143,6 +2179,9 @@ test.describe('SAP Tools region selector', () => {
         name: 'Confirm Scope',
       });
       await expect(confirmButton).toBeEnabled();
+      await expect
+        .poll(() => confirmButton.evaluate((button) => button.closest('.group-card') === null))
+        .toBe(true);
       await clickWithFallback(confirmButton);
       await expect(
         webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
@@ -2276,6 +2315,10 @@ test.describe('SAP Tools region selector', () => {
         scrollSnapshot?.viewportHeight ?? 0
       );
       expect(scrollSnapshot?.afterTop).toBeGreaterThanOrEqual(0);
+      const confirmButton = webviewFrame.getByRole('button', { name: 'Confirm Scope' });
+      await expect
+        .poll(() => confirmButton.evaluate((button) => button.closest('.group-card') === null))
+        .toBe(true);
     } finally {
       await cleanupExtensionHost(session);
     }

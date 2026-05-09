@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.47 (pre-release)
+- Kept Quick-confirmed workspaces showing the selected organization name even when the manual organization list has not been loaded.
+- Reworked the Quick Org Search selected-org view to mirror Custom selection with focused Organization and Choose Space sections.
+- Removed the extra confirmation card wrapper in both Quick Org Search and Custom selection so Confirm Scope stands on its own.
+
 ## 0.7.46 (pre-release)
 - Reworked Select SAP BTP Region into Quick Org Search and Custom tabs when synced topology is available.
 - Made Quick Org Search org picks instant by resolving spaces from the local topology snapshot and confirming scope only after a space is chosen.
