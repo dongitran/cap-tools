@@ -431,12 +431,6 @@ body.pattern-dots::before {
   min-height: 0;
 }
 
-.quick-org-head {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
 .quick-empty-state {
   padding: 20px;
   color: var(--muted-color);

@@ -52,15 +52,23 @@ interface QuickScopeConfirmPayloadForTest {
   readonly spaceName: string;
 }
 
+interface SpaceSelectionPayloadForTest {
+  readonly spaceName: string;
+  readonly orgGuid: string;
+  readonly orgName: string;
+}
+
 interface SidebarProviderTestAccess {
   cfSession: CfSession | null;
   currentConfirmedScope: SharedCfScope | undefined;
+  handleSpaceSelected(payload: SpaceSelectionPayloadForTest): Promise<void>;
   handleQuickScopeConfirm(payload: QuickScopeConfirmPayloadForTest): Promise<void>;
   handleConfirmScope(payload: ConfirmScopePayloadForTest): Promise<void>;
   handleExternalScopeChange(scope: SharedCfScope): Promise<void>;
   hydrateQuickConfirmedScope(payload: ConfirmScopePayloadForTest): Promise<void>;
   hydrateRestoredScope(scope: unknown): Promise<void>;
   lastWrittenScope: SharedCfScope | undefined;
+  postMessage(message: Record<string, unknown>): void;
   postSpacesError(message: string): void;
   resolveOrgGuidByName(regionId: string, orgName: string): Promise<string>;
   restoreExternalScope(scope: SharedCfScope): Promise<void>;
@@ -311,6 +319,34 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     };
     expect(confirmSpy).toHaveBeenCalledWith(expectedPayload);
     expect(hydrateSpy).toHaveBeenCalledWith(expectedPayload);
+  });
+
+  it('posts org name when hydrating a quick confirmed scope', async () => {
+    const { access } = createProviderFixture();
+    const postMessageSpy = vi.spyOn(access, 'postMessage').mockImplementation(() => {
+      return undefined;
+    });
+    vi.spyOn(access, 'handleSpaceSelected').mockResolvedValue();
+
+    await access.hydrateQuickConfirmedScope({
+      regionId: 'us10',
+      regionCode: 'us-10',
+      regionName: 'US East (VA)',
+      regionArea: 'Americas',
+      orgGuid: 'org-finance-prod',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(postMessageSpy).toHaveBeenCalledWith({
+      type: 'sapTools.restoreConfirmedScope',
+      scope: {
+        regionId: 'us10',
+        orgGuid: 'org-finance-prod',
+        orgName: 'finance-services-prod',
+        spaceName: 'uat',
+      },
+    });
   });
 
   it('rejects quick scope selection for unknown regions', async () => {

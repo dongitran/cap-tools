@@ -588,6 +588,7 @@ let mode = 'selection';
 let selectedGroupId = '';
 let selectedRegionId = '';
 let selectedOrgId = '';
+let selectedOrgName = '';
 let selectedSpaceId = '';
 let orgSearchQuery = '';
 let activeTabId = 'logs';
@@ -1320,6 +1321,7 @@ function handleGroupSelection(nextGroupId) {
 
   selectedRegionId = '';
   selectedOrgId = '';
+  selectedOrgName = '';
   selectedSpaceId = '';
   orgSearchQuery = '';
   resetWorkspaceLoggingState();
@@ -1341,6 +1343,7 @@ function handleRegionSelection(nextRegionId) {
   selectedGroupId = nextGroupId;
   selectedRegionId = nextRegionId;
   selectedOrgId = '';
+  selectedOrgName = '';
   selectedSpaceId = '';
   orgSearchQuery = '';
   resetWorkspaceLoggingState();
@@ -1370,16 +1373,17 @@ function handleOrgSelection(nextOrgId) {
     return;
   }
 
-  const orgExists =
+  const selectedOrg =
     vscodeApi !== null && liveOrgOptions !== null
-      ? liveOrgLookup.has(nextOrgId)
-      : resolveCurrentMockOrgOptions().some((org) => org.id === nextOrgId);
+      ? liveOrgLookup.get(nextOrgId)
+      : resolveCurrentMockOrgOptions().find((org) => org.id === nextOrgId);
 
-  if (!orgExists) {
+  if (selectedOrg === undefined) {
     return;
   }
 
   selectedOrgId = nextOrgId;
+  selectedOrgName = selectedOrg.name;
   selectedSpaceId = '';
   resetWorkspaceLoggingState();
   liveSpaceNames = null;
@@ -1390,8 +1394,7 @@ function handleOrgSelection(nextOrgId) {
 
   if (vscodeApi !== null) {
     spacesLoadingState = 'loading';
-    const org = liveOrgLookup.get(nextOrgId);
-    postOrgSelection(nextOrgId, org?.name ?? nextOrgId);
+    postOrgSelection(nextOrgId, selectedOrgName);
   } else {
     spacesLoadingState = 'idle';
   }
@@ -1758,6 +1761,7 @@ function handleSelectionFlowAction(action) {
     selectedGroupId = '';
     selectedRegionId = '';
     selectedOrgId = '';
+    selectedOrgName = '';
     selectedSpaceId = '';
     orgSearchQuery = '';
     resetWorkspaceLoggingState();
@@ -1767,6 +1771,7 @@ function handleSelectionFlowAction(action) {
   if (action === 'reset-region-selection') {
     selectedRegionId = '';
     selectedOrgId = '';
+    selectedOrgName = '';
     selectedSpaceId = '';
     orgSearchQuery = '';
     resetWorkspaceLoggingState();
@@ -1775,6 +1780,7 @@ function handleSelectionFlowAction(action) {
 
   if (action === 'reset-org-selection') {
     selectedOrgId = '';
+    selectedOrgName = '';
     selectedSpaceId = '';
     resetWorkspaceLoggingState();
     return true;
@@ -2094,6 +2100,7 @@ function applyCacheStateSnapshot(snapshot) {
   if (!selectedRegionExists) {
     selectedRegionId = '';
     selectedOrgId = '';
+    selectedOrgName = '';
     selectedSpaceId = '';
     orgSearchQuery = '';
     resetWorkspaceLoggingState();
@@ -2559,7 +2566,7 @@ function requestAppsForSelectedScope(spaceName) {
   appsErrorMessage = '';
   appsLoadingState = 'loading';
 
-  const orgName = resolveSelectedOrg()?.name ?? selectedOrgId;
+  const orgName = resolveSelectedOrgName() || selectedOrgId;
   postSpaceSelection(normalizedSpaceName, selectedOrgId, orgName);
 }
 
@@ -2744,6 +2751,7 @@ function applyTopologyScopeResolved(scope) {
 
   const regionId = typeof scope.regionId === 'string' ? scope.regionId.trim() : '';
   const orgGuid = typeof scope.orgGuid === 'string' ? scope.orgGuid.trim() : '';
+  const orgName = typeof scope.orgName === 'string' ? scope.orgName.trim() : '';
   if (regionId.length === 0 || orgGuid.length === 0) {
     topologyPickInProgress = false;
     return;
@@ -2759,6 +2767,7 @@ function applyTopologyScopeResolved(scope) {
   selectedGroupId = groupId;
   selectedRegionId = region.id;
   selectedOrgId = orgGuid;
+  selectedOrgName = orgName;
   selectedSpaceId = '';
   orgSearchQuery = '';
   topologyPickInProgress = false;
@@ -3006,11 +3015,6 @@ function renderTopologyOrgSearchPanel() {
   }
 
   const filtered = filterTopologyOrgEntries();
-  const totalLabel =
-    cfTopology.accounts.length === 1
-      ? '1 org synced across regions'
-      : `${cfTopology.accounts.length} orgs synced across regions`;
-
   let resultsMarkup = '';
   if (filtered.length === 0) {
     const queryLabel = escapeHtml(topologyOrgSearchQuery.trim());
@@ -3035,7 +3039,6 @@ function renderTopologyOrgSearchPanel() {
     <section class="group-card topology-org-panel" data-role="topology-search-panel" aria-label="Quick org search">
       <div class="group-head">
         <h2>Quick Org Search</h2>
-        <span class="group-count">${escapeHtml(totalLabel)}</span>
       </div>
       <p class="topology-org-hint">Search across all synced regions and jump straight to space selection.</p>
       <div class="topology-org-search-row">
@@ -3058,6 +3061,7 @@ function applyRestoredConfirmedScope(scope) {
   const regionId =
     typeof scope.regionId === 'string' ? scope.regionId.trim() : '';
   const orgGuid = typeof scope.orgGuid === 'string' ? scope.orgGuid.trim() : '';
+  const orgName = typeof scope.orgName === 'string' ? scope.orgName.trim() : '';
   const spaceName =
     typeof scope.spaceName === 'string' ? scope.spaceName.trim() : '';
 
@@ -3074,6 +3078,7 @@ function applyRestoredConfirmedScope(scope) {
   selectedGroupId = selectedGroupIdFromRegion;
   selectedRegionId = selectedRegion.id;
   selectedOrgId = orgGuid;
+  selectedOrgName = orgName;
   selectedSpaceId = spaceName;
   mode = 'workspace';
   activeTabId = 'logs';
@@ -3187,16 +3192,9 @@ function renderQuickOrgPanel() {
   }
 
   const filtered = filterTopologyOrgEntries();
-  const totalLabel =
-    orgCount === 1
-      ? '1 org synced across regions'
-      : `${String(orgCount)} orgs synced across regions`;
   const resultsMarkup = renderQuickOrgResultsMarkup(filtered);
 
   return `
-    <div class="quick-org-head">
-      <span class="group-count">${escapeHtml(totalLabel)}</span>
-    </div>
     <input
       type="search"
       class="topology-org-search-input"
@@ -3764,10 +3762,9 @@ function renderEmptyRegionPanel() {
 
 function renderWorkspaceScreen() {
   const selectedRegion = resolveSelectedRegion();
-  const selectedOrg = resolveSelectedOrg();
   const selectedSpace = selectedSpaceId.length > 0 ? selectedSpaceId : 'No space selected';
   const regionCode = selectedRegion?.code ?? 'no-region';
-  const orgLabel = selectedOrg?.name ?? 'No org selected';
+  const orgLabel = resolveSelectedOrgName() || 'No org selected';
   const workspaceSummary = `Region: ${regionCode}. Org: ${orgLabel}. Space: ${selectedSpace}`;
   const workspaceBodyClass =
     activeTabId === 'settings' ? 'workspace-body workspace-body-sql' : 'workspace-body';
@@ -4242,7 +4239,7 @@ function renderLogsFilters() {
 
   return `
     <div class="scope-row">
-      <span class="scope-chip">Org: ${resolveSelectedOrg()?.name ?? 'n/a'}</span>
+      <span class="scope-chip">Org: ${resolveSelectedOrgName() || 'n/a'}</span>
       <span class="scope-chip">Space: ${selectedSpaceId.length > 0 ? selectedSpaceId : 'n/a'}</span>
       <span class="scope-chip">App: all</span>
       <span class="scope-chip">Range: 15m</span>
@@ -5142,6 +5139,14 @@ function resolveSelectedOrg() {
   return resolveCurrentMockOrgOptions().find((org) => org.id === selectedOrgId);
 }
 
+function resolveSelectedOrgName() {
+  if (selectedOrgName.length > 0) {
+    return selectedOrgName;
+  }
+
+  return resolveSelectedOrg()?.name ?? '';
+}
+
 function resolveCurrentMockOrgOptions() {
   const selectedRegion = resolveSelectedRegion();
   if (selectedRegion?.code === 'br-10') {
@@ -5497,7 +5502,7 @@ function resolveActiveAppNamesByIds(activeAppIds) {
 }
 
 function buildFallbackAppNames(spaceKey) {
-  const orgName = resolveSelectedOrg()?.name ?? 'app-services';
+  const orgName = resolveSelectedOrgName() || 'app-services';
   const orgSlug = orgName
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, '-')

@@ -1891,6 +1891,9 @@ test.describe('SAP Tools region selector', () => {
       );
       await expect(getQuickOrgSearchPanel(webviewFrame)).toBeVisible();
       await expect(getQuickOrgSearchInput(webviewFrame)).toBeVisible();
+      await expect(getQuickOrgSearchPanel(webviewFrame)).not.toContainText(
+        /orgs synced across regions/i
+      );
       await expect(getTopologyOrgRow(webviewFrame, 'finance-services-prod', /^us10\b/i))
         .toBeVisible();
       await expect(webviewFrame.getByRole('heading', { name: 'Choose Area' })).toHaveCount(0);
@@ -1924,6 +1927,42 @@ test.describe('SAP Tools region selector', () => {
         timeout: 10000,
       });
       await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can see restored quick scope org name without manual org list', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await expect(getQuickOrgSearchInput(webviewFrame)).toBeVisible({ timeout: 15000 });
+
+      await webviewFrame.evaluate(() => {
+        window.postMessage(
+          {
+            type: 'sapTools.restoreConfirmedScope',
+            scope: {
+              regionId: 'us10',
+              orgGuid: 'live-cf-org-guid',
+              orgName: 'finance-services-prod',
+              spaceName: 'uat',
+            },
+          },
+          '*'
+        );
+      });
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: us-10. Org: finance-services-prod. Space: uat'
+      );
+      await expect(webviewFrame.locator('.workspace-context')).not.toContainText(
+        'No org selected'
+      );
     } finally {
       await cleanupExtensionHost(session);
     }

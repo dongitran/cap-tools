@@ -643,6 +643,7 @@ export class RegionSidebarProvider
       scope: {
         regionId: payload.regionId,
         orgGuid: payload.orgGuid,
+        orgName: payload.orgName,
         spaceName: payload.spaceName,
       },
     });
@@ -854,6 +855,7 @@ export class RegionSidebarProvider
       scope: {
         regionId: payload.regionId,
         orgGuid: payload.orgGuid,
+        orgName: payload.orgName,
         spaceName: payload.spaceName,
       },
     });
@@ -962,6 +964,7 @@ export class RegionSidebarProvider
       scope: {
         regionId: persistedScope.regionId,
         orgGuid: persistedScope.orgGuid,
+        orgName: persistedScope.orgName,
         spaceName: persistedScope.spaceName,
       },
     });
