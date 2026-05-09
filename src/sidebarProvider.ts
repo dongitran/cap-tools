@@ -567,8 +567,12 @@ export class RegionSidebarProvider
   private async handleConfirmScope(payload: ConfirmScopePayload): Promise<void> {
     await this.persistConfirmedScopeForCurrentUser(payload);
     const sharedScope = buildSharedScopeFromConfirmPayload(payload);
+    const isChangedScope = !areSharedScopesEqual(sharedScope, this.currentConfirmedScope);
     this.lastWrittenScope = sharedScope;
     this.currentConfirmedScope = sharedScope;
+    if (isChangedScope) {
+      this.hanaSqlWorkbench.invalidateAllAppContexts();
+    }
     try {
       await writeScopeIfChanged(sharedScope);
     } catch (error) {
@@ -619,6 +623,7 @@ export class RegionSidebarProvider
       return;
     }
 
+    this.clearScopeBoundRuntimeStateForScopeChange();
     const orgGuid = await this.resolveOrgGuidByName(scope.regionCode, scope.orgName);
     if (orgGuid.length === 0) {
       return;
@@ -650,6 +655,23 @@ export class RegionSidebarProvider
     await this.hydrateRestoredScope({
       ...payload,
       confirmedAt: new Date().toISOString(),
+    });
+  }
+
+  private clearScopeBoundRuntimeStateForScopeChange(): void {
+    this.bumpRegionSelectionRequestId();
+    this.currentApps = [];
+    this.currentLogSessionSeed = null;
+    this.serviceFolderMappings = [];
+    this.serviceFolderSelections.clear();
+    this.exportInProgress = false;
+    this.lastLoadedScope = null;
+    this.cfLogsPanel.updateApps([], null);
+    this.hanaSqlWorkbench.invalidateAllAppContexts();
+    this.postMessage({ type: MSG_APPS_LOADED, apps: [] });
+    this.postMessage({
+      type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+      mappings: this.serviceFolderMappings,
     });
   }
 
@@ -2089,6 +2111,7 @@ export class RegionSidebarProvider
       this.lastLoadedScope = null;
       this.lastWrittenScope = undefined;
       this.currentConfirmedScope = undefined;
+      this.hanaSqlWorkbench.invalidateAllAppContexts();
       this.cfLogsPanel.updateApps([], null);
       this.cfLogsPanel.updateScope('No scope selected');
       this.reloadToLoginView();

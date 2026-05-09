@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.50 (pre-release)
+- Cleared CF logs apps and active logging state immediately when an external shared scope change cannot be restored.
+- Invalidated S/4HANA SQL Workbench app credentials and table metadata when the confirmed scope changes.
+- Guarded in-flight HANA table preload results so stale tables cannot repopulate after scope invalidation.
+
 ## 0.7.49 (pre-release)
 - Matched the Quick Org Search Back button width to Confirm Scope in the space selection step.
 - Strengthened E2E coverage so Back and Confirm Scope rendered widths must stay aligned.

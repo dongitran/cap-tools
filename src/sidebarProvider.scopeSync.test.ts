@@ -76,7 +76,9 @@ interface SidebarProviderTestAccess {
 
 interface ProviderFixture {
   readonly access: SidebarProviderTestAccess;
+  readonly cfLogsPanelUpdateAppsMock: ReturnType<typeof vi.fn>;
   readonly globalStateUpdateMock: ReturnType<typeof vi.fn>;
+  readonly hanaInvalidateAllAppContextsMock: ReturnType<typeof vi.fn>;
   readonly provider: RegionSidebarProvider;
 }
 
@@ -135,7 +137,9 @@ function createProviderFixture(): ProviderFixture {
     updateApps: vi.fn(),
     updateScope: vi.fn(),
   } as unknown as CfLogsPanelProvider;
-  const hanaSqlWorkbench = {} as unknown as HanaSqlWorkbench;
+  const hanaSqlWorkbench = {
+    invalidateAllAppContexts: vi.fn(),
+  } as unknown as HanaSqlWorkbench;
   const outputChannel = {
     appendLine: vi.fn(),
   } as unknown as vscode.OutputChannel;
@@ -152,7 +156,10 @@ function createProviderFixture(): ProviderFixture {
 
   return {
     access: provider as unknown as SidebarProviderTestAccess,
+    cfLogsPanelUpdateAppsMock: cfLogsPanel.updateApps as ReturnType<typeof vi.fn>,
     globalStateUpdateMock,
+    hanaInvalidateAllAppContextsMock:
+      hanaSqlWorkbench.invalidateAllAppContexts as ReturnType<typeof vi.fn>,
     provider,
   };
 }
@@ -171,7 +178,8 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
   });
 
   it('ignores an external scope change that matches the last written scope', async () => {
-    const { access } = createProviderFixture();
+    const { access, cfLogsPanelUpdateAppsMock, hanaInvalidateAllAppContextsMock } =
+      createProviderFixture();
     const scope: SharedCfScope = {
       regionCode: 'us10',
       orgName: 'finance-services-prod',
@@ -184,6 +192,8 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     await access.handleExternalScopeChange(scope);
 
     expect(restoreSpy).not.toHaveBeenCalled();
+    expect(cfLogsPanelUpdateAppsMock).not.toHaveBeenCalled();
+    expect(hanaInvalidateAllAppContextsMock).not.toHaveBeenCalled();
   });
 
   it('ignores an external scope change when no CF session is active', async () => {
@@ -230,7 +240,8 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
   });
 
   it('does not confirm an external scope when the org GUID cannot be resolved', async () => {
-    const { access } = createProviderFixture();
+    const { access, cfLogsPanelUpdateAppsMock, hanaInvalidateAllAppContextsMock } =
+      createProviderFixture();
     access.cfSession = createMockSession();
     vi.spyOn(access, 'resolveOrgGuidByName').mockResolvedValue('');
     const confirmSpy = vi.spyOn(access, 'handleConfirmScope');
@@ -242,6 +253,30 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     });
 
     expect(confirmSpy).not.toHaveBeenCalled();
+    expect(cfLogsPanelUpdateAppsMock).toHaveBeenCalledWith([], null);
+    expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears scope-bound runtime state before resolving an external scope', async () => {
+    const { access, cfLogsPanelUpdateAppsMock, hanaInvalidateAllAppContextsMock } =
+      createProviderFixture();
+    access.cfSession = createMockSession();
+    vi.spyOn(access, 'resolveOrgGuidByName').mockImplementation(async () => {
+      expect(cfLogsPanelUpdateAppsMock).toHaveBeenCalledWith([], null);
+      expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
+      return 'org-finance-prod';
+    });
+    vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
+    vi.spyOn(access, 'hydrateRestoredScope').mockResolvedValue(undefined);
+
+    await access.restoreExternalScope({
+      regionCode: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+
+    expect(cfLogsPanelUpdateAppsMock).toHaveBeenCalledWith([], null);
+    expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
   });
 
   it('confirms an external scope with compact region id and hyphenated region code', async () => {
@@ -292,6 +327,27 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
       },
       'global-target'
     );
+  });
+
+  it('invalidates HANA app contexts when the confirmed scope changes', async () => {
+    const { access, hanaInvalidateAllAppContextsMock } = createProviderFixture();
+    access.currentConfirmedScope = {
+      regionCode: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    };
+
+    await access.handleConfirmScope({
+      regionId: 'br10',
+      regionCode: 'br-10',
+      regionName: 'Brazil (Sao Paulo)',
+      regionArea: 'Americas',
+      orgGuid: 'org-br10-billing-reconciliation',
+      orgName: 'billing-reconciliation-prod',
+      spaceName: 'etl',
+    });
+
+    expect(hanaInvalidateAllAppContextsMock).toHaveBeenCalledTimes(1);
   });
 
   it('confirms quick scope selection with org GUID resolved from test mode topology', async () => {

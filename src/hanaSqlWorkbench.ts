@@ -28,10 +28,17 @@ import {
   filterKeywordCandidates,
   formatHanaTableDisplayEntries,
   resolveHanaDisplayTableReferences,
-  resolveHanaSqlTargetTableName,
   sanitizeUntitledFileName,
   type HanaTableDisplayEntry,
 } from './hanaSqlWorkbenchSupport';
+import {
+  delayE2eQuickSelectIfConfigured,
+  delayTestModeTableLoadIfConfigured,
+  resolveSqlResultTableName,
+  sanitizeSqlCommandLogValue,
+  sanitizeSqlLogValue,
+  toPositiveViewColumnNumber,
+} from './hanaSqlWorkbenchRuntime';
 import { HanaSqlResultPanelManager, type HanaSqlResultPanelSession } from './hanaSqlResultPanel';
 export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWorkbenchSupport';
 export const RUN_HANA_SQL_COMMAND_ID = 'sapTools.runHanaSql';
@@ -47,6 +54,7 @@ interface HanaSqlAppContext {
   tableNames: readonly string[];
   tableEntries: readonly HanaTableDisplayEntry[];
   tableNamesPromise: Promise<void> | null;
+  cacheVersion: number;
 }
 export interface OpenHanaSqlFileRequest {
   readonly appId: string;
@@ -99,6 +107,7 @@ export class HanaSqlWorkbench
   private readonly appIdByDocumentUri = new Map<string, string>();
   private readonly disposables: vscode.Disposable[] = [];
   private readonly resultPanelManager: HanaSqlResultPanelManager;
+  private appContextCacheVersion = 0;
 
   constructor(private readonly outputChannel: vscode.OutputChannel) {
     this.isTestMode = process.env['SAP_TOOLS_TEST_MODE'] === '1';
@@ -131,6 +140,20 @@ export class HanaSqlWorkbench
     this.resultPanelManager.dispose();
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
+    }
+    this.appContextsByAppId.clear();
+    this.appIdByDocumentUri.clear();
+  }
+
+  invalidateAllAppContexts(): void {
+    this.appContextCacheVersion += 1;
+    for (const context of this.appContextsByAppId.values()) {
+      context.cacheVersion = this.appContextCacheVersion;
+      context.connection = null;
+      context.schema = '';
+      context.tableNames = [];
+      context.tableEntries = [];
+      context.tableNamesPromise = null;
     }
   }
 
@@ -284,6 +307,7 @@ export class HanaSqlWorkbench
       tableNames: [],
       tableEntries: [],
       tableNamesPromise: null,
+      cacheVersion: this.appContextCacheVersion,
     };
     this.appContextsByAppId.set(options.appId, created);
     return created;
@@ -439,21 +463,31 @@ export class HanaSqlWorkbench
       return;
     }
 
-    context.tableNamesPromise = this.loadTableNames(context)
+    const cacheVersion = context.cacheVersion;
+    const tableNamesPromise = this.loadTableNames(context, cacheVersion)
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         this.logSql(`table suggestion preload failed: ${sanitizeSqlLogValue(message)}`);
       })
       .finally(() => {
-        context.tableNamesPromise = null;
+        if (context.tableNamesPromise === tableNamesPromise) {
+          context.tableNamesPromise = null;
+        }
       });
+    context.tableNamesPromise = tableNamesPromise;
 
     await context.tableNamesPromise;
   }
 
-  private async loadTableNames(context: HanaSqlAppContext): Promise<void> {
+  private async loadTableNames(
+    context: HanaSqlAppContext,
+    cacheVersion: number
+  ): Promise<void> {
     if (this.isTestMode) {
       await delayTestModeTableLoadIfConfigured();
+      if (!this.isAppContextCurrent(context, cacheVersion)) {
+        return;
+      }
       context.schema = 'TEST_SCHEMA';
       context.tableNames = createTestModeTableNames(context.appName);
       context.tableEntries = await this.formatTableEntries(context.tableNames);
@@ -463,11 +497,12 @@ export class HanaSqlWorkbench
       return;
     }
 
-    await this.ensureConnection(context);
-    if (context.connection === null) {
+    await this.ensureConnection(context, cacheVersion);
+    if (!this.isAppContextCurrent(context, cacheVersion) || context.connection === null) {
       return;
     }
 
+    const connection = context.connection;
     const queries = buildTableDiscoveryQueries(context.schema);
     let hadSuccessfulDiscoveryQuery = false;
     let lastErrorMessage = '';
@@ -476,18 +511,23 @@ export class HanaSqlWorkbench
         `run table discovery query ${String(index + 1)} for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(query)}`
       );
       try {
-        const result = await executeHanaQuery(context.connection, query, {
+        const result = await executeHanaQuery(connection, query, {
           timeoutMs: 15_000,
         });
         if (result.kind !== 'resultset') {
           continue;
         }
         hadSuccessfulDiscoveryQuery = true;
-        context.tableNames = extractTableNames(result);
-        context.tableEntries = await this.formatTableEntries(context.tableNames);
-        if (context.tableNames.length > 0) {
+        const tableNames = extractTableNames(result);
+        const tableEntries = await this.formatTableEntries(tableNames);
+        if (!this.isAppContextCurrent(context, cacheVersion)) {
+          return;
+        }
+        context.tableNames = tableNames;
+        context.tableEntries = tableEntries;
+        if (tableNames.length > 0) {
           this.logSql(
-            `loaded ${String(context.tableNames.length)} tables for app ${sanitizeSqlLogValue(context.appName)}`
+            `loaded ${String(tableNames.length)} tables for app ${sanitizeSqlLogValue(context.appName)}`
           );
           return;
         }
@@ -501,6 +541,9 @@ export class HanaSqlWorkbench
     }
     if (!hadSuccessfulDiscoveryQuery && lastErrorMessage.length > 0) {
       throw new Error(`Failed to discover tables: ${lastErrorMessage}`);
+    }
+    if (!this.isAppContextCurrent(context, cacheVersion)) {
+      return;
     }
     this.logSql(`no tables found for app ${sanitizeSqlLogValue(context.appName)}`);
     context.tableEntries = [];
@@ -518,7 +561,10 @@ export class HanaSqlWorkbench
     }
   }
 
-  private async ensureConnection(context: HanaSqlAppContext): Promise<void> {
+  private async ensureConnection(
+    context: HanaSqlAppContext,
+    cacheVersion = context.cacheVersion
+  ): Promise<void> {
     if (context.connection !== null) {
       return;
     }
@@ -531,10 +577,20 @@ export class HanaSqlWorkbench
       appName: context.appName,
       session: context.session,
     });
+    if (!this.isAppContextCurrent(context, cacheVersion)) {
+      return;
+    }
     context.connection = resolved.connection;
     context.schema = resolved.schema;
     this.logSql(
       `resolved HANA connection for app ${sanitizeSqlLogValue(context.appName)} schema ${sanitizeSqlLogValue(context.schema)}`
+    );
+  }
+
+  private isAppContextCurrent(context: HanaSqlAppContext, cacheVersion: number): boolean {
+    return (
+      this.appContextsByAppId.get(context.appId) === context &&
+      context.cacheVersion === cacheVersion
     );
   }
 
@@ -612,85 +668,4 @@ export class HanaSqlWorkbench
   private logSql(message: string): void {
     this.outputChannel.appendLine(`[sql] ${message}`);
   }
-}
-
-function sanitizeSqlLogValue(value: string): string {
-  return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
-}
-
-function sanitizeSqlCommandLogValue(value: string): string {
-  return sanitizeSqlLogValue(redactSqlStringLiteralsForLog(value));
-}
-
-function resolveSqlResultTableName(sql: string): string {
-  return resolveHanaSqlTargetTableName(sql) ?? 'SQL statement';
-}
-
-function toPositiveViewColumnNumber(
-  viewColumn: vscode.ViewColumn | undefined
-): number | undefined {
-  if (viewColumn === undefined) {
-    return undefined;
-  }
-  const column: number = viewColumn;
-  return column > 0 ? column : undefined;
-}
-
-function redactSqlStringLiteralsForLog(value: string): string {
-  let redacted = '';
-  let index = 0;
-  while (index < value.length) {
-    if (value[index] !== "'") {
-      redacted += value[index] ?? '';
-      index += 1;
-      continue;
-    }
-    redacted += "'[literal]'";
-    index = skipSqlStringLiteralForLog(value, index);
-  }
-  return redacted;
-}
-
-function skipSqlStringLiteralForLog(value: string, start: number): number {
-  for (let index = start + 1; index < value.length; index += 1) {
-    if (value[index] !== "'") continue;
-    if (value[index + 1] === "'") {
-      index += 1;
-      continue;
-    }
-    return index + 1;
-  }
-  return value.length;
-}
-
-async function delayTestModeTableLoadIfConfigured(): Promise<void> {
-  await delayE2eMsFromEnv('SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS');
-}
-
-async function delayE2eQuickSelectIfConfigured(): Promise<void> {
-  await delayE2eMsFromEnv('SAP_TOOLS_E2E_QUICK_SELECT_DELAY_MS');
-}
-
-async function delayE2eMsFromEnv(envName: string): Promise<void> {
-  const delayMs = resolveE2eDelayMs(envName);
-  if (delayMs === 0) {
-    return;
-  }
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
-function resolveE2eDelayMs(envName: string): number {
-  if (process.env['SAP_TOOLS_E2E'] !== '1') {
-    return 0;
-  }
-
-  const rawDelay = process.env[envName] ?? '';
-  const parsedDelay = Number.parseInt(rawDelay, 10);
-  if (!Number.isFinite(parsedDelay) || parsedDelay <= 0) {
-    return 0;
-  }
-
-  return Math.min(parsedDelay, 30_000);
 }

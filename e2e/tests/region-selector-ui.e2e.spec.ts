@@ -27,6 +27,7 @@ import {
   getOrgSearchInput,
   getSelectionTab,
   launchExtensionHost,
+  openCfLogsPanel,
   openCustomSelectionMode,
   openSapToolsSidebar,
   readPaletteSnapshot,
@@ -1043,6 +1044,53 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByRole('button', { name: 'Confirm Scope' })
       ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can clear active logging state when an external scope cannot be restored', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await selectDefaultScope(webviewFrame);
+
+      const confirmButton = webviewFrame.getByRole('button', {
+        name: 'Confirm Scope',
+      });
+      await expect(confirmButton).toBeEnabled();
+      await clickWithFallback(confirmButton);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 10000 });
+
+      const logsFrame = await openCfLogsPanel(session.window);
+      await clickWithFallback(webviewFrame.getByLabel('Select finance-uat-api'));
+      await clickWithFallback(
+        webviewFrame.getByRole('button', { name: 'Start App Logging' })
+      );
+
+      const appSelect = logsFrame.getByLabel('Select app');
+      await expect(appSelect).toBeEnabled({ timeout: 10000 });
+      await expect(appSelect.locator('option')).toContainText(['finance-uat-api (1)']);
+
+      const currentSettings = readUserSettings(session.userDataDir);
+      writeUserSettings(session.userDataDir, {
+        ...currentSettings,
+        'sapCap.currentScope': {
+          regionCode: 'us10',
+          orgName: 'missing-external-org',
+          spaceName: 'uat',
+        },
+      });
+
+      await expect(appSelect).toBeDisabled({ timeout: 20000 });
+      await expect(appSelect.locator('option')).toHaveText(['— no active app logging —']);
+      await expect(webviewFrame.locator('.app-log-catalog')).toContainText(
+        'No apps found in current space.',
+        { timeout: 20000 }
+      );
     } finally {
       await cleanupExtensionHost(session);
     }
