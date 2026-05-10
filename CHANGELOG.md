@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.52 (pre-release)
+- Restored SAP Tools from external `sapCap.currentScope` changes even before SAP Tools has an active CF region session.
+- Established the target region session on demand while keeping cache/test-mode org resolution first.
+- Guarded rapid external scope changes so stale restores cannot overwrite the latest shared scope.
+
 ## 0.7.51 (pre-release)
 - Avoided duplicate S/4HANA SQL Workbench cache invalidation during successful external scope restore.
 - Reloaded SQL Workbench table metadata for callers that were waiting while scope invalidation happened.

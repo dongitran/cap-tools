@@ -134,6 +134,7 @@ interface ConfirmScopePayload {
 
 interface ConfirmScopeOptions {
   readonly invalidateHanaAppContexts?: boolean;
+  readonly writeSharedScope?: boolean;
 }
 
 interface TopologyOrgSelectedPayload {
@@ -271,6 +272,7 @@ export class RegionSidebarProvider
   private lastLoadedScope: LoadedScopeState | null = null;
   private lastWrittenScope: SharedCfScope | undefined;
   private currentConfirmedScope: SharedCfScope | undefined;
+  private externalScopeChangeRequestId = 0;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -581,14 +583,17 @@ export class RegionSidebarProvider
     if (isChangedScope && shouldInvalidateHanaAppContexts) {
       this.hanaSqlWorkbench.invalidateAllAppContexts();
     }
-    try {
-      await writeScopeIfChanged(sharedScope);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to write shared scope setting.';
-      this.outputChannel.appendLine(
-        `[scope] Shared setting update failed: ${sanitizeForLog(errorMessage)}`
-      );
+    const shouldWriteSharedScope = options.writeSharedScope ?? true;
+    if (shouldWriteSharedScope) {
+      try {
+        await writeScopeIfChanged(sharedScope);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to write shared scope setting.';
+        this.outputChannel.appendLine(
+          `[scope] Shared setting update failed: ${sanitizeForLog(errorMessage)}`
+        );
+      }
     }
     this.outputChannel.appendLine(
       `[scope] Confirmed scope region=${sanitizeForLog(payload.regionCode)} org=${sanitizeForLog(payload.orgName)} space=${sanitizeForLog(payload.spaceName)}`
@@ -601,10 +606,6 @@ export class RegionSidebarProvider
       return;
     }
 
-    if (this.cfSession === null) {
-      return;
-    }
-
     const region = SAP_BTP_REGIONS.find((entry) => entry.id === scope.regionCode);
     if (region === undefined) {
       return;
@@ -614,8 +615,9 @@ export class RegionSidebarProvider
       return;
     }
 
+    const requestId = this.bumpExternalScopeChangeRequestId();
     try {
-      await this.restoreExternalScope(scope);
+      await this.restoreExternalScope(scope, requestId);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to restore external scope.';
@@ -625,14 +627,24 @@ export class RegionSidebarProvider
     }
   }
 
-  private async restoreExternalScope(scope: SharedCfScope): Promise<void> {
+  private async restoreExternalScope(
+    scope: SharedCfScope,
+    requestId = this.externalScopeChangeRequestId
+  ): Promise<void> {
     const region = SAP_BTP_REGIONS.find((entry) => entry.id === scope.regionCode);
-    if (region === undefined || this.cfSession === null) {
+    if (region === undefined) {
       return;
     }
 
     this.clearScopeBoundRuntimeStateForScopeChange();
-    const orgGuid = await this.resolveOrgGuidByName(scope.regionCode, scope.orgName);
+    const orgGuid = await this.resolveOrgGuidByName(
+      scope.regionCode,
+      scope.orgName,
+      () => this.isCurrentExternalScopeRequest(requestId)
+    );
+    if (!this.isCurrentExternalScopeRequest(requestId)) {
+      return;
+    }
     if (orgGuid.length === 0) {
       return;
     }
@@ -647,7 +659,13 @@ export class RegionSidebarProvider
       spaceName: scope.spaceName,
     };
 
-    await this.handleConfirmScope(payload, { invalidateHanaAppContexts: false });
+    await this.handleConfirmScope(payload, {
+      invalidateHanaAppContexts: false,
+      writeSharedScope: false,
+    });
+    if (!this.isCurrentExternalScopeRequest(requestId)) {
+      return;
+    }
     this.cfLogsPanel.updateScope(
       buildScopeLabel(payload.regionCode, payload.orgName, payload.spaceName)
     );
@@ -898,32 +916,124 @@ export class RegionSidebarProvider
 
   private async resolveOrgGuidByName(
     regionId: string,
-    orgName: string
+    orgName: string,
+    isCurrentRequest: () => boolean = () => true
   ): Promise<string> {
+    const region = SAP_BTP_REGIONS.find((entry) => entry.id === regionId);
+    if (region === undefined) {
+      return '';
+    }
+
+    const regionCode = toHyphenatedRegionCode(region.id);
+    this.selectedRegionId = region.id;
+    this.selectedRegionCode = regionCode;
+    this.selectedOrgGuid = '';
+
+    const cachedOrTestGuid = await this.resolveCachedOrTestOrgGuid(
+      regionId,
+      regionCode,
+      orgName,
+      isCurrentRequest
+    );
+    if (cachedOrTestGuid !== null) {
+      return cachedOrTestGuid;
+    }
+
+    return this.resolveLiveOrgGuid(regionCode, orgName, isCurrentRequest);
+  }
+
+  private async resolveCachedOrTestOrgGuid(
+    regionId: string,
+    regionCode: string,
+    orgName: string,
+    isCurrentRequest: () => boolean
+  ): Promise<string | null> {
     const cachedOrgs = await this.cacheSyncService.getCachedOrgs(regionId);
+    if (!isCurrentRequest()) {
+      return '';
+    }
     const cachedMatch = cachedOrgs?.find((org) => org.name === orgName);
     if (cachedMatch !== undefined) {
       return cachedMatch.guid;
     }
     if (isTestMode()) {
-      const mockOrg = resolveMockOrgsForRegion(toHyphenatedRegionCode(regionId)).find(
+      const mockOrg = resolveMockOrgsForRegion(regionCode).find(
         (entry) => entry.name === orgName
       );
       return mockOrg?.guid ?? '';
     }
-    if (this.cfSession === null) {
-      return '';
+
+    return null;
+  }
+
+  private async resolveLiveOrgGuid(
+    regionCode: string,
+    orgName: string,
+    isCurrentRequest: () => boolean
+  ): Promise<string> {
+    if (this.cfSessionRegionCode !== regionCode) {
+      this.cfSession = null;
+      this.cfSessionRegionCode = '';
     }
-    if (this.cfSessionRegionCode !== toHyphenatedRegionCode(regionId)) {
+    if (this.cfSession === null) {
+      const credentials = await getEffectiveCredentials(this.context);
+      if (!isCurrentRequest()) {
+        return '';
+      }
+      if (credentials === null) {
+        return '';
+      }
+      const establishedSession = await this.establishCurrentScopeResolutionSession(
+        credentials,
+        regionCode,
+        isCurrentRequest
+      );
+      if (establishedSession === null) {
+        return '';
+      }
+    }
+    const session = this.cfSession;
+    if (session === null) {
       return '';
     }
     try {
-      const liveOrgs = await fetchOrgs(this.cfSession);
+      const liveOrgs = await fetchOrgs(session);
+      if (!isCurrentRequest()) {
+        return '';
+      }
       const liveMatch = liveOrgs.find((org) => org.name === orgName);
       return liveMatch?.guid ?? '';
     } catch {
       return '';
     }
+  }
+
+  private async establishCurrentScopeResolutionSession(
+    credentials: { readonly email: string; readonly password: string },
+    regionCode: string,
+    isCurrentRequest: () => boolean
+  ): Promise<CfSession | null> {
+    if (
+      this.cfSession !== null &&
+      this.cfSessionRegionCode.length > 0 &&
+      this.cfSessionRegionCode === regionCode
+    ) {
+      return this.cfSession;
+    }
+
+    const apiEndpoint = getCfApiEndpoint(regionCode);
+    const loginInfo = await fetchCfLoginInfo(apiEndpoint);
+    const token = await cfLogin(
+      loginInfo.authorizationEndpoint,
+      credentials.email,
+      credentials.password
+    );
+    if (!isCurrentRequest() || this.selectedRegionCode !== regionCode) {
+      return null;
+    }
+    this.cfSession = { token, apiEndpoint };
+    this.cfSessionRegionCode = regionCode;
+    return this.cfSession;
   }
 
   private async preloadRootFolderForPersistedScope(): Promise<void> {
@@ -2663,6 +2773,11 @@ export class RegionSidebarProvider
     return this.spaceSelectionRequestId;
   }
 
+  private bumpExternalScopeChangeRequestId(): number {
+    this.externalScopeChangeRequestId += 1;
+    return this.externalScopeChangeRequestId;
+  }
+
   private isCurrentRegionRequest(requestId: number): boolean {
     return requestId === this.regionSelectionRequestId;
   }
@@ -2673,6 +2788,10 @@ export class RegionSidebarProvider
 
   private isCurrentSpaceRequest(requestId: number): boolean {
     return requestId === this.spaceSelectionRequestId;
+  }
+
+  private isCurrentExternalScopeRequest(requestId: number): boolean {
+    return requestId === this.externalScopeChangeRequestId;
   }
 
   // ── Region logging ───────────────────────────────────────────────────────

@@ -60,6 +60,7 @@ interface SpaceSelectionPayloadForTest {
 
 interface ConfirmScopeOptionsForTest {
   readonly invalidateHanaAppContexts?: boolean;
+  readonly writeSharedScope?: boolean;
 }
 
 interface SidebarProviderTestAccess {
@@ -105,6 +106,20 @@ function createMockSession(): CfSession {
       expiresAt: Date.now() + 60_000,
       refreshToken: '',
     },
+  };
+}
+
+function createDeferred(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+} {
+  let resolveDeferred: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolveDeferred = resolve;
+  });
+  return {
+    promise,
+    resolve: resolveDeferred,
   };
 }
 
@@ -203,17 +218,30 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     expect(hanaInvalidateAllAppContextsMock).not.toHaveBeenCalled();
   });
 
-  it('ignores an external scope change when no CF session is active', async () => {
+  it('restores an external scope change when no CF session is active', async () => {
     const { access } = createProviderFixture();
-    const restoreSpy = vi.spyOn(access, 'restoreExternalScope');
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    vi.spyOn(access, 'hydrateRestoredScope').mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
 
     await access.handleExternalScopeChange({
-      regionCode: 'us10',
-      orgName: 'finance-services-prod',
-      spaceName: 'uat',
+      regionCode: 'br10',
+      orgName: 'billing-reconciliation-prod',
+      spaceName: 'etl',
     });
 
-    expect(restoreSpy).not.toHaveBeenCalled();
+    expect(confirmSpy).toHaveBeenCalledWith(
+      {
+        regionId: 'br10',
+        regionCode: 'br-10',
+        regionName: 'Brazil (Sao Paulo)',
+        regionArea: 'Americas',
+        orgGuid: 'org-br10-billing-reconciliation',
+        orgName: 'billing-reconciliation-prod',
+        spaceName: 'etl',
+      },
+      { invalidateHanaAppContexts: false, writeSharedScope: false }
+    );
   });
 
   it('ignores an external scope change for an unknown region', async () => {
@@ -325,7 +353,53 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
         orgName: 'finance-services-prod',
         spaceName: 'uat',
       },
-      { invalidateHanaAppContexts: false }
+      { invalidateHanaAppContexts: false, writeSharedScope: false }
+    );
+  });
+
+  it('keeps the latest external scope when changes arrive in quick succession', async () => {
+    const { access } = createProviderFixture();
+    access.cfSession = createMockSession();
+    const firstResolveGate = createDeferred();
+    vi.spyOn(access, 'resolveOrgGuidByName').mockImplementation(
+      async (_regionId: string, orgName: string): Promise<string> => {
+        if (orgName === 'finance-services-prod') {
+          await firstResolveGate.promise;
+          return 'org-finance-prod';
+        }
+        return 'org-br10-billing-reconciliation';
+      }
+    );
+    vi.spyOn(access, 'hydrateRestoredScope').mockResolvedValue(undefined);
+    const confirmSpy = vi.spyOn(access, 'handleConfirmScope').mockResolvedValue();
+
+    const firstRestore = access.handleExternalScopeChange({
+      regionCode: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+    const secondRestore = access.handleExternalScopeChange({
+      regionCode: 'br10',
+      orgName: 'billing-reconciliation-prod',
+      spaceName: 'etl',
+    });
+
+    await secondRestore;
+    firstResolveGate.resolve();
+    await firstRestore;
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(confirmSpy).toHaveBeenCalledWith(
+      {
+        regionId: 'br10',
+        regionCode: 'br-10',
+        regionName: 'Brazil (Sao Paulo)',
+        regionArea: 'Americas',
+        orgGuid: 'org-br10-billing-reconciliation',
+        orgName: 'billing-reconciliation-prod',
+        spaceName: 'etl',
+      },
+      { invalidateHanaAppContexts: false, writeSharedScope: false }
     );
   });
 

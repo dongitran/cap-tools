@@ -1049,6 +1049,44 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
+  test('User can follow external SAP CAP scope before selecting a SAP Tools region', async () => {
+    const session = await launchExtensionHost();
+
+    try {
+      const webviewFrame = await openSapToolsSidebar(session.window);
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Select SAP BTP Region' })
+      ).toBeVisible({ timeout: 10000 });
+
+      const currentSettings = readUserSettings(session.userDataDir);
+      writeUserSettings(session.userDataDir, {
+        ...currentSettings,
+        'sapCap.currentScope': {
+          regionCode: 'br10',
+          orgName: 'billing-reconciliation-prod',
+          spaceName: 'etl',
+        },
+      });
+
+      await expect(
+        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+      ).toBeVisible({ timeout: 20000 });
+      await expect(webviewFrame.locator('.workspace-context')).toContainText(
+        'Region: br-10. Org: billing-reconciliation-prod. Space: etl',
+        { timeout: 20000 }
+      );
+      await expect(webviewFrame.getByText('etl-scheduler')).toBeVisible({
+        timeout: 20000,
+      });
+      await expect(webviewFrame.locator('.stage-error')).toHaveCount(0);
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Confirm Scope' })
+      ).toHaveCount(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can clear active logging state when an external scope cannot be restored', async () => {
     const session = await launchExtensionHost();
 
