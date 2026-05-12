@@ -487,10 +487,11 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 }
 
 .cf-log-table .cell-request-text {
-  white-space: pre-wrap;
+  white-space: nowrap;
+  overflow: hidden;
   overflow-wrap: anywhere;
-  word-break: break-word;
-  text-overflow: clip;
+  word-break: normal;
+  text-overflow: ellipsis;
 }
 
 .cf-log-table .cell-message {
@@ -499,6 +500,8 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 /* Message text: preserve formatting, wrap at any char to avoid overflow */
 .cf-log-table .cell-message-text {
+  max-height: 8.5em;
+  overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;

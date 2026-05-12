@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type ElectronApplication, type Frame } from '@playwright/test';
 
 import {
   AREA_TO_SELECT,
@@ -13,6 +13,143 @@ import {
   openSapToolsSidebar,
   selectDefaultScope,
 } from './support/sapToolsHarness';
+
+interface StartedCfLogsSession {
+  readonly session: Awaited<ReturnType<typeof launchExtensionHost>>;
+  readonly logsFrame: Frame;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function openStartedCfLogsSession(): Promise<StartedCfLogsSession> {
+  const session = await launchExtensionHost();
+  const sidebarFrame = await openSapToolsSidebar(session.window);
+  const logsFrame = await openCfLogsPanel(session.window);
+  await selectDefaultScope(sidebarFrame);
+
+  const confirmButton = sidebarFrame.getByRole('button', { name: 'Confirm Scope' });
+  await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+  await clickWithFallback(confirmButton);
+
+  await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));
+  await clickWithFallback(sidebarFrame.getByRole('button', { name: 'Start App Logging' }));
+  await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+    timeout: 10000,
+  });
+
+  return { session, logsFrame };
+}
+
+async function setCfLogsColumnVisible(
+  logsFrame: Frame,
+  label: string,
+  visible: boolean
+): Promise<void> {
+  const settingsPanel = logsFrame.locator('#settings-panel');
+  if (await settingsPanel.isHidden().catch(() => true)) {
+    await clickWithFallback(logsFrame.getByLabel('Column settings'));
+    await expect(settingsPanel).toBeVisible({ timeout: 5000 });
+  }
+
+  const checkbox = logsFrame
+    .locator('#settings-column-toggles .settings-column-item')
+    .filter({ hasText: label })
+    .locator('input[type="checkbox"]');
+
+  if ((await checkbox.isChecked()) !== visible) {
+    await clickWithFallback(checkbox);
+  }
+
+  if (visible) {
+    await expect(checkbox).toBeChecked();
+  } else {
+    await expect(checkbox).not.toBeChecked();
+  }
+
+  await clickWithFallback(logsFrame.getByLabel('Column settings'));
+  await expect(settingsPanel).toBeHidden({ timeout: 5000 });
+}
+
+async function getActiveCfLogsAppName(logsFrame: Frame): Promise<string> {
+  const appName = await logsFrame
+    .getByLabel('Select app')
+    .evaluate((element) => (element instanceof HTMLSelectElement ? element.value : ''));
+  expect(appName.length).toBeGreaterThan(0);
+  return appName;
+}
+
+async function appendCfLogsLines(logsFrame: Frame, lines: string[]): Promise<void> {
+  const appName = await getActiveCfLogsAppName(logsFrame);
+  await logsFrame.evaluate(
+    ({ targetApp, logLines }) => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'sapTools.logsAppend',
+            appName: targetApp,
+            lines: logLines,
+          },
+        })
+      );
+    },
+    { targetApp: appName, logLines: lines }
+  );
+}
+
+async function expectSingleRequestText(
+  logsFrame: Frame,
+  searchTerm: string,
+  expectedText: string
+): Promise<void> {
+  await logsFrame.getByLabel('Search logs').fill(searchTerm);
+  await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+    timeout: 5000,
+  });
+  await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+  await expect(
+    logsFrame.locator('#log-table-body tr').first().locator('td.cell-request .cell-request-text')
+  ).toHaveText(expectedText);
+}
+
+async function readElectronClipboardText(
+  electronApp: ElectronApplication
+): Promise<string> {
+  return electronApp.evaluate((electron): string => {
+    const electronRecord = electron as Record<string, unknown>;
+    const clipboard = electronRecord['clipboard'];
+    if (typeof clipboard !== 'object' || clipboard === null || Array.isArray(clipboard)) {
+      return '';
+    }
+
+    const clipboardRecord = clipboard as Record<string, unknown>;
+    const readText = clipboardRecord['readText'];
+    if (typeof readText !== 'function') {
+      return '';
+    }
+
+    const text = (readText as () => unknown)();
+    return typeof text === 'string' ? text : '';
+  });
+}
+
+async function waitForElectronClipboardText(
+  electronApp: ElectronApplication,
+  isExpectedText: (text: string) => boolean
+): Promise<string> {
+  let latestText = '';
+  await expect
+    .poll(
+      async () => {
+        latestText = await readElectronClipboardText(electronApp);
+        return isExpectedText(latestText);
+      },
+      { timeout: 10000 }
+    )
+    .toBe(true);
+  return latestText;
+}
 
 test.describe('SAP Tools CF logs panel', () => {
   test('User can open CF logs panel with table and filter controls', async () => {
@@ -108,7 +245,7 @@ test.describe('SAP Tools CF logs panel', () => {
     }
   });
 
-  test('User can read wrapped endpoint events while raw log messages stay hidden', async () => {
+  test('User can read compact endpoint events while raw log messages stay hidden', async () => {
     const session = await launchExtensionHost();
 
     try {
@@ -144,10 +281,10 @@ test.describe('SAP Tools CF logs panel', () => {
         };
       });
 
-      expect(requestCellStyle.whiteSpace).toBe('pre-wrap');
-      expect(requestCellStyle.textOverflow).toBe('clip');
+      expect(requestCellStyle.whiteSpace).toBe('nowrap');
+      expect(requestCellStyle.textOverflow).toBe('ellipsis');
       expect(requestCellStyle.overflowWrap).toBe('anywhere');
-      expect(requestCellStyle.wordBreak).toBe('break-word');
+      expect(requestCellStyle.wordBreak).toBe('normal');
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -217,6 +354,203 @@ test.describe('SAP Tools CF logs panel', () => {
       // The copy toast should appear briefly.
       const toast = logsFrame.locator('#copy-toast');
       await expect(toast).toHaveClass(/is-visible/, { timeout: 5000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can inspect and copy raw JSON metadata from CF log messages', async () => {
+    const { session, logsFrame } = await openStartedCfLogsSession();
+
+    try {
+      await setCfLogsColumnVisible(logsFrame, 'Message', true);
+
+      const correlationId = 'synthetic-correlation-e2e-001';
+      const payload = {
+        level: 'info',
+        logger: 'SyntheticBatchJob - runSyntheticBatch',
+        correlation_id: correlationId,
+        remote_user: 'sample-user',
+        timestamp: '2026-05-11T11:20:17.839Z',
+        layer: 'cds',
+        component_type: 'application',
+        container_id: '192.0.2.20',
+        component_id: '00000000-0000-4000-8000-000000000101',
+        component_name: 'synthetic-cap-service',
+        component_instance: 0,
+        source_instance: 0,
+        organization_name: 'synthetic-org',
+        organization_id: '00000000-0000-4000-8000-000000000102',
+        space_name: 'sandbox',
+        space_id: '00000000-0000-4000-8000-000000000103',
+        msg: "{\n refID: 'synthetic-ref-e2e-001',\n batchID: 997,\n concurrencyLimit: 5\n}",
+        type: 'log',
+      };
+      const rawJson = JSON.stringify(payload);
+
+      await appendCfLogsLines(logsFrame, [
+        `2026-05-11T18:20:17.84+0700 [APP/PROC/WEB/0] OUT ${rawJson}`,
+      ]);
+
+      await logsFrame.getByLabel('Search logs').fill(correlationId);
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 5000,
+      });
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+
+      const row = logsFrame.locator('#log-table-body tr').first();
+      const messageText = row.locator('td.cell-message .cell-message-text');
+      await expect(messageText).toContainText(`"correlation_id":"${correlationId}"`);
+      await expect(messageText).toContainText('"remote_user":"sample-user"');
+      await expect(messageText).toContainText('"container_id":"192.0.2.20"');
+      await expect(messageText).toContainText('"organization_id":"00000000-0000-4000-8000-000000000102"');
+      await expect(messageText).toContainText('"space_id":"00000000-0000-4000-8000-000000000103"');
+      await expect(messageText).toContainText('"msg":"{\\n refID');
+
+      await clickWithFallback(row);
+      const clipboardText = await waitForElectronClipboardText(
+        session.electronApp,
+        (text) => text.includes(`"correlation_id":"${correlationId}"`)
+      );
+      const parsed: unknown = JSON.parse(clipboardText);
+      expect(isRecord(parsed)).toBe(true);
+      if (!isRecord(parsed)) {
+        return;
+      }
+      expect(parsed['correlation_id']).toBe(correlationId);
+      expect(parsed['remote_user']).toBe('sample-user');
+      expect(parsed['container_id']).toBe('192.0.2.20');
+      expect(parsed['msg']).toContain("refID: 'synthetic-ref-e2e-001'");
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can keep text and continuation messages faithful in CF logs', async () => {
+    const { session, logsFrame } = await openStartedCfLogsSession();
+
+    try {
+      await setCfLogsColumnVisible(logsFrame, 'Message', true);
+
+      await appendCfLogsLines(logsFrame, [
+        '2026-05-11T18:21:00.00+0700 [APP/PROC/WEB/0] OUT',
+        '2026-05-11T18:21:01.00+0700 [RTR/0] OUT app-demo.example.test - [2026-05-11T11:21:01.000Z] "GET /rtr-raw-json-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" response_time:0.001',
+        '2026-05-11T18:21:02.00+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"ContinuationLogger","msg":"continuation base message","type":"log"}',
+        'continuation metadata tail synthetic-tail-marker',
+      ]);
+
+      const searchBox = logsFrame.getByLabel('Search logs');
+      await searchBox.fill('18:21:00');
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 5000,
+      });
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.cell-message')
+      ).toHaveText('(empty)');
+
+      await searchBox.fill('rtr-raw-json-check');
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 5000,
+      });
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.cell-message')
+      ).toContainText('"GET /rtr-raw-json-check HTTP/1.1" 200');
+
+      await searchBox.fill('synthetic-tail-marker');
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 5000,
+      });
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+      const continuationMessage = logsFrame
+        .locator('#log-table-body tr')
+        .first()
+        .locator('td.cell-message .cell-message-text');
+      await expect(continuationMessage).toContainText('{"level":"info","logger":"ContinuationLogger"');
+      await expect(continuationMessage).toContainText('continuation metadata tail synthetic-tail-marker');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can scan structured CAP events from Endpoint Event summaries', async () => {
+    const { session, logsFrame } = await openStartedCfLogsSession();
+
+    try {
+      const nestedReason = {
+        statusCode: 502,
+        reason: {
+          message: '',
+          name: 'Error',
+          request: {
+            method: 'POST',
+            url: 'http://example.test:44300/odata/v1/SyntheticEntitiesE2e',
+          },
+          response: {
+            status: 503,
+            statusText: 'Service Unavailable',
+          },
+        },
+      };
+      const inspectMessage = [
+        '{',
+        "  name: 'syntheticValidationRun - [Info] Sample validation message\\n' +",
+        "    'Synthetic detail line',",
+        '  error: Error: Error during request to remote service: validation-test-run-marker-unique',
+        '      at module.exports.run (/srv/node_modules/@sap/cds/runtime/remote/utils/client.js:196:31),',
+        '    statusCode: 502,',
+        "    code: 'ERR_BAD_REQUEST'",
+        '}',
+      ].join('\n');
+      const stackMessage = [
+        '400 - Error: Synthetic escaped unique character in JSON at position 81',
+        '    at SyntheticActionHandler.executeSyntheticAction (/srv/srv/handlers/SyntheticAction.handler.ts:49:18)',
+        '    at async RemoteService.on_handler (/srv/node_modules/@sap/cds/lib/srv/Service.js:279:20) {',
+        "  code: '400'",
+        '}',
+      ].join('\n');
+      const loggerMessage = [
+        '{',
+        " refID: 'synthetic-ref-e2e-999',",
+        ' batchID: 997,',
+        ' concurrencyLimit: 5',
+        '}',
+      ].join('\n');
+      const lines = [
+        `2026-05-11T18:22:00.00+0700 [APP/PROC/WEB/0] OUT ${JSON.stringify({ level: 'error', logger: 'SyntheticRemoteService', msg: JSON.stringify(nestedReason), type: 'log' })}`,
+        `2026-05-11T18:22:01.00+0700 [APP/PROC/WEB/0] OUT ${JSON.stringify({ level: 'error', logger: 'SyntheticValidationRunner', msg: inspectMessage, type: 'log' })}`,
+        `2026-05-11T18:22:02.00+0700 [APP/PROC/WEB/0] OUT ${JSON.stringify({ level: 'error', logger: 'cds', msg: stackMessage, type: 'log' })}`,
+        `2026-05-11T18:22:03.00+0700 [APP/PROC/WEB/0] OUT ${JSON.stringify({ level: 'info', logger: 'SyntheticBatchJob - runSyntheticBatch', msg: loggerMessage, type: 'log' })}`,
+      ];
+
+      await appendCfLogsLines(logsFrame, lines);
+
+      await expectSingleRequestText(
+        logsFrame,
+        'SyntheticEntitiesE2e',
+        'POST /odata/v1/SyntheticEntitiesE2e'
+      );
+      await expect(
+        logsFrame.locator('#log-table-body tr').first().locator('td.col-status .badge')
+      ).toHaveText('502');
+
+      const nestedRequestTitle = await logsFrame
+        .locator('#log-table-body tr')
+        .first()
+        .locator('td.cell-request')
+        .getAttribute('title');
+      expect(nestedRequestTitle).toContain(
+        'POST http://example.test:44300/odata/v1/SyntheticEntitiesE2e'
+      );
+
+      await expectSingleRequestText(logsFrame, 'validation-test-run-marker-unique', 'syntheticValidationRun');
+      await expectSingleRequestText(
+        logsFrame,
+        'Synthetic escaped unique character',
+        'SyntheticActionHandler.executeSyntheticAction'
+      );
+      await expectSingleRequestText(logsFrame, 'synthetic-ref-e2e-999', 'runSyntheticBatch');
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -1318,10 +1652,14 @@ test.describe('SAP Tools CF logs panel', () => {
 
       const levelFilter = logsFrame.getByLabel('Filter by level');
       await levelFilter.selectOption('error');
-      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(2, { timeout: 5000 });
+      const visibleRows = logsFrame.locator('#log-table-body tr');
+      await expect
+        .poll(async () => visibleRows.count(), { timeout: 5000 })
+        .toBeGreaterThanOrEqual(2);
+      const initialErrorRowCount = await visibleRows.count();
 
-      const firstRow = logsFrame.locator('#log-table-body tr').first();
-      const secondRow = logsFrame.locator('#log-table-body tr').nth(1);
+      const firstRow = visibleRows.first();
+      const secondRow = visibleRows.nth(1);
 
       await clickWithFallback(secondRow);
       await expect(secondRow).toHaveClass(/is-selected/);
@@ -1357,7 +1695,7 @@ test.describe('SAP Tools CF logs panel', () => {
         })
       );
 
-      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(2);
+      await expect(visibleRows).toHaveCount(initialErrorRowCount);
       await expect(secondRow).toHaveClass(/is-selected/);
       await expect(firstRow).not.toHaveClass(/is-selected/);
     } finally {

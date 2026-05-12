@@ -33,6 +33,7 @@ const RTR_TRUE_CLIENT_IP_PATTERN = /\bx_cf_true_client_ip:"(?<clientIp>[^"]*)"/;
 const RTR_LEGACY_TRUE_CLIENT_IP_PATTERN = /\btrue_client_ip:"(?<clientIp>[^"]*)"/;
 const RTR_X_FORWARDED_FOR_PATTERN = /\bx_forwarded_for:"(?<forwardedFor>[^"]*)"/;
 const MAX_REQUEST_SUMMARY_CHARS = 120;
+const GENERIC_JSON_LOGGER_NAMES = new Set(['app', 'application', 'cds', 'node', 'source']);
 
 /** All columns in canonical display order. */
 const COLUMN_DEFS = [
@@ -103,6 +104,10 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app app-demo in org 
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT Server is listening at http://localhost:8080
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"server listening on { url: 'http://localhost:8080' }","type":"log"}
 2026-04-12T09:14:47.95+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","timestamp":"2026-04-12T02:14:47.953Z","component_name":"app-demo","organization_name":"finance-platform","space_name":"app","msg":"database retry exhausted on startup","type":"log"}
+2026-05-11T18:20:17.84+0700 [APP/PROC/WEB/0] OUT {"level":"info","logger":"SyntheticBatchJob - runSyntheticBatch","correlation_id":"synthetic-correlation-001","remote_user":"sample-user","timestamp":"2026-05-11T11:20:17.839Z","layer":"cds","component_type":"application","container_id":"192.0.2.10","component_id":"00000000-0000-4000-8000-000000000001","component_name":"synthetic-cap-service","component_instance":0,"source_instance":0,"organization_name":"synthetic-org","organization_id":"00000000-0000-4000-8000-000000000002","space_name":"sandbox","space_id":"00000000-0000-4000-8000-000000000003","msg":"{\n refID: 'synthetic-ref-001',\n batchID: 997,\n concurrencyLimit: 5\n}","type":"log"}
+2026-05-11T18:22:00.00+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"SyntheticRemoteService","msg":"{\"statusCode\":502,\"reason\":{\"message\":\"\",\"name\":\"Error\",\"request\":{\"method\":\"POST\",\"url\":\"http://example.test:44300/odata/v1/SyntheticEntities\"},\"response\":{\"status\":503,\"statusText\":\"Service Unavailable\"}}}","type":"log"}
+2026-05-11T18:22:01.00+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"SyntheticValidationRunner","msg":"{\n  name: 'syntheticValidationRun - [Info] Sample validation message',\n  error: Error: Error during request to remote service: synthetic-validation-marker\n      at module.exports.run (/srv/node_modules/@sap/cds/runtime/remote/utils/client.js:196:31),\n    statusCode: 502,\n    code: 'ERR_BAD_REQUEST'\n}","type":"log"}
+2026-05-11T18:22:02.00+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","msg":"400 - Error: Synthetic escaped character in JSON at position 81\n    at SyntheticActionHandler.executeSyntheticAction (/srv/srv/handlers/SyntheticAction.handler.ts:49:18) {\n  code: '400'\n}","type":"log"}
 2026-04-12T09:14:48.20+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.200Z] "GET /rtr-health-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" x_forwarded_for:"1.2.3.4, 10.0.1.1" x_forwarded_proto:"https" vcap_request_id:"rtr-req-001" response_time:0.001 gorouter_time:0.000010 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-001" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"aabbccdd" x_b3_spanid:"aabbccdd" b3:"aabbccdd-aabbccdd"
 2026-04-12T09:14:48.25+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.250Z] "GET /rtr-not-found HTTP/1.1" 404 80 10 "-" "curl/7.88.1" "10.0.1.2:1002" "10.0.2.2:2002" x_forwarded_for:"1.2.3.5, 10.0.1.2" x_forwarded_proto:"https" vcap_request_id:"rtr-req-002" response_time:0.000 gorouter_time:0.000009 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-002" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"bbccddee" x_b3_spanid:"bbccddee" b3:"bbccddee-bbccddee"
 2026-04-12T09:14:48.30+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.300Z] "POST /rtr-upstream-fail HTTP/1.1" 500 120 10 "-" "axios/1.0.0" "10.0.1.3:1003" "10.0.2.3:2003" x_forwarded_for:"1.2.3.6, 10.0.1.3" x_forwarded_proto:"https" vcap_request_id:"rtr-req-003" response_time:0.123 gorouter_time:0.000011 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-003" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"ccddeeff" x_b3_spanid:"ccddeeff" b3:"ccddeeff-ccddeeff"
@@ -314,11 +319,13 @@ function parseCfRecentLog(rawText) {
 }
 
 function appendContinuationLine(previousRow, trimmedLine) {
-  const requestTracksMessage = previousRow.request === previousRow.message;
+  const requestTracksMessage =
+    previousRow.format === 'text' && previousRow.request === previousRow.message;
   previousRow.message = `${previousRow.message}\n${trimmedLine}`;
   previousRow.rawBody = `${previousRow.rawBody}\n${trimmedLine}`;
   if (requestTracksMessage) {
     previousRow.request = previousRow.message;
+    previousRow.requestTitle = previousRow.request;
   }
   previousRow.level = normalizeLevel(
     resolveCandidateLevel(previousRow),
@@ -398,6 +405,7 @@ function buildTextRow({ id, timestamp, source, stream, body }) {
     tenant: routerInfo?.tenantId ?? '',
     clientIp: routerInfo?.clientIp ?? '',
     requestId: routerInfo?.requestId ?? '',
+    requestTitle: routerInfo?.request ?? message,
     message,
     rawBody: body,
     jsonPayload: null,
@@ -411,7 +419,11 @@ function buildTextRow({ id, timestamp, source, stream, body }) {
 function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
   const formattedTimestamp = formatTimestampToClock(timestamp);
   const message = readString(payload.msg) || body;
-  const level = normalizeLevel(readString(payload.level), stream, message, source, '');
+  const innerJson = tryParseInnerJson(message);
+  const innerHttpInfo = innerJson !== null ? extractInnerHttpInfo(innerJson) : null;
+  const requestSummary = extractEndpointSummary(payload, message, source, innerHttpInfo);
+  const status = innerHttpInfo?.statusCode ?? '';
+  const level = normalizeLevel(readString(payload.level), stream, message, source, status);
   const row = {
     id,
     timestamp: formattedTimestamp,
@@ -425,13 +437,14 @@ function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
     org: readString(payload.organization_name),
     space: readString(payload.space_name),
     host: deriveLoggerFromSource(source),
-    method: '',
-    request: message,
-    status: '',
+    method: innerHttpInfo?.method ?? '',
+    request: requestSummary.text,
+    status,
     latency: '',
     tenant: '',
     clientIp: '',
     requestId: '',
+    requestTitle: requestSummary.title,
     message,
     rawBody: body,
     jsonPayload: payload,
@@ -440,6 +453,178 @@ function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
 
   row.searchableText = buildSearchableText(row);
   return row;
+}
+
+function extractEndpointSummary(payload, message, source, innerHttpInfo) {
+  if (innerHttpInfo !== null && innerHttpInfo.url.length > 0) {
+    const method = innerHttpInfo.method.length > 0 ? innerHttpInfo.method : 'HTTP';
+    const target = summarizeUrlTarget(innerHttpInfo.url);
+    return buildEndpointSummary(buildRequestSummary(method, target), `${method} ${innerHttpInfo.url}`);
+  }
+
+  if (innerHttpInfo !== null && innerHttpInfo.statusCode.length > 0) {
+    const reason = innerHttpInfo.statusText.length > 0 ? innerHttpInfo.statusText : 'status';
+    return buildEndpointSummary(`${innerHttpInfo.statusCode} ${reason}`, '');
+  }
+
+  const inspectName = extractInspectFieldString(message, 'name');
+  if (inspectName.length > 0) {
+    return buildEndpointSummary(extractEventNameFromInspectName(inspectName), inspectName);
+  }
+
+  const handler = extractHandlerFromStack(message);
+  if (handler.length > 0) {
+    return buildEndpointSummary(handler, handler);
+  }
+
+  const loggerEvent = extractLoggerEvent(payload, source);
+  if (loggerEvent.length > 0) {
+    return buildEndpointSummary(loggerEvent, loggerEvent);
+  }
+
+  return buildEndpointSummary(firstLineSummary(message), '');
+}
+
+function buildEndpointSummary(text, title) {
+  const compactText = compactSingleLine(text, MAX_REQUEST_SUMMARY_CHARS);
+  const compactTitle = title.length > 0 ? compactSingleLine(title, 500) : compactText;
+  return {
+    text: compactText,
+    title: compactTitle,
+  };
+}
+
+function tryParseInnerJson(message) {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return isObjectRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractInnerHttpInfo(innerJson) {
+  const reason = readObjectProperty(innerJson, 'reason');
+  const request = readObjectProperty(innerJson, 'request') ?? readObjectProperty(reason, 'request');
+  const response = readObjectProperty(innerJson, 'response') ?? readObjectProperty(reason, 'response');
+  const method = normalizeMethod(readString(request?.method) || readString(innerJson.method));
+  const url = readString(request?.url) || readString(innerJson.url);
+  const statusCode =
+    readStatusCode(innerJson.statusCode) ||
+    readStatusCode(reason?.statusCode) ||
+    readStatusCode(innerJson.status) ||
+    readStatusCode(response?.status);
+  const statusText = readString(response?.statusText) || readString(reason?.name) || readString(innerJson.name);
+
+  if (method.length === 0 && url.length === 0 && statusCode.length === 0 && statusText.length === 0) {
+    return null;
+  }
+
+  return { method, url, statusCode, statusText };
+}
+
+function readObjectProperty(record, key) {
+  if (!isObjectRecord(record)) {
+    return null;
+  }
+  const value = record[key];
+  return isObjectRecord(value) ? value : null;
+}
+
+function readStatusCode(value) {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 999) {
+    return String(value);
+  }
+  if (typeof value === 'string' && /^\d{3}$/.test(value.trim())) {
+    return value.trim();
+  }
+  return '';
+}
+
+function normalizeMethod(method) {
+  const normalized = method.trim().toUpperCase();
+  return /^[A-Z]+$/.test(normalized) ? normalized : '';
+}
+
+function summarizeUrlTarget(url) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
+function extractHandlerFromStack(message) {
+  const pattern =
+    /(?:^|\n)\s+at\s+(?:async\s+|new\s+)?([A-Za-z_$][\w$<>]*(?:\.[\w$<>]+)*)(?:\s+\[as\s+[^\]]+])?\s*\(([^)]*)\)/g;
+  const candidates = [];
+  let match = pattern.exec(message);
+
+  while (match !== null) {
+    const name = match[1] ?? '';
+    const path = match[2] ?? '';
+    if (name.length > 0) {
+      candidates.push({ name, isNodeModule: /(?:^|[\\/])node_modules(?:[\\/]|$)/.test(path) });
+    }
+    match = pattern.exec(message);
+  }
+
+  const userFrame = candidates.find((candidate) => !candidate.isNodeModule);
+  return userFrame?.name ?? candidates[0]?.name ?? '';
+}
+
+function extractInspectFieldString(message, fieldName) {
+  const pattern = new RegExp(`(?:^|\\n)\\s*${escapeRegExp(fieldName)}:\\s*(['"\`])([^'"\`\\n]+)`, 'm');
+  const match = message.match(pattern);
+  return match?.[2]?.trim() ?? '';
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractEventNameFromInspectName(value) {
+  const firstLine = value.split(/\r?\n/)[0]?.trim() ?? '';
+  const separatorIndex = firstLine.indexOf(' - ');
+  const eventName = separatorIndex >= 0 ? firstLine.slice(0, separatorIndex) : firstLine;
+  return compactSingleLine(eventName, MAX_REQUEST_SUMMARY_CHARS);
+}
+
+function extractLoggerEvent(payload, source) {
+  const logger = readString(payload.logger);
+  if (logger.length === 0) {
+    return '';
+  }
+
+  const separatorIndex = logger.indexOf(' - ');
+  if (separatorIndex >= 0) {
+    return compactSingleLine(logger.slice(separatorIndex + 3), MAX_REQUEST_SUMMARY_CHARS);
+  }
+
+  const normalizedLogger = logger.toLowerCase();
+  if (normalizedLogger === deriveLoggerFromSource(source) || GENERIC_JSON_LOGGER_NAMES.has(normalizedLogger)) {
+    return '';
+  }
+  return compactSingleLine(logger, MAX_REQUEST_SUMMARY_CHARS);
+}
+
+function firstLineSummary(message) {
+  const firstLine = message.split(/\r?\n/)[0]?.trim() ?? '';
+  return compactSingleLine(firstLine, MAX_REQUEST_SUMMARY_CHARS);
+}
+
+function compactSingleLine(value, maxLength) {
+  const compacted = value.replace(/\s+/g, ' ').trim();
+  if (compacted.length <= maxLength) {
+    return compacted;
+  }
+  return `${compacted.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 function resolveCandidateLevel(row) {
@@ -677,6 +862,7 @@ function buildSearchableText(row) {
     row.tenant,
     row.clientIp,
     row.requestId,
+    row.rawBody,
     row.message,
   ];
   return tokens.join(' ').toLowerCase();
@@ -1391,7 +1577,7 @@ function renderTable(rows) {
     tr.addEventListener('click', () => {
       selectedRowId = row.id;
       renderTable(filteredRows);
-      copyRowMessage(row.message);
+      copyRowMessage(resolveRowMessageText(row));
     });
 
     for (const colId of visibleColumns) {
@@ -1420,7 +1606,7 @@ function renderTable(rows) {
           tr.append(createTextCell(row.logger, `cell-logger ${colDef.cellClass}`));
           break;
         case 'request':
-          tr.append(createRequestCell(row.request, colDef.cellClass));
+          tr.append(createRequestCell(row.request, colDef.cellClass, row.requestTitle));
           break;
         case 'status':
           tr.append(createStatusCell(row.status, colDef.cellClass));
@@ -1438,7 +1624,7 @@ function renderTable(rows) {
           tr.append(createTextCell(row.requestId, `cell-request-id ${colDef.cellClass}`));
           break;
         case 'message':
-          tr.append(createMessageCell(row.message));
+          tr.append(createMessageCell(row));
           break;
         default:
           break;
@@ -1477,10 +1663,10 @@ function createMethodCell(method, cellClass) {
   return td;
 }
 
-function createMessageCell(message) {
+function createMessageCell(row) {
   const td = document.createElement('td');
   td.className = 'cell-message col-message';
-  const textValue = message.length > 0 ? message : '-';
+  const textValue = resolveRowMessageText(row);
   const messageText = document.createElement('div');
   messageText.className = 'cell-message-text';
   messageText.textContent = textValue;
@@ -1488,10 +1674,20 @@ function createMessageCell(message) {
   return td;
 }
 
-function createRequestCell(request, cellClass) {
+function resolveRowMessageText(row) {
+  if (typeof row.rawBody === 'string' && row.rawBody.length > 0) {
+    return row.rawBody;
+  }
+  return row.message.length > 0 ? row.message : '-';
+}
+
+function createRequestCell(request, cellClass, requestTitle) {
   const td = document.createElement('td');
   td.className = `cell-request ${cellClass}`;
   const textValue = request.length > 0 ? request : '-';
+  const titleValue =
+    typeof requestTitle === 'string' && requestTitle.length > 0 ? requestTitle : textValue;
+  td.title = titleValue;
   const requestText = document.createElement('div');
   requestText.className = 'cell-request-text';
   requestText.textContent = textValue;

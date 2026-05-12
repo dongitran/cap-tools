@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.53 (pre-release)
+- Kept CFLogs Message cells and row-copy output aligned to the raw log body so JSON metadata remains visible and searchable.
+- Added compact Endpoint / Event summaries for structured CAP-style JSON, inspect-style messages, and stack traces.
+- Updated CFLogs prototype and E2E coverage with synthetic raw JSON, continuation, and endpoint-summary scenarios.
+
 ## 0.7.52 (pre-release)
 - Restored SAP Tools from external `sapCap.currentScope` changes even before SAP Tools has an active CF region session.
 - Established the target region session on demand while keeping cache/test-mode org resolution first.
