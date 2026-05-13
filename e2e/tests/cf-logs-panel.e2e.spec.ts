@@ -1,3 +1,4 @@
+// cspell:words mdglogid reqid vcap
 import { test, expect, type ElectronApplication, type Frame } from '@playwright/test';
 
 import {
@@ -551,6 +552,75 @@ test.describe('SAP Tools CF logs panel', () => {
         'SyntheticActionHandler.executeSyntheticAction'
       );
       await expectSingleRequestText(logsFrame, 'synthetic-ref-e2e-999', 'runSyntheticBatch');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can scan CAP remote request logs without generic remote logger noise', async () => {
+    const { session, logsFrame } = await openStartedCfLogsSession();
+
+    try {
+      await setCfLogsColumnVisible(logsFrame, 'Tenant', true);
+      await setCfLogsColumnVisible(logsFrame, 'Client IP', true);
+      await setCfLogsColumnVisible(logsFrame, 'Request ID', true);
+
+      const mdgLogId = 'a1db2b12-16d3-43e5-b73d-35744ebe2f';
+      const requestId = '1758b535-a6bc-4eee-5261-bf740494e2e';
+      const tenantId = 'tenant-remote-e2e';
+      const clientIp = '192.0.2.44';
+      const remoteRequestMessage = [
+        `get <srv_process_system>/systemprocessservice/requesttaskeventdata?$top=1&$select=deepdata,reqid,mdglogid&$filter=mdglogid%20eq%20'${mdgLogId}' {`,
+        '  headers: {',
+        "    accept: 'application/json,text/plain',",
+        "    authorization: 'bearer ***',",
+        `    'x-correlation-id': '${requestId}'`,
+        '  }',
+        '}',
+      ].join('\n');
+      const payload = {
+        level: 'debug',
+        logger: 'remote',
+        correlation_id: requestId,
+        tenant_id: tenantId,
+        remote_user: 'privileged',
+        x_cf_true_client_ip: clientIp,
+        x_forwarded_for: `${clientIp}, 198.51.100.10`,
+        x_vcap_request_id: requestId,
+        request_id: requestId,
+        x_correlation_id: requestId,
+        timestamp: '2026-05-13T09:51:41.166Z',
+        layer: 'cds',
+        component_type: 'application',
+        component_name: 'synthetic-cap-service',
+        organization_name: 'synthetic-org',
+        space_name: 'sandbox',
+        msg: remoteRequestMessage,
+        type: 'log',
+      };
+
+      await appendCfLogsLines(logsFrame, [
+        `2026-05-13T16:51:41.16+0700 [APP/PROC/WEB/0] OUT ${JSON.stringify(payload)}`,
+      ]);
+
+      await logsFrame.getByLabel('Search logs').fill(mdgLogId);
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0, {
+        timeout: 5000,
+      });
+      await expect(logsFrame.locator('#log-table-body tr')).toHaveCount(1, { timeout: 5000 });
+
+      const row = logsFrame.locator('#log-table-body tr').first();
+      await expect(row.locator('td.cell-method')).toHaveText('GET');
+      await expect(row.locator('td.cell-request .cell-request-text')).toContainText(
+        'GET <srv_process_system>/systemprocessservice/requesttaskeventdata'
+      );
+      await expect(row.locator('td.cell-request .cell-request-text')).not.toHaveText('remote');
+      await expect(row.locator('td.cell-tenant')).toHaveText(tenantId);
+      await expect(row.locator('td.cell-client-ip')).toHaveText(clientIp);
+      await expect(row.locator('td.cell-request-id')).toHaveText(requestId);
+
+      const requestTitle = await row.locator('td.cell-request').getAttribute('title');
+      expect(requestTitle).toContain(mdgLogId);
     } finally {
       await cleanupExtensionHost(session);
     }

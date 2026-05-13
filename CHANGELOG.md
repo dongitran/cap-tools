@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.54 (pre-release)
+- Parsed CAP remote request logs in CFLogs so `Endpoint / Event` shows the real request target instead of the generic `remote` logger.
+- Filled CFLogs method, tenant, client IP, and request ID columns from structured CAP log metadata when available.
+- Updated CFLogs prototype and E2E coverage for Event Mesh/CAP remote request log samples.
+
 ## 0.7.53 (pre-release)
 - Kept CFLogs Message cells and row-copy output aligned to the raw log body so JSON metadata remains visible and searchable.
 - Added compact Endpoint / Event summaries for structured CAP-style JSON, inspect-style messages, and stack traces.

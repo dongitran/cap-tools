@@ -33,7 +33,7 @@ const RTR_TRUE_CLIENT_IP_PATTERN = /\bx_cf_true_client_ip:"(?<clientIp>[^"]*)"/;
 const RTR_LEGACY_TRUE_CLIENT_IP_PATTERN = /\btrue_client_ip:"(?<clientIp>[^"]*)"/;
 const RTR_X_FORWARDED_FOR_PATTERN = /\bx_forwarded_for:"(?<forwardedFor>[^"]*)"/;
 const MAX_REQUEST_SUMMARY_CHARS = 120;
-const GENERIC_JSON_LOGGER_NAMES = new Set(['app', 'application', 'cds', 'node', 'source']);
+const GENERIC_JSON_LOGGER_NAMES = new Set(['app', 'application', 'cds', 'node', 'remote', 'source']);
 
 /** All columns in canonical display order. */
 const COLUMN_DEFS = [
@@ -108,6 +108,7 @@ const PROTOTYPE_SAMPLE_LOG = String.raw`Retrieving logs for app app-demo in org 
 2026-05-11T18:22:00.00+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"SyntheticRemoteService","msg":"{\"statusCode\":502,\"reason\":{\"message\":\"\",\"name\":\"Error\",\"request\":{\"method\":\"POST\",\"url\":\"http://example.test:44300/odata/v1/SyntheticEntities\"},\"response\":{\"status\":503,\"statusText\":\"Service Unavailable\"}}}","type":"log"}
 2026-05-11T18:22:01.00+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"SyntheticValidationRunner","msg":"{\n  name: 'syntheticValidationRun - [Info] Sample validation message',\n  error: Error: Error during request to remote service: synthetic-validation-marker\n      at module.exports.run (/srv/node_modules/@sap/cds/runtime/remote/utils/client.js:196:31),\n    statusCode: 502,\n    code: 'ERR_BAD_REQUEST'\n}","type":"log"}
 2026-05-11T18:22:02.00+0700 [APP/PROC/WEB/0] OUT {"level":"error","logger":"cds","msg":"400 - Error: Synthetic escaped character in JSON at position 81\n    at SyntheticActionHandler.executeSyntheticAction (/srv/srv/handlers/SyntheticAction.handler.ts:49:18) {\n  code: '400'\n}","type":"log"}
+2026-05-13T16:51:41.16+0700 [APP/PROC/WEB/0] OUT {"level":"debug","logger":"remote","tenant_id":"tenant-remote-sample","x_cf_true_client_ip":"192.0.2.44","request_id":"1758b535-a6bc-4eee-5261-bf740494e2e","x_correlation_id":"1758b535-a6bc-4eee-5261-bf740494e2e","msg":"get <srv_process_system>/systemprocessservice/requesttaskeventdata?$top=1&$select=deepdata,reqid,mdglogid&$filter=mdglogid%20eq%20'a1db2b12-16d3-43e5-b73d-35744eb1e2e' {\n  headers: {\n    accept: 'application/json,text/plain',\n    authorization: 'bearer ***'\n  }\n}","type":"log"}
 2026-04-12T09:14:48.20+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.200Z] "GET /rtr-health-check HTTP/1.1" 200 42 10 "-" "probe/1.0" "10.0.1.1:1001" "10.0.2.1:2001" x_forwarded_for:"1.2.3.4, 10.0.1.1" x_forwarded_proto:"https" vcap_request_id:"rtr-req-001" response_time:0.001 gorouter_time:0.000010 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-001" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"aabbccdd" x_b3_spanid:"aabbccdd" b3:"aabbccdd-aabbccdd"
 2026-04-12T09:14:48.25+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.250Z] "GET /rtr-not-found HTTP/1.1" 404 80 10 "-" "curl/7.88.1" "10.0.1.2:1002" "10.0.2.2:2002" x_forwarded_for:"1.2.3.5, 10.0.1.2" x_forwarded_proto:"https" vcap_request_id:"rtr-req-002" response_time:0.000 gorouter_time:0.000009 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-002" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"bbccddee" x_b3_spanid:"bbccddee" b3:"bbccddee-bbccddee"
 2026-04-12T09:14:48.30+0700 [RTR/0] OUT app-demo.cfapps.ap11.hana.ondemand.com - [2026-04-12T02:14:48.300Z] "POST /rtr-upstream-fail HTTP/1.1" 500 120 10 "-" "axios/1.0.0" "10.0.1.3:1003" "10.0.2.3:2003" x_forwarded_for:"1.2.3.6, 10.0.1.3" x_forwarded_proto:"https" vcap_request_id:"rtr-req-003" response_time:0.123 gorouter_time:0.000011 app_id:"app001" app_index:"0" instance_id:"inst001" failed_attempts:0 failed_attempts_time:"-" x_cf_routererror:"-" x_correlationid:"corr-req-003" tenantid:"app-demo" x_cf_true_client_ip:"13.251.40.148" x_b3_traceid:"ccddeeff" x_b3_spanid:"ccddeeff" b3:"ccddeeff-ccddeeff"
@@ -437,13 +438,13 @@ function buildJsonRow({ id, timestamp, source, stream, body, payload }) {
     org: readString(payload.organization_name),
     space: readString(payload.space_name),
     host: deriveLoggerFromSource(source),
-    method: innerHttpInfo?.method ?? '',
+    method: requestSummary.method,
     request: requestSummary.text,
     status,
     latency: '',
-    tenant: '',
-    clientIp: '',
-    requestId: '',
+    tenant: resolvePayloadTenant(payload),
+    clientIp: resolvePayloadClientIp(payload),
+    requestId: resolvePayloadRequestId(payload),
     requestTitle: requestSummary.title,
     message,
     rawBody: body,
@@ -459,7 +460,7 @@ function extractEndpointSummary(payload, message, source, innerHttpInfo) {
   if (innerHttpInfo !== null && innerHttpInfo.url.length > 0) {
     const method = innerHttpInfo.method.length > 0 ? innerHttpInfo.method : 'HTTP';
     const target = summarizeUrlTarget(innerHttpInfo.url);
-    return buildEndpointSummary(buildRequestSummary(method, target), `${method} ${innerHttpInfo.url}`);
+    return buildEndpointSummary(buildRequestSummary(method, target), `${method} ${innerHttpInfo.url}`, method);
   }
 
   if (innerHttpInfo !== null && innerHttpInfo.statusCode.length > 0) {
@@ -477,6 +478,15 @@ function extractEndpointSummary(payload, message, source, innerHttpInfo) {
     return buildEndpointSummary(handler, handler);
   }
 
+  const remoteRequestInfo = extractCapRemoteRequestInfo(message);
+  if (remoteRequestInfo !== null) {
+    return buildEndpointSummary(
+      buildRequestSummary(remoteRequestInfo.method, remoteRequestInfo.target),
+      `${remoteRequestInfo.method} ${remoteRequestInfo.target}`,
+      remoteRequestInfo.method
+    );
+  }
+
   const loggerEvent = extractLoggerEvent(payload, source);
   if (loggerEvent.length > 0) {
     return buildEndpointSummary(loggerEvent, loggerEvent);
@@ -485,13 +495,32 @@ function extractEndpointSummary(payload, message, source, innerHttpInfo) {
   return buildEndpointSummary(firstLineSummary(message), '');
 }
 
-function buildEndpointSummary(text, title) {
+function buildEndpointSummary(text, title, method = '') {
   const compactText = compactSingleLine(text, MAX_REQUEST_SUMMARY_CHARS);
   const compactTitle = title.length > 0 ? compactSingleLine(title, 500) : compactText;
   return {
     text: compactText,
     title: compactTitle,
+    method,
   };
+}
+
+function extractCapRemoteRequestInfo(message) {
+  const firstLine = message.split(/\r?\n/)[0]?.trim() ?? '';
+  const match = firstLine.match(
+    /^(?<method>GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(?<target>.+?)(?:\s+\{|\s*$)/i
+  );
+  if (match?.groups === undefined) {
+    return null;
+  }
+
+  const method = normalizeMethod(match.groups.method);
+  const target = decodeRequestTarget(match.groups.target.trim());
+  if (method.length === 0 || target.length === 0) {
+    return null;
+  }
+
+  return { method, target };
 }
 
 function tryParseInnerJson(message) {
@@ -642,6 +671,49 @@ function readString(value) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : '';
+}
+
+function readFirstPayloadString(payload, keys) {
+  for (const key of keys) {
+    const value = readString(payload[key]);
+    if (value.length > 0) {
+      return value;
+    }
+  }
+  return '';
+}
+
+function resolvePayloadTenant(payload) {
+  return readFirstPayloadString(payload, ['tenant_id', 'tenantid', 'tenant']);
+}
+
+function resolvePayloadClientIp(payload) {
+  const trueClientIp = readFirstPayloadString(payload, [
+    'x_cf_true_client_ip',
+    'true_client_ip',
+    'client_ip',
+  ]);
+  if (trueClientIp.length > 0) {
+    return trueClientIp;
+  }
+
+  const forwardedFor = readFirstPayloadString(payload, ['x_forwarded_for']);
+  if (forwardedFor.length === 0) {
+    return '';
+  }
+
+  const firstForwardedIp = forwardedFor.split(',')[0]?.trim() ?? '';
+  return normalizeMetadataValue(firstForwardedIp);
+}
+
+function resolvePayloadRequestId(payload) {
+  return readFirstPayloadString(payload, [
+    'x_correlation_id',
+    'x_correlationid',
+    'correlation_id',
+    'request_id',
+    'x_vcap_request_id',
+  ]);
 }
 
 function deriveLoggerFromSource(source) {
