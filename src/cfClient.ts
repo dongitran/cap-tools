@@ -59,6 +59,20 @@ export interface CfSession {
   readonly apiEndpoint: string;
 }
 
+const CF_TOKEN_EXPIRY_SAFETY_MARGIN_MS = 60_000;
+
+/**
+ * A cached CF session is unusable once its access token is at (or near) its
+ * expiry. CF API calls do not refresh tokens, so a stale token surfaces as a
+ * 401 and must trigger a fresh login instead of being reused.
+ */
+export function isCfSessionExpired(
+  session: CfSession,
+  nowMs: number = Date.now()
+): boolean {
+  return session.token.expiresAt <= nowMs + CF_TOKEN_EXPIRY_SAFETY_MARGIN_MS;
+}
+
 export interface CfRunningApp {
   readonly name: string;
   readonly runningInstances: number;
