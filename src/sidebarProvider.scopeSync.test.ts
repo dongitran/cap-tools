@@ -1,3 +1,4 @@
+// cspell:words unstub
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as vscode from 'vscode';
@@ -65,7 +66,15 @@ interface ConfirmScopeOptionsForTest {
 
 interface SidebarProviderTestAccess {
   cfSession: CfSession | null;
+  cfSessionRegionCode: string;
   currentConfirmedScope: SharedCfScope | undefined;
+  selectedOrgGuid: string;
+  selectedRegionCode: string;
+  selectedRegionId: string;
+  ensureRegionSession(credentials: {
+    readonly email: string;
+    readonly password: string;
+  }): Promise<CfSession>;
   handleSpaceSelected(payload: SpaceSelectionPayloadForTest): Promise<void>;
   handleQuickScopeConfirm(payload: QuickScopeConfirmPayloadForTest): Promise<void>;
   handleConfirmScope(
@@ -191,6 +200,7 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     getConfigurationMock.mockReset();
     getEffectiveCredentialsMock.mockReset();
     updateMock.mockReset();
+    vi.unstubAllGlobals();
     configureWorkspaceScope(undefined);
     getEffectiveCredentialsMock.mockResolvedValue({
       email: 'test@example.com',
@@ -578,5 +588,81 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     expect(spacesErrorSpy).toHaveBeenCalledWith(
       'Could not confirm scope. Please try again or use Custom tab.'
     );
+  });
+
+  it('refreshes an expired cached CF session before reusing a region session', async () => {
+    const { access } = createProviderFixture();
+    access.selectedRegionCode = 'us-10';
+    access.cfSessionRegionCode = 'us-10';
+    access.cfSession = {
+      apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+      token: {
+        accessToken: 'expired-token',
+        expiresAt: Date.now() - 1_000,
+        refreshToken: '',
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith('/v2/info')) {
+        return new Response(
+          JSON.stringify({ authorization_endpoint: 'https://login.cf.example.com' }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/oauth/token')) {
+        return new Response(
+          JSON.stringify({
+            access_token: 'fresh-token',
+            expires_in: 3600,
+            refresh_token: 'fresh-refresh',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const session = await access.ensureRegionSession({
+      email: 'test@example.com',
+      password: 'test-password',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(session.token.accessToken).toBe('fresh-token');
+    expect(access.cfSession).toEqual(session);
+  });
+
+  it('keeps previous quick-scope state when live org resolution cannot log in', async () => {
+    const { access } = createProviderFixture();
+    const existingSession = createMockSession();
+    access.cfSession = existingSession;
+    access.cfSessionRegionCode = 'us-10';
+    access.selectedRegionId = 'us10';
+    access.selectedRegionCode = 'us-10';
+    access.selectedOrgGuid = 'org-finance-prod';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (): Promise<Response> => {
+        return new Response('{}', { status: 401 });
+      })
+    );
+    const spacesErrorSpy = vi.spyOn(access, 'postSpacesError');
+
+    await access.handleQuickScopeConfirm({
+      regionKey: 'br10',
+      orgName: 'billing-reconciliation-prod',
+      spaceName: 'etl',
+    });
+
+    expect(spacesErrorSpy).toHaveBeenCalledWith(
+      'Could not confirm scope. Please try again or use Custom tab.'
+    );
+    expect(access.cfSession).toBe(existingSession);
+    expect(access.cfSessionRegionCode).toBe('us-10');
+    expect(access.selectedRegionId).toBe('us10');
+    expect(access.selectedRegionCode).toBe('us-10');
+    expect(access.selectedOrgGuid).toBe('org-finance-prod');
   });
 });

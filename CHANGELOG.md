@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.55 (pre-release)
+- Reopened HANA SQL app contexts when the selected CF region, org, space, or credentials change so same-name apps do not reuse stale database credentials.
+- Refreshed expired cached CF sessions before live org or space resolution instead of surfacing generic quick-scope confirmation failures.
+- Deferred Quick Org Search scope state updates until CF login and org lookup both succeed, preserving the previous active session on failed confirms.
+
 ## 0.7.54 (pre-release)
 - Parsed CAP remote request logs in CFLogs so `Endpoint / Event` shows the real request target instead of the generic `remote` logger.
 - Filled CFLogs method, tenant, client IP, and request ID columns from structured CAP log metadata when available.

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
+import type { HanaSqlScopeSession } from './hanaSqlConnectionResolver';
 import type { HanaConnection } from './hanaSqlService';
 import type { HanaTableDisplayEntry } from './hanaSqlWorkbenchSupport';
 
@@ -55,6 +56,7 @@ import { HanaSqlWorkbench } from './hanaSqlWorkbench';
 interface HanaSqlAppContextForTest {
   readonly appId: string;
   readonly appName: string;
+  session: HanaSqlScopeSession | null;
   connection: HanaConnection | null;
   schema: string;
   sqlDocumentUri: string;
@@ -76,6 +78,18 @@ function createWorkbench(): HanaSqlWorkbench {
     appendLine: vi.fn(),
   };
   return new HanaSqlWorkbench(outputChannel);
+}
+
+function createScopeSession(overrides: Partial<HanaSqlScopeSession> = {}): HanaSqlScopeSession {
+  return {
+    apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+    email: 'developer@example.com',
+    password: 'top-secret',
+    orgName: 'finance-services-prod',
+    spaceName: 'uat',
+    cfHomeDir: '/tmp/sap-tools-cf-home',
+    ...overrides,
+  };
 }
 
 describe('HanaSqlWorkbench scope cache invalidation', () => {
@@ -190,5 +204,75 @@ describe('HanaSqlWorkbench scope cache invalidation', () => {
     expect(tableNames.length).toBeGreaterThan(0);
     expect(context.tableNames.length).toBeGreaterThan(0);
     expect(context.cacheVersion).toBeGreaterThan(0);
+  });
+
+  test('clears cached HANA connection when the same app is opened in a different scope', async () => {
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+    const firstSession = createScopeSession();
+    const nextSession = createScopeSession({ spaceName: 'prod' });
+
+    await workbench.loadTableEntriesForApp({
+      appId: 'finance-api',
+      appName: 'finance-api',
+      session: firstSession,
+    });
+    const context = access.appContextsByAppId.get('finance-api');
+    expect(context).toBeDefined();
+    if (context === undefined) {
+      throw new Error('Expected test app context.');
+    }
+
+    context.connection = {
+      host: 'old-host',
+      port: 30015,
+      user: 'old-user',
+      password: 'old-password',
+    };
+    context.schema = 'OLD_SCHEMA';
+
+    await workbench.loadTableEntriesForApp({
+      appId: 'finance-api',
+      appName: 'finance-api',
+      session: nextSession,
+    });
+
+    expect(context.session).toEqual(nextSession);
+    expect(context.connection).toBeNull();
+    expect(context.cacheVersion).toBeGreaterThan(0);
+  });
+
+  test('starts a fresh table load when app scope changes during an in-flight preload', async () => {
+    process.env['SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS'] = '25';
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+    const firstSession = createScopeSession();
+    const nextSession = createScopeSession({ orgName: 'finance-services-prod-copy' });
+
+    const staleLoad = workbench.loadTableNamesForApp({
+      appId: 'finance-api',
+      appName: 'finance-api',
+      session: firstSession,
+    });
+    const context = access.appContextsByAppId.get('finance-api');
+    expect(context).toBeDefined();
+    if (context === undefined) {
+      throw new Error('Expected test app context.');
+    }
+    expect(context.tableNamesPromise).not.toBeNull();
+
+    const freshLoad = workbench.loadTableNamesForApp({
+      appId: 'finance-api',
+      appName: 'finance-api',
+      session: nextSession,
+    });
+
+    await staleLoad;
+    const tableNames = await freshLoad;
+
+    expect(context.session).toEqual(nextSession);
+    expect(context.cacheVersion).toBeGreaterThan(0);
+    expect(tableNames.length).toBeGreaterThan(0);
+    expect(context.tableNames.length).toBeGreaterThan(0);
   });
 });

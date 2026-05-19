@@ -33,6 +33,7 @@ import {
   fetchSpaces,
   fetchStartedAppsViaCfCli,
   getCfApiEndpoint,
+  isCfSessionExpired,
   parseCfAppsOutput,
   spawnAppLogStreamFromTarget,
 } from './cfClient';
@@ -104,6 +105,44 @@ describe('getCfApiEndpoint', () => {
   it('resolves China Cloud Foundry endpoint on sapcloud domain', () => {
     expect(getCfApiEndpoint('cn-20')).toBe('https://api.cf.cn20.platform.sapcloud.cn');
     expect(getCfApiEndpoint('cn40')).toBe('https://api.cf.cn40.platform.sapcloud.cn');
+  });
+});
+
+describe('isCfSessionExpired', () => {
+  it('treats tokens inside the safety window as expired', () => {
+    const nowMs = 1_000_000;
+
+    expect(
+      isCfSessionExpired(
+        {
+          apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+          token: {
+            accessToken: 'token',
+            refreshToken: '',
+            expiresAt: nowMs + 60_000,
+          },
+        },
+        nowMs
+      )
+    ).toBe(true);
+  });
+
+  it('keeps sessions usable when the token expiry is outside the safety window', () => {
+    const nowMs = 1_000_000;
+
+    expect(
+      isCfSessionExpired(
+        {
+          apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+          token: {
+            accessToken: 'token',
+            refreshToken: '',
+            expiresAt: nowMs + 60_001,
+          },
+        },
+        nowMs
+      )
+    ).toBe(false);
   });
 });
 
