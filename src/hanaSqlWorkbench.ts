@@ -67,6 +67,23 @@ export interface RunQuickTableSelectRequest {
   readonly session: HanaSqlScopeSession | null;
   readonly tableName: string;
 }
+function isSameHanaSqlScope(
+  previous: HanaSqlScopeSession | null,
+  next: HanaSqlScopeSession
+): boolean {
+  if (previous === null) {
+    return false;
+  }
+  return (
+    previous.apiEndpoint === next.apiEndpoint &&
+    previous.orgName === next.orgName &&
+    previous.spaceName === next.spaceName &&
+    previous.email === next.email &&
+    previous.password === next.password &&
+    previous.cfHomeDir === next.cfHomeDir
+  );
+}
+
 function buildSqlKeywordCompletionItems(prefix: string): vscode.CompletionItem[] {
   return filterKeywordCandidates(prefix).map((keyword) => {
     const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
@@ -146,15 +163,19 @@ export class HanaSqlWorkbench
   }
 
   invalidateAllAppContexts(): void {
-    this.appContextCacheVersion += 1;
     for (const context of this.appContextsByAppId.values()) {
-      context.cacheVersion = this.appContextCacheVersion;
-      context.connection = null;
-      context.schema = '';
-      context.tableNames = [];
-      context.tableEntries = [];
-      context.tableNamesPromise = null;
+      this.resetAppContextCache(context);
     }
+  }
+
+  private resetAppContextCache(context: HanaSqlAppContext): void {
+    this.appContextCacheVersion += 1;
+    context.cacheVersion = this.appContextCacheVersion;
+    context.connection = null;
+    context.schema = '';
+    context.tableNames = [];
+    context.tableEntries = [];
+    context.tableNamesPromise = null;
   }
 
   async openSqlDocumentForApp(options: OpenHanaSqlFileRequest): Promise<void> {
@@ -291,6 +312,9 @@ export class HanaSqlWorkbench
     const existing = this.appContextsByAppId.get(options.appId);
     if (existing !== undefined) {
       if (options.session !== null) {
+        if (!isSameHanaSqlScope(existing.session, options.session)) {
+          this.resetAppContextCache(existing);
+        }
         existing.session = options.session;
       }
       return existing;
