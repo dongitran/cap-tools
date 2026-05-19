@@ -8,6 +8,7 @@ import {
   fetchSpaces,
   fetchStartedAppsViaCfCli,
   getCfApiEndpoint,
+  isCfSessionExpired,
 } from './cfClient';
 import type { CfSession } from './cfClient';
 import { ensureCfHomeDir } from './cfHome';
@@ -971,7 +972,10 @@ export class RegionSidebarProvider
     orgName: string,
     isCurrentRequest: () => boolean
   ): Promise<string> {
-    if (this.cfSessionRegionCode !== regionCode) {
+    if (
+      this.cfSessionRegionCode !== regionCode ||
+      (this.cfSession !== null && isCfSessionExpired(this.cfSession))
+    ) {
       this.cfSession = null;
       this.cfSessionRegionCode = '';
     }
@@ -1016,7 +1020,8 @@ export class RegionSidebarProvider
     if (
       this.cfSession !== null &&
       this.cfSessionRegionCode.length > 0 &&
-      this.cfSessionRegionCode === regionCode
+      this.cfSessionRegionCode === regionCode &&
+      !isCfSessionExpired(this.cfSession)
     ) {
       return this.cfSession;
     }
@@ -2593,7 +2598,8 @@ export class RegionSidebarProvider
     if (
       this.cfSession !== null &&
       this.cfSessionRegionCode.length > 0 &&
-      this.cfSessionRegionCode === this.selectedRegionCode
+      this.cfSessionRegionCode === this.selectedRegionCode &&
+      !isCfSessionExpired(this.cfSession)
     ) {
       return this.cfSession;
     }
