@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.56 (pre-release)
+- Updated the Marketplace extension icon to use the new isometric cube PNG asset.
+
 ## 0.7.55 (pre-release)
 - Reopened HANA SQL app contexts when the selected CF region, org, space, or credentials change so same-name apps do not reuse stale database credentials.
 - Refreshed expired cached CF sessions before live org or space resolution instead of surfacing generic quick-scope confirmation failures.
