@@ -35,7 +35,7 @@ async function findSqlResultFrame(window: Page): Promise<Frame | undefined> {
 
   for (const frame of [...candidateFrames].reverse()) {
     const resultLayout = frame
-      .locator('.result-layout, .state-layout, .result-loading-layout')
+      .locator('.result-layout, .state-layout, .result-loading-layout, .result-batch-layout')
       .first();
     const visible = await resultLayout.isVisible().catch(() => false);
     if (visible) {

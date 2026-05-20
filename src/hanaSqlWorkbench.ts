@@ -468,18 +468,17 @@ export class HanaSqlWorkbench
       const finalViews = batchOutcome.outcomes.map((outcome, index) =>
         this.toStatementView(prepared[index], outcome)
       );
-      const summary: SqlResultBatchSummary = batchOutcome.transactionUnavailableReason === undefined
-        ? {
-            usedTransaction: batchOutcome.usedTransaction,
-            committed: batchOutcome.committed,
-            rolledBack: batchOutcome.rolledBack,
-          }
-        : {
-            usedTransaction: batchOutcome.usedTransaction,
-            committed: batchOutcome.committed,
-            rolledBack: batchOutcome.rolledBack,
-            transactionUnavailableReason: batchOutcome.transactionUnavailableReason,
-          };
+      const summary: SqlResultBatchSummary = {
+        usedTransaction: batchOutcome.usedTransaction,
+        committed: batchOutcome.committed,
+        rolledBack: batchOutcome.rolledBack,
+        ...(batchOutcome.transactionUnavailableReason === undefined
+          ? {}
+          : { transactionUnavailableReason: batchOutcome.transactionUnavailableReason }),
+        ...(batchOutcome.commitFailureMessage === undefined
+          ? {}
+          : { commitFailureMessage: batchOutcome.commitFailureMessage }),
+      };
 
       this.logSql(
         `batch completed for app ${sanitizeSqlLogValue(context.appName)} (${describeBatchCounts(finalViews)})`
