@@ -719,9 +719,29 @@ describe('executeHanaQueryBatch', () => {
     expect(log.events).not.toContain('client.commit');
   });
 
-  test('runs without a transaction when the HDB client omits transaction APIs and the batch is mutating', async () => {
+  test('runs without a transaction when the HDB client omits transaction APIs and the batch contains multiple mutating statements', async () => {
     const { client, log } = createBatchFakeClient({
       omitTransactionApis: true,
+      defaultBehavior: { rowsOrAffected: 1 },
+    });
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [
+        { sql: 'UPDATE T SET X = 1', statementKind: 'mutating' },
+        { sql: 'UPDATE T SET X = 2', statementKind: 'mutating' },
+      ],
+      { clientFactory: () => client }
+    );
+
+    expect(summary.usedTransaction).toBe(false);
+    expect(summary.transactionUnavailableReason).toMatch(/transaction/i);
+    expect(log.events).not.toContain('client.commit');
+    expect(log.events).not.toContain('client.rollback');
+  });
+
+  test('does not open a transaction for a single mutating statement so HDB autocommit handles it', async () => {
+    const { client, log } = createBatchFakeClient({
       defaultBehavior: { rowsOrAffected: 1 },
     });
 
@@ -734,8 +754,59 @@ describe('executeHanaQueryBatch', () => {
     );
 
     expect(summary.usedTransaction).toBe(false);
-    expect(summary.transactionUnavailableReason).toMatch(/transaction/i);
+    expect(summary.committed).toBe(false);
+    expect(summary.rolledBack).toBe(false);
+    expect(log.events).not.toContain('client.setAutoCommit:off');
     expect(log.events).not.toContain('client.commit');
     expect(log.events).not.toContain('client.rollback');
+  });
+
+  test('surfaces a commit failure via summary.commitFailureMessage instead of mutating outcome status', async () => {
+    const { client, log } = createBatchFakeClient({
+      defaultBehavior: { rowsOrAffected: 1 },
+      commitError: new Error('disk full during commit'),
+    });
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [
+        { sql: 'UPDATE T SET X = 1', statementKind: 'mutating' },
+        { sql: 'UPDATE T SET X = 2', statementKind: 'mutating' },
+      ],
+      { clientFactory: () => client }
+    );
+
+    expect(summary.usedTransaction).toBe(true);
+    expect(summary.committed).toBe(false);
+    expect(summary.rolledBack).toBe(true);
+    expect(summary.commitFailureMessage).toBe('disk full during commit');
+    expect(summary.outcomes.every((outcome) => outcome.status === 'success')).toBe(true);
+    expect(log.events).toContain('client.commit');
+    expect(log.events).toContain('client.rollback');
+  });
+
+  test('continues the batch when a progress callback throws', async () => {
+    const { client } = createBatchFakeClient({
+      defaultBehavior: { rowsOrAffected: [{ ID: 1 }] },
+    });
+    const observedIndexes: number[] = [];
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [
+        { sql: 'SELECT 1 FROM DUMMY', statementKind: 'readonly' },
+        { sql: 'SELECT 2 FROM DUMMY', statementKind: 'readonly' },
+      ],
+      {
+        clientFactory: () => client,
+        onStatementComplete: (index) => {
+          observedIndexes.push(index);
+          throw new Error('listener crashed');
+        },
+      }
+    );
+
+    expect(observedIndexes).toEqual([0, 1]);
+    expect(summary.outcomes.every((outcome) => outcome.status === 'success')).toBe(true);
   });
 });

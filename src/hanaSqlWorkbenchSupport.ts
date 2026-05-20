@@ -179,6 +179,7 @@ export function buildTestModeBatchOutcomes(
   const outcomes: HanaStatementOutcome[] = [];
   let errorIndex = -1;
   const hasMutating = statements.some((statement) => statement.statementKind === 'mutating');
+  const shouldUseTransaction = hasMutating && statements.length > 1;
 
   for (let index = 0; index < statements.length; index += 1) {
     const statement = statements[index];
@@ -221,9 +222,9 @@ export function buildTestModeBatchOutcomes(
 
   return {
     outcomes,
-    usedTransaction: hasMutating,
-    committed: hasMutating && errorIndex < 0,
-    rolledBack: hasMutating && errorIndex >= 0,
+    usedTransaction: shouldUseTransaction,
+    committed: shouldUseTransaction && errorIndex < 0,
+    rolledBack: shouldUseTransaction && errorIndex >= 0,
     elapsedMs: outcomes.reduce((sum, outcome) => sum + (outcome.elapsedMs ?? 0), 0),
   };
 }

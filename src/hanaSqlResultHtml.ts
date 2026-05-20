@@ -16,6 +16,7 @@ export interface SqlResultBatchSummary {
   readonly committed: boolean;
   readonly rolledBack: boolean;
   readonly transactionUnavailableReason?: string;
+  readonly commitFailureMessage?: string;
 }
 
 export interface RenderSqlResultOptions {
@@ -805,7 +806,10 @@ function renderBatchSummaryToolbar(
 function renderTransactionChip(summary: SqlResultBatchSummary | undefined): string {
   if (summary === undefined) return '';
   if (summary.rolledBack) {
-    return '<span class="result-chip result-chip-warn" title="Transaction was rolled back">Rolled back</span>';
+    const tooltip = summary.commitFailureMessage !== undefined
+      ? `Commit failed: ${summary.commitFailureMessage}`
+      : 'Transaction was rolled back';
+    return `<span class="result-chip result-chip-warn" title="${escapeHtml(tooltip)}">Rolled back</span>`;
   }
   if (summary.committed) {
     return '<span class="result-chip result-chip-success" title="Transaction committed">Committed</span>';

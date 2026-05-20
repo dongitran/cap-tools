@@ -134,6 +134,7 @@ export interface HanaBatchExecutionSummary {
   readonly committed: boolean;
   readonly rolledBack: boolean;
   readonly transactionUnavailableReason?: string;
+  readonly commitFailureMessage?: string;
   readonly elapsedMs: number;
 }
 
@@ -206,6 +207,7 @@ export async function executeHanaQueryBatch(
   const timeoutMs = options.timeoutMs ?? HANA_QUERY_DEFAULT_TIMEOUT_MS;
   const factory = options.clientFactory ?? createDefaultHdbClient;
   const hasMutating = statements.some((statement) => statement.statementKind === 'mutating');
+  const shouldUseTransaction = hasMutating && statements.length > 1;
 
   let client: HdbClient;
   try {
@@ -227,7 +229,7 @@ export async function executeHanaQueryBatch(
 
   let usedTransaction = false;
   let transactionUnavailableReason: string | undefined;
-  if (hasMutating) {
+  if (shouldUseTransaction) {
     if (typeof client.setAutoCommit === 'function' && typeof client.commit === 'function' && typeof client.rollback === 'function') {
       try {
         client.setAutoCommit(false);
@@ -245,6 +247,7 @@ export async function executeHanaQueryBatch(
   let committed = false;
   let rolledBack = false;
   let errorIndex = -1;
+  let commitFailureMessage: string | undefined;
   const batchStartedAt = Date.now();
 
   try {
@@ -277,7 +280,7 @@ export async function executeHanaQueryBatch(
           elapsedMs: Date.now() - statementStartedAt,
         };
         outcomes.push(outcome);
-        options.onStatementComplete?.(index, outcome);
+        notifyStatementOutcome(options.onStatementComplete, index, outcome);
       } catch (error) {
         const mapped = toHanaQueryError(error, 'exec');
         const outcome: HanaStatementOutcome = {
@@ -289,7 +292,7 @@ export async function executeHanaQueryBatch(
           elapsedMs: Date.now() - statementStartedAt,
         };
         outcomes.push(outcome);
-        options.onStatementComplete?.(index, outcome);
+        notifyStatementOutcome(options.onStatementComplete, index, outcome);
         errorIndex = index;
         break;
       }
@@ -323,20 +326,11 @@ export async function executeHanaQueryBatch(
           committed = true;
         } catch (error) {
           const mapped = toHanaQueryError(error, 'exec');
+          commitFailureMessage = mapped.message;
           await rollbackTransaction(client, timeoutMs).catch(() => {
             /* best effort */
           });
           rolledBack = true;
-          const lastOutcomeIndex = outcomes.length - 1;
-          const last = lastOutcomeIndex >= 0 ? outcomes[lastOutcomeIndex] : undefined;
-          if (last?.status === 'success') {
-            outcomes[lastOutcomeIndex] = {
-              ...last,
-              status: 'error',
-              errorMessage: `Commit failed: ${mapped.message}`,
-              errorKind: mapped.kind,
-            };
-          }
         }
       }
     }
@@ -344,23 +338,29 @@ export async function executeHanaQueryBatch(
     await safeDisconnect(client);
   }
 
-  const summary: HanaBatchExecutionSummary = transactionUnavailableReason === undefined
-    ? {
-        outcomes,
-        usedTransaction,
-        committed,
-        rolledBack,
-        elapsedMs: Date.now() - batchStartedAt,
-      }
-    : {
-        outcomes,
-        usedTransaction,
-        committed,
-        rolledBack,
-        transactionUnavailableReason,
-        elapsedMs: Date.now() - batchStartedAt,
-      };
+  const summary: HanaBatchExecutionSummary = {
+    outcomes,
+    usedTransaction,
+    committed,
+    rolledBack,
+    elapsedMs: Date.now() - batchStartedAt,
+    ...(transactionUnavailableReason === undefined ? {} : { transactionUnavailableReason }),
+    ...(commitFailureMessage === undefined ? {} : { commitFailureMessage }),
+  };
   return summary;
+}
+
+function notifyStatementOutcome(
+  callback: ((index: number, outcome: HanaStatementOutcome) => void) | undefined,
+  index: number,
+  outcome: HanaStatementOutcome
+): void {
+  if (callback === undefined) return;
+  try {
+    callback(index, outcome);
+  } catch {
+    /* swallow listener errors so they don't abort the batch */
+  }
 }
 
 function commitTransaction(client: HdbClient, timeoutMs: number): Promise<undefined> {
