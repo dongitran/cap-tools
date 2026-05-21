@@ -290,9 +290,18 @@ export class HanaSqlWorkbench
     options: OpenHanaSqlFileRequest
   ): Promise<readonly HanaTableDisplayEntry[]> {
     const context = this.ensureAppContext(options);
+    const inflight = context.tableNamesPromise;
+    if (inflight !== null) {
+      await inflight.catch(() => undefined);
+    }
     this.forceTableRefreshAppIds.add(context.appId);
     this.resetAppContextCache(context);
-    await this.prefetchTableNames(context.appId);
+    const cacheVersion = context.cacheVersion;
+    try {
+      await this.loadTableNames(context, cacheVersion);
+    } finally {
+      this.forceTableRefreshAppIds.delete(context.appId);
+    }
     if (context.tableNames.length > 0 && context.tableEntries.length === 0) {
       context.tableEntries = await this.formatTableEntries(context.tableNames);
     }
@@ -749,7 +758,8 @@ export class HanaSqlWorkbench
     }
 
     const connection = context.connection;
-    const queries = buildTableDiscoveryQueries(context.schema);
+    const discoverySchema = context.schema;
+    const queries = buildTableDiscoveryQueries(discoverySchema);
     let hadSuccessfulDiscoveryQuery = false;
     let lastErrorMessage = '';
     for (const [index, query] of queries.entries()) {
@@ -775,7 +785,14 @@ export class HanaSqlWorkbench
           this.logSql(
             `loaded ${String(tableNames.length)} tables for app ${sanitizeSqlLogValue(context.appName)}`
           );
-          await this.safeWriteCachedTableList(cacheScopeKey, context, tableNames, tableEntries);
+          await this.safeWriteCachedTableList(
+            cacheScopeKey,
+            context,
+            cacheVersion,
+            discoverySchema,
+            tableNames,
+            tableEntries
+          );
           return;
         }
       } catch (error) {
@@ -794,7 +811,14 @@ export class HanaSqlWorkbench
     }
     this.logSql(`no tables found for app ${sanitizeSqlLogValue(context.appName)}`);
     context.tableEntries = [];
-    await this.safeWriteCachedTableList(cacheScopeKey, context, [], []);
+    await this.safeWriteCachedTableList(
+      cacheScopeKey,
+      context,
+      cacheVersion,
+      discoverySchema,
+      [],
+      []
+    );
   }
 
   private async safeReadCachedTableList(
@@ -818,15 +842,23 @@ export class HanaSqlWorkbench
   private async safeWriteCachedTableList(
     scopeKey: string,
     context: HanaSqlAppContext,
+    cacheVersion: number,
+    schema: string,
     tableNames: readonly string[],
     tableEntries: readonly HanaTableDisplayEntry[]
   ): Promise<void> {
     if (this.cacheStore === null || scopeKey.length === 0) {
       return;
     }
+    if (!this.isAppContextCurrent(context, cacheVersion)) {
+      return;
+    }
+    if (schema.length === 0 && tableNames.length === 0) {
+      return;
+    }
     try {
       await this.cacheStore.setHanaTableList(scopeKey, {
-        schema: context.schema,
+        schema,
         tableNames,
         displayEntries: tableEntries.map((entry) => ({
           name: entry.name,

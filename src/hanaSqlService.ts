@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { isUtf8 } from 'node:buffer';
 
-const HANA_QUERY_DEFAULT_TIMEOUT_MS = 30_000;
+const HANA_QUERY_DEFAULT_TIMEOUT_MS = 300_000;
 const HANA_QUERY_RESULT_PREVIEW_BYTES = 4096;
 
 export interface HanaConnection {
