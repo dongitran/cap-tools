@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { buildHanaTableListScopeKey } from './cacheStore';
+import type { HanaTableListCacheEntry } from './cacheModels';
 import {
   HanaQueryError,
   classifyHanaSqlStatement,
@@ -15,6 +17,15 @@ import {
 import { splitHanaSqlStatements } from './hanaSqlStatementSplitter';
 import { HANA_SQL_DEFAULT_SELECT_LIMIT, applyDefaultHanaSelectLimit } from './hanaSqlLimitGuard';
 import { resolveHanaConnectionFromApp, type HanaSqlScopeSession } from './hanaSqlConnectionResolver';
+
+export interface HanaTableListCacheGateway {
+  getHanaTableList(scopeKey: string): Promise<HanaTableListCacheEntry | null>;
+  setHanaTableList(
+    scopeKey: string,
+    entry: HanaTableListCacheEntry
+  ): Promise<HanaTableListCacheEntry>;
+  deleteHanaTableList(scopeKey: string): Promise<void>;
+}
 import {
   buildHanaSqlDocumentFileUri,
   resolveHanaSqlDocumentOpenUri,
@@ -112,6 +123,20 @@ function isSameHanaSqlScope(
   );
 }
 
+function buildCacheScopeKeyForContext(context: HanaSqlAppContext): string {
+  const session = context.session;
+  if (session === null) {
+    return '';
+  }
+  return buildHanaTableListScopeKey({
+    email: session.email,
+    apiEndpoint: session.apiEndpoint,
+    orgName: session.orgName,
+    spaceName: session.spaceName,
+    appId: context.appId,
+  });
+}
+
 function buildSqlKeywordCompletionItems(prefix: string): vscode.CompletionItem[] {
   return filterKeywordCandidates(prefix).map((keyword) => {
     const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
@@ -152,9 +177,13 @@ export class HanaSqlWorkbench
   private readonly appIdByDocumentUri = new Map<string, string>();
   private readonly disposables: vscode.Disposable[] = [];
   private readonly resultPanelManager: HanaSqlResultPanelManager;
+  private readonly forceTableRefreshAppIds = new Set<string>();
   private appContextCacheVersion = 0;
 
-  constructor(private readonly outputChannel: vscode.OutputChannel) {
+  constructor(
+    private readonly outputChannel: vscode.OutputChannel,
+    private readonly cacheStore: HanaTableListCacheGateway | null = null
+  ) {
     this.isTestMode = process.env['SAP_TOOLS_TEST_MODE'] === '1';
     this.resultPanelManager = new HanaSqlResultPanelManager(outputChannel);
 
@@ -250,6 +279,19 @@ export class HanaSqlWorkbench
     options: OpenHanaSqlFileRequest
   ): Promise<readonly HanaTableDisplayEntry[]> {
     const context = this.ensureAppContext(options);
+    await this.prefetchTableNames(context.appId);
+    if (context.tableNames.length > 0 && context.tableEntries.length === 0) {
+      context.tableEntries = await this.formatTableEntries(context.tableNames);
+    }
+    return context.tableEntries;
+  }
+
+  async refreshTableEntriesForApp(
+    options: OpenHanaSqlFileRequest
+  ): Promise<readonly HanaTableDisplayEntry[]> {
+    const context = this.ensureAppContext(options);
+    this.forceTableRefreshAppIds.add(context.appId);
+    this.resetAppContextCache(context);
     await this.prefetchTableNames(context.appId);
     if (context.tableNames.length > 0 && context.tableEntries.length === 0) {
       context.tableEntries = await this.formatTableEntries(context.tableNames);
@@ -682,6 +724,25 @@ export class HanaSqlWorkbench
       return;
     }
 
+    const forceRefresh = this.forceTableRefreshAppIds.delete(context.appId);
+    const cacheScopeKey = buildCacheScopeKeyForContext(context);
+
+    if (!forceRefresh && cacheScopeKey.length > 0 && this.cacheStore !== null) {
+      const cachedEntry = await this.safeReadCachedTableList(cacheScopeKey, context);
+      if (cachedEntry !== null && this.isAppContextCurrent(context, cacheVersion)) {
+        context.schema = cachedEntry.schema;
+        context.tableNames = cachedEntry.tableNames;
+        context.tableEntries = cachedEntry.displayEntries.map((entry) => ({
+          name: entry.name,
+          displayName: entry.displayName,
+        }));
+        this.logSql(
+          `loaded ${String(cachedEntry.tableNames.length)} tables from cache for app ${sanitizeSqlLogValue(context.appName)} (updated ${sanitizeSqlLogValue(cachedEntry.updatedAt)})`
+        );
+        return;
+      }
+    }
+
     await this.ensureConnection(context, cacheVersion);
     if (!this.isAppContextCurrent(context, cacheVersion) || context.connection === null) {
       return;
@@ -714,6 +775,7 @@ export class HanaSqlWorkbench
           this.logSql(
             `loaded ${String(tableNames.length)} tables for app ${sanitizeSqlLogValue(context.appName)}`
           );
+          await this.safeWriteCachedTableList(cacheScopeKey, context, tableNames, tableEntries);
           return;
         }
       } catch (error) {
@@ -732,6 +794,52 @@ export class HanaSqlWorkbench
     }
     this.logSql(`no tables found for app ${sanitizeSqlLogValue(context.appName)}`);
     context.tableEntries = [];
+    await this.safeWriteCachedTableList(cacheScopeKey, context, [], []);
+  }
+
+  private async safeReadCachedTableList(
+    scopeKey: string,
+    context: HanaSqlAppContext
+  ): Promise<HanaTableListCacheEntry | null> {
+    if (this.cacheStore === null) {
+      return null;
+    }
+    try {
+      return await this.cacheStore.getHanaTableList(scopeKey);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(
+        `failed to read cached tables for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
+      );
+      return null;
+    }
+  }
+
+  private async safeWriteCachedTableList(
+    scopeKey: string,
+    context: HanaSqlAppContext,
+    tableNames: readonly string[],
+    tableEntries: readonly HanaTableDisplayEntry[]
+  ): Promise<void> {
+    if (this.cacheStore === null || scopeKey.length === 0) {
+      return;
+    }
+    try {
+      await this.cacheStore.setHanaTableList(scopeKey, {
+        schema: context.schema,
+        tableNames,
+        displayEntries: tableEntries.map((entry) => ({
+          name: entry.name,
+          displayName: entry.displayName,
+        })),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(
+        `failed to cache tables for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(message)}`
+      );
+    }
   }
 
   private async formatTableEntries(

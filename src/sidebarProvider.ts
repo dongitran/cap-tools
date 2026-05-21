@@ -100,6 +100,7 @@ const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
 const MSG_HANA_SQL_FILE_OPEN_RESULT = 'sapTools.hanaSqlFileOpenResult';
 const MSG_HANA_TABLES_LOADED = 'sapTools.hanaTablesLoaded';
 const MSG_HANA_TABLE_SELECT_RESULT = 'sapTools.hanaTableSelectResult';
+const MSG_REFRESH_HANA_TABLES = 'sapTools.refreshHanaTables';
 const MSG_CF_TOPOLOGY = 'sapTools.cfTopology';
 const MSG_TOPOLOGY_SCOPE_RESOLVED = 'sapTools.topologyScopeResolved';
 
@@ -463,6 +464,12 @@ export class RegionSidebarProvider
     if (type === MSG_OPEN_HANA_SQL_FILE && isOpenHanaSqlFileMessage(message)) {
       const payload = readOpenHanaSqlFilePayload(message);
       await this.handleOpenHanaSqlFile(payload);
+      return;
+    }
+
+    if (type === MSG_REFRESH_HANA_TABLES && isOpenHanaSqlFileMessage(message)) {
+      const payload = readOpenHanaSqlFilePayload(message);
+      await this.handleRefreshHanaTables(payload);
       return;
     }
 
@@ -2072,19 +2079,26 @@ export class RegionSidebarProvider
   private async publishHanaTablesForApp(
     appId: string,
     appName: string,
-    session: CfLogSessionSeed | null
+    session: CfLogSessionSeed | null,
+    forceRefresh = false
   ): Promise<void> {
     this.outputChannel.appendLine(
-      `[sql-ui] load tables requested app=${sanitizeSqlUiLogValue(appName)}`
+      `[sql-ui] ${forceRefresh ? 'refresh' : 'load'} tables requested app=${sanitizeSqlUiLogValue(appName)}`
     );
     try {
-      const tables = await this.hanaSqlWorkbench.loadTableEntriesForApp({
-        appId,
-        appName,
-        session,
-      });
+      const tables = forceRefresh
+        ? await this.hanaSqlWorkbench.refreshTableEntriesForApp({
+            appId,
+            appName,
+            session,
+          })
+        : await this.hanaSqlWorkbench.loadTableEntriesForApp({
+            appId,
+            appName,
+            session,
+          });
       this.outputChannel.appendLine(
-        `[sql-ui] load tables succeeded app=${sanitizeSqlUiLogValue(appName)} count=${String(tables.length)}`
+        `[sql-ui] ${forceRefresh ? 'refresh' : 'load'} tables succeeded app=${sanitizeSqlUiLogValue(appName)} count=${String(tables.length)}`
       );
       this.postMessage({
         type: MSG_HANA_TABLES_LOADED,
@@ -2099,7 +2113,7 @@ export class RegionSidebarProvider
       const message =
         error instanceof Error ? error.message : 'Failed to load tables for app.';
       this.outputChannel.appendLine(
-        `[sql-ui] load tables failed app=${sanitizeSqlUiLogValue(appName)} message=${sanitizeSqlUiLogValue(message)}`
+        `[sql-ui] ${forceRefresh ? 'refresh' : 'load'} tables failed app=${sanitizeSqlUiLogValue(appName)} message=${sanitizeSqlUiLogValue(message)}`
       );
       this.postMessage({
         type: MSG_HANA_TABLES_LOADED,
@@ -2109,6 +2123,27 @@ export class RegionSidebarProvider
         message,
       });
     }
+  }
+
+  private async handleRefreshHanaTables(payload: OpenHanaSqlFilePayload): Promise<void> {
+    const targetApp =
+      this.currentApps.find((app) => app.id === payload.serviceId) ??
+      this.currentApps.find((app) => app.name === payload.serviceName);
+    if (targetApp === undefined) {
+      this.outputChannel.appendLine(
+        `[sql-ui] refresh tables rejected: app not found serviceId=${sanitizeSqlUiLogValue(payload.serviceId)} serviceName=${sanitizeSqlUiLogValue(payload.serviceName)}`
+      );
+      this.postMessage({
+        type: MSG_HANA_TABLES_LOADED,
+        serviceId: payload.serviceId,
+        success: false,
+        tables: [],
+        message: 'Selected app was not found.',
+      });
+      return;
+    }
+    const sessionSeed = this.currentLogSessionSeed;
+    await this.publishHanaTablesForApp(targetApp.id, targetApp.name, sessionSeed, true);
   }
 
   private async handleRunHanaTableSelect(payload: RunHanaTableSelectPayload): Promise<void> {
@@ -2243,8 +2278,22 @@ export class RegionSidebarProvider
 
   private async handleLogout(): Promise<void> {
     try {
+      const previousCredentials = await getEffectiveCredentials(this.context).catch(() => null);
+      const previousEmail = previousCredentials?.email ?? '';
       await clearCredentials(this.context);
       await this.cacheSyncService.setCredentials(null);
+      if (previousEmail.length > 0) {
+        try {
+          const removed = await this.cacheStore.clearHanaTableListsForUser(previousEmail);
+          if (removed > 0) {
+            this.outputChannel.appendLine(
+              `[sql-ui] cleared ${String(removed)} cached HANA table list(s) for ${sanitizeSqlUiLogValue(previousEmail)}`
+            );
+          }
+        } catch {
+          /* best effort cleanup, ignore failures */
+        }
+      }
       this.cfSession = null;
       this.cfSessionRegionCode = '';
       this.selectedRegionCode = '';

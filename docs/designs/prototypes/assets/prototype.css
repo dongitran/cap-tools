@@ -2156,6 +2156,44 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
 }
 
+.sql-tables-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--border-color) 80%, var(--mix-base));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
+  color: var(--chip-text);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, transform 240ms ease;
+}
+
+.sql-tables-refresh-button:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--surface-bg) 70%, var(--accent-color));
+  color: var(--text-color);
+}
+
+.sql-tables-refresh-button:active:not(:disabled) {
+  transform: rotate(180deg);
+}
+
+.sql-tables-refresh-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sql-tables-list.is-loading + * .sql-tables-refresh-button,
+.sql-tables-head .sql-tables-refresh-button[aria-busy='true'] {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
 .sql-tables-list {
   display: grid;
   gap: 3px;

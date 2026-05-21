@@ -3,10 +3,15 @@ import type * as vscode from 'vscode';
 
 import {
   buildExportRootFolderScopeKey,
+  buildHanaTableListScopeKey,
   CacheStore,
   normalizeUserEmail,
 } from './cacheStore';
-import type { CacheState, CachedUserEntry } from './cacheModels';
+import type {
+  CacheState,
+  CachedUserEntry,
+  HanaTableListCacheEntry,
+} from './cacheModels';
 
 interface MockGlobalState {
   readonly get: ReturnType<typeof vi.fn>;
@@ -78,7 +83,22 @@ describe('CacheStore', () => {
       settings: { syncIntervalHours: 24 },
       users: {},
       exportRootFolders: {},
+      hanaTableLists: {},
     });
+  });
+
+  it('normalizes persisted state that lacks the hanaTableLists field for backward compatibility', async () => {
+    const legacyState = {
+      version: 1,
+      settings: { syncIntervalHours: 24 },
+      users: {},
+      exportRootFolders: {},
+    };
+    const context = createMockContext(legacyState);
+    const store = new CacheStore(context);
+
+    const state = await store.readState();
+    expect(state.hanaTableLists).toEqual({});
   });
 
   it('persists sync interval setting', async () => {
@@ -130,6 +150,7 @@ describe('CacheStore', () => {
         '': createSampleUser('invalid@example.com'),
       },
       exportRootFolders: {},
+      hanaTableLists: {},
     };
     const context = createMockContext(persisted);
     const store = new CacheStore(context);
@@ -231,5 +252,179 @@ describe('buildExportRootFolderScopeKey', () => {
         ' ORG-GUID-1 '
       )
     ).toBe('dev.user@example.com::us-10::org-guid-1');
+  });
+});
+
+describe('buildHanaTableListScopeKey', () => {
+  it('joins email, api endpoint, org, space and app id with double colons', () => {
+    expect(
+      buildHanaTableListScopeKey({
+        email: 'Dev.User@Example.Com',
+        apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+        orgName: 'Finance-Services-Prod',
+        spaceName: 'UAT',
+        appId: 'finance-uat-api',
+      })
+    ).toBe(
+      'dev.user@example.com::https://api.cf.us10.hana.ondemand.com::finance-services-prod::uat::finance-uat-api'
+    );
+  });
+
+  it('strips a trailing slash on the api endpoint so equivalent URLs map to the same key', () => {
+    expect(
+      buildHanaTableListScopeKey({
+        email: 'a@b.com',
+        apiEndpoint: 'https://api.example.com/',
+        orgName: 'org',
+        spaceName: 'space',
+        appId: 'app',
+      })
+    ).toBe('a@b.com::https://api.example.com::org::space::app');
+  });
+
+  it('returns an empty string when any scope component is blank', () => {
+    expect(
+      buildHanaTableListScopeKey({
+        email: '',
+        apiEndpoint: 'https://api.example.com',
+        orgName: 'org',
+        spaceName: 'space',
+        appId: 'app',
+      })
+    ).toBe('');
+    expect(
+      buildHanaTableListScopeKey({
+        email: 'a@b.com',
+        apiEndpoint: 'https://api.example.com',
+        orgName: 'org',
+        spaceName: '',
+        appId: 'app',
+      })
+    ).toBe('');
+  });
+});
+
+describe('CacheStore HANA table list cache', () => {
+  function createSampleHanaTableListEntry(
+    overrides: Partial<HanaTableListCacheEntry> = {}
+  ): HanaTableListCacheEntry {
+    return {
+      schema: 'SAP_HANA_SCHEMA_1',
+      tableNames: ['ORDERS', 'CUSTOMERS'],
+      displayEntries: [
+        { name: 'ORDERS', displayName: 'Orders' },
+        { name: 'CUSTOMERS', displayName: 'Customers' },
+      ],
+      updatedAt: '2026-05-21T10:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('returns null when no cached table list exists for the scope key', async () => {
+    const store = new CacheStore(createMockContext());
+    expect(await store.getHanaTableList('missing-key')).toBeNull();
+  });
+
+  it('returns null when the scope key is empty', async () => {
+    const store = new CacheStore(createMockContext());
+    expect(await store.getHanaTableList('')).toBeNull();
+  });
+
+  it('persists and retrieves a table list entry by scope key', async () => {
+    const store = new CacheStore(createMockContext());
+    const scopeKey = buildHanaTableListScopeKey({
+      email: 'dev@example.com',
+      apiEndpoint: 'https://api.example.com',
+      orgName: 'org-1',
+      spaceName: 'uat',
+      appId: 'finance-uat-api',
+    });
+    const entry = createSampleHanaTableListEntry();
+
+    await store.setHanaTableList(scopeKey, entry);
+    const cached = await store.getHanaTableList(scopeKey);
+
+    expect(cached?.schema).toBe('SAP_HANA_SCHEMA_1');
+    expect(cached?.tableNames).toEqual(['ORDERS', 'CUSTOMERS']);
+    expect(cached?.displayEntries).toEqual([
+      { name: 'ORDERS', displayName: 'Orders' },
+      { name: 'CUSTOMERS', displayName: 'Customers' },
+    ]);
+    expect(cached?.updatedAt).toBe('2026-05-21T10:00:00.000Z');
+  });
+
+  it('rejects an empty scope key when setting a table list entry', async () => {
+    const store = new CacheStore(createMockContext());
+    await expect(
+      store.setHanaTableList('', createSampleHanaTableListEntry())
+    ).rejects.toThrow(/empty scope key/);
+  });
+
+  it('rejects an entry with an empty updatedAt as malformed', async () => {
+    const store = new CacheStore(createMockContext());
+    await expect(
+      store.setHanaTableList('valid-key', createSampleHanaTableListEntry({ updatedAt: '' }))
+    ).rejects.toThrow(/invalid/i);
+  });
+
+  it('deletes a single table list entry without touching siblings', async () => {
+    const store = new CacheStore(createMockContext());
+    const keyA = 'a@example.com::https://api.example.com::org::space::app-a';
+    const keyB = 'a@example.com::https://api.example.com::org::space::app-b';
+    await store.setHanaTableList(keyA, createSampleHanaTableListEntry());
+    await store.setHanaTableList(keyB, createSampleHanaTableListEntry({ schema: 'SCHEMA_B' }));
+
+    await store.deleteHanaTableList(keyA);
+
+    expect(await store.getHanaTableList(keyA)).toBeNull();
+    const remaining = await store.getHanaTableList(keyB);
+    expect(remaining?.schema).toBe('SCHEMA_B');
+  });
+
+  it('clears every cached table list whose scope key belongs to the given user email', async () => {
+    const store = new CacheStore(createMockContext());
+    const userAKey = 'a@example.com::https://api.example.com::org::space::app-a';
+    const userBKey = 'b@example.com::https://api.example.com::org::space::app-a';
+    await store.setHanaTableList(userAKey, createSampleHanaTableListEntry());
+    await store.setHanaTableList(userBKey, createSampleHanaTableListEntry());
+
+    const removed = await store.clearHanaTableListsForUser('A@example.com');
+
+    expect(removed).toBe(1);
+    expect(await store.getHanaTableList(userAKey)).toBeNull();
+    expect(await store.getHanaTableList(userBKey)).not.toBeNull();
+  });
+
+  it('drops persisted entries that are missing required metadata when normalizing', async () => {
+    const state = {
+      version: 1,
+      settings: { syncIntervalHours: 24 },
+      users: {},
+      exportRootFolders: {},
+      hanaTableLists: {
+        'good-key': {
+          schema: 'S',
+          tableNames: ['ORDERS'],
+          displayEntries: [{ name: 'ORDERS', displayName: 'Orders' }],
+          updatedAt: '2026-05-21T10:00:00.000Z',
+        },
+        'no-timestamp-key': {
+          schema: 'S',
+          tableNames: ['X'],
+          displayEntries: [],
+          updatedAt: '',
+        },
+        '   ': {
+          schema: 'S',
+          tableNames: ['X'],
+          displayEntries: [],
+          updatedAt: '2026-05-21T10:00:00.000Z',
+        },
+      },
+    };
+    const store = new CacheStore(createMockContext(state));
+
+    expect(await store.getHanaTableList('good-key')).not.toBeNull();
+    expect(await store.getHanaTableList('no-timestamp-key')).toBeNull();
   });
 });

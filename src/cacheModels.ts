@@ -57,11 +57,24 @@ export interface ExportRootFolderCacheEntry {
   readonly updatedAt: string;
 }
 
+export interface HanaTableDisplayCacheEntry {
+  readonly name: string;
+  readonly displayName: string;
+}
+
+export interface HanaTableListCacheEntry {
+  readonly schema: string;
+  readonly tableNames: readonly string[];
+  readonly displayEntries: readonly HanaTableDisplayCacheEntry[];
+  readonly updatedAt: string;
+}
+
 export interface CacheState {
   readonly version: 1;
   readonly settings: CacheSettings;
   readonly users: Record<string, CachedUserEntry>;
   readonly exportRootFolders: Record<string, ExportRootFolderCacheEntry>;
+  readonly hanaTableLists: Record<string, HanaTableListCacheEntry>;
 }
 
 export function isSyncIntervalHours(
