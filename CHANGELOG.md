@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1 (stable)
+- Added multi-statement HANA SQL execution from the SQL Workbench, including sequential batch execution on one connection so session state is preserved.
+- Wrapped mutating multi-statement batches in transactions with rollback on failure and skipped-state reporting for remaining statements.
+- Added stacked batch result rendering with per-statement result sections and combined CSV/JSON export actions.
+
 ## 0.8.0 (stable)
 - Added the `eu10-006` (Europe/Frankfurt, AWS) Cloud Foundry landscape to the region catalog and bumped `@saptools/cf-sync` to `0.4.10`, so the region picker and CF cache sync now cover all 50 SAP BTP regions.
 - Updated the VS Code Activity Bar and panel icon to use a monochrome isometric cube that matches the Marketplace logo.

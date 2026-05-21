@@ -823,6 +823,7 @@ appElement.addEventListener('contextmenu', (event) => {
   }
   const rowIndex = Number.parseInt(cell.dataset.rowIndex ?? '', 10);
   const columnIndex = Number.parseInt(cell.dataset.columnIndex ?? '', 10);
+  const statementIndex = Number.parseInt(cell.dataset.statementIndex ?? '', 10);
   if (!Number.isInteger(rowIndex) || !Number.isInteger(columnIndex)) {
     return;
   }
@@ -831,6 +832,7 @@ appElement.addEventListener('contextmenu', (event) => {
   hanaSqlResultContextMenuState = {
     columnIndex,
     rowIndex,
+    statementIndex: Number.isInteger(statementIndex) ? statementIndex : null,
     x: Math.min(event.clientX, Math.max(8, window.innerWidth - 190)),
     y: Math.min(event.clientY, Math.max(8, window.innerHeight - 96)),
   };
@@ -1612,19 +1614,42 @@ function buildPrototypeSqlResultReadyState(appName, tableName) {
   const executedAt = new Date().toISOString();
   return {
     appName,
-    columns: ['ID', 'TABLE_NAME', 'STATUS', 'DESCRIPTION'],
-    elapsedMs: 128,
+    batchSummary: {
+      committed: false,
+      rolledBack: true,
+      usedTransaction: true,
+    },
     executedAt,
     phase: 'ready',
-    rows: [
-      ['1', tableName, 'READY', 'Prototype row with comma, quote " and newline\nfor export checks.'],
-      [
-        '2',
+    statements: [
+      {
+        columns: ['ID', 'TABLE_NAME', 'STATUS', 'DESCRIPTION'],
+        elapsedMs: 128,
+        rows: [
+          ['1', tableName, 'READY', 'Prototype row with comma, quote " and newline\nfor export checks.'],
+          [
+            '2',
+            tableName,
+            'SUCCESS',
+            '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}',
+          ],
+        ],
+        sql: `SELECT * FROM "${tableName}" LIMIT 100`,
+        status: 'success',
         tableName,
-        'SUCCESS',
-        '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}',
-      ],
-      ['3', tableName, 'SYNCED', 'Short value'],
+      },
+      {
+        elapsedMs: 64,
+        errorMessage: 'Prototype batch statement failed, so SAP Tools rolled back the transaction.',
+        sql: `UPDATE "${tableName}" SET STATUS = 'READY' WHERE ID = 'draft-42'`,
+        status: 'error',
+        tableName,
+      },
+      {
+        sql: `SELECT COUNT(*) AS TOTAL FROM "${tableName}"`,
+        status: 'skipped',
+        tableName,
+      },
     ],
     tableName,
   };
@@ -1656,8 +1681,9 @@ function triggerPrototypeSqlResultContextCopyAction(action) {
   }
 
   const state = hanaSqlResultPreviewState;
-  const { rowIndex, columnIndex } = hanaSqlResultContextMenuState;
-  const row = state.rows[rowIndex];
+  const { rowIndex, columnIndex, statementIndex } = hanaSqlResultContextMenuState;
+  const resultState = resolvePrototypeSqlResultContextState(state, statementIndex);
+  const row = resultState?.rows[rowIndex];
   hanaSqlResultContextMenuState = null;
   if (!Array.isArray(row)) {
     return true;
@@ -1665,7 +1691,7 @@ function triggerPrototypeSqlResultContextCopyAction(action) {
 
   const content =
     action === 'copy-sql-result-row-object'
-      ? buildPrototypeSqlResultRowObjectJson(state, row)
+      ? buildPrototypeSqlResultRowObjectJson(resultState, row)
       : row[columnIndex] ?? '';
   if (navigator.clipboard?.writeText !== undefined) {
     void navigator.clipboard.writeText(content);
@@ -1674,6 +1700,9 @@ function triggerPrototypeSqlResultContextCopyAction(action) {
 }
 
 function buildPrototypeSqlResultCsv(state) {
+  if (isPrototypeSqlResultBatchState(state)) {
+    return buildPrototypeSqlResultBatchCsv(state);
+  }
   return [
     state.columns.map(escapeCsvValue).join(','),
     ...state.rows.map((row) => state.columns.map((_, index) => escapeCsvValue(row[index] ?? '')).join(',')),
@@ -1688,6 +1717,9 @@ function escapeCsvValue(value) {
 }
 
 function buildPrototypeSqlResultJson(state) {
+  if (isPrototypeSqlResultBatchState(state)) {
+    return buildPrototypeSqlResultBatchJson(state);
+  }
   const columnKeys = buildPrototypeSqlResultColumnKeys(state.columns);
   const rows = state.rows.map((row) => {
     return Object.fromEntries(columnKeys.map((column, index) => [column, row[index] ?? '']));
@@ -1711,6 +1743,73 @@ function buildPrototypeSqlResultColumnKeys(columns) {
     const count = (counts.get(baseKey) ?? 0) + 1;
     counts.set(baseKey, count);
     return count === 1 ? baseKey : `${baseKey}_${String(count)}`;
+  });
+}
+
+function isPrototypeSqlResultBatchState(state) {
+  return Array.isArray(state?.statements) && state.statements.length > 1;
+}
+
+function resolvePrototypeSqlResultContextState(state, statementIndex) {
+  if (!isPrototypeSqlResultBatchState(state)) {
+    return state;
+  }
+  if (!Number.isInteger(statementIndex)) {
+    return null;
+  }
+  const statement = state.statements[statementIndex];
+  if (statement?.status !== 'success' || !Array.isArray(statement.rows)) {
+    return null;
+  }
+  return statement;
+}
+
+function buildPrototypeSqlResultBatchCsv(state) {
+  const sections = [];
+  state.statements.forEach((statement, index) => {
+    sections.push(buildPrototypeSqlBatchSectionHeader(statement, index));
+    if (statement.status === 'success' && Array.isArray(statement.rows)) {
+      sections.push(buildPrototypeSqlResultCsv(statement));
+    }
+    sections.push('');
+  });
+  return sections.join('\n');
+}
+
+function buildPrototypeSqlBatchSectionHeader(statement, index) {
+  const status = String(statement.status ?? 'pending').toUpperCase();
+  const tableName = statement.tableName ?? 'SQL statement';
+  const elapsed = Number.isInteger(statement.elapsedMs) ? `, ${String(statement.elapsedMs)} ms` : '';
+  const suffix = statement.errorMessage !== undefined ? ` - ${statement.errorMessage}` : '';
+  return `-- Statement ${String(index + 1)} (${status}, ${tableName}${elapsed})${suffix}`;
+}
+
+function buildPrototypeSqlResultBatchJson(state) {
+  const statements = state.statements.map((statement, index) => {
+    const record = {
+      index: index + 1,
+      sql: statement.sql,
+      status: statement.status,
+      tableName: statement.tableName,
+    };
+    if (Number.isInteger(statement.elapsedMs)) {
+      record.elapsedMs = statement.elapsedMs;
+    }
+    if (typeof statement.errorMessage === 'string') {
+      record.errorMessage = statement.errorMessage;
+    }
+    if (Array.isArray(statement.rows)) {
+      record.rows = buildPrototypeSqlResultRows(statement);
+    }
+    return record;
+  });
+  return JSON.stringify({ statements }, null, 2);
+}
+
+function buildPrototypeSqlResultRows(state) {
+  const columnKeys = buildPrototypeSqlResultColumnKeys(state.columns);
+  return state.rows.map((row) => {
+    return Object.fromEntries(columnKeys.map((column, index) => [column, row[index] ?? '']));
   });
 }
 
@@ -4677,6 +4776,10 @@ function renderSqlResultPreviewPanel() {
   }
 
   const state = hanaSqlResultPreviewState;
+  if (isPrototypeSqlResultBatchState(state)) {
+    return renderSqlBatchResultPreviewPanel(state);
+  }
+
   const menuClass = hanaSqlResultExportMenuOpen ? ' is-open' : '';
   return `
     <section class="group-card sql-result-preview-panel" data-role="sql-result-preview-panel" aria-label="SQL result preview">
@@ -4710,16 +4813,132 @@ function renderSqlResultPreviewPanel() {
   `;
 }
 
-function renderSqlResultPreviewTable(state) {
+function renderSqlBatchResultPreviewPanel(state) {
+  const menuClass = hanaSqlResultExportMenuOpen ? ' is-open' : '';
+  const counts = countPrototypeSqlStatementStatuses(state.statements);
+  const elapsedMs = state.statements.reduce((sum, statement) => {
+    return sum + (Number.isInteger(statement.elapsedMs) ? statement.elapsedMs : 0);
+  }, 0);
+
+  return `
+    <section class="group-card sql-result-preview-panel sql-result-batch-preview" data-role="sql-result-preview-panel" aria-label="SQL result preview">
+      <header class="sql-result-preview-toolbar sql-result-batch-summary">
+        <span class="sql-result-preview-chip">Statements: ${String(state.statements.length)}</span>
+        <span class="sql-result-preview-chip is-success">OK: ${String(counts.success)}</span>
+        ${counts.error > 0 ? `<span class="sql-result-preview-chip is-error">Failed: ${String(counts.error)}</span>` : ''}
+        ${counts.skipped > 0 ? `<span class="sql-result-preview-chip is-muted">Skipped: ${String(counts.skipped)}</span>` : ''}
+        <span class="sql-result-preview-chip">Elapsed: ${String(elapsedMs)} ms</span>
+        ${renderPrototypeSqlTransactionChip(state.batchSummary)}
+        <div class="sql-result-export-menu${menuClass}">
+          <button type="button" class="sql-result-export-trigger" data-action="toggle-sql-result-export-menu" aria-haspopup="menu" aria-expanded="${hanaSqlResultExportMenuOpen ? 'true' : 'false'}">Export all</button>
+          <div class="sql-result-export-list" role="menu">
+            <button type="button" role="menuitem" data-action="copy-sql-result-csv">Copy all CSV</button>
+            <button type="button" role="menuitem" data-action="copy-sql-result-json">Copy all JSON</button>
+            <button type="button" role="menuitem" data-action="export-sql-result-csv">Export all CSV</button>
+            <button type="button" role="menuitem" data-action="export-sql-result-json">Export all JSON</button>
+          </div>
+        </div>
+      </header>
+      <div class="sql-result-batch-sections">
+        ${state.statements.map(renderSqlResultBatchStatementSection).join('')}
+      </div>
+      ${renderSqlResultContextMenu()}
+    </section>
+  `;
+}
+
+function countPrototypeSqlStatementStatuses(statements) {
+  const counts = { error: 0, skipped: 0, success: 0 };
+  for (const statement of statements) {
+    if (statement.status === 'error') counts.error += 1;
+    if (statement.status === 'skipped') counts.skipped += 1;
+    if (statement.status === 'success') counts.success += 1;
+  }
+  return counts;
+}
+
+function renderPrototypeSqlTransactionChip(summary) {
+  if (summary?.rolledBack === true) {
+    return '<span class="sql-result-preview-chip is-error">Rolled back</span>';
+  }
+  if (summary?.committed === true) {
+    return '<span class="sql-result-preview-chip is-success">Committed</span>';
+  }
+  if (summary?.usedTransaction === true) {
+    return '<span class="sql-result-preview-chip">Transactional</span>';
+  }
+  return '';
+}
+
+function renderSqlResultBatchStatementSection(statement, index, statements) {
+  const tableName = statement.tableName ?? 'SQL statement';
+  const elapsedChip = Number.isInteger(statement.elapsedMs)
+    ? `<span class="sql-result-preview-chip">Elapsed: ${String(statement.elapsedMs)} ms</span>`
+    : '';
+  return `
+    <section class="sql-result-statement-section is-${escapeHtml(statement.status)}" data-statement-index="${String(index)}">
+      <header class="sql-result-statement-header">
+        <span class="sql-result-statement-title">Statement ${String(index + 1)} / ${String(statements.length)}</span>
+        ${renderSqlResultStatementStatusChip(statement.status)}
+        <span class="sql-result-preview-chip">Table: ${escapeHtml(tableName)}</span>
+        ${elapsedChip}
+      </header>
+      <div class="sql-result-statement-body">
+        ${renderSqlResultBatchStatementBody(statement, index)}
+      </div>
+    </section>
+  `;
+}
+
+function renderSqlResultStatementStatusChip(status) {
+  if (status === 'success') {
+    return '<span class="sql-result-preview-chip is-success">Success</span>';
+  }
+  if (status === 'error') {
+    return '<span class="sql-result-preview-chip is-error">Failed</span>';
+  }
+  if (status === 'skipped') {
+    return '<span class="sql-result-preview-chip is-muted">Skipped</span>';
+  }
+  return '<span class="sql-result-preview-chip">Pending</span>';
+}
+
+function renderSqlResultBatchStatementBody(statement, statementIndex) {
+  if (statement.status === 'success' && Array.isArray(statement.rows)) {
+    return `<div class="sql-result-preview-table-wrap">${renderSqlResultPreviewTable(statement, statementIndex)}</div>`;
+  }
+  if (statement.status === 'error') {
+    return renderSqlResultStatementState('Execution Error', statement.errorMessage ?? 'Query execution failed.', statement.sql);
+  }
+  if (statement.status === 'skipped') {
+    return renderSqlResultStatementState('Skipped', 'Skipped due to a preceding statement failure. The transaction was rolled back.', statement.sql);
+  }
+  return '<div class="sql-result-preview-loading is-compact" role="status"><span class="sql-result-preview-spinner" aria-hidden="true"></span><span>Queued...</span></div>';
+}
+
+function renderSqlResultStatementState(title, message, sql) {
+  return `
+    <section class="sql-result-statement-state">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(message)}</p>
+      <pre>${escapeHtml(sql)}</pre>
+    </section>
+  `;
+}
+
+function renderSqlResultPreviewTable(state, statementIndex = null) {
   const headerCells = [
     '<th>#</th>',
     ...state.columns.map((column) => `<th>${escapeHtml(column)}</th>`),
   ].join('');
+  const statementAttribute = Number.isInteger(statementIndex)
+    ? ` data-statement-index="${String(statementIndex)}"`
+    : '';
   const bodyRows = state.rows
     .map((row, rowIndex) => {
       const cells = state.columns
         .map((_, columnIndex) => {
-          return `<td data-role="sql-result-cell" data-row-index="${String(rowIndex)}" data-column-index="${String(columnIndex)}">${escapeHtml(row[columnIndex] ?? '')}</td>`;
+          return `<td data-role="sql-result-cell" data-row-index="${String(rowIndex)}" data-column-index="${String(columnIndex)}"${statementAttribute}>${escapeHtml(row[columnIndex] ?? '')}</td>`;
         })
         .join('');
       return `<tr data-role="sql-result-row" data-row-index="${String(rowIndex)}"><td>${String(rowIndex + 1)}</td>${cells}</tr>`;
