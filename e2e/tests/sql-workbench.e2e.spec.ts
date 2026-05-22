@@ -959,7 +959,7 @@ test.describe('SAP Tools SQL workbench', () => {
       const searchInput = tablesPanel.getByRole('searchbox', { name: 'Search tables' });
       await expect(searchInput).toBeEnabled();
       await expect(tableRows(tablesPanel)).toHaveCount(105, { timeout: 15000 });
-      await expect(tablesPanel.getByRole('button', { name: /^Select first 10 rows of / })).toHaveCount(105);
+      await expect(tablesPanel.getByRole('button', { name: /^Select first 100 rows of / })).toHaveCount(105);
       await tablesPanel.evaluate((element) => {
         if (!(element instanceof HTMLElement)) {
           throw new Error('Tables panel is missing.');
@@ -1208,7 +1208,7 @@ test.describe('SAP Tools SQL workbench', () => {
         'none'
       );
       const targetSelectButton = targetTableRow.getByRole('button', {
-        name: `Select first 10 rows of ${targetTableName}`,
+        name: `Select first 100 rows of ${targetTableName}`,
       });
       await expect(targetSelectButton).toHaveCSS('opacity', '0');
       await expect(targetSelectButton).toHaveCSS('pointer-events', 'none');
@@ -1246,7 +1246,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(targetSelectAction).toHaveClass(/is-loading/);
       await expect(targetSelectAction).toHaveAttribute(
         'aria-label',
-        `Loading first 10 rows of ${targetTableName}`
+        `Loading first 100 rows of ${targetTableName}`
       );
       await expect(targetSelectAction).toHaveAttribute('aria-busy', 'true');
       await expect(targetSelectAction).toBeDisabled();
@@ -1320,7 +1320,7 @@ test.describe('SAP Tools SQL workbench', () => {
       await expect(targetSelectAction).toHaveAttribute('aria-busy', 'false');
       await expect(targetSelectAction).toHaveAttribute(
         'aria-label',
-        `Select first 10 rows of ${targetTableName}`
+        `Select first 100 rows of ${targetTableName}`
       );
       await expect(targetSelectAction).toBeEnabled();
       await expect(targetSelectAction.locator('.sql-table-select-spinner')).toBeHidden();
@@ -1378,12 +1378,12 @@ test.describe('SAP Tools SQL workbench', () => {
         {
           APP_NAME: 'finance-uat-api',
           CURRENT_SCHEMA: 'TEST_SCHEMA',
-          EXECUTED_SQL: `SELECT * FROM "TEST_SCHEMA"."${targetTableName}" LIMIT 10`,
+          EXECUTED_SQL: `SELECT * FROM "TEST_SCHEMA"."${targetTableName}" LIMIT 100`,
         },
       ]);
 
       const secondTargetSelectButton = secondTargetTableRow.getByRole('button', {
-        name: `Select first 10 rows of ${secondTargetTableName}`,
+        name: `Select first 100 rows of ${secondTargetTableName}`,
       });
       const resultCountBeforeSecondQuickSelect = await session.window
         .getByRole('tab', { name: /SAP Tools SQL Result/i })

@@ -34,7 +34,7 @@ export {
 } from './hanaTableDisplayNameFormatter';
 
 export const TABLE_SUGGESTION_LIMIT = 500;
-export const QUICK_SELECT_ROW_LIMIT = 10;
+export const QUICK_SELECT_ROW_LIMIT = 100;
 const TEST_MODE_SAMPLE_JSON_PAYLOAD =
   '{"status":"Success","message":"This is mock data for testing","timestamp":"2026-04-08T03:10:07.482Z"}';
 

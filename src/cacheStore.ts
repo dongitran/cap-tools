@@ -13,6 +13,8 @@ import type {
   CacheState,
   ExportRootFolderCacheEntry,
   CachedUserEntry,
+  HanaTableDisplayCacheEntry,
+  HanaTableListCacheEntry,
   RegionAccessState,
   SyncIntervalHours,
 } from './cacheModels';
@@ -21,6 +23,8 @@ const CACHE_STATE_KEY = 'sapTools.cache.state.v1';
 
 const EMPTY_USERS: Record<string, CachedUserEntry> = Object.freeze({});
 const EMPTY_EXPORT_ROOT_FOLDERS: Record<string, ExportRootFolderCacheEntry> =
+  Object.freeze({});
+const EMPTY_HANA_TABLE_LISTS: Record<string, HanaTableListCacheEntry> =
   Object.freeze({});
 
 export class CacheStore {
@@ -139,6 +143,90 @@ export class CacheStore {
     });
   }
 
+  async getHanaTableList(
+    scopeKey: string
+  ): Promise<HanaTableListCacheEntry | null> {
+    if (scopeKey.length === 0) {
+      return null;
+    }
+    const state = await this.readState();
+    const cachedEntry = state.hanaTableLists[scopeKey];
+    return cachedEntry ?? null;
+  }
+
+  async setHanaTableList(
+    scopeKey: string,
+    entry: HanaTableListCacheEntry
+  ): Promise<HanaTableListCacheEntry> {
+    if (scopeKey.length === 0) {
+      throw new Error('Cannot cache HANA table list for an empty scope key.');
+    }
+
+    const normalizedEntry = normalizeHanaTableListEntry(entry);
+    if (normalizedEntry === null) {
+      throw new Error('Cannot cache an invalid HANA table list entry.');
+    }
+
+    await this.updateState((state) => {
+      return {
+        ...state,
+        hanaTableLists: {
+          ...state.hanaTableLists,
+          [scopeKey]: normalizedEntry,
+        },
+      };
+    });
+
+    return normalizedEntry;
+  }
+
+  async deleteHanaTableList(scopeKey: string): Promise<void> {
+    if (scopeKey.length === 0) {
+      return;
+    }
+
+    await this.updateState((state) => {
+      if (state.hanaTableLists[scopeKey] === undefined) {
+        return state;
+      }
+      const remaining = Object.fromEntries(
+        Object.entries(state.hanaTableLists).filter(([key]) => key !== scopeKey)
+      );
+      return {
+        ...state,
+        hanaTableLists: remaining,
+      };
+    });
+  }
+
+  async clearHanaTableListsForUser(email: string): Promise<number> {
+    const normalizedEmail = normalizeUserEmail(email);
+    if (normalizedEmail.length === 0) {
+      return 0;
+    }
+
+    const prefix = `${normalizedEmail}::`;
+    let removed = 0;
+    await this.updateState((state) => {
+      const filtered: Record<string, HanaTableListCacheEntry> = {};
+      for (const [key, value] of Object.entries(state.hanaTableLists)) {
+        if (key.startsWith(prefix)) {
+          removed += 1;
+          continue;
+        }
+        filtered[key] = value;
+      }
+      if (removed === 0) {
+        return state;
+      }
+      return {
+        ...state,
+        hanaTableLists: filtered,
+      };
+    });
+    return removed;
+  }
+
   async upsertUser(
     email: string,
     updater: (current: CachedUserEntry | null) => CachedUserEntry
@@ -221,6 +309,50 @@ export function buildExportRootFolderScopeKey(
   return `${normalizedEmail}::${normalizedRegionCode}::${normalizedOrgGuid}`;
 }
 
+export function normalizeApiEndpoint(value: string): string {
+  return value.trim().toLowerCase().replace(/\/+$/u, '');
+}
+
+export function normalizeOrgName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function normalizeSpaceName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function normalizeAppId(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export interface HanaTableListScopeInput {
+  readonly email: string;
+  readonly apiEndpoint: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+  readonly appId: string;
+}
+
+export function buildHanaTableListScopeKey(
+  scope: HanaTableListScopeInput
+): string {
+  const normalizedEmail = normalizeUserEmail(scope.email);
+  const normalizedApiEndpoint = normalizeApiEndpoint(scope.apiEndpoint);
+  const normalizedOrgName = normalizeOrgName(scope.orgName);
+  const normalizedSpaceName = normalizeSpaceName(scope.spaceName);
+  const normalizedAppId = normalizeAppId(scope.appId);
+  if (
+    normalizedEmail.length === 0 ||
+    normalizedApiEndpoint.length === 0 ||
+    normalizedOrgName.length === 0 ||
+    normalizedSpaceName.length === 0 ||
+    normalizedAppId.length === 0
+  ) {
+    return '';
+  }
+  return `${normalizedEmail}::${normalizedApiEndpoint}::${normalizedOrgName}::${normalizedSpaceName}::${normalizedAppId}`;
+}
+
 function normalizeCacheState(rawState: unknown): CacheState {
   if (!isRecord(rawState)) {
     return createDefaultCacheState();
@@ -234,13 +366,96 @@ function normalizeCacheState(rawState: unknown): CacheState {
   const rawSettings = normalizeSettings(rawState['settings']);
   const rawUsers = normalizeUsers(rawState['users']);
   const rawExportRootFolders = normalizeExportRootFolders(rawState['exportRootFolders']);
+  const rawHanaTableLists = normalizeHanaTableLists(rawState['hanaTableLists']);
 
   return {
     version: 1,
     settings: rawSettings,
     users: rawUsers,
     exportRootFolders: rawExportRootFolders,
+    hanaTableLists: rawHanaTableLists,
   };
+}
+
+function normalizeHanaTableLists(
+  rawHanaTableLists: unknown
+): Record<string, HanaTableListCacheEntry> {
+  if (!isRecord(rawHanaTableLists)) {
+    return EMPTY_HANA_TABLE_LISTS;
+  }
+
+  const entries: Record<string, HanaTableListCacheEntry> = {};
+  for (const [scopeKey, rawEntry] of Object.entries(rawHanaTableLists)) {
+    const trimmedScopeKey = scopeKey.trim();
+    if (trimmedScopeKey.length === 0) {
+      continue;
+    }
+    const normalized = normalizeHanaTableListEntry(rawEntry);
+    if (normalized === null) {
+      continue;
+    }
+    entries[trimmedScopeKey] = normalized;
+  }
+  return entries;
+}
+
+function normalizeHanaTableListEntry(
+  rawEntry: unknown
+): HanaTableListCacheEntry | null {
+  if (!isRecord(rawEntry)) {
+    return null;
+  }
+
+  const schema = readString(rawEntry['schema']);
+  const updatedAt = readString(rawEntry['updatedAt']);
+  if (updatedAt.length === 0) {
+    return null;
+  }
+
+  const tableNames = normalizeHanaTableNames(rawEntry['tableNames']);
+  const displayEntries = normalizeHanaDisplayEntries(rawEntry['displayEntries']);
+
+  return {
+    schema,
+    tableNames,
+    displayEntries,
+    updatedAt,
+  };
+}
+
+function normalizeHanaTableNames(rawTableNames: unknown): readonly string[] {
+  if (!Array.isArray(rawTableNames)) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const rawName of rawTableNames) {
+    const name = readString(rawName);
+    if (name.length > 0) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+function normalizeHanaDisplayEntries(
+  rawEntries: unknown
+): readonly HanaTableDisplayCacheEntry[] {
+  if (!Array.isArray(rawEntries)) {
+    return [];
+  }
+  const entries: HanaTableDisplayCacheEntry[] = [];
+  for (const rawEntry of rawEntries) {
+    if (!isRecord(rawEntry)) {
+      continue;
+    }
+    const name = readString(rawEntry['name']);
+    const displayName = readString(rawEntry['displayName']);
+    if (name.length === 0 || displayName.length === 0) {
+      continue;
+    }
+    entries.push({ name, displayName });
+  }
+  return entries;
 }
 
 function normalizeSettings(rawSettings: unknown): CacheSettings {
@@ -569,6 +784,7 @@ function createDefaultCacheState(): CacheState {
     },
     users: EMPTY_USERS,
     exportRootFolders: EMPTY_EXPORT_ROOT_FOLDERS,
+    hanaTableLists: EMPTY_HANA_TABLE_LISTS,
   };
 }
 

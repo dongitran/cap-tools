@@ -1515,7 +1515,38 @@ function handleSqlTabAction(action, actionElement) {
     return triggerRunHanaTableSelect(serviceId, tableName);
   }
 
+  if (action === 'refresh-hana-tables') {
+    return triggerRefreshHanaTables();
+  }
+
   return null;
+}
+
+function triggerRefreshHanaTables() {
+  const serviceId = selectedHanaServiceId;
+  if (serviceId.length === 0) {
+    return false;
+  }
+  const service = resolveHanaServices().find((entry) => entry.id === serviceId);
+  if (service === undefined) {
+    return false;
+  }
+  hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
+  hanaTablesLoadingByServiceId.set(serviceId, 'loading');
+  hanaTablesErrorByServiceId = new Map(hanaTablesErrorByServiceId);
+  hanaTablesErrorByServiceId.delete(serviceId);
+  if (vscodeApi !== null) {
+    vscodeApi.postMessage({
+      type: 'sapTools.refreshHanaTables',
+      serviceId: service.id,
+      serviceName: service.name,
+    });
+    return true;
+  }
+  hanaTablesByServiceId = new Map(hanaTablesByServiceId);
+  hanaTablesByServiceId.delete(serviceId);
+  primeHanaTablesForStandalone(serviceId);
+  return true;
 }
 
 function primeHanaTablesForStandalone(serviceId) {
@@ -4685,7 +4716,7 @@ function applyHanaTableSelectLoadingState(row, tableName, isLoading) {
   button.setAttribute('aria-busy', isLoading ? 'true' : 'false');
   button.setAttribute(
     'aria-label',
-    `${isLoading ? 'Loading' : 'Select'} first 10 rows of ${tableName}`
+    `${isLoading ? 'Loading' : 'Select'} first 100 rows of ${tableName}`
   );
 }
 
@@ -5035,6 +5066,15 @@ function renderSqlTablesPanel() {
       <header class="sql-tables-head">
         <h3>${selectedService === undefined ? 'Tables' : `Tables · ${escapeHtml(selectedService.name)}`}</h3>
         <span class="sql-tables-count" data-role="hana-tables-count">${escapeHtml(state.countLabel)}</span>
+        <button
+          type="button"
+          class="sql-tables-refresh-button"
+          data-role="hana-tables-refresh"
+          data-action="refresh-hana-tables"
+          title="Refresh tables from HANA"
+          aria-label="Refresh tables from HANA"
+          ${selectedService === undefined ? 'disabled' : ''}
+        >&#10227;</button>
       </header>
       <label class="sql-table-search-row search-input-with-icon">
         <span class="search-input-icon" aria-hidden="true">&#128269;</span>
@@ -5189,7 +5229,7 @@ function renderHanaTableRows(serviceId, tables) {
             data-action="run-hana-table-select"
             data-service-id="${escapeHtml(serviceId)}"
             data-table-name="${escapeHtml(tableName)}"
-            aria-label="${isHanaTableSelectLoading(serviceId, tableName) ? 'Loading' : 'Select'} first 10 rows of ${escapeHtml(tableName)}"
+            aria-label="${isHanaTableSelectLoading(serviceId, tableName) ? 'Loading' : 'Select'} first 100 rows of ${escapeHtml(tableName)}"
             aria-busy="${isHanaTableSelectLoading(serviceId, tableName) ? 'true' : 'false'}"
             ${isHanaTableSelectLoading(serviceId, tableName) ? 'disabled' : ''}
           >

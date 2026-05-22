@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const cacheSyncService = new CacheSyncService(cacheStore, context, outputChannel);
 
   const cfLogsPanel = new CfLogsPanelProvider(context);
-  const hanaSqlWorkbench = new HanaSqlWorkbench(outputChannel);
+  const hanaSqlWorkbench = new HanaSqlWorkbench(outputChannel, cacheStore);
 
   const regionSidebarProvider = new RegionSidebarProvider(
     context.extensionUri,

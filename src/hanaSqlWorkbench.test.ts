@@ -276,3 +276,109 @@ describe('HanaSqlWorkbench scope cache invalidation', () => {
     expect(context.tableNames.length).toBeGreaterThan(0);
   });
 });
+
+describe('HanaSqlWorkbench table list persistent cache', () => {
+  beforeEach(() => {
+    delete process.env['SAP_TOOLS_TEST_MODE'];
+    delete process.env['SAP_TOOLS_E2E'];
+    delete process.env['SAP_TOOLS_E2E_TESTMODE_TABLES_DELAY_MS'];
+    executeCommandMock.mockClear();
+    onDidChangeActiveTextEditorMock.mockClear();
+    onDidCloseTextDocumentMock.mockClear();
+    registerCommandMock.mockClear();
+    registerCompletionItemProviderMock.mockClear();
+  });
+
+  function createMockCacheStore(initialEntry: {
+    schema: string;
+    tableNames: readonly string[];
+    displayEntries: readonly { name: string; displayName: string }[];
+    updatedAt: string;
+  } | null) {
+    return {
+      getHanaTableList: vi.fn(async () => initialEntry),
+      setHanaTableList: vi.fn(async (_key: string, entry: unknown) => entry),
+      deleteHanaTableList: vi.fn(async () => undefined),
+    };
+  }
+
+  test('serves cached table entries without running HANA discovery when an entry is present for the scope', async () => {
+    const cachedEntry = {
+      schema: 'PERSISTED_SCHEMA',
+      tableNames: ['ORDERS', 'CUSTOMERS'],
+      displayEntries: [
+        { name: 'ORDERS', displayName: 'Orders' },
+        { name: 'CUSTOMERS', displayName: 'Customers' },
+      ],
+      updatedAt: '2026-05-21T10:00:00.000Z',
+    };
+    const cacheStore = createMockCacheStore(cachedEntry);
+    const workbench = new HanaSqlWorkbench(
+      { appendLine: vi.fn() } as unknown as Parameters<typeof HanaSqlWorkbench['prototype']['constructor']>[0],
+      cacheStore
+    );
+
+    const entries = await workbench.loadTableEntriesForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: createScopeSession(),
+    });
+
+    expect(entries).toEqual([
+      { name: 'ORDERS', displayName: 'Orders' },
+      { name: 'CUSTOMERS', displayName: 'Customers' },
+    ]);
+    expect(cacheStore.getHanaTableList).toHaveBeenCalledTimes(1);
+    expect(cacheStore.setHanaTableList).not.toHaveBeenCalled();
+    const expectedScopeKey =
+      'developer@example.com::https://api.cf.us10.hana.ondemand.com::finance-services-prod::uat::finance-uat-api';
+    expect(cacheStore.getHanaTableList).toHaveBeenCalledWith(expectedScopeKey);
+  });
+
+  test('skips the cache lookup when the session is missing (no scope key buildable)', async () => {
+    const cacheStore = createMockCacheStore(null);
+    const workbench = new HanaSqlWorkbench(
+      { appendLine: vi.fn() } as unknown as Parameters<typeof HanaSqlWorkbench['prototype']['constructor']>[0],
+      cacheStore
+    );
+
+    try {
+      await workbench.loadTableEntriesForApp({
+        appId: 'finance-uat-api',
+        appName: 'finance-uat-api',
+        session: null,
+      });
+    } catch {
+      /* ensureConnection rejects without a session; we only care about cache behavior */
+    }
+
+    expect(cacheStore.getHanaTableList).not.toHaveBeenCalled();
+  });
+
+  test('refreshTableEntriesForApp resets the in-memory cache and forces a fresh load', async () => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const cacheStore = createMockCacheStore(null);
+    const workbench = new HanaSqlWorkbench(
+      { appendLine: vi.fn() } as unknown as Parameters<typeof HanaSqlWorkbench['prototype']['constructor']>[0],
+      cacheStore
+    );
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+
+    const firstEntries = await workbench.loadTableEntriesForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: createScopeSession(),
+    });
+    expect(firstEntries.length).toBeGreaterThan(0);
+    const context = access.appContextsByAppId.get('finance-uat-api');
+    const cacheVersionBefore = context?.cacheVersion ?? 0;
+
+    const refreshedEntries = await workbench.refreshTableEntriesForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: createScopeSession(),
+    });
+    expect(refreshedEntries.length).toBeGreaterThan(0);
+    expect(context?.cacheVersion).toBeGreaterThan(cacheVersionBefore);
+  });
+});

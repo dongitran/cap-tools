@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2 (stable)
+- Cached HANA table lists per user, endpoint, org, space, and app so SQL Workbench table suggestions reopen quickly without leaking scope data.
+- Added explicit table refresh behavior that reloads HANA metadata and updates the scoped cache when users need fresh table lists.
+- Hardened table-cache reads and writes, raised quick table SELECT actions to `LIMIT 100`, and increased the HANA query timeout for larger metadata queries.
+
 ## 0.8.1 (stable)
 - Added multi-statement HANA SQL execution from the SQL Workbench, including sequential batch execution on one connection so session state is preserved.
 - Wrapped mutating multi-statement batches in transactions with rollback on failure and skipped-state reporting for remaining statements.
