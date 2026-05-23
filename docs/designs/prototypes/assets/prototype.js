@@ -1509,10 +1509,13 @@ function handleSqlTabAction(action, actionElement) {
   if (action === 'run-hana-table-select') {
     const serviceId = actionElement.dataset.serviceId ?? '';
     const tableName = actionElement.dataset.tableName ?? '';
+    const row = actionElement.closest('[data-role="hana-table-row"]');
+    const displayTableName =
+      row instanceof HTMLElement ? row.dataset.displayTableName ?? tableName : tableName;
     if (serviceId.length === 0 || tableName.length === 0) {
       return false;
     }
-    return triggerRunHanaTableSelect(serviceId, tableName);
+    return triggerRunHanaTableSelect(serviceId, tableName, displayTableName);
   }
 
   if (action === 'refresh-hana-tables') {
@@ -1600,7 +1603,7 @@ function buildStandaloneTableNames(appName) {
   return [...baseTables, ...generatedTables];
 }
 
-function triggerRunHanaTableSelect(serviceId, tableName) {
+function triggerRunHanaTableSelect(serviceId, tableName, displayTableName = tableName) {
   const service = resolveHanaServices().find((entry) => entry.id === serviceId);
   if (service === undefined) {
     hanaQueryStatusTone = 'error';
@@ -1613,11 +1616,15 @@ function triggerRunHanaTableSelect(serviceId, tableName) {
   setHanaTableSelectLoading(serviceId, tableName, true);
 
   if (vscodeApi === null) {
-    hanaSqlResultPreviewState = buildPrototypeSqlResultLoadingState(service.name, tableName);
+    hanaSqlResultPreviewState = buildPrototypeSqlResultLoadingState(service.name, displayTableName);
     hanaSqlResultExportMenuOpen = false;
     window.setTimeout(() => {
       setHanaTableSelectLoading(serviceId, tableName, false);
-      hanaSqlResultPreviewState = buildPrototypeSqlResultReadyState(service.name, tableName);
+      hanaSqlResultPreviewState = buildPrototypeSqlResultReadyState(
+        service.name,
+        tableName,
+        displayTableName
+      );
       refreshSqlResultPreviewPanel();
     }, 700);
     return true;
@@ -1641,7 +1648,7 @@ function buildPrototypeSqlResultLoadingState(appName, tableName) {
   };
 }
 
-function buildPrototypeSqlResultReadyState(appName, tableName) {
+function buildPrototypeSqlResultReadyState(appName, tableName, displayTableName = tableName) {
   const executedAt = new Date().toISOString();
   return {
     appName,
@@ -1667,22 +1674,22 @@ function buildPrototypeSqlResultReadyState(appName, tableName) {
         ],
         sql: `SELECT * FROM "${tableName}" LIMIT 100`,
         status: 'success',
-        tableName,
+        tableName: displayTableName,
       },
       {
         elapsedMs: 64,
         errorMessage: 'Prototype batch statement failed, so SAP Tools rolled back the transaction.',
         sql: `UPDATE "${tableName}" SET STATUS = 'READY' WHERE ID = 'draft-42'`,
         status: 'error',
-        tableName,
+        tableName: displayTableName,
       },
       {
         sql: `SELECT COUNT(*) AS TOTAL FROM "${tableName}"`,
         status: 'skipped',
-        tableName,
+        tableName: displayTableName,
       },
     ],
-    tableName,
+    tableName: displayTableName,
   };
 }
 
@@ -4845,31 +4852,8 @@ function renderSqlResultPreviewPanel() {
 }
 
 function renderSqlBatchResultPreviewPanel(state) {
-  const menuClass = hanaSqlResultExportMenuOpen ? ' is-open' : '';
-  const counts = countPrototypeSqlStatementStatuses(state.statements);
-  const elapsedMs = state.statements.reduce((sum, statement) => {
-    return sum + (Number.isInteger(statement.elapsedMs) ? statement.elapsedMs : 0);
-  }, 0);
-
   return `
     <section class="group-card sql-result-preview-panel sql-result-batch-preview" data-role="sql-result-preview-panel" aria-label="SQL result preview">
-      <header class="sql-result-preview-toolbar sql-result-batch-summary">
-        <span class="sql-result-preview-chip">Statements: ${String(state.statements.length)}</span>
-        <span class="sql-result-preview-chip is-success">OK: ${String(counts.success)}</span>
-        ${counts.error > 0 ? `<span class="sql-result-preview-chip is-error">Failed: ${String(counts.error)}</span>` : ''}
-        ${counts.skipped > 0 ? `<span class="sql-result-preview-chip is-muted">Skipped: ${String(counts.skipped)}</span>` : ''}
-        <span class="sql-result-preview-chip">Elapsed: ${String(elapsedMs)} ms</span>
-        ${renderPrototypeSqlTransactionChip(state.batchSummary)}
-        <div class="sql-result-export-menu${menuClass}">
-          <button type="button" class="sql-result-export-trigger" data-action="toggle-sql-result-export-menu" aria-haspopup="menu" aria-expanded="${hanaSqlResultExportMenuOpen ? 'true' : 'false'}">Export all</button>
-          <div class="sql-result-export-list" role="menu">
-            <button type="button" role="menuitem" data-action="copy-sql-result-csv">Copy all CSV</button>
-            <button type="button" role="menuitem" data-action="copy-sql-result-json">Copy all JSON</button>
-            <button type="button" role="menuitem" data-action="export-sql-result-csv">Export all CSV</button>
-            <button type="button" role="menuitem" data-action="export-sql-result-json">Export all JSON</button>
-          </div>
-        </div>
-      </header>
       <div class="sql-result-batch-sections">
         ${state.statements.map(renderSqlResultBatchStatementSection).join('')}
       </div>
@@ -4878,41 +4862,14 @@ function renderSqlBatchResultPreviewPanel(state) {
   `;
 }
 
-function countPrototypeSqlStatementStatuses(statements) {
-  const counts = { error: 0, skipped: 0, success: 0 };
-  for (const statement of statements) {
-    if (statement.status === 'error') counts.error += 1;
-    if (statement.status === 'skipped') counts.skipped += 1;
-    if (statement.status === 'success') counts.success += 1;
-  }
-  return counts;
-}
-
-function renderPrototypeSqlTransactionChip(summary) {
-  if (summary?.rolledBack === true) {
-    return '<span class="sql-result-preview-chip is-error">Rolled back</span>';
-  }
-  if (summary?.committed === true) {
-    return '<span class="sql-result-preview-chip is-success">Committed</span>';
-  }
-  if (summary?.usedTransaction === true) {
-    return '<span class="sql-result-preview-chip">Transactional</span>';
-  }
-  return '';
-}
-
 function renderSqlResultBatchStatementSection(statement, index, statements) {
   const tableName = statement.tableName ?? 'SQL statement';
-  const elapsedChip = Number.isInteger(statement.elapsedMs)
-    ? `<span class="sql-result-preview-chip">Elapsed: ${String(statement.elapsedMs)} ms</span>`
-    : '';
   return `
     <section class="sql-result-statement-section is-${escapeHtml(statement.status)}" data-statement-index="${String(index)}">
       <header class="sql-result-statement-header">
         <span class="sql-result-statement-title">Statement ${String(index + 1)} / ${String(statements.length)}</span>
         ${renderSqlResultStatementStatusChip(statement.status)}
         <span class="sql-result-preview-chip">Table: ${escapeHtml(tableName)}</span>
-        ${elapsedChip}
       </header>
       <div class="sql-result-statement-body">
         ${renderSqlResultBatchStatementBody(statement, index)}
@@ -4959,7 +4916,7 @@ function renderSqlResultStatementState(title, message, sql) {
 
 function renderSqlResultPreviewTable(state, statementIndex = null) {
   const headerCells = [
-    '<th>#</th>',
+    '<th class="sql-result-row-number">#</th>',
     ...state.columns.map((column) => `<th>${escapeHtml(column)}</th>`),
   ].join('');
   const statementAttribute = Number.isInteger(statementIndex)
@@ -4972,7 +4929,7 @@ function renderSqlResultPreviewTable(state, statementIndex = null) {
           return `<td data-role="sql-result-cell" data-row-index="${String(rowIndex)}" data-column-index="${String(columnIndex)}"${statementAttribute}>${escapeHtml(row[columnIndex] ?? '')}</td>`;
         })
         .join('');
-      return `<tr data-role="sql-result-row" data-row-index="${String(rowIndex)}"><td>${String(rowIndex + 1)}</td>${cells}</tr>`;
+      return `<tr data-role="sql-result-row" data-row-index="${String(rowIndex)}"><td class="sql-result-row-number">${String(rowIndex + 1)}</td>${cells}</tr>`;
     })
     .join('');
 

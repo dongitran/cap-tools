@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { HanaSqlScopeSession } from './hanaSqlConnectionResolver';
-import type { HanaConnection } from './hanaSqlService';
-import type { HanaTableDisplayEntry } from './hanaSqlWorkbenchSupport';
+import type { HanaConnection, HanaQueryResult } from './hanaSqlService';
+import type {
+  HanaTableDisplayEntry,
+  RenderSqlResultOptions,
+} from './hanaSqlWorkbenchSupport';
 
 const {
   executeCommandMock,
@@ -71,6 +74,35 @@ interface HanaSqlWorkbenchTestAccess {
   readonly appContextsByAppId: Map<string, HanaSqlAppContextForTest>;
   readonly appIdByDocumentUri: Map<string, string>;
   invalidateAllAppContexts(): void;
+  prepareStatement(
+    context: HanaSqlAppContextForTest,
+    rawSql: string,
+    tableEntries: readonly HanaTableDisplayEntry[]
+  ): {
+    readonly executionSql: string;
+    readonly statementKind: string;
+    readonly tableName: string;
+  };
+}
+
+interface HanaSqlWorkbenchQuickSelectTestAccess extends HanaSqlWorkbenchTestAccess {
+  openLoadingResultPanel(
+    appName: string,
+    tableName: string,
+    sql: string,
+    sourceViewColumn: number | undefined
+  ): { update(options: RenderSqlResultOptions): void };
+  updateLoadingResultPanel(
+    resultPanel: { update(options: RenderSqlResultOptions): void },
+    appName: string,
+    tableName: string,
+    sql: string
+  ): void;
+  executeSqlForContext(
+    context: HanaSqlAppContextForTest,
+    sql: string,
+    statementKind: string
+  ): Promise<HanaQueryResult>;
 }
 
 function createWorkbench(): HanaSqlWorkbench {
@@ -380,5 +412,123 @@ describe('HanaSqlWorkbench table list persistent cache', () => {
     });
     expect(refreshedEntries.length).toBeGreaterThan(0);
     expect(context?.cacheVersion).toBeGreaterThan(cacheVersionBefore);
+  });
+});
+
+describe('HanaSqlWorkbench SQL result table display names', () => {
+  beforeEach(() => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    process.env['SAP_TOOLS_E2E'] = '1';
+    executeCommandMock.mockClear();
+    onDidChangeActiveTextEditorMock.mockClear();
+    onDidCloseTextDocumentMock.mockClear();
+    registerCommandMock.mockClear();
+    registerCompletionItemProviderMock.mockClear();
+  });
+
+  function createPreparedStatementContext(): HanaSqlAppContextForTest {
+    return {
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: null,
+      connection: null,
+      schema: 'TEST_SCHEMA',
+      sqlDocumentUri: '',
+      sqlDocumentFileUri: '',
+      tableNames: ['DEMO_PURCHASEORDERITEMMAPPING'],
+      tableEntries: [
+        {
+          displayName: 'Demo_PurchaseOrderItemMapping',
+          name: 'DEMO_PURCHASEORDERITEMMAPPING',
+        },
+      ],
+      tableNamesPromise: null,
+      cacheVersion: 0,
+    };
+  }
+
+  test('uses the sidebar readable table name for rewritten display-name references', () => {
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+    const context = createPreparedStatementContext();
+
+    const prepared = access.prepareStatement(
+      context,
+      'SELECT * FROM Demo_PurchaseOrderItemMapping LIMIT 100',
+      context.tableEntries
+    );
+
+    expect(prepared.executionSql).toBe(
+      'SELECT * FROM "TEST_SCHEMA"."DEMO_PURCHASEORDERITEMMAPPING" LIMIT 100'
+    );
+    expect(prepared.tableName).toBe('Demo_PurchaseOrderItemMapping');
+  });
+
+  test('uses the sidebar readable table name for already quoted raw references', () => {
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+    const context = createPreparedStatementContext();
+
+    const prepared = access.prepareStatement(
+      context,
+      'SELECT * FROM "TEST_SCHEMA"."DEMO_PURCHASEORDERITEMMAPPING" LIMIT 100',
+      context.tableEntries
+    );
+
+    expect(prepared.executionSql).toBe(
+      'SELECT * FROM "TEST_SCHEMA"."DEMO_PURCHASEORDERITEMMAPPING" LIMIT 100'
+    );
+    expect(prepared.tableName).toBe('Demo_PurchaseOrderItemMapping');
+  });
+
+  test('uses the sidebar readable table name for quick table selects', async () => {
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchQuickSelectTestAccess;
+    const updates: RenderSqlResultOptions[] = [];
+    const resultPanel = { update: (options: RenderSqlResultOptions): void => updates.push(options) };
+    const recordLoadingUpdate = (
+      appName: string,
+      tableName: string,
+      sql: string,
+      executedAt: string
+    ): void => {
+      updates.push({ appName, tableName, sql, executedAt, isLoading: true });
+    };
+
+    access.openLoadingResultPanel = vi.fn(
+      (appName: string, tableName: string, sql: string) => {
+        recordLoadingUpdate(appName, tableName, sql, 'open');
+        return resultPanel;
+      }
+    );
+    access.updateLoadingResultPanel = vi.fn(
+      (
+        panel: { update(options: RenderSqlResultOptions): void },
+        appName: string,
+        tableName: string,
+        sql: string
+      ) => {
+        void panel;
+        recordLoadingUpdate(appName, tableName, sql, 'loading');
+      }
+    );
+    access.executeSqlForContext = vi.fn(async () => ({
+      kind: 'resultset',
+      columns: ['ID'],
+      rows: [['1']],
+      rowCount: 1,
+      elapsedMs: 4,
+    }));
+
+    await workbench.loadTableEntriesForApp({ appId: 'finance-uat-api', appName: 'finance-uat-api', session: null });
+    await workbench.runQuickTableSelectForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: null,
+      tableName: 'DEMO_APP',
+    });
+
+    expect(updates.map((update) => update.tableName)).toEqual(['Demo_App', 'Demo_App', 'Demo_App']);
+    expect(updates.at(-1)?.sql).toBe('SELECT * FROM "TEST_SCHEMA"."DEMO_APP" LIMIT 100');
   });
 });

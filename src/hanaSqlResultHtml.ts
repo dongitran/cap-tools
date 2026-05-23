@@ -239,7 +239,7 @@ const RESULT_SET_STYLE = `${SHARED_THEME_STYLE}
         font-weight: 600;
       }
       tbody tr:nth-child(even) { background: var(--saptools-surface); }
-      .row-number { width: 52px; color: var(--saptools-muted); }
+      .row-number { width: 31px; min-width: 31px; max-width: 31px; color: var(--saptools-muted); text-align: right; }
       .result-context-menu {
         position: fixed;
         z-index: 5;
@@ -276,20 +276,8 @@ const RESULT_BATCH_STYLE = `${SHARED_THEME_STYLE}
       .result-batch-layout {
         min-height: 100vh;
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: minmax(0, 1fr);
         gap: 0;
-      }
-      .result-batch-summary {
-        padding: 6px;
-        border-bottom: 1px solid var(--saptools-border);
-        background: var(--saptools-surface);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-        position: sticky;
-        top: 0;
-        z-index: 3;
       }
       .result-chip {
         border: 1px solid var(--saptools-border);
@@ -402,7 +390,7 @@ const RESULT_BATCH_STYLE = `${SHARED_THEME_STYLE}
         font-weight: 600;
       }
       tbody tr:nth-child(even) { background: var(--saptools-surface); }
-      .row-number { width: 52px; color: var(--saptools-muted); }
+      .row-number { width: 31px; min-width: 31px; max-width: 31px; color: var(--saptools-muted); text-align: right; }
       .result-export-menu { position: relative; flex: 0 0 auto; }
       .result-export-trigger,
       .result-export-list button { font: inherit; }
@@ -765,13 +753,11 @@ function renderResultContextMenu(): string {
 
 function buildBatchResultHtml(options: RenderSqlResultOptions): string {
   const statements = options.statements ?? [];
-  const summary = options.batchSummary;
   return wrapResultDocument(
     options.nonce,
     RESULT_BATCH_STYLE,
     `
     <main class="result-batch-layout">
-      ${renderBatchSummaryToolbar(statements, summary)}
       <div class="result-batch-sections">
         ${statements
           .map((statement, index) => renderStatementSection(statement, index, statements.length))
@@ -784,72 +770,6 @@ function buildBatchResultHtml(options: RenderSqlResultOptions): string {
   );
 }
 
-function renderBatchSummaryToolbar(
-  statements: readonly SqlResultStatementView[],
-  summary: SqlResultBatchSummary | undefined
-): string {
-  const counts = countStatementStatuses(statements);
-  const totalElapsed = statements.reduce(
-    (sum, statement) => sum + (statement.elapsedMs ?? 0),
-    0
-  );
-  const transactionChip = renderTransactionChip(summary);
-  const showExportAll = counts.success > 0;
-  return `<header class="result-batch-summary">
-        <span class="result-chip">Statements: ${String(statements.length)}</span>
-        <span class="result-chip result-chip-success">OK: ${String(counts.success)}</span>
-        ${counts.error > 0 ? `<span class="result-chip result-chip-error">Failed: ${String(counts.error)}</span>` : ''}
-        ${counts.skipped > 0 ? `<span class="result-chip result-chip-skip">Skipped: ${String(counts.skipped)}</span>` : ''}
-        ${counts.pending > 0 ? `<span class="result-chip">Pending: ${String(counts.pending)}</span>` : ''}
-        <span class="result-chip">Elapsed: ${String(totalElapsed)} ms</span>
-        ${transactionChip}
-        <span class="result-toolbar-spacer" aria-hidden="true"></span>
-        ${showExportAll ? renderBatchExportAllMenu() : ''}
-      </header>`;
-}
-
-function renderTransactionChip(summary: SqlResultBatchSummary | undefined): string {
-  if (summary === undefined) return '';
-  if (summary.rolledBack) {
-    const tooltip = summary.commitFailureMessage !== undefined
-      ? `Commit failed: ${summary.commitFailureMessage}`
-      : 'Transaction was rolled back';
-    return `<span class="result-chip result-chip-warn" title="${escapeHtml(tooltip)}">Rolled back</span>`;
-  }
-  if (summary.committed) {
-    return '<span class="result-chip result-chip-success" title="Transaction committed">Committed</span>';
-  }
-  if (summary.usedTransaction) {
-    return '<span class="result-chip">Transactional</span>';
-  }
-  if (summary.transactionUnavailableReason !== undefined) {
-    return `<span class="result-chip result-chip-warn" title="${escapeHtml(summary.transactionUnavailableReason)}">Transaction unavailable</span>`;
-  }
-  return '';
-}
-
-function renderBatchExportAllMenu(): string {
-  return `<div class="result-export-menu" data-role="result-export-menu">
-          <button type="button" class="result-export-trigger" data-role="result-export-trigger" aria-haspopup="menu" aria-expanded="false">Export all</button>
-          <div class="result-export-list" data-role="result-export-list" role="menu" hidden>
-            <button type="button" role="menuitem" data-action="copyAllCsv">Copy all CSV</button>
-            <button type="button" role="menuitem" data-action="copyAllJson">Copy all JSON</button>
-            <button type="button" role="menuitem" data-action="exportAllCsv">Export all CSV</button>
-            <button type="button" role="menuitem" data-action="exportAllJson">Export all JSON</button>
-          </div>
-        </div>`;
-}
-
-function countStatementStatuses(
-  statements: readonly SqlResultStatementView[]
-): { success: number; error: number; skipped: number; pending: number } {
-  const totals = { success: 0, error: 0, skipped: 0, pending: 0 };
-  for (const statement of statements) {
-    totals[statement.status] += 1;
-  }
-  return totals;
-}
-
 function renderStatementSection(
   statement: SqlResultStatementView,
   index: number,
@@ -858,10 +778,6 @@ function renderStatementSection(
   const statusClass = `status-${statement.status}`;
   const trimmedTableName = (statement.tableName ?? '').trim();
   const tableName = trimmedTableName.length > 0 ? trimmedTableName : 'SQL statement';
-  const elapsed = statement.elapsedMs ?? 0;
-  const elapsedChip = statement.status === 'success' || statement.status === 'error'
-    ? `<span class="result-chip">Elapsed: ${String(elapsed)} ms</span>`
-    : '';
   const statusBadge = renderStatementStatusBadge(statement.status);
   const tableChip = `<span class="result-chip">Table: ${escapeHtml(tableName)}</span>`;
   const exportMenu =
@@ -875,7 +791,6 @@ function renderStatementSection(
           <span class="result-statement-title">Statement ${String(index + 1)} / ${String(total)}</span>
           ${statusBadge}
           ${tableChip}
-          ${elapsedChip}
           <span class="result-toolbar-spacer" aria-hidden="true"></span>
           ${exportMenu}
         </header>
@@ -944,7 +859,6 @@ function renderStatementBody(statement: SqlResultStatementView): string {
         <section class="state-card state-success">
           <h1>Statement Executed</h1>
           <p class="state-message">${escapeHtml(result.message)}</p>
-          <p class="state-meta-line">Elapsed: ${String(result.elapsedMs)} ms</p>
         </section>
         <section class="state-card">
           <pre class="state-sql">${escapeHtml(statement.sql)}</pre>

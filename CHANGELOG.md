@@ -2,6 +2,9 @@
 
 ## 0.8.3 (stable)
 - Added bottom spacing inside multi-statement SQL Workbench result tables so the horizontal scrollbar no longer sits flush against the last row and stays easy to grab.
+- Removed the multi-statement SQL batch summary row and per-statement elapsed chips so batch results focus on individual statement output.
+- Aligned SQL result table names with the readable names used in the sidebar table list, including manual statements and quick table SELECT results.
+- Narrowed the SQL result `#` row-number column and rendered HANA BOOLEAN columns as `true`/`false` instead of numeric `1`/`0`.
 
 ## 0.8.2 (stable)
 - Cached HANA table lists per user, endpoint, org, space, and app so SQL Workbench table suggestions reopen quickly without leaking scope data.

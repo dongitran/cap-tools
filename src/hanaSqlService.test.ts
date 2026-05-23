@@ -20,6 +20,7 @@ import {
 interface FakeStatementMetadata {
   readonly columnDisplayName?: string;
   readonly columnName?: string;
+  readonly dataType?: number;
   readonly displayName?: string;
 }
 
@@ -182,6 +183,29 @@ describe('executeHanaQuery (rows)', () => {
     if (result.kind !== 'resultset') throw new Error('expected resultset');
     expect(result.columns).toEqual(['FOO', 'BAR']);
     expect(result.rows).toEqual([['1', 'x']]);
+  });
+
+  test('uses HANA BOOLEAN metadata to render numeric boolean values as true and false', async () => {
+    const rows: HdbRow[] = [{ IS_ACTIVE: 1, IS_ARCHIVED: 0, COUNT_VALUE: 1 }];
+    const { client } = createFakeClient({
+      statement: {
+        metadata: [
+          { columnDisplayName: 'IS_ACTIVE', dataType: 28 },
+          { columnDisplayName: 'IS_ARCHIVED', dataType: 28 },
+          { columnDisplayName: 'COUNT_VALUE', dataType: 3 },
+        ],
+        rowsOrAffected: rows,
+      },
+    });
+
+    const result = await executeHanaQuery(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      'SELECT IS_ACTIVE, IS_ARCHIVED, COUNT_VALUE FROM FLAGS',
+      { clientFactory: () => client }
+    );
+
+    if (result.kind !== 'resultset') throw new Error('expected resultset');
+    expect(result.rows).toEqual([['true', 'false', '1']]);
   });
 
   test('returns empty rows array with no columns when query returns nothing and metadata is absent', async () => {

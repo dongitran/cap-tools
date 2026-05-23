@@ -2544,6 +2544,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 }
 
 .sql-result-batch-preview {
+  grid-template-rows: minmax(0, 1fr);
   max-height: min(58%, 430px);
 }
 
@@ -2653,6 +2654,16 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   border-bottom: 1px solid color-mix(in oklab, var(--border-color) 82%, var(--mix-base));
   text-align: left;
   white-space: pre;
+}
+
+.sql-result-preview-table-wrap .sql-result-row-number {
+  width: 31px;
+  min-width: 31px;
+  max-width: 31px;
+  padding-right: 6px;
+  padding-left: 6px;
+  color: var(--muted-color);
+  text-align: right;
 }
 
 .sql-result-preview-table-wrap tbody tr {

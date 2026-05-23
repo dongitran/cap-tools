@@ -769,6 +769,7 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('white-space: pre;');
     expect(html).toContain('overflow: visible;');
     expect(html).toContain('text-overflow: clip;');
+    expect(html).toContain('.row-number { width: 31px; min-width: 31px; max-width: 31px;');
     expect(html).not.toContain('text-overflow: ellipsis;');
   });
 
@@ -1081,14 +1082,16 @@ describe('buildHanaSqlResultHtml batch view', () => {
     });
 
     expect(html).toContain('result-batch-layout');
-    expect(html).toContain('Statements: 2');
-    expect(html).toContain('OK: 2');
+    expect(html).not.toContain('Statements: 2');
+    expect(html).not.toContain('OK: 2');
     expect(html).not.toContain('Failed: ');
     expect(html).toContain('Statement 1 / 2');
     expect(html).toContain('Statement 2 / 2');
     expect(html).toContain('data-statement-index="0"');
     expect(html).toContain('data-statement-index="1"');
-    expect(html).toContain('Export all');
+    expect(html).toContain('Table: DUMMY');
+    expect(html).not.toContain('Elapsed:');
+    expect(html).not.toContain('Export all');
   });
 
   test('keeps the batch table horizontal scrollbar clear of the last row', () => {
@@ -1154,15 +1157,59 @@ describe('buildHanaSqlResultHtml batch view', () => {
       },
     });
 
-    expect(html).toContain('Failed: 1');
-    expect(html).toContain('Skipped: 1');
-    expect(html).toContain('OK: 1');
-    expect(html).toContain('Rolled back');
+    expect(html).not.toContain('Failed: 1');
+    expect(html).not.toContain('Skipped: 1');
+    expect(html).not.toContain('OK: 1');
+    expect(html).not.toContain('Rolled back');
     expect(html).toContain('Execution Error');
     expect(html).toContain('sql syntax error near bad');
     expect(html).toContain('Skipped due to a preceding statement failure');
     expect(html).toContain('status-skipped');
     expect(html).toContain('status-error');
+    expect(html).not.toContain('Elapsed:');
+  });
+
+  test('renders readable per-statement table names without batch-level controls', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT * FROM Demo_PurchaseOrderItemMapping; SELECT * FROM DEMO_BUSINESSAPP_TEST',
+      executedAt: '2026-04-25T00:00:00Z',
+      nonce: 'test-nonce',
+      statements: [
+        {
+          sql: 'SELECT * FROM "TEST_SCHEMA"."DEMO_PURCHASEORDERITEMMAPPING"',
+          status: 'success',
+          tableName: 'Demo_PurchaseOrderItemMapping',
+          elapsedMs: 4,
+          result: {
+            kind: 'resultset',
+            columns: ['ID'],
+            rows: [['1']],
+            rowCount: 1,
+            elapsedMs: 4,
+          },
+        },
+        {
+          sql: 'SELECT * FROM "TEST_SCHEMA"."DEMO_BUSINESSAPP_TEST"',
+          status: 'success',
+          tableName: 'Demo_BusinessApp_Test',
+          elapsedMs: 5,
+          result: {
+            kind: 'resultset',
+            columns: ['ID'],
+            rows: [['2']],
+            rowCount: 1,
+            elapsedMs: 5,
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('Table: Demo_PurchaseOrderItemMapping');
+    expect(html).toContain('Table: Demo_BusinessApp_Test');
+    expect(html).not.toContain('Table: DEMO_PURCHASEORDERITEMMAPPING');
+    expect(html).not.toContain('Export all');
+    expect(html).not.toContain('Elapsed:');
   });
 
   test('keeps the single-statement layout when there is exactly one statement supplied', () => {

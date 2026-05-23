@@ -5,6 +5,7 @@ import { isUtf8 } from 'node:buffer';
 
 const HANA_QUERY_DEFAULT_TIMEOUT_MS = 300_000;
 const HANA_QUERY_RESULT_PREVIEW_BYTES = 4096;
+const HDB_BOOLEAN_TYPE_CODE = 28;
 
 export interface HanaConnection {
   readonly host: string;
@@ -55,6 +56,7 @@ export class HanaQueryError extends Error {
 export interface HdbColumnMetadata {
   readonly columnDisplayName?: string;
   readonly columnName?: string;
+  readonly dataType?: number;
   readonly displayName?: string;
 }
 
@@ -650,8 +652,11 @@ function buildHanaQueryResult(
     statement === undefined
       ? extractColumnNamesFromRows(rowsOrAffected)
       : extractColumnNames(statement, rowsOrAffected);
+  const columnMetadata = statement?.resultSetMetadata ?? [];
   const rows = rowsOrAffected.map((row) => {
-    return columns.map((column) => formatHanaCellValue(row[column]));
+    return columns.map((column, index) => {
+      return formatHanaCellValueForColumn(row[column], columnMetadata[index]);
+    });
   });
   return {
     kind: 'resultset',
@@ -660,6 +665,39 @@ function buildHanaQueryResult(
     rowCount: rows.length,
     elapsedMs,
   };
+}
+
+function formatHanaCellValueForColumn(
+  value: unknown,
+  column: HdbColumnMetadata | undefined
+): string {
+  if (column?.dataType === HDB_BOOLEAN_TYPE_CODE) {
+    return formatHanaBooleanCellValue(value);
+  }
+  return formatHanaCellValue(value);
+}
+
+function formatHanaBooleanCellValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return 'true';
+    if (value === 0) return 'false';
+  }
+  if (typeof value === 'bigint') {
+    if (value === 1n) return 'true';
+    if (value === 0n) return 'false';
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toUpperCase();
+    if (normalized === 'TRUE' || normalized === '1') return 'true';
+    if (normalized === 'FALSE' || normalized === '0') return 'false';
+  }
+  return formatHanaCellValue(value);
 }
 
 function extractColumnNamesFromRows(rows: readonly HdbRow[]): string[] {

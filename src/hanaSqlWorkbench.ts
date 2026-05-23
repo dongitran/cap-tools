@@ -45,6 +45,7 @@ import {
   formatHanaTableDisplayEntries,
   resolveHanaDisplayTableReferences,
   sanitizeUntitledFileName,
+  type HanaResolvedTableReference,
   type HanaTableDisplayEntry,
   type RenderSqlResultOptions,
   type SqlResultBatchSummary,
@@ -319,9 +320,11 @@ export class HanaSqlWorkbench
 
     const statementKind: HanaSqlStatementKind = 'readonly';
     let sql = '';
+    const displayTableName =
+      findHanaTableDisplayName(context.tableEntries, options.tableName) ?? options.tableName;
     const resultPanel = this.openLoadingResultPanel(
       context.appName,
-      options.tableName,
+      displayTableName,
       options.tableName,
       this.resolveSqlSourceViewColumn(context)
     );
@@ -331,7 +334,7 @@ export class HanaSqlWorkbench
         await this.ensureConnection(context);
       }
       sql = buildQuickTableSelectSql(context.schema, options.tableName);
-      this.updateLoadingResultPanel(resultPanel, context.appName, options.tableName, sql);
+      this.updateLoadingResultPanel(resultPanel, context.appName, displayTableName, sql);
       this.logSql(
         `run quick SELECT for app ${sanitizeSqlLogValue(context.appName)} table ${sanitizeSqlLogValue(options.tableName)}: ${sanitizeSqlLogValue(sql)}`
       );
@@ -342,7 +345,7 @@ export class HanaSqlWorkbench
       );
       resultPanel.update({
         appName: context.appName,
-        tableName: options.tableName,
+        tableName: displayTableName,
         sql,
         executedAt: new Date().toISOString(),
         result,
@@ -355,7 +358,7 @@ export class HanaSqlWorkbench
       void vscode.window.showErrorMessage(message);
       resultPanel.update({
         appName: context.appName,
-        tableName: options.tableName,
+        tableName: displayTableName,
         sql: sql.length > 0 ? sql : options.tableName,
         executedAt: new Date().toISOString(),
         errorMessage: message,
@@ -475,7 +478,7 @@ export class HanaSqlWorkbench
       );
 
       const prepared = splitStatements.map((entry) => this.prepareStatement(context, entry.sql, tableEntries));
-      tableName = resolveSqlResultTableName(prepared[0]?.executionSql ?? '');
+      tableName = prepared[0]?.tableName ?? resolveSqlResultTableName(prepared[0]?.executionSql ?? '');
 
       const pendingViews: SqlResultStatementView[] = prepared.map((statement) => ({
         sql: statement.executionSql,
@@ -603,7 +606,11 @@ export class HanaSqlWorkbench
     return {
       executionSql,
       statementKind,
-      tableName: resolveSqlResultTableName(executionSql),
+      tableName: resolvePreparedStatementTableName(
+        executionSql,
+        resolution.replacements,
+        tableEntries
+      ),
     };
   }
 
@@ -993,4 +1000,43 @@ export class HanaSqlWorkbench
   private logSql(message: string): void {
     this.outputChannel.appendLine(`[sql] ${message}`);
   }
+}
+
+function resolvePreparedStatementTableName(
+  executionSql: string,
+  replacements: readonly HanaResolvedTableReference[],
+  tableEntries: readonly HanaTableDisplayEntry[]
+): string {
+  const targetTableName = resolveSqlResultTableName(executionSql);
+  if (targetTableName === 'SQL statement') {
+    return targetTableName;
+  }
+  const replacement = replacements.find((entry) => {
+    return isSameHanaTableName(entry.tableName, targetTableName);
+  });
+  if (replacement !== undefined) {
+    return replacement.displayName;
+  }
+  return findHanaTableDisplayName(tableEntries, targetTableName) ?? targetTableName;
+}
+
+function findHanaTableDisplayName(
+  tableEntries: readonly HanaTableDisplayEntry[],
+  tableName: string
+): string | undefined {
+  const entry = tableEntries.find((candidate) => {
+    return (
+      isSameHanaTableName(candidate.name, tableName) ||
+      isSameHanaTableName(candidate.displayName, tableName)
+    );
+  });
+  return entry?.displayName;
+}
+
+function isSameHanaTableName(left: string, right: string): boolean {
+  return normalizeHanaTableName(left) === normalizeHanaTableName(right);
+}
+
+function normalizeHanaTableName(value: string): string {
+  return value.trim().toUpperCase();
 }
