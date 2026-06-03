@@ -10,7 +10,14 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { extractRemoteRoot, pickRemoteRoot, readSharedRemoteRoot } from './sharedDebugConfig';
+import {
+  extractRemoteRoot,
+  mergeAppFolderMappings,
+  normalizeAppFolderMappings,
+  pickRemoteRoot,
+  readSharedAppFolderMappings,
+  readSharedRemoteRoot,
+} from './sharedDebugConfig';
 
 /**
  * Stubs `getConfiguration(section).get('sharedCapDebugConfig')` per section so we can
@@ -80,5 +87,89 @@ describe('readSharedRemoteRoot', () => {
   it('returns undefined when neither extension is configured', () => {
     configureSharedCapDebugConfig({ sapTools: {}, cdsDebug: {} });
     expect(readSharedRemoteRoot()).toBeUndefined();
+  });
+});
+
+/**
+ * Models `getConfiguration(section).get(key)` so folder-mapping tests can set each
+ * extension's `appFolderMappings` independently.
+ */
+function configureByKey(values: {
+  sapTools?: Record<string, unknown>;
+  cdsDebug?: Record<string, unknown>;
+}): void {
+  getConfigurationMock.mockImplementation((section: string) => ({
+    get: (key: string) =>
+      (section === 'sapTools' ? values.sapTools : values.cdsDebug)?.[key],
+  }));
+}
+
+describe('normalizeAppFolderMappings', () => {
+  it('keeps valid entries, trims values, and drops malformed/duplicate ones', () => {
+    expect(
+      normalizeAppFolderMappings([
+        { appName: '  finance-api ', folderName: ' legacy-billing ' },
+        { appName: 'finance-api', folderName: 'second-wins-not' },
+        { appName: '', folderName: 'no-app' },
+        { appName: 'no-folder', folderName: '' },
+        { folderName: 'missing-app' },
+        'nonsense',
+      ])
+    ).toEqual([{ appName: 'finance-api', folderName: 'legacy-billing' }]);
+  });
+
+  it('returns an empty list for non-array input', () => {
+    expect(normalizeAppFolderMappings(undefined)).toEqual([]);
+    expect(normalizeAppFolderMappings({ appName: 'x', folderName: 'y' })).toEqual([]);
+  });
+});
+
+describe('mergeAppFolderMappings', () => {
+  it('lets SAP Tools entries win on conflicting app names but keeps the rest', () => {
+    expect(
+      mergeAppFolderMappings(
+        [{ appName: 'shared', folderName: 'own-folder' }],
+        [
+          { appName: 'shared', folderName: 'cds-folder' },
+          { appName: 'cds-only', folderName: 'cds-only-folder' },
+        ]
+      )
+    ).toEqual([
+      { appName: 'shared', folderName: 'own-folder' },
+      { appName: 'cds-only', folderName: 'cds-only-folder' },
+    ]);
+  });
+});
+
+describe('readSharedAppFolderMappings', () => {
+  it('merges own settings ahead of cds-debug settings', () => {
+    configureByKey({
+      sapTools: { appFolderMappings: [{ appName: 'shared', folderName: 'own' }] },
+      cdsDebug: {
+        appFolderMappings: [
+          { appName: 'shared', folderName: 'cds' },
+          { appName: 'cds-only', folderName: 'cds-folder' },
+        ],
+      },
+    });
+    expect(readSharedAppFolderMappings()).toEqual([
+      { appName: 'shared', folderName: 'own' },
+      { appName: 'cds-only', folderName: 'cds-folder' },
+    ]);
+  });
+
+  it('falls back to cds-debug settings when SAP Tools has none', () => {
+    configureByKey({
+      sapTools: {},
+      cdsDebug: { appFolderMappings: [{ appName: 'app', folderName: 'folder' }] },
+    });
+    expect(readSharedAppFolderMappings()).toEqual([
+      { appName: 'app', folderName: 'folder' },
+    ]);
+  });
+
+  it('returns an empty list when neither extension is configured', () => {
+    configureByKey({ sapTools: {}, cdsDebug: {} });
+    expect(readSharedAppFolderMappings()).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -55,6 +55,27 @@
               "remoteRoot": {
                 "type": "string",
                 "markdownDescription": "Remote source root inside the CF app container used to locate exported artifacts such as `pnpm-lock.yaml`. Use a fixed path like `/home/vcap/app`, or a regex with `regex:<pattern>` or `/pattern/flags`; regex values are resolved per CF app through `cf ssh` (matched against the folders that contain a `package.json`). When unset or unmatched, SAP Tools falls back to the standard `/home/vcap/app` location."
+              }
+            }
+          },
+          "sapTools.appFolderMappings": {
+            "type": "array",
+            "scope": "application",
+            "default": [],
+            "markdownDescription": "Explicit Cloud Foundry app name → local folder name mappings for the Apps tab service-folder mapping. Use this when a CF app's name differs too much from its local source folder for the automatic `-`↔`_` normalization to find it. `folderName` is a folder *basename* searched recursively (depth ≤ 6) for a folder with that name containing a `package.json`; it has the highest matching priority. SAP Tools merges these with the CDS Debug extension's `cdsDebug.appFolderMappings` (own entries win on conflicting app names), so a single configuration serves both extensions.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["appName", "folderName"],
+              "properties": {
+                "appName": {
+                  "type": "string",
+                  "markdownDescription": "Exact Cloud Foundry application name (case-sensitive)."
+                },
+                "folderName": {
+                  "type": "string",
+                  "markdownDescription": "Local source folder name (basename) to resolve this app to."
+                }
               }
             }
           }

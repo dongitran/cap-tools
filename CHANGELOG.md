@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.5 (stable)
+- Added a `sapTools.appFolderMappings` setting so Apps-tab service-folder mapping can resolve apps whose CF name differs too much from the local folder for the automatic `-`↔`_` normalization.
+- Explicit mappings take the highest matching priority and are reported as exact matches; `folderName` is a basename searched recursively (depth ≤ 6) for a folder containing a `package.json`.
+- Merged these with the CDS Debug extension's `cdsDebug.appFolderMappings` (SAP Tools entries win on conflicting app names), so a single configuration serves both extensions.
+
 ## 0.8.4 (stable)
 - Added a shared `sapTools.sharedCapDebugConfig.remoteRoot` setting so service artifact export can locate `pnpm-lock.yaml` when it does not live at the standard `/home/vcap/app` path.
 - `remoteRoot` accepts a fixed path or a regex (`regex:<pattern>` or `/pattern/flags`) that is resolved per CF app via `cf ssh` against the container's `package.json` folders.

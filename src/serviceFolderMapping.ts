@@ -24,9 +24,32 @@ export interface ServiceFolderMapping {
   readonly hasConflict: boolean;
 }
 
+/**
+ * Explicit CF app name → local folder basename override. Shared in shape with the
+ * cds-debug extension's `cdsDebug.appFolderMappings` so a single configuration maps
+ * apps whose CF name differs too much from their local folder for `-`↔`_`.
+ */
+export interface AppFolderMapping {
+  readonly appName: string;
+  readonly folderName: string;
+}
+
+/**
+ * Returns the explicitly configured folder name for an app, if any. App-name match
+ * is case-sensitive exact, matching cds-debug semantics.
+ */
+export function resolveOverrideFolder(
+  appName: string,
+  overrides?: readonly AppFolderMapping[]
+): string | undefined {
+  const match = overrides?.find((mapping) => mapping.appName === appName)?.folderName.trim();
+  return match !== undefined && match.length > 0 ? match : undefined;
+}
+
 export async function buildServiceFolderMappings(
   rootFolderPath: string,
-  appNames: readonly string[]
+  appNames: readonly string[],
+  overrides?: readonly AppFolderMapping[]
 ): Promise<readonly ServiceFolderMapping[]> {
   const normalizedRootFolderPath = rootFolderPath.trim();
   if (normalizedRootFolderPath.length === 0) {
@@ -42,7 +65,8 @@ export async function buildServiceFolderMappings(
   const folderIndex = createFolderIndex(repoFolders);
 
   return normalizedAppNames.map((appName) => {
-    const candidates = getFolderNameCandidates(appName);
+    const overrideFolder = resolveOverrideFolder(appName, overrides);
+    const candidates = getFolderNameCandidates(appName, overrides);
     for (const candidate of candidates) {
       const candidateKey = candidate.toLowerCase();
       const candidatePaths = folderIndex.get(candidateKey);
@@ -62,11 +86,13 @@ export async function buildServiceFolderMappings(
       }
 
       const bestPath = candidatePaths[0] ?? '';
+      // An explicit override that resolves is a user-intended exact mapping.
+      const isExactMatch = candidate === appName || candidate === overrideFolder;
       return {
         appId: appName,
         appName,
         folderPath: bestPath,
-        matchType: candidate === appName ? 'exact' : 'underscore',
+        matchType: isExactMatch ? 'exact' : 'underscore',
         candidateFolderPaths: bestPath.length > 0 ? [bestPath] : [],
         hasConflict: false,
       } satisfies ServiceFolderMapping;
@@ -83,15 +109,25 @@ export async function buildServiceFolderMappings(
   });
 }
 
-export function getFolderNameCandidates(appName: string): string[] {
+export function getFolderNameCandidates(
+  appName: string,
+  overrides?: readonly AppFolderMapping[]
+): string[] {
   const normalizedAppName = appName.trim();
   if (normalizedAppName.length === 0) {
     return [];
   }
 
-  const candidates = [normalizedAppName];
+  const candidates: string[] = [];
+  const overrideFolder = resolveOverrideFolder(normalizedAppName, overrides);
+  if (overrideFolder !== undefined) {
+    candidates.push(overrideFolder);
+  }
+  if (!candidates.includes(normalizedAppName)) {
+    candidates.push(normalizedAppName);
+  }
   const underscoreVariant = normalizedAppName.replaceAll('-', '_');
-  if (underscoreVariant !== normalizedAppName) {
+  if (underscoreVariant !== normalizedAppName && !candidates.includes(underscoreVariant)) {
     candidates.push(underscoreVariant);
   }
   return candidates;

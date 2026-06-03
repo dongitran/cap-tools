@@ -11,6 +11,7 @@ SAP Tools is a VS Code extension focused on SAP BTP development workflows.
 
 ## Configuration
 - `sapTools.sharedCapDebugConfig.remoteRoot` (User settings): remote source root inside the CF app container used to locate exported artifacts such as `pnpm-lock.yaml`. Accepts a fixed path (e.g. `/home/vcap/app`) or a regex (`regex:<pattern>` or `/pattern/flags`) resolved per CF app via `cf ssh` against the container's `package.json` folders. SAP Tools falls back to the CDS Debug extension's `cdsDebug.sharedCapDebugConfig`, so a single configuration serves both extensions.
+- `sapTools.appFolderMappings` (User settings): explicit `{ "appName", "folderName" }` entries that map a Cloud Foundry app to a local source folder basename in the Apps tab when the names differ too much for automatic `-`↔`_` matching. Merged with the CDS Debug extension's `cdsDebug.appFolderMappings` (SAP Tools entries win on conflicts), so a single configuration serves both extensions.
 
 ## Development
 ```bash

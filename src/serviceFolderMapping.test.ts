@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildServiceFolderMappings,
   getFolderNameCandidates,
+  resolveOverrideFolder,
 } from './serviceFolderMapping';
 
 const createdTempDirs: string[] = [];
@@ -27,6 +28,45 @@ describe('getFolderNameCandidates', () => {
 
   it('returns only exact candidate when no dash exists', () => {
     expect(getFolderNameCandidates('billingapi')).toEqual(['billingapi']);
+  });
+
+  it('puts an explicit override folder first as the highest-priority candidate', () => {
+    expect(
+      getFolderNameCandidates('finance-uat-api', [
+        { appName: 'finance-uat-api', folderName: 'legacy-billing' },
+      ])
+    ).toEqual(['legacy-billing', 'finance-uat-api', 'finance_uat_api']);
+  });
+
+  it('does not duplicate when the override equals an existing candidate', () => {
+    expect(
+      getFolderNameCandidates('finance-uat-api', [
+        { appName: 'finance-uat-api', folderName: 'finance-uat-api' },
+      ])
+    ).toEqual(['finance-uat-api', 'finance_uat_api']);
+  });
+
+  it('ignores overrides for other apps', () => {
+    expect(
+      getFolderNameCandidates('billingapi', [
+        { appName: 'other-app', folderName: 'somewhere' },
+      ])
+    ).toEqual(['billingapi']);
+  });
+});
+
+describe('resolveOverrideFolder', () => {
+  it('returns the configured folder name for an exact app-name match', () => {
+    expect(
+      resolveOverrideFolder('finance-uat-api', [
+        { appName: 'finance-uat-api', folderName: 'legacy-billing' },
+      ])
+    ).toBe('legacy-billing');
+  });
+
+  it('returns undefined when there is no override or the list is empty', () => {
+    expect(resolveOverrideFolder('finance-uat-api')).toBeUndefined();
+    expect(resolveOverrideFolder('finance-uat-api', [])).toBeUndefined();
   });
 });
 
@@ -65,6 +105,28 @@ describe('buildServiceFolderMappings', () => {
         folderPath: '',
         matchType: 'none',
         candidateFolderPaths: [],
+        hasConflict: false,
+      },
+    ]);
+  });
+
+  it('maps an app to an explicitly overridden folder name as an exact match', async (): Promise<void> => {
+    const rootDir = await createTempRootDir();
+    await createRepoFolder(rootDir, 'legacy-billing');
+
+    const mappings = await buildServiceFolderMappings(
+      rootDir,
+      ['finance-uat-api'],
+      [{ appName: 'finance-uat-api', folderName: 'legacy-billing' }]
+    );
+
+    expect(mappings).toEqual([
+      {
+        appId: 'finance-uat-api',
+        appName: 'finance-uat-api',
+        folderPath: join(rootDir, 'legacy-billing'),
+        matchType: 'exact',
+        candidateFolderPaths: [join(rootDir, 'legacy-billing')],
         hasConflict: false,
       },
     ]);

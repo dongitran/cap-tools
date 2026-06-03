@@ -105,4 +105,19 @@ describe('Extension manifest feature surface', () => {
     );
     expect(Object.keys(readRecord(sharedConfig['properties']))).toContain('remoteRoot');
   });
+
+  it('contributes the shared explicit app-folder mappings setting', () => {
+    const manifest = readExtensionManifest();
+    const configuration = manifest.contributes['configuration'];
+    expect(Array.isArray(configuration)).toBe(true);
+
+    const properties = configuration
+      .filter(isRecord)
+      .map((entry) => readRecord(entry['properties']))
+      .find((entry) => entry['sapTools.appFolderMappings'] !== undefined);
+
+    expect(properties?.['sapTools.appFolderMappings']).toEqual(
+      expect.objectContaining({ scope: 'application', type: 'array' })
+    );
+  });
 });

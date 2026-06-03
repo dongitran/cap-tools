@@ -26,7 +26,7 @@ import {
   exportServiceArtifacts,
   type ServiceExportSession,
 } from './serviceArtifactExporter';
-import { readSharedRemoteRoot } from './sharedDebugConfig';
+import { readSharedAppFolderMappings, readSharedRemoteRoot } from './sharedDebugConfig';
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
 import {
   resolveMockApps,
@@ -1452,7 +1452,8 @@ export class RegionSidebarProvider
     try {
       const mappings = await buildServiceFolderMappings(
         this.selectedLocalRootFolderPath,
-        this.currentApps.map((app) => app.name)
+        this.currentApps.map((app) => app.name),
+        readSharedAppFolderMappings()
       );
       this.serviceFolderMappings = this.applyServiceFolderSelections(mappings);
       await this.persistServiceFolderMappingsForCurrentScope(this.serviceFolderMappings);
