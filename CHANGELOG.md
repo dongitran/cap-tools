@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.7 (stable)
+- SQL Workbench now runs unlimited INSERT/batch statements (removed the 100-statement cap) and shows a colored progress band at the top of multi-statement results that streams live OK / Failed / Skipped / Pending counts and a progress bar, updating in place without reloading the result view.
+- Increased the HANA connection handshake timeout and added automatic retry for cold HANA Cloud instances, so the first query after the database wakes from auto-suspend no longer fails with "No initialization reply received within 5 sec".
+- CFLogs serializes CF CLI session preparation on the shared CF home and lets a freshly started log stream re-target and recover automatically, so the first "Start App Logging" no longer surfaces transient "No org targeted" / "Not logged in" / "App not found" errors before working on a retry.
+
 ## 0.8.6 (stable)
 - CFLogs now shows full Message column content by default, with an optional settings checkbox to restore compact row-local scrolling for long messages.
 - Shortened Apps tab artifact export completion text to show only exported artifact filenames while keeping full paths in the Output channel for diagnostics.
