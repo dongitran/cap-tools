@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.8 (stable)
+- Fixed CFLogs/Apps showing no apps after selecting a space when the apps are started but scaled to zero (0 running instances) — common in dev subaccounts. The app list now reads from the shared `~/.saptools/cf-structure.json` synced by the CDS Debug extension and lists every app in the space (running, scaled-to-zero, and stopped), matching the CDS Debug app list, instead of only apps with at least one running instance from this extension's own (initially empty) cache.
+
 ## 0.8.7 (stable)
 - SQL Workbench now runs unlimited INSERT/batch statements (removed the 100-statement cap) and shows a colored progress band at the top of multi-statement results that streams live OK / Failed / Skipped / Pending counts and a progress bar, updating in place without reloading the result view.
 - Increased the HANA connection handshake timeout and added automatic retry for cold HANA Cloud instances, so the first query after the database wakes from auto-suspend no longer fails with "No initialization reply received within 5 sec".
