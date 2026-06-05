@@ -59,16 +59,21 @@ describe('Extension manifest feature surface', () => {
     expect(cfSyncVersion).toBe('^0.4.10');
   });
 
-  it('keeps Marketplace stable metadata aligned with the release workflow', () => {
+  it('keeps Marketplace metadata aligned with the release workflow', () => {
     const manifest = readExtensionManifest();
     const topHeading = readChangelogTopHeading();
     const publishScript = String(manifest.scripts['publish'] ?? '');
+    const preReleasePublishScript = String(manifest.scripts['publish:pre'] ?? '');
     const minorVersion = Number(manifest.version.split('.')[1] ?? Number.NaN);
 
-    expect(topHeading).toContain(`${manifest.version} (stable)`);
     expect(Number.isInteger(minorVersion)).toBe(true);
-    expect(minorVersion % 2).toBe(0);
+    // The release workflow ("Resolve publish flavor") publishes odd-minor versions as
+    // pre-release and even-minor versions as stable; the CHANGELOG heading flavor must
+    // match the version parity.
+    const expectedFlavor = minorVersion % 2 === 1 ? 'pre-release' : 'stable';
+    expect(topHeading).toContain(`${manifest.version} (${expectedFlavor})`);
     expect(publishScript).not.toContain('--pre-release');
+    expect(preReleasePublishScript).toContain('--pre-release');
   });
 
   it('contributes the shared SAP CAP current scope setting', () => {

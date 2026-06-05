@@ -2596,11 +2596,21 @@ export class RegionSidebarProvider
           })));
 
     if (immediateApps !== null) {
+      // Serve straight from the shared cf-structure.json (kept fresh by the cf-sync
+      // engine and the sibling CDS Debug extension). Do NOT trigger a live cf-sync
+      // here: running it on every space selection — including scope hand-offs received
+      // from CDS Debug via sapCap.currentScope — made both extensions drive the shared
+      // ~/.saptools cf-sync engine at the same time, contending over its CF config and
+      // lock files and breaking the bidirectional scope sync. Freshness for scopes the
+      // user actually confirms is handled by refreshTopologyForConfirmedScope, and
+      // CDS Debug keeps the shared structure fresh otherwise.
       await this.postAppsLoaded(immediateApps, payload, credentials, cfHomeDir, regionCode);
+      return;
     }
 
-    // Refresh the shared structure for this single space, then re-read it so the list
-    // stays current and SAP-Tools-only installs populate on first open.
+    // Nothing cached for this scope yet (e.g. a SAP-Tools-only install before any
+    // sync has populated the shared structure): populate just this one space on
+    // demand, then serve it.
     try {
       const refresh = await refreshCfSyncSpace({
         apiEndpoint,
@@ -2616,40 +2626,26 @@ export class RegionSidebarProvider
       if (refresh.status === 'refreshed') {
         const freshApps =
           getAppsFromTopologySync(apiEndpoint, payload.orgName, payload.spaceName) ?? [];
-        if (immediateApps === null || !areSidebarAppsEqual(immediateApps, freshApps)) {
-          await this.postAppsLoaded(freshApps, payload, credentials, cfHomeDir, regionCode);
-        }
+        await this.postAppsLoaded(freshApps, payload, credentials, cfHomeDir, regionCode);
         return;
       }
 
-      if (immediateApps === null) {
-        const reason =
-          refresh.status === 'failed'
-            ? refresh.error instanceof Error
-              ? refresh.error.message
-              : 'Failed to refresh apps from Cloud Foundry.'
-            : 'Could not resolve the Cloud Foundry region for this scope.';
-        this.outputChannel.appendLine(
-          `[apps] Refresh ${refresh.status} for ${sanitizeForLog(payload.spaceName)}: ${sanitizeForLog(reason)}`
-        );
-        this.postAppsError(reason);
-      } else {
-        this.outputChannel.appendLine(
-          `[apps] Refresh ${refresh.status} for ${sanitizeForLog(payload.spaceName)}; keeping current app list.`
-        );
-      }
+      const reason =
+        refresh.status === 'failed'
+          ? refresh.error instanceof Error
+            ? refresh.error.message
+            : 'Failed to load apps from Cloud Foundry.'
+          : 'Could not resolve the Cloud Foundry region for this scope.';
+      this.outputChannel.appendLine(
+        `[apps] Refresh ${refresh.status} for ${sanitizeForLog(payload.spaceName)}: ${sanitizeForLog(reason)}`
+      );
+      this.postAppsError(reason);
     } catch (error) {
       if (!this.isCurrentSpaceRequest(requestId)) {
         return;
       }
       const errorMessage =
-        error instanceof Error ? error.message : 'Failed to fetch apps from Cloud Foundry.';
-      if (immediateApps !== null) {
-        this.outputChannel.appendLine(
-          `[apps] Live refresh failed for ${sanitizeForLog(payload.spaceName)}: ${sanitizeForLog(errorMessage)}`
-        );
-        return;
-      }
+        error instanceof Error ? error.message : 'Failed to load apps from Cloud Foundry.';
       this.postAppsError(errorMessage);
     }
   }
@@ -3278,34 +3274,6 @@ function normalizeServiceMappingForPersistence(rawValue: unknown): ServiceFolder
     candidateFolderPaths,
     hasConflict,
   };
-}
-
-function areSidebarAppsEqual(
-  leftApps: readonly SidebarAppEntry[],
-  rightApps: readonly SidebarAppEntry[]
-): boolean {
-  if (leftApps.length !== rightApps.length) {
-    return false;
-  }
-
-  const rightById = new Map(
-    rightApps.map((app) => {
-      return [app.id, app] as const;
-    })
-  );
-  for (const leftApp of leftApps) {
-    const rightApp = rightById.get(leftApp.id);
-    if (rightApp === undefined) {
-      return false;
-    }
-    if (
-      rightApp.name !== leftApp.name ||
-      rightApp.runningInstances !== leftApp.runningInstances
-    ) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function haveSameOrgEntries(
