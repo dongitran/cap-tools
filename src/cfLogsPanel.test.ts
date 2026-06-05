@@ -159,6 +159,38 @@ function createYoungStream(appName: string): {
   return { appName, startedAt: Date.now(), healthy: false, sawSessionError: false };
 }
 
+
+describe('CfLogsPanelProvider app catalog filtering', () => {
+  it('publishes only apps with running instances to the Logs app selector', () => {
+    const provider = createProviderForSettings();
+    const webview = createMockWebview();
+
+    provider.resolveWebviewView(
+      { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+    );
+
+    provider.updateActiveApps(['orders-api', 'scaled-worker', 'legacy-api']);
+    provider.updateApps(
+      [
+        { id: 'orders-api', name: 'orders-api', runningInstances: 2 },
+        { id: 'scaled-worker', name: 'scaled-worker', runningInstances: 0 },
+        { id: 'legacy-api', name: 'legacy-api', runningInstances: 0 },
+      ],
+      null
+    );
+
+    expect(webview.htmlMessages).toContainEqual({
+      type: 'sapTools.appsUpdate',
+      apps: [{ id: 'orders-api', name: 'orders-api', runningInstances: 2 }],
+      selectedApp: 'orders-api',
+    });
+    expect(webview.htmlMessages).toContainEqual({
+      type: 'sapTools.activeAppsUpdate',
+      appNames: ['orders-api'],
+    });
+  });
+});
+
 describe('CfLogsPanelProvider session healing', () => {
   it('suppresses CF session-not-ready lines for a young stream until real output arrives', () => {
     const provider = createProviderForSettings();

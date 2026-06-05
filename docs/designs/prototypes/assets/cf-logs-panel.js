@@ -1151,7 +1151,7 @@ function requestLogsForApp(appName, force) {
 }
 
 function handleAppsUpdate(apps, selectedApp) {
-  latestApps = normalizeAppsCatalog(apps);
+  latestApps = normalizeAppsCatalog(apps).filter(isLoggableApp);
   activeAppNames = filterActiveNamesByCatalog(activeAppNames, latestApps);
   refreshAppSelectorAndLogs(selectedApp);
 }
@@ -1372,6 +1372,10 @@ function normalizeAppsCatalog(apps) {
   }
 
   return normalized;
+}
+
+function isLoggableApp(app) {
+  return app.runningInstances > 0;
 }
 
 function filterActiveNamesByCatalog(activeNames, appsCatalog) {
