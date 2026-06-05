@@ -283,11 +283,15 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
    * later (i.e. if the panel was closed during space selection).
    */
   updateApps(apps: CfAppEntry[], sessionParams: LogSessionParams | null): void {
-    this.pendingAppsUpdate = { apps, sessionParams };
-    this.availableAppNames = new Set(apps.map((app) => app.name));
-    this.pendingActiveAppNames = this.filterActiveAppNames(this.pendingActiveAppNames, apps);
+    const loggableApps = this.filterLoggableApps(apps);
+    this.pendingAppsUpdate = { apps: loggableApps, sessionParams };
+    this.availableAppNames = new Set(loggableApps.map((app) => app.name));
+    this.pendingActiveAppNames = this.filterActiveAppNames(
+      this.pendingActiveAppNames,
+      loggableApps
+    );
     this.stopAllStreams();
-    this.doUpdateApps(apps, sessionParams);
+    this.doUpdateApps(loggableApps, sessionParams);
     this.doUpdateActiveApps(this.pendingActiveAppNames);
     void this.syncStreamsToActiveApps();
   }
@@ -334,6 +338,12 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       type: ACTIVE_APPS_UPDATE_MESSAGE_TYPE,
       appNames,
     });
+  }
+
+  private filterLoggableApps(apps: CfAppEntry[]): CfAppEntry[] {
+    return apps.filter(
+      (app) => Number.isFinite(app.runningInstances) && app.runningInstances > 0
+    );
   }
 
   private resolvePreferredSelectedApp(apps: CfAppEntry[]): string {

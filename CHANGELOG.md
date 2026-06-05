@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.3 (stable)
+- CFLogs now lists only loggable apps in the Logs panel app selector: apps must have more than zero running instances, so stopped and scaled-to-zero apps remain available in the Apps workspace but no longer appear where logs cannot be viewed.
+
 ## 0.10.2 (stable)
 - SAP Tools SQL Result now uses the full webview width for result tables, removing outer left/right gutters and padding from the result table wrapper and batch result sections.
 
