@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.0 (stable)
+- Logs/Apps now list every app in a space (including scaled-to-zero apps) from the shared cache, and two-way CF scope sync with the CDS Debug extension works again — changing org/space in one extension follows in the other.
+
 ## 0.9.0 (pre-release)
 - Fixed CFLogs/Apps no longer following the shared CF scope when it is changed from the sibling CDS Debug extension (and the reverse handoff). The 0.8.8 "list all apps" change made SAP Tools run a blocking Cloud Foundry sync on every space selection — including scope changes handed off from CDS Debug — so both extensions drove the shared `~/.saptools` cf-sync engine at once and contended over its CF config and lock files, breaking the bidirectional scope sync. SAP Tools now serves the app list directly from the shared `cf-structure.json` cache (kept fresh by CDS Debug and by SAP Tools' own confirm-time refresh) and only triggers a sync when that cache has no apps for the space yet (e.g. a SAP-Tools-only install).
 
