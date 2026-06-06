@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.25 (stable)
+- Fine-tune package list layout to precisely match the app log list styling.
+
+
+
 ## 0.10.24 (stable)
 - Reduce height of "Build All" and "Configure" buttons by 18%.
 - Remove "Selected service: ..." and "Selected ... for export." UI lines.
