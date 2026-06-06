@@ -1,0 +1,164 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Background subtle glow -->
+    <radialGradient id="L05-bgGrd" cx="62" cy="62" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#001E2B"/>
+      <stop offset="70%"  stop-color="#020B12"/>
+      <stop offset="100%" stop-color="#040B14"/>
+    </radialGradient>
+
+    <!-- Top-left facet (most lit) -->
+    <linearGradient id="L05-faceA" x1="11" y1="8" x2="63" y2="55"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#A5F3FC"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+
+    <!-- Top-right facet (slightly less lit) -->
+    <linearGradient id="L05-faceB" x1="115" y1="8" x2="63" y2="55"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#0891B2"/>
+    </linearGradient>
+
+    <!-- Bottom-left facet (shadow) -->
+    <linearGradient id="L05-faceC" x1="11" y1="122" x2="63" y2="55"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0E7490"/>
+      <stop offset="100%" stop-color="#155E75"/>
+    </linearGradient>
+
+    <!-- Bottom-right facet (deepest shadow) -->
+    <linearGradient id="L05-faceD" x1="115" y1="122" x2="63" y2="55"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0C4A6E"/>
+      <stop offset="100%" stop-color="#0A3554"/>
+    </linearGradient>
+
+    <!-- Glow for the gem edges -->
+    <filter id="L05-edgeGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Gem aura -->
+    <filter id="L05-aura" x="-50%" y="-50%" width="200%" height="200%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L05-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="400" height="130" rx="14" fill="#040B14"/>
+  <ellipse cx="62" cy="62" rx="85" ry="72"
+           fill="url(#L05-bgGrd)" clip-path="url(#L05-card)"/>
+
+  <!-- Gem outer glow aura -->
+  <path d="M63,8 L115,55 L63,122 L11,55 Z"
+        fill="#22D3EE" opacity="0.06" filter="url(#L05-aura)"
+        clip-path="url(#L05-card)"/>
+
+  <!-- ══════════════════════
+       GEM FACETS
+       Girdle center: (63, 55)
+       Vertices: Top(63,8) Right(115,55) Bottom(63,122) Left(11,55)
+  ══════════════════════ -->
+
+  <!-- ── Top-left facet (light source) ── -->
+  <polygon points="63,8 11,55 63,55"
+           fill="url(#L05-faceA)"/>
+
+  <!-- ── Top-right facet ── -->
+  <polygon points="63,8 115,55 63,55"
+           fill="url(#L05-faceB)"/>
+
+  <!-- ── Bottom-left facet ── -->
+  <polygon points="11,55 63,122 63,55"
+           fill="url(#L05-faceC)"/>
+
+  <!-- ── Bottom-right facet ── -->
+  <polygon points="115,55 63,122 63,55"
+           fill="url(#L05-faceD)"/>
+
+  <!-- ── Inner subdivision lines (adds depth / facet detail) ── -->
+  <!-- Top-left facet subdivided by inner highlight line -->
+  <line x1="63" y1="8"  x2="37" y2="31.5"
+        stroke="#BAE6FD" stroke-width="0.7" opacity="0.6"/>
+  <!-- Top-right inner line -->
+  <line x1="63" y1="8"  x2="89" y2="31.5"
+        stroke="#BAE6FD" stroke-width="0.5" opacity="0.35"/>
+  <!-- Center horizontal girdle line -->
+  <line x1="11" y1="55" x2="115" y2="55"
+        stroke="#7DD3FC" stroke-width="0.5" opacity="0.3"/>
+  <!-- Center vertical -->
+  <line x1="63" y1="8"  x2="63" y2="122"
+        stroke="#BAE6FD" stroke-width="0.4" opacity="0.2"/>
+
+  <!-- ── OUTER EDGE LINES ──
+       (bright on lit sides, dim on shadow sides)
+  ── -->
+  <!-- Top-left edge (brightest — facing light) -->
+  <line x1="63" y1="8" x2="11" y2="55"
+        stroke="#E0F7FF" stroke-width="2" opacity="0.9"
+        filter="url(#L05-edgeGlow)"/>
+  <!-- Top-right edge (slightly less bright) -->
+  <line x1="63" y1="8" x2="115" y2="55"
+        stroke="#BAE6FD" stroke-width="1.5" opacity="0.65"/>
+  <!-- Bottom-left edge (shadow side) -->
+  <line x1="11" y1="55" x2="63" y2="122"
+        stroke="#0EA5E9" stroke-width="1" opacity="0.4"/>
+  <!-- Bottom-right edge (darkest) -->
+  <line x1="115" y1="55" x2="63" y2="122"
+        stroke="#0369A1" stroke-width="1" opacity="0.3"/>
+
+  <!-- ── SPECULAR HIGHLIGHT — small bright region top-left ── -->
+  <ellipse cx="40" cy="34" rx="10" ry="6"
+           transform="rotate(-30, 40, 34)"
+           fill="white" opacity="0.18"/>
+
+  <!-- ── VERTEX DOTS ── -->
+  <circle cx="63"  cy="8"   r="2.5" fill="white" opacity="0.9"/>
+  <circle cx="11"  cy="55"  r="1.8" fill="#7DD3FC" opacity="0.8"/>
+  <circle cx="115" cy="55"  r="1.8" fill="#0EA5E9" opacity="0.65"/>
+  <circle cx="63"  cy="122" r="2"   fill="#0369A1" opacity="0.7"/>
+  <!-- Girdle center -->
+  <circle cx="63"  cy="55"  r="1.5" fill="white" opacity="0.5"/>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="135" y1="14" x2="135" y2="116"
+        stroke="#0C4A6E" stroke-width="0.8" opacity="0.5"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <text x="155" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <text x="155" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#22D3EE" letter-spacing="8">TOOLS</text>
+
+  <!-- Teal underline -->
+  <line x1="155" y1="89" x2="315" y2="89"
+        stroke="#22D3EE" stroke-width="0.6" opacity="0.35"/>
+
+  <text x="156" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#0891B2"
+        letter-spacing="3.5" opacity="0.9">BTP DEVELOPER KIT</text>
+
+</svg>

@@ -1,0 +1,200 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- PCB board subtle gradient -->
+    <linearGradient id="L06-board" x1="0" y1="0" x2="130" y2="130"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0C1A0C"/>
+      <stop offset="100%" stop-color="#081008"/>
+    </linearGradient>
+
+    <!-- Trace glow -->
+    <filter id="L06-traceGlow" x="-20%" y="-20%" width="140%" height="140%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Pad glow -->
+    <filter id="L06-padGlow" x="-100%" y="-100%" width="300%" height="300%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L06-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+    <clipPath id="L06-boardArea">
+      <rect width="130" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND — full card dark ── -->
+  <rect width="400" height="130" rx="14" fill="#0D1117"/>
+
+  <!-- ── PCB BOARD AREA (left 130px) ── -->
+  <rect width="130" height="130" rx="14"
+        fill="url(#L06-board)" clip-path="url(#L06-card)"/>
+
+  <!-- ── PCB GRID TEXTURE (very faint) ── -->
+  <g stroke="#1A2E1A" stroke-width="0.4" opacity="0.5" clip-path="url(#L06-card)">
+    <!-- Vertical grid lines -->
+    <line x1="10"  y1="0" x2="10"  y2="130"/>
+    <line x1="22"  y1="0" x2="22"  y2="130"/>
+    <line x1="34"  y1="0" x2="34"  y2="130"/>
+    <line x1="46"  y1="0" x2="46"  y2="130"/>
+    <line x1="58"  y1="0" x2="58"  y2="130"/>
+    <line x1="70"  y1="0" x2="70"  y2="130"/>
+    <line x1="82"  y1="0" x2="82"  y2="130"/>
+    <line x1="94"  y1="0" x2="94"  y2="130"/>
+    <line x1="106" y1="0" x2="106" y2="130"/>
+    <line x1="118" y1="0" x2="118" y2="130"/>
+    <!-- Horizontal grid lines -->
+    <line x1="0" y1="10"  x2="130" y2="10"/>
+    <line x1="0" y1="22"  x2="130" y2="22"/>
+    <line x1="0" y1="34"  x2="130" y2="34"/>
+    <line x1="0" y1="46"  x2="130" y2="46"/>
+    <line x1="0" y1="58"  x2="130" y2="58"/>
+    <line x1="0" y1="70"  x2="130" y2="70"/>
+    <line x1="0" y1="82"  x2="130" y2="82"/>
+    <line x1="0" y1="94"  x2="130" y2="94"/>
+    <line x1="0" y1="106" x2="130" y2="106"/>
+    <line x1="0" y1="118" x2="130" y2="118"/>
+  </g>
+
+  <!-- ══════════════════════════════
+       MAIN S-TRACE PATH
+       Top horizontal:    (18,20) → (108,20)
+       Down right side:   (108,20) → (108,56)
+       Middle horizontal: (108,56) → (18,56)  [goes left]
+       Down left side:    (18,56) → (18,92)
+       Bottom horizontal: (18,92) → (108,92)
+  ══════════════════════════════ -->
+
+  <!-- Trace glow layer (wider, softer) -->
+  <g stroke="#1B5E2C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"
+     fill="none" opacity="0.6" filter="url(#L06-traceGlow)">
+    <polyline points="18,20 108,20 108,56 18,56 18,92 108,92"/>
+  </g>
+
+  <!-- Main trace (sharp) -->
+  <polyline points="18,20 108,20 108,56 18,56 18,92 108,92"
+            stroke="#2D9D50" stroke-width="3.5" stroke-linecap="round"
+            stroke-linejoin="round" fill="none"/>
+
+  <!-- Trace inner highlight (bright center line) -->
+  <polyline points="18,20 108,20 108,56 18,56 18,92 108,92"
+            stroke="#4ADE80" stroke-width="1" stroke-linecap="round"
+            stroke-linejoin="round" fill="none" opacity="0.6"/>
+
+  <!-- ── BRANCH TRACES (secondary, smaller) ── -->
+  <!-- Branch 1: off top horizontal at x=46, going up to a pad -->
+  <polyline points="46,20 46,10" stroke="#2D9D50" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- Branch 2: off top horizontal at x=82, going down to IC stub -->
+  <polyline points="82,20 82,10" stroke="#2D9D50" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- Branch 3: off middle at x=46, going down-right -->
+  <polyline points="46,56 46,70 58,70" stroke="#2D9D50" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- Branch 4: off middle at x=82, going down -->
+  <polyline points="82,56 82,70" stroke="#2D9D50" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- Branch 5: off bottom horizontal at x=58 -->
+  <polyline points="58,92 58,120" stroke="#2D9D50" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <!-- Branch 6: off bottom horizontal at x=82 -->
+  <polyline points="82,92 82,112 96,112" stroke="#2D9D50" stroke-width="2" stroke-linecap="round" fill="none"/>
+
+  <!-- ══════════════════════
+       SOLDER PADS
+       (at corners and endpoints — gold, round)
+  ══════════════════════ -->
+
+  <!-- Pad glow halos -->
+  <g fill="#FFB800" opacity="0.2" filter="url(#L06-padGlow)">
+    <circle cx="18"  cy="20" r="7"/>
+    <circle cx="108" cy="20" r="7"/>
+    <circle cx="108" cy="56" r="7"/>
+    <circle cx="18"  cy="56" r="7"/>
+    <circle cx="18"  cy="92" r="7"/>
+    <circle cx="108" cy="92" r="7"/>
+  </g>
+
+  <!-- Pad bodies (outer ring + inner copper) -->
+  <!-- Top-left pad -->
+  <circle cx="18"  cy="20" r="6"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.5"/>
+  <circle cx="18"  cy="20" r="3.5" fill="#FFB800"/>
+  <!-- Top-right pad -->
+  <circle cx="108" cy="20" r="6"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.5"/>
+  <circle cx="108" cy="20" r="3.5" fill="#FFB800"/>
+  <!-- Mid-right pad -->
+  <circle cx="108" cy="56" r="6"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.5"/>
+  <circle cx="108" cy="56" r="3.5" fill="#FFB800"/>
+  <!-- Mid-left pad -->
+  <circle cx="18"  cy="56" r="6"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.5"/>
+  <circle cx="18"  cy="56" r="3.5" fill="#FFB800"/>
+  <!-- Bottom-left pad -->
+  <circle cx="18"  cy="92" r="6"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.5"/>
+  <circle cx="18"  cy="92" r="3.5" fill="#FFB800"/>
+  <!-- Bottom-right pad -->
+  <circle cx="108" cy="92" r="6"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.5"/>
+  <circle cx="108" cy="92" r="3.5" fill="#FFB800"/>
+
+  <!-- ── VIAS (through-hole markers on branches) ── -->
+  <!-- Via 1 -->
+  <circle cx="46"  cy="10"  r="3.5" fill="#0C1A0C" stroke="#FFB800" stroke-width="1.2"/>
+  <circle cx="46"  cy="10"  r="1.5" fill="#2D9D50" opacity="0.6"/>
+  <!-- Via 2 -->
+  <circle cx="82"  cy="10"  r="3.5" fill="#0C1A0C" stroke="#FFB800" stroke-width="1.2"/>
+  <circle cx="82"  cy="10"  r="1.5" fill="#2D9D50" opacity="0.6"/>
+  <!-- Via 3 -->
+  <circle cx="58"  cy="70"  r="3"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.2"/>
+  <circle cx="58"  cy="70"  r="1.3" fill="#2D9D50" opacity="0.6"/>
+  <!-- Via 4 -->
+  <circle cx="82"  cy="70"  r="3"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.2"/>
+  <circle cx="82"  cy="70"  r="1.3" fill="#2D9D50" opacity="0.6"/>
+  <!-- Via 5 -->
+  <circle cx="58"  cy="120" r="3.5" fill="#0C1A0C" stroke="#FFB800" stroke-width="1.2"/>
+  <circle cx="58"  cy="120" r="1.5" fill="#2D9D50" opacity="0.6"/>
+  <!-- Via 6 -->
+  <circle cx="96"  cy="112" r="3"   fill="#0C1A0C" stroke="#FFB800" stroke-width="1.2"/>
+  <circle cx="96"  cy="112" r="1.3" fill="#2D9D50" opacity="0.6"/>
+
+  <!-- ── PCB SILKSCREEN text ── -->
+  <text x="10" y="128"
+        font-family="monospace, 'Courier New', serif"
+        font-size="6" fill="#2D9D50" opacity="0.5" letter-spacing="1">REV 1.0</text>
+  <text x="70" y="128"
+        font-family="monospace, 'Courier New', serif"
+        font-size="6" fill="#2D9D50" opacity="0.5">SAP-BTP</text>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="136" y1="14" x2="136" y2="116"
+        stroke="#1A2E1A" stroke-width="0.8" opacity="0.7"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <text x="156" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <text x="156" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#4ADE80" letter-spacing="8">TOOLS</text>
+
+  <!-- Green underline -->
+  <line x1="156" y1="89" x2="316" y2="89"
+        stroke="#4ADE80" stroke-width="0.6" opacity="0.32"/>
+
+  <text x="157" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#2D9D50"
+        letter-spacing="3.5" opacity="0.9">BTP DEVELOPER KIT</text>
+
+</svg>

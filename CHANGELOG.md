@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.9 (stable)
+- Saving `sapTools.localPackages.namePatterns` in VS Code Settings now immediately triggers a re-scan of local packages — no restart required. A loading indicator shows while scanning and the Configure button is disabled during the scan.
+- Local package scan results are now cached. On VS Code restart, the cached list is shown instantly while a background re-scan verifies it; if the config has changed, the scan runs fresh.
+- Renamed the "NPM Packages" section title to "Packages" and removed the patterns label from the header.
+- Renamed the "Build & Publish all" button to "Build All" and matched its height to the "Configure" button.
+
 ## 0.10.8 (stable)
 - The Apps tab service list now shows only apps actually running on Cloud Foundry (started, instances > 0), matching the Logs tab — stopped and scaled-to-zero apps are no longer listed there.
 - Moved "Build & Publish" off the Cloud Foundry app/service rows (those are CF apps, not npm packages). The action now lives on the "NPM Packages" list as a single "Build & Publish all" button that builds and publishes every detected local package to the local registry in dependency order.

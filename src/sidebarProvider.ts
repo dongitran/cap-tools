@@ -117,6 +117,7 @@ const MSG_CF_TOPOLOGY = 'sapTools.cfTopology';
 const MSG_TOPOLOGY_SCOPE_RESOLVED = 'sapTools.topologyScopeResolved';
 const MSG_LOCAL_REGISTRY_STATE = 'sapTools.localRegistryState';
 const MSG_LOCAL_PACKAGES_LOADED = 'sapTools.localPackagesLoaded';
+const MSG_LOCAL_PACKAGES_LOADING = 'sapTools.localPackagesLoading';
 const MSG_BUILD_PUBLISH_PREVIEW = 'sapTools.buildPublishPreview';
 const MSG_BUILD_PUBLISH_PROGRESS = 'sapTools.buildPublishProgress';
 const MSG_BUILD_PUBLISH_RESULT = 'sapTools.buildPublishResult';
@@ -317,6 +318,17 @@ export class RegionSidebarProvider
     this.npmBuildChannel = vscode.window.createOutputChannel('SAP Tools: NPM Build');
     this.verdaccioManager = new VerdaccioManager(this.npmBuildChannel);
     this.disposables.push(this.npmBuildChannel, this.verdaccioManager);
+
+    // Re-scan local packages whenever the user changes sapTools.localPackages settings
+    // (e.g. namePatterns) without requiring a VSCode restart.
+    const localPackagesConfigSubscription = vscode.workspace.onDidChangeConfiguration(
+      (event): void => {
+        if (event.affectsConfiguration('sapTools.localPackages')) {
+          void this.postDetectedLocalPackages();
+        }
+      }
+    );
+    this.disposables.push(localPackagesConfigSubscription);
   }
 
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
@@ -2041,6 +2053,7 @@ export class RegionSidebarProvider
     const patterns = readLocalPackagesConfig().namePatterns.trim();
 
     if (rootFolderPath.length === 0 || patterns.length === 0) {
+      this.postMessage({ type: MSG_LOCAL_PACKAGES_LOADING, loading: false });
       this.postMessage({
         type: MSG_LOCAL_PACKAGES_LOADED,
         configured: patterns.length > 0,
@@ -2050,33 +2063,36 @@ export class RegionSidebarProvider
       return;
     }
 
-    try {
-      const packages = await scanLocalPackages(rootFolderPath, patterns);
-      const roundByName = new Map<string, number>();
-      try {
-        const order = buildDependencyOrder(
-          packages.map((pkg) => ({ name: pkg.name, deps: pkg.dependencyNames }))
-        );
-        order.rounds.forEach((round, index) => {
-          for (const name of round) {
-            roundByName.set(name, index);
-          }
-        });
-      } catch {
-        // Dependency cycle — leave rounds unset; the list still shows the packages.
-      }
+    this.postMessage({ type: MSG_LOCAL_PACKAGES_LOADING, loading: true });
+
+    const cacheKey = buildLocalPackagesCacheKey(rootFolderPath, patterns);
+    const cached = await this.cacheStore.getLocalPackages(cacheKey);
+    if (cached !== null) {
+      // Serve stale-while-revalidate: show cached data instantly, then rescan.
+      this.postMessage({ type: MSG_LOCAL_PACKAGES_LOADING, loading: false });
       this.postMessage({
         type: MSG_LOCAL_PACKAGES_LOADED,
         configured: true,
         patterns,
-        packages: packages.map((pkg) => ({
-          name: pkg.name,
-          version: pkg.version,
-          hasBuildScript: pkg.buildScript !== undefined,
-          round: roundByName.get(pkg.name) ?? null,
-        })),
+        packages: cached.packages,
       });
+    }
+
+    try {
+      const scanned = await this.scanAndOrderLocalPackages(rootFolderPath, patterns);
+      const isSameAsCached = cached !== null && areLocalPackageListsEqual(scanned, cached.packages);
+      if (!isSameAsCached) {
+        this.postMessage({ type: MSG_LOCAL_PACKAGES_LOADING, loading: false });
+        this.postMessage({
+          type: MSG_LOCAL_PACKAGES_LOADED,
+          configured: true,
+          patterns,
+          packages: scanned,
+        });
+      }
+      await this.cacheStore.setLocalPackages(cacheKey, scanned);
     } catch (error) {
+      this.postMessage({ type: MSG_LOCAL_PACKAGES_LOADING, loading: false });
       this.postMessage({
         type: MSG_LOCAL_PACKAGES_LOADED,
         configured: true,
@@ -2085,6 +2101,32 @@ export class RegionSidebarProvider
         error: error instanceof Error ? error.message : 'Failed to scan local packages.',
       });
     }
+  }
+
+  private async scanAndOrderLocalPackages(
+    rootFolderPath: string,
+    patterns: string
+  ): Promise<{ name: string; version: string; hasBuildScript: boolean; round: number | null }[]> {
+    const packages = await scanLocalPackages(rootFolderPath, patterns);
+    const roundByName = new Map<string, number>();
+    try {
+      const order = buildDependencyOrder(
+        packages.map((pkg) => ({ name: pkg.name, deps: pkg.dependencyNames }))
+      );
+      order.rounds.forEach((round, index) => {
+        for (const name of round) {
+          roundByName.set(name, index);
+        }
+      });
+    } catch {
+      // Dependency cycle — leave rounds unset; the list still shows the packages.
+    }
+    return packages.map((pkg) => ({
+      name: pkg.name,
+      version: pkg.version,
+      hasBuildScript: pkg.buildScript !== undefined,
+      round: roundByName.get(pkg.name) ?? null,
+    }));
   }
 
   private postBuildResult(success: boolean, message: string): void {
@@ -3851,4 +3893,28 @@ function readRunHanaTableSelectPayload(
 
 function sanitizeSqlUiLogValue(value: string): string {
   return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
+}
+
+function buildLocalPackagesCacheKey(rootFolderPath: string, namePatterns: string): string {
+  return `${rootFolderPath.trim()}::${namePatterns.trim()}`;
+}
+
+function areLocalPackageListsEqual(
+  left: readonly { name: string; version: string; hasBuildScript: boolean; round: number | null }[],
+  right: readonly { readonly name: string; readonly version: string; readonly hasBuildScript: boolean; readonly round: number | null }[]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i++) {
+    const l = left[i];
+    const r = right[i];
+    if (l === undefined || r === undefined) {
+      return false;
+    }
+    if (l.name !== r.name || l.version !== r.version || l.hasBuildScript !== r.hasBuildScript || l.round !== r.round) {
+      return false;
+    }
+  }
+  return true;
 }

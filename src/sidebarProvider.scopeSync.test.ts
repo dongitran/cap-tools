@@ -26,6 +26,7 @@ vi.mock('vscode', () => ({
   },
   workspace: {
     getConfiguration: getConfigurationMock,
+    onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
   },
   window: {
     createOutputChannel: vi.fn(() => ({

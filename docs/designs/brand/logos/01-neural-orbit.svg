@@ -1,0 +1,157 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Deep space background glow on left -->
+    <radialGradient id="L01-bgGrd" cx="65" cy="65" r="75" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#001E55"/>
+      <stop offset="65%"  stop-color="#020B20"/>
+      <stop offset="100%" stop-color="#030B18"/>
+    </radialGradient>
+
+    <!-- Orbital core gradient -->
+    <radialGradient id="L01-coreGrd" cx="0" cy="0" r="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#BAE6FD"/>
+      <stop offset="45%"  stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </radialGradient>
+
+    <!-- Node glow -->
+    <filter id="L01-nodeGlow" x="-150%" y="-150%" width="400%" height="400%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Core ambient glow -->
+    <filter id="L01-coreGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Subtle text glow -->
+    <filter id="L01-textGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L01-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="400" height="130" rx="14" fill="#030B18"/>
+  <!-- Left deep-space nebula bloom -->
+  <ellipse cx="65" cy="65" rx="90" ry="75"
+           fill="url(#L01-bgGrd)" clip-path="url(#L01-card)"/>
+
+  <!-- ── STAR FIELD ── -->
+  <g fill="white" clip-path="url(#L01-card)">
+    <circle cx="18"  cy="16"  r="0.7" opacity="0.5"/>
+    <circle cx="94"  cy="8"   r="0.55" opacity="0.35"/>
+    <circle cx="44"  cy="122" r="0.6" opacity="0.4"/>
+    <circle cx="113" cy="119" r="0.5" opacity="0.25"/>
+    <circle cx="318" cy="12"  r="0.65" opacity="0.4"/>
+    <circle cx="372" cy="30"  r="0.5" opacity="0.3"/>
+    <circle cx="358" cy="108" r="0.6" opacity="0.35"/>
+    <circle cx="252" cy="5"   r="0.5" opacity="0.3"/>
+    <circle cx="185" cy="124" r="0.55" opacity="0.3"/>
+  </g>
+
+  <!-- ── ORBITAL SYSTEM centered at (65, 65) ── -->
+  <g transform="translate(65,65)">
+
+    <!-- Ambient haze behind core -->
+    <circle r="36" fill="#1D4ED8" opacity="0.06" filter="url(#L01-coreGlow)"/>
+
+    <!-- ── RING 1 — horizontal plane ── -->
+    <ellipse rx="47" ry="13"
+             fill="none" stroke="#1D6AF5" stroke-width="1.6" opacity="0.75"/>
+
+    <!-- ── RING 2 — 60° tilt ── -->
+    <g transform="rotate(60)">
+      <ellipse rx="47" ry="13"
+               fill="none" stroke="#22D3EE" stroke-width="1.1" opacity="0.52"/>
+    </g>
+
+    <!-- ── RING 3 — 120° tilt ── -->
+    <g transform="rotate(120)">
+      <ellipse rx="47" ry="13"
+               fill="none" stroke="#38BDF8" stroke-width="1" opacity="0.38"/>
+    </g>
+
+    <!-- ── NODE on ring 1 right (brightest) ── -->
+    <circle cx="47" cy="0" r="7"   fill="#22D3EE" opacity="0.18" filter="url(#L01-nodeGlow)"/>
+    <circle cx="47" cy="0" r="3.8" fill="#22D3EE"/>
+    <circle cx="47" cy="0" r="1.6" fill="white" opacity="0.92"/>
+
+    <!-- ── NODE on ring 1 left (dim) ── -->
+    <circle cx="-47" cy="0" r="2.6" fill="#1D6AF5" opacity="0.65"/>
+
+    <!-- ── NODE on ring 2 ── -->
+    <g transform="rotate(60)">
+      <circle cx="47" cy="0" r="6"   fill="#22D3EE" opacity="0.18" filter="url(#L01-nodeGlow)"/>
+      <circle cx="47" cy="0" r="3.2" fill="#38BDF8" opacity="0.82"/>
+      <circle cx="47" cy="0" r="1.3" fill="white" opacity="0.85"/>
+    </g>
+
+    <!-- ── NODE on ring 3 ── -->
+    <g transform="rotate(120)">
+      <circle cx="-47" cy="0" r="2.8" fill="#38BDF8" opacity="0.55"/>
+    </g>
+
+    <!-- ── CORE — outer glow ── -->
+    <circle r="20" fill="#2563EB" opacity="0.14" filter="url(#L01-coreGlow)"/>
+
+    <!-- ── CORE — body ── -->
+    <circle r="13.5" fill="url(#L01-coreGrd)"/>
+    <circle r="13.5" fill="none" stroke="#93C5FD" stroke-width="0.7" opacity="0.5"/>
+
+    <!-- ── "S" letter in core ── -->
+    <text x="0" y="5.5"
+          text-anchor="middle"
+          font-family="'Arial Black', Impact, 'Franklin Gothic Heavy', sans-serif"
+          font-size="15" font-weight="900"
+          fill="white" opacity="0.96">S</text>
+
+  </g>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="132" y1="14" x2="132" y2="116"
+        stroke="#1D4ED8" stroke-width="0.8" opacity="0.28"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <!-- SAP — bold, white -->
+  <text x="153" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <!-- TOOLS — light weight, electric cyan, wide tracking -->
+  <text x="153" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#22D3EE" letter-spacing="8">TOOLS</text>
+
+  <!-- Accent underline under TOOLS -->
+  <line x1="153" y1="89" x2="314" y2="89"
+        stroke="#22D3EE" stroke-width="0.6" opacity="0.32"/>
+
+  <!-- Subtitle -->
+  <text x="154" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#3B82F6"
+        letter-spacing="3.5" opacity="0.85">BTP DEVELOPER KIT</text>
+
+</svg>

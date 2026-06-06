@@ -1,0 +1,169 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Glass fill for prism -->
+    <linearGradient id="L02-prismFill" x1="20" y1="25" x2="100" y2="105"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0B2544" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#061524" stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- Ray glow filter -->
+    <filter id="L02-rayGlow" x="-30%" y="-30%" width="160%" height="160%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Entry ray glow -->
+    <filter id="L02-entryGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Prism edge highlight -->
+    <filter id="L02-edgeGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L02-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="400" height="130" rx="14" fill="#04080F"/>
+
+  <!-- Subtle ambient dark glow left of prism -->
+  <ellipse cx="55" cy="65" rx="70" ry="65"
+           fill="#020C1E" opacity="0.6" clip-path="url(#L02-card)"/>
+
+  <!-- ── STAR FIELD ── -->
+  <g fill="white" clip-path="url(#L02-card)">
+    <circle cx="10"  cy="10"  r="0.6" opacity="0.4"/>
+    <circle cx="70"  cy="6"   r="0.5" opacity="0.3"/>
+    <circle cx="25"  cy="120" r="0.6" opacity="0.35"/>
+    <circle cx="320" cy="8"   r="0.55" opacity="0.4"/>
+    <circle cx="380" cy="20"  r="0.5" opacity="0.28"/>
+    <circle cx="365" cy="115" r="0.55" opacity="0.32"/>
+    <circle cx="200" cy="122" r="0.5" opacity="0.28"/>
+  </g>
+
+  <!-- ── ENTRY RAY — white light approaching prism ── -->
+  <g filter="url(#L02-entryGlow)">
+    <!-- soft wide glow -->
+    <line x1="5" y1="65" x2="20" y2="65"
+          stroke="white" stroke-width="4" opacity="0.12"/>
+    <!-- sharp main ray -->
+    <line x1="5" y1="65" x2="20" y2="65"
+          stroke="white" stroke-width="1.8" opacity="0.95"/>
+  </g>
+  <!-- Ray hit point dot -->
+  <circle cx="20" cy="65" r="1.8" fill="white" opacity="0.8"/>
+
+  <!-- ── PRISM BODY ──
+       Left-top: (20, 25)   Left-bottom: (20, 105)   Right-tip: (100, 65)
+  ── -->
+  <!-- Fill (glass effect) -->
+  <polygon points="20,25 20,105 100,65"
+           fill="url(#L02-prismFill)"/>
+  <!-- Edge highlight (bright left face) -->
+  <line x1="20" y1="25" x2="20" y2="105"
+        stroke="#B0E8FF" stroke-width="2" opacity="0.8" filter="url(#L02-edgeGlow)"/>
+  <!-- Top edge -->
+  <line x1="20" y1="25" x2="100" y2="65"
+        stroke="#38BDF8" stroke-width="1.2" opacity="0.55"/>
+  <!-- Bottom edge -->
+  <line x1="20" y1="105" x2="100" y2="65"
+        stroke="#38BDF8" stroke-width="1.2" opacity="0.55"/>
+  <!-- Prism corner dots -->
+  <circle cx="20" cy="25"  r="2" fill="#7DD3FC" opacity="0.7"/>
+  <circle cx="20" cy="105" r="2" fill="#7DD3FC" opacity="0.7"/>
+  <circle cx="100" cy="65" r="2.5" fill="white" opacity="0.85"/>
+
+  <!-- ── SPECTRUM EXIT RAYS — from right tip (100,65) ── -->
+  <g filter="url(#L02-rayGlow)">
+
+    <!-- Violet -->
+    <line x1="100" y1="65" x2="128" y2="22"
+          stroke="#A78BFA" stroke-width="1.8" opacity="0.85"/>
+    <!-- Indigo/Blue -->
+    <line x1="100" y1="65" x2="128" y2="33"
+          stroke="#60A5FA" stroke-width="1.8" opacity="0.85"/>
+    <!-- Cyan -->
+    <line x1="100" y1="65" x2="128" y2="44"
+          stroke="#22D3EE" stroke-width="1.8" opacity="0.9"/>
+    <!-- Green -->
+    <line x1="100" y1="65" x2="128" y2="57"
+          stroke="#34D399" stroke-width="1.8" opacity="0.85"/>
+    <!-- Yellow -->
+    <line x1="100" y1="65" x2="128" y2="70"
+          stroke="#FCD34D" stroke-width="1.8" opacity="0.85"/>
+    <!-- Orange -->
+    <line x1="100" y1="65" x2="128" y2="83"
+          stroke="#FB923C" stroke-width="1.8" opacity="0.85"/>
+    <!-- Red -->
+    <line x1="100" y1="65" x2="128" y2="96"
+          stroke="#F87171" stroke-width="1.8" opacity="0.82"/>
+
+  </g>
+
+  <!-- Ray tip dots at x=128 -->
+  <circle cx="128" cy="22" r="1.5" fill="#A78BFA" opacity="0.8"/>
+  <circle cx="128" cy="33" r="1.5" fill="#60A5FA" opacity="0.8"/>
+  <circle cx="128" cy="44" r="1.5" fill="#22D3EE" opacity="0.85"/>
+  <circle cx="128" cy="57" r="1.5" fill="#34D399" opacity="0.8"/>
+  <circle cx="128" cy="70" r="1.5" fill="#FCD34D" opacity="0.8"/>
+  <circle cx="128" cy="83" r="1.5" fill="#FB923C" opacity="0.8"/>
+  <circle cx="128" cy="96" r="1.5" fill="#F87171" opacity="0.8"/>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="136" y1="14" x2="136" y2="116"
+        stroke="#1E3A5F" stroke-width="0.8" opacity="0.45"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <!-- SAP -->
+  <text x="156" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <!-- TOOLS — with spectrum-inspired gradient simulation via teal -->
+  <text x="156" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#22D3EE" letter-spacing="8">TOOLS</text>
+
+  <!-- Spectrum-inspired underline (gradient bar) -->
+  <defs>
+    <linearGradient id="L02-spectrumLine" x1="156" y1="0" x2="316" y2="0"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#A78BFA"/>
+      <stop offset="20%"  stop-color="#60A5FA"/>
+      <stop offset="40%"  stop-color="#22D3EE"/>
+      <stop offset="60%"  stop-color="#34D399"/>
+      <stop offset="80%"  stop-color="#FCD34D"/>
+      <stop offset="100%" stop-color="#F87171"/>
+    </linearGradient>
+  </defs>
+  <line x1="156" y1="89" x2="316" y2="89"
+        stroke="url(#L02-spectrumLine)" stroke-width="0.8" opacity="0.55"/>
+
+  <!-- Subtitle -->
+  <text x="157" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#38BDF8"
+        letter-spacing="3.5" opacity="0.85">BTP DEVELOPER KIT</text>
+
+</svg>

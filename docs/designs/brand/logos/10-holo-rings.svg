@@ -1,0 +1,164 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Deep dark background gradient -->
+    <radialGradient id="L10-bgGrd" cx="64" cy="65" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#001A28"/>
+      <stop offset="55%"  stop-color="#000C14"/>
+      <stop offset="100%" stop-color="#040B14"/>
+    </radialGradient>
+
+    <!-- Inner ring glow -->
+    <filter id="L10-ringGlow" x="-80%" y="-200%" width="260%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Core glow -->
+    <filter id="L10-coreGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Outermost faint glow -->
+    <filter id="L10-outerGlow" x="-30%" y="-100%" width="160%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L10-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="400" height="130" rx="14" fill="#040B14"/>
+  <ellipse cx="64" cy="65" rx="90" ry="75"
+           fill="url(#L10-bgGrd)" clip-path="url(#L10-card)"/>
+
+  <!-- ── STAR FIELD ── -->
+  <g fill="white" clip-path="url(#L10-card)">
+    <circle cx="12"  cy="8"   r="0.5" opacity="0.4"/>
+    <circle cx="95"  cy="12"  r="0.4" opacity="0.3"/>
+    <circle cx="108" cy="120" r="0.5" opacity="0.35"/>
+    <circle cx="18"  cy="112" r="0.4" opacity="0.3"/>
+    <circle cx="300" cy="10"  r="0.5" opacity="0.38"/>
+    <circle cx="360" cy="22"  r="0.4" opacity="0.3"/>
+    <circle cx="385" cy="108" r="0.5" opacity="0.35"/>
+  </g>
+
+  <!-- ══════════════════════════════
+       HOLOGRAPHIC RINGS
+       All centered at (64, 65)
+       Viewed from slightly above & to the side
+       → Outer rings: large rx, narrow ry (foreshortened = far)
+       → Inner rings: smaller rx, taller ry ratio (more circular = close)
+
+       Ring specs (rx, ry, stroke-color, opacity, stroke-width):
+       R1: 52, 15 — dark teal #083344
+       R2: 44, 15 — #0A4A5A
+       R3: 36, 14 — #0A7280
+       R4: 28, 13 — #06B6D4
+       R5: 20, 12 — #22D3EE
+       R6: 12, 11 — #7DD3FC (innermost, most circular, brightest)
+  ══════════════════════════════ -->
+
+  <!-- ── RING 1 — outermost, dim ── -->
+  <ellipse cx="64" cy="65" rx="52" ry="15"
+           fill="none" stroke="#0A4A5A" stroke-width="1.5" opacity="0.55"/>
+
+  <!-- ── RING 2 ── -->
+  <ellipse cx="64" cy="65" rx="44" ry="15"
+           fill="none" stroke="#0A7280" stroke-width="1.6" opacity="0.65"/>
+
+  <!-- ── RING 3 ── -->
+  <ellipse cx="64" cy="65" rx="36" ry="14"
+           fill="none" stroke="#0EA5E9" stroke-width="1.8" opacity="0.72"
+           filter="url(#L10-outerGlow)"/>
+
+  <!-- ── RING 4 ── -->
+  <ellipse cx="64" cy="65" rx="28" ry="13"
+           fill="none" stroke="#06B6D4" stroke-width="2" opacity="0.80"
+           filter="url(#L10-ringGlow)"/>
+
+  <!-- ── RING 5 — bright ── -->
+  <ellipse cx="64" cy="65" rx="20" ry="12"
+           fill="none" stroke="#22D3EE" stroke-width="2.2" opacity="0.90"
+           filter="url(#L10-ringGlow)"/>
+
+  <!-- ── RING 6 — innermost, brightest ── -->
+  <ellipse cx="64" cy="65" rx="12" ry="11"
+           fill="none" stroke="#7DD3FC" stroke-width="2.5" opacity="0.95"
+           filter="url(#L10-coreGlow)"/>
+
+  <!-- ── RING DETAIL: small dots at each ring's rightmost point ── -->
+  <!-- These simulate holographic projection dots -->
+  <circle cx="116" cy="65" r="2" fill="#0A4A5A" opacity="0.55"/>
+  <circle cx="108" cy="65" r="2.2" fill="#0A7280" opacity="0.65"/>
+  <circle cx="100" cy="65" r="2.3" fill="#0EA5E9" opacity="0.7"/>
+  <circle cx="92"  cy="65" r="2.5" fill="#06B6D4" opacity="0.78"/>
+  <circle cx="84"  cy="65" r="2.8" fill="#22D3EE" opacity="0.88"/>
+  <circle cx="76"  cy="65" r="3"   fill="#7DD3FC" opacity="0.92" filter="url(#L10-ringGlow)"/>
+
+  <!-- Left side dots (matching) -->
+  <circle cx="12"  cy="65" r="2"   fill="#0A4A5A" opacity="0.5"/>
+  <circle cx="20"  cy="65" r="2.2" fill="#0A7280" opacity="0.6"/>
+  <circle cx="28"  cy="65" r="2.3" fill="#0EA5E9" opacity="0.65"/>
+  <circle cx="36"  cy="65" r="2.5" fill="#06B6D4" opacity="0.72"/>
+  <circle cx="44"  cy="65" r="2.8" fill="#22D3EE" opacity="0.85"/>
+  <circle cx="52"  cy="65" r="3"   fill="#7DD3FC" opacity="0.9"/>
+
+  <!-- ── CORE CENTER — bright point ── -->
+  <circle cx="64" cy="65" r="8"
+          fill="#0EA5E9" opacity="0.15" filter="url(#L10-coreGlow)"
+          clip-path="url(#L10-card)"/>
+  <circle cx="64" cy="65" r="4"
+          fill="#22D3EE" opacity="0.5" filter="url(#L10-coreGlow)"
+          clip-path="url(#L10-card)"/>
+  <circle cx="64" cy="65" r="2.5"
+          fill="#BAE6FD"/>
+  <circle cx="64" cy="65" r="1.2"
+          fill="white" opacity="0.95"/>
+
+  <!-- ── HOLOGRAPHIC AMBIENT GLOW ── -->
+  <ellipse cx="64" cy="65" rx="55" ry="18"
+           fill="#0A7280" opacity="0.03" filter="url(#L10-coreGlow)"
+           clip-path="url(#L10-card)"/>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="135" y1="14" x2="135" y2="116"
+        stroke="#0A3344" stroke-width="0.8" opacity="0.55"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <text x="155" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <text x="155" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#22D3EE" letter-spacing="8">TOOLS</text>
+
+  <!-- Teal underline -->
+  <line x1="155" y1="89" x2="315" y2="89"
+        stroke="#22D3EE" stroke-width="0.6" opacity="0.32"/>
+
+  <text x="156" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#0891B2"
+        letter-spacing="3.5" opacity="0.9">BTP DEVELOPER KIT</text>
+
+</svg>

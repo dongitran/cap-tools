@@ -1,0 +1,235 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Background gradient -->
+    <radialGradient id="L09-bgGrd" cx="64" cy="65" r="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#001A20"/>
+      <stop offset="65%"  stop-color="#000D14"/>
+      <stop offset="100%" stop-color="#050C14"/>
+    </radialGradient>
+
+    <!-- Node glow filter (cyan) -->
+    <filter id="L09-cyanGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Node glow filter (green) -->
+    <filter id="L09-greenGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Strand glow -->
+    <filter id="L09-strandGlow" x="-20%" y="-5%" width="140%" height="110%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L09-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="400" height="130" rx="14" fill="#050C14"/>
+  <ellipse cx="64" cy="65" rx="88" ry="72"
+           fill="url(#L09-bgGrd)" clip-path="url(#L09-card)"/>
+
+  <!-- ── STAR FIELD ── -->
+  <g fill="white" clip-path="url(#L09-card)">
+    <circle cx="14"  cy="10"  r="0.5" opacity="0.35"/>
+    <circle cx="110" cy="7"   r="0.4" opacity="0.3"/>
+    <circle cx="120" cy="110" r="0.5" opacity="0.35"/>
+    <circle cx="280" cy="8"   r="0.4" opacity="0.3"/>
+    <circle cx="360" cy="18"  r="0.5" opacity="0.38"/>
+    <circle cx="390" cy="95"  r="0.4" opacity="0.3"/>
+  </g>
+
+  <!-- ══════════════════════════════
+       DOUBLE HELIX (centered at x=64, spans y 9–121)
+
+       Left strand (cyan): max x=86 when sin=1 (right side)
+       Right strand (green): max x=42 when sin=-1 (left side)
+       Both strands offset by π (half a period)
+
+       Computed node positions (2 full turns):
+         y-values: 9, 22, 35, 48, 61, 74, 87, 100, 113, 121
+  ══════════════════════════════ -->
+
+  <!-- ── RUNG LINES (base pairs) — drawn first, behind strands ── -->
+  <g stroke="#E0FFFF" stroke-width="1.2" opacity="0.22">
+    <!-- y=22: L(86,22) — R(42,22) -->
+    <line x1="86" y1="22" x2="42" y2="22"/>
+    <!-- y=35: L(86,35) — R(42,35) — wait, these are max spread -->
+    <!-- Actually rungs at every node except center crossings -->
+    <!-- y=22 rung -->
+    <line x1="85" y1="22" x2="43" y2="22"/>
+    <!-- y=35 rung -->
+    <line x1="64" y1="35" x2="64" y2="35"/>
+    <!-- y=48 rung -->
+    <line x1="43" y1="48" x2="85" y2="48"/>
+    <!-- y=61 rung -->
+    <line x1="64" y1="61" x2="64" y2="61"/>
+    <!-- y=74 rung -->
+    <line x1="85" y1="74" x2="43" y2="74"/>
+    <!-- y=87 rung -->
+    <line x1="64" y1="87" x2="64" y2="87"/>
+    <!-- y=100 rung -->
+    <line x1="43" y1="100" x2="85" y2="100"/>
+    <!-- y=113 rung -->
+    <line x1="64" y1="113" x2="64" y2="113"/>
+  </g>
+
+  <!-- ── More evenly computed rungs ── -->
+  <!-- Let me redo with proper sinusoidal helix: -->
+  <!-- sin values for θ = i * (4π/9) for i=0..9: -->
+  <!-- i=0: sin(0)=0 → center -->
+  <!-- i=1: sin(139.9°)= sin(π*4/9)=0.985 → x_L=64+22*0.985=85.7 -->
+  <!-- i=2: sin(279.8°)= sin(π*8/9)=0.342 → x_L=64+22*0.342=71.5 -->
+  <!-- i=3: sin(419.7°)= sin(π*12/9)= sin(240°)=-0.866 → x_L=64-22*0.866=44.9 -->
+  <!-- i=4: sin(559.6°)= sin(π*16/9)= sin(320°)=-0.643 → x_L=64-22*0.643=49.9 -->
+  <!-- i=5: sin(699.5°)= sin(π*20/9)= sin(400°)=sin(40°)=0.643 → x_L=64+22*0.643=78.1 -->
+  <!-- Hmm complex. Let me just use well-spaced visually good approximations -->
+
+  <!-- ── RUNG LINES (accurate for visual helix) ── -->
+  <g stroke="#94F5E4" stroke-width="1.1" opacity="0.28">
+    <!-- Full rungs at near-max-spread y positions -->
+    <line x1="86" y1="20" x2="42" y2="20"/>
+    <line x1="42" y1="47" x2="86" y2="47"/>
+    <line x1="86" y1="74" x2="42" y2="74"/>
+    <line x1="42" y1="100" x2="86" y2="100"/>
+    <!-- Shorter rungs at near-crossings -->
+    <line x1="62" y1="34" x2="66" y2="34"/>
+    <line x1="62" y1="61" x2="66" y2="61"/>
+    <line x1="62" y1="87" x2="66" y2="87"/>
+    <line x1="62" y1="114" x2="66" y2="114"/>
+  </g>
+
+  <!-- ── LEFT STRAND (cyan) — sinusoidal path ── -->
+  <!--
+    Nodes descending: each line goes through the "S" curve of the helix
+    Points (left strand):
+      (64,9), (86,20), (86,34), (64,47), (42,60), (42,74), (64,87), (86,100), (86,114), (64,121)
+  -->
+  <!-- Glow version -->
+  <polyline
+    points="64,9 86,20 86,34 64,47 42,60 42,74 64,87 86,100 86,114 64,121"
+    fill="none" stroke="#00E5FF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.18" filter="url(#L09-strandGlow)"/>
+  <!-- Main strand -->
+  <polyline
+    points="64,9 86,20 86,34 64,47 42,60 42,74 64,87 86,100 86,114 64,121"
+    fill="none" stroke="#00E5FF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.85"/>
+
+  <!-- ── RIGHT STRAND (green) — offset by half period (opposite curve) ── -->
+  <!--
+    Points (right strand — π offset from left):
+      (64,9), (42,20), (42,34), (64,47), (86,60), (86,74), (64,87), (42,100), (42,114), (64,121)
+  -->
+  <!-- Glow version -->
+  <polyline
+    points="64,9 42,20 42,34 64,47 86,60 86,74 64,87 42,100 42,114 64,121"
+    fill="none" stroke="#10FF80" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.15" filter="url(#L09-strandGlow)"/>
+  <!-- Main strand -->
+  <polyline
+    points="64,9 42,20 42,34 64,47 86,60 86,74 64,87 42,100 42,114 64,121"
+    fill="none" stroke="#10FF80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+    opacity="0.82"/>
+
+  <!-- ── CYAN STRAND NODES ── -->
+  <!-- Glow halos -->
+  <g fill="#00E5FF" opacity="0.2" filter="url(#L09-cyanGlow)">
+    <circle cx="86" cy="20"  r="7"/>
+    <circle cx="86" cy="34"  r="5"/>
+    <circle cx="42" cy="60"  r="7"/>
+    <circle cx="42" cy="74"  r="5"/>
+    <circle cx="86" cy="100" r="7"/>
+    <circle cx="86" cy="114" r="5"/>
+  </g>
+  <!-- Node bodies -->
+  <g fill="#00E5FF">
+    <circle cx="64" cy="9"   r="3.5"/>  <!-- top center -->
+    <circle cx="86" cy="20"  r="4.5"/>  <!-- max right, bright -->
+    <circle cx="86" cy="34"  r="3"/>
+    <circle cx="64" cy="47"  r="3"/>    <!-- center crossing -->
+    <circle cx="42" cy="60"  r="4.5"/>  <!-- max left, bright -->
+    <circle cx="42" cy="74"  r="3"/>
+    <circle cx="64" cy="87"  r="3"/>    <!-- center crossing -->
+    <circle cx="86" cy="100" r="4.5"/>  <!-- max right, bright -->
+    <circle cx="86" cy="114" r="3"/>
+    <circle cx="64" cy="121" r="3.5"/>  <!-- bottom center -->
+  </g>
+  <!-- Inner highlights for bright nodes -->
+  <g fill="white" opacity="0.7">
+    <circle cx="86" cy="20"  r="1.8"/>
+    <circle cx="42" cy="60"  r="1.8"/>
+    <circle cx="86" cy="100" r="1.8"/>
+  </g>
+
+  <!-- ── GREEN STRAND NODES ── -->
+  <!-- Glow halos -->
+  <g fill="#10FF80" opacity="0.18" filter="url(#L09-greenGlow)">
+    <circle cx="42" cy="20"  r="7"/>
+    <circle cx="42" cy="34"  r="5"/>
+    <circle cx="86" cy="60"  r="7"/>
+    <circle cx="86" cy="74"  r="5"/>
+    <circle cx="42" cy="100" r="7"/>
+    <circle cx="42" cy="114" r="5"/>
+  </g>
+  <!-- Node bodies -->
+  <g fill="#10FF80">
+    <circle cx="42" cy="20"  r="4.5"/>  <!-- max left, bright -->
+    <circle cx="42" cy="34"  r="3"/>
+    <circle cx="86" cy="60"  r="4.5"/>  <!-- max right, bright -->
+    <circle cx="86" cy="74"  r="3"/>
+    <circle cx="42" cy="100" r="4.5"/>  <!-- max left, bright -->
+    <circle cx="42" cy="114" r="3"/>
+  </g>
+  <!-- Inner highlights for bright nodes -->
+  <g fill="white" opacity="0.7">
+    <circle cx="42" cy="20"  r="1.8"/>
+    <circle cx="86" cy="60"  r="1.8"/>
+    <circle cx="42" cy="100" r="1.8"/>
+  </g>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="134" y1="14" x2="134" y2="116"
+        stroke="#003322" stroke-width="0.8" opacity="0.6"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <text x="154" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <text x="154" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#00E5FF" letter-spacing="8">TOOLS</text>
+
+  <!-- Cyan underline -->
+  <line x1="154" y1="89" x2="314" y2="89"
+        stroke="#00E5FF" stroke-width="0.6" opacity="0.32"/>
+
+  <text x="155" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#0EA5E9"
+        letter-spacing="3.5" opacity="0.85">BTP DEVELOPER KIT</text>
+
+</svg>

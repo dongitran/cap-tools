@@ -1,0 +1,202 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Background -->
+    <radialGradient id="I06-bg" cx="128" cy="128" r="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#001A20"/>
+      <stop offset="100%" stop-color="#020810"/>
+    </radialGradient>
+
+    <!-- Core center glow -->
+    <filter id="I06-coreGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Hex edge glow (inner rings) -->
+    <filter id="I06-hexGlow" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="I06-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="256" height="256" rx="46" fill="url(#I06-bg)"/>
+
+  <!-- ══════════════════════════════════════════════
+       7 NESTED HEXAGONS, each rotated 8° more than previous
+       Center: (128, 128)
+       Radii:    100, 85, 70, 55, 40, 25, 10
+       Rotations:  0°,  8°, 16°, 24°, 32°, 40°, 48°
+
+       Pre-computed vertices (x,y) rounded to 1 decimal:
+       Level 0 (r=100, θ=0°):
+         228,128  178,215  78,215  28,128  78,41  178,41
+       Level 1 (r=85, θ=8°):
+         212,140  160,207  76,195  44,116  96,49  180,61
+       Level 2 (r=70, θ=16°):
+         195,147  145,196  78,177  61,109  111,60  178,79
+       Level 3 (r=55, θ=24°):
+         178,150  134,183  84,160  78,106  122,73  173,96
+       Level 4 (r=40, θ=32°):
+         162,149  127,168  93,147  94,107  129,88  163,109
+       Level 5 (r=25, θ=40°):
+         147,144  124,153  105,137  109,112  132,103  152,120
+       Level 6 (r=10, θ=48°):
+         135,135  125,138  118,130  121,121  131,119  138,126
+  ══════════════════════════════════════════════ -->
+
+  <!-- Level 0 — outermost, very dim -->
+  <polygon points="228,128 178,215 78,215 28,128 78,41 178,41"
+           fill="none" stroke="#064E6A" stroke-width="1.5" opacity="0.5"
+           clip-path="url(#I06-card)"/>
+
+  <!-- Level 1 -->
+  <polygon points="212,140 160,207 76,195 44,116 96,49 180,61"
+           fill="none" stroke="#0A7280" stroke-width="1.6" opacity="0.58"
+           clip-path="url(#I06-card)"/>
+
+  <!-- Level 2 -->
+  <polygon points="195,147 145,196 78,177 61,109 111,60 178,79"
+           fill="none" stroke="#0EA5E9" stroke-width="1.8" opacity="0.65"
+           clip-path="url(#I06-card)"/>
+
+  <!-- Level 3 -->
+  <polygon points="178,150 134,183 84,160 78,106 122,73 173,96"
+           fill="none" stroke="#22D3EE" stroke-width="2" opacity="0.74"
+           clip-path="url(#I06-card)"/>
+
+  <!-- Level 4 — brighter glow starts -->
+  <polygon points="162,149 127,168 93,147 94,107 129,88 163,109"
+           fill="none" stroke="#38BDF8" stroke-width="2.2" opacity="0.82"
+           filter="url(#I06-hexGlow)" clip-path="url(#I06-card)"/>
+
+  <!-- Level 5 -->
+  <polygon points="147,144 124,153 105,137 109,112 132,103 152,120"
+           fill="none" stroke="#7DD3FC" stroke-width="2.4" opacity="0.90"
+           filter="url(#I06-hexGlow)" clip-path="url(#I06-card)"/>
+
+  <!-- Level 6 — innermost, brightest -->
+  <polygon points="135,135 125,138 118,130 121,121 131,119 138,126"
+           fill="none" stroke="#BAE6FD" stroke-width="2.5" opacity="0.97"
+           filter="url(#I06-hexGlow)" clip-path="url(#I06-card)"/>
+
+  <!-- ══════════════════════════════════════════════
+       CONNECTING LINES between levels
+       (vertex j of level i → vertex j of level i+1)
+       6 connections × 6 level-pairs = 36 lines
+  ══════════════════════════════════════════════ -->
+
+  <!-- Between level 0 and 1 -->
+  <g stroke="#0A7280" stroke-width="0.9" opacity="0.45" clip-path="url(#I06-card)">
+    <line x1="228" y1="128" x2="212" y2="140"/>
+    <line x1="178" y1="215" x2="160" y2="207"/>
+    <line x1="78"  y1="215" x2="76"  y2="195"/>
+    <line x1="28"  y1="128" x2="44"  y2="116"/>
+    <line x1="78"  y1="41"  x2="96"  y2="49"/>
+    <line x1="178" y1="41"  x2="180" y2="61"/>
+  </g>
+
+  <!-- Between level 1 and 2 -->
+  <g stroke="#0EA5E9" stroke-width="1" opacity="0.5" clip-path="url(#I06-card)">
+    <line x1="212" y1="140" x2="195" y2="147"/>
+    <line x1="160" y1="207" x2="145" y2="196"/>
+    <line x1="76"  y1="195" x2="78"  y2="177"/>
+    <line x1="44"  y1="116" x2="61"  y2="109"/>
+    <line x1="96"  y1="49"  x2="111" y2="60"/>
+    <line x1="180" y1="61"  x2="178" y2="79"/>
+  </g>
+
+  <!-- Between level 2 and 3 -->
+  <g stroke="#22D3EE" stroke-width="1.1" opacity="0.55" clip-path="url(#I06-card)">
+    <line x1="195" y1="147" x2="178" y2="150"/>
+    <line x1="145" y1="196" x2="134" y2="183"/>
+    <line x1="78"  y1="177" x2="84"  y2="160"/>
+    <line x1="61"  y1="109" x2="78"  y2="106"/>
+    <line x1="111" y1="60"  x2="122" y2="73"/>
+    <line x1="178" y1="79"  x2="173" y2="96"/>
+  </g>
+
+  <!-- Between level 3 and 4 -->
+  <g stroke="#38BDF8" stroke-width="1.2" opacity="0.62" clip-path="url(#I06-card)">
+    <line x1="178" y1="150" x2="162" y2="149"/>
+    <line x1="134" y1="183" x2="127" y2="168"/>
+    <line x1="84"  y1="160" x2="93"  y2="147"/>
+    <line x1="78"  y1="106" x2="94"  y2="107"/>
+    <line x1="122" y1="73"  x2="129" y2="88"/>
+    <line x1="173" y1="96"  x2="163" y2="109"/>
+  </g>
+
+  <!-- Between level 4 and 5 -->
+  <g stroke="#7DD3FC" stroke-width="1.3" opacity="0.70" clip-path="url(#I06-card)">
+    <line x1="162" y1="149" x2="147" y2="144"/>
+    <line x1="127" y1="168" x2="124" y2="153"/>
+    <line x1="93"  y1="147" x2="105" y2="137"/>
+    <line x1="94"  y1="107" x2="109" y2="112"/>
+    <line x1="129" y1="88"  x2="132" y2="103"/>
+    <line x1="163" y1="109" x2="152" y2="120"/>
+  </g>
+
+  <!-- Between level 5 and 6 -->
+  <g stroke="#BAE6FD" stroke-width="1.4" opacity="0.80" clip-path="url(#I06-card)">
+    <line x1="147" y1="144" x2="135" y2="135"/>
+    <line x1="124" y1="153" x2="125" y2="138"/>
+    <line x1="105" y1="137" x2="118" y2="130"/>
+    <line x1="109" y1="112" x2="121" y2="121"/>
+    <line x1="132" y1="103" x2="131" y2="119"/>
+    <line x1="152" y1="120" x2="138" y2="126"/>
+  </g>
+
+  <!-- ── VERTEX DOTS (at key hex vertices for node feel) ── -->
+  <!-- Level 0 vertices -->
+  <g fill="#064E6A" opacity="0.6">
+    <circle cx="228" cy="128" r="2.5"/>
+    <circle cx="178" cy="215" r="2.5"/>
+    <circle cx="78"  cy="215" r="2.5"/>
+    <circle cx="28"  cy="128" r="2.5"/>
+    <circle cx="78"  cy="41"  r="2.5"/>
+    <circle cx="178" cy="41"  r="2.5"/>
+  </g>
+  <!-- Level 3 vertices -->
+  <g fill="#22D3EE" opacity="0.7">
+    <circle cx="178" cy="150" r="2.8"/>
+    <circle cx="134" cy="183" r="2.8"/>
+    <circle cx="84"  cy="160" r="2.8"/>
+    <circle cx="78"  cy="106" r="2.8"/>
+    <circle cx="122" cy="73"  r="2.8"/>
+    <circle cx="173" cy="96"  r="2.8"/>
+  </g>
+  <!-- Level 6 vertices (innermost, bright) -->
+  <g fill="#BAE6FD" opacity="0.9">
+    <circle cx="135" cy="135" r="2.5"/>
+    <circle cx="125" cy="138" r="2.5"/>
+    <circle cx="118" cy="130" r="2.5"/>
+    <circle cx="121" cy="121" r="2.5"/>
+    <circle cx="131" cy="119" r="2.5"/>
+    <circle cx="138" cy="126" r="2.5"/>
+  </g>
+
+  <!-- ── CENTER CORE (convergence point) ── -->
+  <circle cx="128" cy="128" r="15"
+          fill="#22D3EE" opacity="0.15" filter="url(#I06-coreGlow)"
+          clip-path="url(#I06-card)"/>
+  <circle cx="128" cy="128" r="5"  fill="#BAE6FD" opacity="0.95"/>
+  <circle cx="128" cy="128" r="2.5" fill="white"/>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="#22D3EE" stroke-width="1" opacity="0.09"/>
+
+</svg>

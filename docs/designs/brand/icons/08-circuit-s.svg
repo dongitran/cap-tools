@@ -1,0 +1,171 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Dark background with warm tint for contrast with magenta -->
+    <radialGradient id="I08-bg" cx="128" cy="128" r="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#14041A"/>
+      <stop offset="60%"  stop-color="#0A0212"/>
+      <stop offset="100%" stop-color="#07010E"/>
+    </radialGradient>
+
+    <!-- Outer plasma glow (widest, soft magenta) -->
+    <filter id="I08-outerGlow" x="-30%" y="-10%" width="160%" height="120%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Mid glow -->
+    <filter id="I08-midGlow" x="-20%" y="-8%" width="140%" height="116%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Inner tight glow -->
+    <filter id="I08-innerGlow" x="-10%" y="-5%" width="120%" height="110%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Hot spot glow at bends -->
+    <filter id="I08-hotspot" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="I08-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="256" height="256" rx="46" fill="url(#I08-bg)"/>
+
+  <!-- Subtle warm ambient field -->
+  <ellipse cx="128" cy="128" rx="80" ry="100"
+           fill="#FF006E" opacity="0.03" clip-path="url(#I08-card)"/>
+
+  <!-- ══════════════════════════════════════
+       PLASMA S PATH
+       Smooth cubic bezier S from top-right to bottom-left
+       The S curve:
+       Start: (178, 46)
+       Control: makes the top arc (goes up-left, curves down)
+       Mid crossing: (128, 128)
+       Control: makes the bottom arc (curves down-right, ends lower-left)
+       End: (78, 210)
+
+       Path: M 178,46 C 148,26 80,32 74,70 C 68,108 92,128 128,128
+             C 164,128 188,148 182,186 C 176,224 108,230 78,210
+  ══════════════════════════════════════ -->
+
+  <!-- ── LAYER 1: Outer plasma aura (widest, lowest opacity) ── -->
+  <path d="M 178,46 C 148,26 80,32 74,70 C 68,108 92,128 128,128 C 164,128 188,148 182,186 C 176,224 108,230 78,210"
+        fill="none" stroke="#FF006E" stroke-width="32" stroke-linecap="round"
+        opacity="0.08" filter="url(#I08-outerGlow)"
+        clip-path="url(#I08-card)"/>
+
+  <!-- ── LAYER 2: Mid plasma corona ── -->
+  <path d="M 178,46 C 148,26 80,32 74,70 C 68,108 92,128 128,128 C 164,128 188,148 182,186 C 176,224 108,230 78,210"
+        fill="none" stroke="#FF2D78" stroke-width="16" stroke-linecap="round"
+        opacity="0.25" filter="url(#I08-midGlow)"
+        clip-path="url(#I08-card)"/>
+
+  <!-- ── LAYER 3: Inner bright corona ── -->
+  <path d="M 178,46 C 148,26 80,32 74,70 C 68,108 92,128 128,128 C 164,128 188,148 182,186 C 176,224 108,230 78,210"
+        fill="none" stroke="#FF5FA3" stroke-width="8" stroke-linecap="round"
+        opacity="0.6" filter="url(#I08-innerGlow)"
+        clip-path="url(#I08-card)"/>
+
+  <!-- ── LAYER 4: Core neon tube (bright center line) ── -->
+  <path d="M 178,46 C 148,26 80,32 74,70 C 68,108 92,128 128,128 C 164,128 188,148 182,186 C 176,224 108,230 78,210"
+        fill="none" stroke="#FFB3D4" stroke-width="3.5" stroke-linecap="round"
+        opacity="0.92"/>
+
+  <!-- ── LAYER 5: Core white-hot center ── -->
+  <path d="M 178,46 C 148,26 80,32 74,70 C 68,108 92,128 128,128 C 164,128 188,148 182,186 C 176,224 108,230 78,210"
+        fill="none" stroke="white" stroke-width="1.2" stroke-linecap="round"
+        opacity="0.65"/>
+
+  <!-- ══════════════════════════════════════
+       PLASMA HOT SPOTS at bend points
+       (where plasma is hottest = most intense)
+       Hot spots at: start(178,46), top-bend≈(74,70), midpoint(128,128),
+                     bot-bend≈(182,186), end(78,210)
+  ══════════════════════════════════════ -->
+  <!-- Hot spot halos -->
+  <g fill="#FF2D78" opacity="0.35" filter="url(#I08-hotspot)"
+     clip-path="url(#I08-card)">
+    <circle cx="178" cy="46"  r="12"/>
+    <circle cx="74"  cy="70"  r="10"/>
+    <circle cx="128" cy="128" r="14"/>
+    <circle cx="182" cy="186" r="10"/>
+    <circle cx="78"  cy="210" r="12"/>
+  </g>
+
+  <!-- Hot spot cores -->
+  <g fill="#FFB3D4">
+    <circle cx="178" cy="46"  r="5.5" opacity="0.95"/>
+    <circle cx="74"  cy="70"  r="4"   opacity="0.9"/>
+    <circle cx="128" cy="128" r="6.5" opacity="0.98"/>
+    <circle cx="182" cy="186" r="4"   opacity="0.9"/>
+    <circle cx="78"  cy="210" r="5.5" opacity="0.95"/>
+  </g>
+  <!-- Inner white dots -->
+  <g fill="white" opacity="0.85">
+    <circle cx="178" cy="46"  r="2.5"/>
+    <circle cx="128" cy="128" r="3"/>
+    <circle cx="78"  cy="210" r="2.5"/>
+  </g>
+
+  <!-- ── PARTICLE SPARKS (emanating from hot spots) ── -->
+  <!-- Sparks around start point (178,46) -->
+  <g stroke="#FF89B5" stroke-width="1" stroke-linecap="round" opacity="0.5"
+     clip-path="url(#I08-card)">
+    <line x1="178" y1="46" x2="192" y2="30"/>
+    <line x1="178" y1="46" x2="195" y2="48"/>
+    <line x1="178" y1="46" x2="186" y2="32"/>
+  </g>
+  <!-- Sparks around end point (78,210) -->
+  <g stroke="#FF89B5" stroke-width="1" stroke-linecap="round" opacity="0.5"
+     clip-path="url(#I08-card)">
+    <line x1="78" y1="210" x2="62"  y2="224"/>
+    <line x1="78" y1="210" x2="62"  y2="208"/>
+    <line x1="78" y1="210" x2="70"  y2="226"/>
+  </g>
+
+  <!-- ── SCAN LINE EFFECT (subtle horizontal lines for holographic look) ── -->
+  <g stroke="#FF006E" stroke-width="0.4" opacity="0.07">
+    <line x1="46" y1="60"  x2="210" y2="60"/>
+    <line x1="46" y1="74"  x2="210" y2="74"/>
+    <line x1="46" y1="88"  x2="210" y2="88"/>
+    <line x1="46" y1="102" x2="210" y2="102"/>
+    <line x1="46" y1="116" x2="210" y2="116"/>
+    <line x1="46" y1="130" x2="210" y2="130"/>
+    <line x1="46" y1="144" x2="210" y2="144"/>
+    <line x1="46" y1="158" x2="210" y2="158"/>
+    <line x1="46" y1="172" x2="210" y2="172"/>
+    <line x1="46" y1="186" x2="210" y2="186"/>
+    <line x1="46" y1="200" x2="210" y2="200"/>
+  </g>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="#FF2D78" stroke-width="1" opacity="0.1"/>
+
+</svg>

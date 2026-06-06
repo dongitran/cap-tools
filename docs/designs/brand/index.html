@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAP Tools — Brand Identity Gallery</title>
+  <style>
+    :root {
+      --bg: #060B15;
+      --surface: #0D1117;
+      --surface2: #161B22;
+      --border: #21262D;
+      --border-hover: rgba(47,129,247,0.5);
+      --text: #E6EDF3;
+      --muted: #6E7681;
+      --accent: #2F81F7;
+      --accent-dim: rgba(47,129,247,0.12);
+      --green: #3FB950;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      padding: 48px 40px 96px;
+      min-height: 100vh;
+    }
+
+    /* ── PAGE HEADER ── */
+    .page-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+    .page-header .eyebrow {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+    .page-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+    }
+    .page-header p {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .page-header .divider {
+      width: 48px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      margin: 24px auto 0;
+      border-radius: 2px;
+    }
+
+    /* ── SECTION ── */
+    .section {
+      margin-bottom: 72px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .section-header .label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .section-header .line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .section-header .count {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* ── LOGO GRID ── */
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    /* ── ICON GRID ── */
+    .icon-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 20px;
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      cursor: default;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(47,129,247,0.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .card:hover {
+      border-color: var(--border-hover);
+      box-shadow: 0 0 0 1px rgba(47,129,247,0.15), 0 8px 32px rgba(0,0,0,0.4);
+      transform: translateY(-2px);
+    }
+
+    .card .svg-wrap {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 16px;
+      min-height: 80px;
+    }
+    .card .svg-wrap img,
+    .card .svg-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .card .svg-wrap .placeholder {
+      width: 100%;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 1px;
+    }
+
+    .card-meta { text-align: center; width: 100%; }
+    .card-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(47,129,247,0.2);
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-bottom: 7px;
+    }
+    .card-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #E6EDF3;
+      margin-bottom: 4px;
+    }
+    .card-desc {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── ICON CARD specific ── */
+    .icon-grid .card .svg-wrap {
+      aspect-ratio: 1;
+      padding: 20px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .icon-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 800px) {
+      .logo-grid { grid-template-columns: 1fr; }
+      .icon-grid { grid-template-columns: repeat(3, 1fr); }
+      body { padding: 32px 20px 64px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="page-header">
+    <div class="eyebrow">SAP Tools VSCode Extension</div>
+    <h1>Brand Identity Concepts</h1>
+    <p>10 Logo Designs &nbsp;·&nbsp; 10 Icon Designs<br>Modern · Futuristic · AI-Inspired</p>
+    <div class="divider"></div>
+  </header>
+
+  <!-- ══════════════════════════════
+       LOGOS SECTION
+  ══════════════════════════════ -->
+  <section class="section" id="logos">
+    <div class="section-header">
+      <span class="label">Logo Concepts</span>
+      <span class="line"></span>
+      <span class="count">10 designs</span>
+    </div>
+    <div class="logo-grid">
+
+      <!-- L01 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/01-neural-orbit.svg" alt="Logo 01 – Neural Orbit" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L01</div>
+          <div class="card-name">Neural Orbit</div>
+          <div class="card-desc">Orbital ring ecosystem · Electric blue/cyan · Scientific precision</div>
+        </div>
+      </div>
+
+      <!-- L02 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/02-prism-light.svg" alt="Logo 02 – Prism Light" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L02</div>
+          <div class="card-name">Prism Light</div>
+          <div class="card-desc">Light refraction through prism · Full spectrum · Transformation</div>
+        </div>
+      </div>
+
+      <!-- L03 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/03-quantum-matrix.svg" alt="Logo 03 – Quantum Matrix" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L03</div>
+          <div class="card-name">Quantum Matrix</div>
+          <div class="card-desc">Dot-grid lattice · Neon green · Data structure aesthetic</div>
+        </div>
+      </div>
+
+      <!-- L04 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/04-nebula-forge.svg" alt="Logo 04 – Nebula Forge" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L04</div>
+          <div class="card-name">Nebula Forge</div>
+          <div class="card-desc">Cosmic nebula cloud · Magenta/blue space · Epic scale</div>
+        </div>
+      </div>
+
+      <!-- L05 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/05-crystal-gem.svg" alt="Logo 05 – Crystal Gem" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L05</div>
+          <div class="card-name">Crystal Gem</div>
+          <div class="card-desc">Multi-faceted diamond · Teal/cyan facets · Premium precision</div>
+        </div>
+      </div>
+
+      <!-- L06 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/06-circuit-flow.svg" alt="Logo 06 – Circuit Flow" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L06</div>
+          <div class="card-name">Circuit Flow</div>
+          <div class="card-desc">PCB trace aesthetic · Green traces / gold pads · Hardware roots</div>
+        </div>
+      </div>
+
+      <!-- L07 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/07-vortex-core.svg" alt="Logo 07 – Vortex Core" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L07</div>
+          <div class="card-name">Vortex Core</div>
+          <div class="card-desc">Spiral vortex arms · Purple/indigo deep · Power in motion</div>
+        </div>
+      </div>
+
+      <!-- L08 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/08-synthwave.svg" alt="Logo 08 – Synthwave" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L08</div>
+          <div class="card-name">Synthwave</div>
+          <div class="card-desc">Retro-future grid horizon · Magenta/orange · Bold & distinctive</div>
+        </div>
+      </div>
+
+      <!-- L09 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/09-helix-stream.svg" alt="Logo 09 – Helix Stream" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L09</div>
+          <div class="card-name">Helix Stream</div>
+          <div class="card-desc">Double helix of nodes · Cyan/green strands · Living data</div>
+        </div>
+      </div>
+
+      <!-- L10 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="logos/10-holo-rings.svg" alt="Logo 10 – Holo Rings" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">L10</div>
+          <div class="card-name">Holo Rings</div>
+          <div class="card-desc">Perspective holographic rings · Deep teal glow · Portal depth</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════
+       ICONS SECTION
+  ══════════════════════════════ -->
+  <section class="section" id="icons">
+    <div class="section-header">
+      <span class="label">Icon Concepts</span>
+      <span class="line"></span>
+      <span class="count">10 designs</span>
+    </div>
+    <div class="icon-grid">
+
+      <!-- I01 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/01-hex-s.svg" alt="Icon 01 – Hexagonal S" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I01</div>
+          <div class="card-name">Hex S</div>
+          <div class="card-desc">Neon hexagon frame · Glowing S · Electric blue</div>
+        </div>
+      </div>
+
+      <!-- I02 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/02-neural-s.svg" alt="Icon 02 – Neural S" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I02</div>
+          <div class="card-name">Neural S</div>
+          <div class="card-desc">Dots forming letter S · Network connections</div>
+        </div>
+      </div>
+
+      <!-- I03 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/03-lightning-ai.svg" alt="Icon 03 – Lightning AI" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I03</div>
+          <div class="card-name">Lightning AI</div>
+          <div class="card-desc">Bolt with neural overlay · Power + intelligence</div>
+        </div>
+      </div>
+
+      <!-- I04 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/04-btp-cube.svg" alt="Icon 04 – BTP Cube" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I04</div>
+          <div class="card-name">BTP Cube</div>
+          <div class="card-desc">Isometric 3D cube · SAP platform depth</div>
+        </div>
+      </div>
+
+      <!-- I05 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/05-orbital-atom.svg" alt="Icon 05 – Orbital Atom" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I05</div>
+          <div class="card-name">Orbital Atom</div>
+          <div class="card-desc">3-ring atom model · Science & precision</div>
+        </div>
+      </div>
+
+      <!-- I06 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/06-prism-icon.svg" alt="Icon 06 – Prism Icon" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I06</div>
+          <div class="card-name">Prism</div>
+          <div class="card-desc">Compact light prism · Spectrum output</div>
+        </div>
+      </div>
+
+      <!-- I07 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/07-globe-wire.svg" alt="Icon 07 – Globe Wire" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I07</div>
+          <div class="card-name">Globe Wire</div>
+          <div class="card-desc">Wireframe globe · Global cloud platform</div>
+        </div>
+      </div>
+
+      <!-- I08 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/08-circuit-s.svg" alt="Icon 08 – Circuit S" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I08</div>
+          <div class="card-name">Circuit S</div>
+          <div class="card-desc">PCB trace letter S · Technical identity</div>
+        </div>
+      </div>
+
+      <!-- I09 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/09-infinity-glow.svg" alt="Icon 09 – Infinity Glow" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I09</div>
+          <div class="card-name">Infinity Glow</div>
+          <div class="card-desc">Neon infinity symbol · Purple→cyan gradient</div>
+        </div>
+      </div>
+
+      <!-- I10 -->
+      <div class="card">
+        <div class="svg-wrap">
+          <img src="icons/10-portal-depth.svg" alt="Icon 10 – Portal Depth" />
+        </div>
+        <div class="card-meta">
+          <div class="card-badge">I10</div>
+          <div class="card-name">Portal Depth</div>
+          <div class="card-desc">Converging ring portal · Gateway to BTP</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</body>
+</html>

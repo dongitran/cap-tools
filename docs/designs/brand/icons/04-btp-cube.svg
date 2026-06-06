@@ -1,0 +1,189 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Background gradient -->
+    <linearGradient id="I04-bg" x1="0" y1="0" x2="256" y2="256"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#060C1A"/>
+      <stop offset="100%" stop-color="#030810"/>
+    </linearGradient>
+
+    <!-- Top face gradient (most lit) -->
+    <linearGradient id="I04-topFace" x1="59" y1="88" x2="197" y2="128"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+
+    <!-- Left face gradient (mid tone) -->
+    <linearGradient id="I04-leftFace" x1="59" y1="88" x2="128" y2="208"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E40AF"/>
+    </linearGradient>
+
+    <!-- Right face gradient (darkest — in shadow) -->
+    <linearGradient id="I04-rightFace" x1="197" y1="88" x2="128" y2="208"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#1D4ED8"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+
+    <!-- Cube ambient glow -->
+    <filter id="I04-cubeGlow" x="-20%" y="-10%" width="140%" height="120%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Edge highlight glow -->
+    <filter id="I04-edgeGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Clip for grid lines on top face -->
+    <clipPath id="I04-topFaceClip">
+      <polygon points="128,48 197,88 128,128 59,88"/>
+    </clipPath>
+
+    <clipPath id="I04-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="256" height="256" rx="46" fill="url(#I04-bg)"/>
+
+  <!-- Subtle ambient glow behind cube -->
+  <ellipse cx="128" cy="130" rx="100" ry="95"
+           fill="#1D4ED8" opacity="0.07"
+           filter="url(#I04-cubeGlow)"
+           clip-path="url(#I04-card)"/>
+
+  <!-- ══════════════════════════════
+       ISOMETRIC CUBE
+       s = 80, center at (128,128)
+
+       Vertices:
+       A = (128, 48)   — top apex
+       B = (197, 88)   — top-right
+       C = (128, 128)  — center (top front bottom / left&right top)
+       D = (59, 88)    — top-left
+       E = (197, 168)  — right-bottom
+       F = (128, 208)  — front-bottom
+       G = (59, 168)   — left-bottom
+
+       Top face:      A-B-C-D
+       Right face:    B-E-F-C
+       Left face:     D-C-F-G
+  ══════════════════════════════ -->
+
+  <!-- ── FACE FILLS ── -->
+  <!-- Left face (front-left, medium shade) -->
+  <polygon points="59,88 128,128 128,208 59,168"
+           fill="url(#I04-leftFace)"/>
+
+  <!-- Right face (front-right, darkest) -->
+  <polygon points="197,88 197,168 128,208 128,128"
+           fill="url(#I04-rightFace)"/>
+
+  <!-- Top face (most lit) -->
+  <polygon points="128,48 197,88 128,128 59,88"
+           fill="url(#I04-topFace)"/>
+
+  <!-- ── ISOMETRIC DOT GRID on top face ── -->
+  <!--
+    Grid points on top face (3×3 interior grid + border):
+    The top face is a rhombus. Create a regular isometric grid within it.
+    Direction 1: along A→B / D→C vector: (69, 40) / 4 = step (17.25, 10)
+    Direction 2: along A→D / B→C vector: (-69, 40) / 4 = step (-17.25, 10)
+
+    Starting from A(128,48), create 4×4 grid points
+    (i, j) point = A + i*(17.25, 10) + j*(-17.25, 10)
+
+    Interior points (i=1..3, j=1..3):
+    (1,1): 128+17.25-17.25, 48+10+10 = 128, 68
+    (1,2): 128+17.25-34.5, 48+10+20 = 110.75, 78 ≈ 111, 78
+    (1,3): 128+17.25-51.75, 48+10+30 = 93.5, 88 ≈ 94, 88
+    (2,1): 128+34.5-17.25, 48+20+10 = 145.25, 78 ≈ 145, 78
+    (2,2): 128+34.5-34.5, 48+20+20 = 128, 88
+    (2,3): 128+34.5-51.75, 48+20+30 = 110.75, 98 ≈ 111, 98
+    (3,1): 128+51.75-17.25, 48+30+10 = 162.5, 88 ≈ 163, 88 [=B vertex area]
+    (3,2): 128+51.75-34.5, 48+30+20 = 145.25, 98 ≈ 145, 98
+    (3,3): 128+51.75-51.75, 48+30+30 = 128, 108
+  -->
+  <g clip-path="url(#I04-topFaceClip)" fill="#93C5FD" opacity="0.45">
+    <circle cx="128" cy="68"  r="2.5"/>
+    <circle cx="111" cy="78"  r="2.5"/>
+    <circle cx="94"  cy="88"  r="2.5"/>
+    <circle cx="145" cy="78"  r="2.5"/>
+    <circle cx="128" cy="88"  r="3"/>    <!-- center of top face -->
+    <circle cx="111" cy="98"  r="2.5"/>
+    <circle cx="163" cy="88"  r="2.5"/>
+    <circle cx="145" cy="98"  r="2.5"/>
+    <circle cx="128" cy="108" r="2.5"/>
+  </g>
+
+  <!-- ── EDGE LINES (highlighting key edges) ── -->
+
+  <!-- Top edges (brightest — facing light) -->
+  <!-- A to B (top apex to top-right) -->
+  <line x1="128" y1="48" x2="197" y2="88"
+        stroke="#BFDBFE" stroke-width="2.5" opacity="0.9"
+        filter="url(#I04-edgeGlow)"/>
+  <!-- A to D (top apex to top-left) -->
+  <line x1="128" y1="48" x2="59" y2="88"
+        stroke="#BFDBFE" stroke-width="2.5" opacity="0.85"
+        filter="url(#I04-edgeGlow)"/>
+  <!-- D to C (top-left to center) -->
+  <line x1="59" y1="88" x2="128" y2="128"
+        stroke="#60A5FA" stroke-width="2" opacity="0.7"/>
+  <!-- B to C (top-right to center) -->
+  <line x1="197" y1="88" x2="128" y2="128"
+        stroke="#60A5FA" stroke-width="2" opacity="0.6"/>
+
+  <!-- Vertical edges (left face visible edges) -->
+  <line x1="59" y1="88" x2="59" y2="168"
+        stroke="#2563EB" stroke-width="2" opacity="0.65"/>
+  <line x1="128" y1="128" x2="128" y2="208"
+        stroke="#3B82F6" stroke-width="2" opacity="0.55"/>
+  <!-- Vertical right edge -->
+  <line x1="197" y1="88" x2="197" y2="168"
+        stroke="#1D4ED8" stroke-width="2" opacity="0.5"/>
+
+  <!-- Bottom edges -->
+  <line x1="59" y1="168" x2="128" y2="208"
+        stroke="#2563EB" stroke-width="2" opacity="0.55"/>
+  <line x1="197" y1="168" x2="128" y2="208"
+        stroke="#1D4ED8" stroke-width="1.8" opacity="0.45"/>
+
+  <!-- ── VERTEX CORNER SPHERES (corners catch the light) ── -->
+  <!-- Top apex (A) — brightest -->
+  <circle cx="128" cy="48" r="5"
+          fill="#93C5FD" opacity="0.9"
+          filter="url(#I04-edgeGlow)"/>
+  <circle cx="128" cy="48" r="3" fill="white" opacity="0.8"/>
+  <!-- Top-right (B) -->
+  <circle cx="197" cy="88" r="4" fill="#60A5FA" opacity="0.8"/>
+  <!-- Top-left (D) -->
+  <circle cx="59" cy="88" r="4" fill="#60A5FA" opacity="0.75"/>
+  <!-- Front center (C) -->
+  <circle cx="128" cy="128" r="3.5" fill="#3B82F6" opacity="0.7"/>
+  <!-- Lower corners — dimmer -->
+  <circle cx="59"  cy="168" r="3" fill="#2563EB" opacity="0.55"/>
+  <circle cx="197" cy="168" r="3" fill="#1D4ED8" opacity="0.5"/>
+  <circle cx="128" cy="208" r="4" fill="#1E40AF" opacity="0.65"/>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="white" stroke-width="1.5" opacity="0.07"/>
+
+</svg>

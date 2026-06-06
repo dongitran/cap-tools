@@ -1,0 +1,181 @@
+<svg width="400" height="130" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Deep space bg gradient -->
+    <radialGradient id="L07-bgGrd" cx="64" cy="65" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0D0520"/>
+      <stop offset="55%"  stop-color="#08031A"/>
+      <stop offset="100%" stop-color="#050210"/>
+    </radialGradient>
+
+    <!-- Vortex arm glow -->
+    <filter id="L07-armGlow" x="-30%" y="-30%" width="160%" height="160%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Core star glow -->
+    <filter id="L07-coreGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Particle glow (small) -->
+    <filter id="L07-particleGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="L07-card">
+      <rect width="400" height="130" rx="14"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="400" height="130" rx="14" fill="#050210"/>
+  <ellipse cx="64" cy="65" rx="85" ry="72"
+           fill="url(#L07-bgGrd)" clip-path="url(#L07-card)"/>
+
+  <!-- ── DISTANT STAR FIELD ── -->
+  <g fill="white" clip-path="url(#L07-card)">
+    <circle cx="10"  cy="9"   r="0.5" opacity="0.35"/>
+    <circle cx="32"  cy="22"  r="0.4" opacity="0.28"/>
+    <circle cx="88"  cy="8"   r="0.5" opacity="0.4"/>
+    <circle cx="115" cy="18"  r="0.4" opacity="0.3"/>
+    <circle cx="18"  cy="108" r="0.5" opacity="0.35"/>
+    <circle cx="100" cy="118" r="0.4" opacity="0.3"/>
+    <circle cx="310" cy="10"  r="0.5" opacity="0.38"/>
+    <circle cx="365" cy="25"  r="0.4" opacity="0.3"/>
+    <circle cx="385" cy="100" r="0.5" opacity="0.35"/>
+    <circle cx="220" cy="122" r="0.4" opacity="0.28"/>
+  </g>
+
+  <!-- ══════════════════════════════
+       VORTEX SYSTEM — centered at (64, 65)
+  ══════════════════════════════ -->
+
+  <!-- ── OUTER DIFFUSE GLOW DISK ── -->
+  <circle cx="64" cy="65" r="55"
+          fill="#4C1D95" opacity="0.05" filter="url(#L07-coreGlow)"
+          clip-path="url(#L07-card)"/>
+
+  <!-- ── SPIRAL ARMS ──
+       Main arms: longer, brighter purple→cyan
+       Secondary arms: shorter, dimmer
+  ── -->
+  <g transform="translate(64,65)" fill="none" stroke-linecap="round">
+
+    <!-- ── Main arm 1 (0°) → sweeps upper right to right ── -->
+    <!-- Glow layer -->
+    <path d="M 0,0 C 12,-22 34,-28 50,-10"
+          stroke="#7C3AED" stroke-width="5" opacity="0.15" filter="url(#L07-armGlow)"/>
+    <!-- Mid color -->
+    <path d="M 0,0 C 12,-22 34,-28 50,-10"
+          stroke="#4F46E5" stroke-width="2.5" opacity="0.7"/>
+    <!-- Inner bright segment (near center) -->
+    <path d="M 0,0 C 8,-14 18,-18 26,-8"
+          stroke="#22D3EE" stroke-width="2" opacity="0.85"/>
+
+    <!-- ── Main arm 2 (180° mirror) → sweeps lower left ── -->
+    <path d="M 0,0 C 12,-22 34,-28 50,-10"
+          stroke="#7C3AED" stroke-width="5" opacity="0.15" filter="url(#L07-armGlow)"
+          transform="rotate(180)"/>
+    <path d="M 0,0 C 12,-22 34,-28 50,-10"
+          stroke="#4F46E5" stroke-width="2.5" opacity="0.7"
+          transform="rotate(180)"/>
+    <path d="M 0,0 C 8,-14 18,-18 26,-8"
+          stroke="#22D3EE" stroke-width="2" opacity="0.85"
+          transform="rotate(180)"/>
+
+    <!-- ── Secondary arm 1 (90°) ── -->
+    <path d="M 0,0 C 20,-8 28,8 22,26"
+          stroke="#6D28D9" stroke-width="4" opacity="0.12" filter="url(#L07-armGlow)"
+          transform="rotate(90)"/>
+    <path d="M 0,0 C 20,-8 28,8 22,26"
+          stroke="#5B21B6" stroke-width="2" opacity="0.55"
+          transform="rotate(90)"/>
+    <path d="M 0,0 C 10,-4 14,4 12,16"
+          stroke="#818CF8" stroke-width="1.5" opacity="0.7"
+          transform="rotate(90)"/>
+
+    <!-- ── Secondary arm 2 (270°) ── -->
+    <path d="M 0,0 C 20,-8 28,8 22,26"
+          stroke="#6D28D9" stroke-width="4" opacity="0.12" filter="url(#L07-armGlow)"
+          transform="rotate(270)"/>
+    <path d="M 0,0 C 20,-8 28,8 22,26"
+          stroke="#5B21B6" stroke-width="2" opacity="0.55"
+          transform="rotate(270)"/>
+    <path d="M 0,0 C 10,-4 14,4 12,16"
+          stroke="#818CF8" stroke-width="1.5" opacity="0.7"
+          transform="rotate(270)"/>
+
+  </g>
+
+  <!-- ── PARTICLES along arms ── -->
+  <g fill="#A78BFA" filter="url(#L07-particleGlow)">
+    <!-- Main arm 1 particles -->
+    <circle cx="79"  cy="52" r="1.5" opacity="0.8"/>
+    <circle cx="90"  cy="44" r="1.2" opacity="0.65"/>
+    <circle cx="104" cy="46" r="1" opacity="0.5"/>
+    <!-- Main arm 2 particles (opposite) -->
+    <circle cx="49"  cy="78" r="1.5" opacity="0.8"/>
+    <circle cx="38"  cy="86" r="1.2" opacity="0.65"/>
+    <circle cx="24"  cy="84" r="1" opacity="0.5"/>
+    <!-- Secondary arm particles -->
+    <circle cx="74"  cy="82" r="1.2" opacity="0.6"/>
+    <circle cx="78"  cy="88" r="1" opacity="0.45"/>
+    <circle cx="54"  cy="48" r="1.2" opacity="0.6"/>
+    <circle cx="50"  cy="42" r="1" opacity="0.45"/>
+  </g>
+
+  <!-- ── CORE GLOW ── -->
+  <circle cx="64" cy="65" r="18"
+          fill="#7C3AED" opacity="0.15" filter="url(#L07-coreGlow)"
+          clip-path="url(#L07-card)"/>
+  <circle cx="64" cy="65" r="10"
+          fill="#22D3EE" opacity="0.12" filter="url(#L07-coreGlow)"
+          clip-path="url(#L07-card)"/>
+
+  <!-- ── CORE BODY ── -->
+  <circle cx="64" cy="65" r="7" fill="#1E1B4B" stroke="#818CF8" stroke-width="1"/>
+  <circle cx="64" cy="65" r="4.5" fill="#4F46E5"/>
+  <circle cx="64" cy="65" r="2.5" fill="#22D3EE"/>
+  <circle cx="64" cy="65" r="1.2" fill="white" opacity="0.95"/>
+
+  <!-- ── VERTICAL DIVIDER ── -->
+  <line x1="136" y1="14" x2="136" y2="116"
+        stroke="#2D1B69" stroke-width="0.8" opacity="0.5"/>
+
+  <!-- ── LOGO TEXT ── -->
+  <text x="156" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="700"
+        fill="white" letter-spacing="-0.5">SAP</text>
+
+  <text x="156" y="84"
+        font-family="'Segoe UI Light', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="31" font-weight="300"
+        fill="#A78BFA" letter-spacing="8">TOOLS</text>
+
+  <!-- Purple underline -->
+  <line x1="156" y1="89" x2="316" y2="89"
+        stroke="#A78BFA" stroke-width="0.6" opacity="0.32"/>
+
+  <text x="157" y="109"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="9" fill="#7C3AED"
+        letter-spacing="3.5" opacity="0.9">BTP DEVELOPER KIT</text>
+
+</svg>

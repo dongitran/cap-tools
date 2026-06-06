@@ -69,12 +69,27 @@ export interface HanaTableListCacheEntry {
   readonly updatedAt: string;
 }
 
+export interface CachedLocalPackage {
+  readonly name: string;
+  readonly version: string;
+  readonly hasBuildScript: boolean;
+  readonly round: number | null;
+}
+
+export interface LocalPackagesCacheEntry {
+  /** Deterministic key: `${rootFolderPath}::${namePatterns}` — invalidated when either changes. */
+  readonly cacheKey: string;
+  readonly packages: readonly CachedLocalPackage[];
+  readonly updatedAt: string;
+}
+
 export interface CacheState {
   readonly version: 1;
   readonly settings: CacheSettings;
   readonly users: Record<string, CachedUserEntry>;
   readonly exportRootFolders: Record<string, ExportRootFolderCacheEntry>;
   readonly hanaTableLists: Record<string, HanaTableListCacheEntry>;
+  readonly localPackages?: LocalPackagesCacheEntry;
 }
 
 export function isSyncIntervalHours(

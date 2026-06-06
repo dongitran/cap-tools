@@ -203,6 +203,7 @@ let buildPublishResultMessage = '';
 let buildPublishResultTone = 'info';
 let detectedPackages = [];
 let detectedPackagesConfigured = false;
+let detectedPackagesLoading = false;
 let detectedPackagesPatterns = '';
 let detectedPackagesError = '';
 let hanaServiceOptions = null;
@@ -628,7 +629,14 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  if (msg.type === 'sapTools.localPackagesLoading') {
+    detectedPackagesLoading = msg.loading === true;
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
   if (msg.type === 'sapTools.localPackagesLoaded') {
+    detectedPackagesLoading = false;
     detectedPackagesConfigured = msg.configured === true;
     detectedPackagesPatterns = typeof msg.patterns === 'string' ? msg.patterns : '';
     detectedPackagesError = typeof msg.error === 'string' ? msg.error : '';
@@ -4405,15 +4413,26 @@ function renderDetectedPackagesInner() {
       class="small-action detected-packages-config"
       data-action="open-local-packages-settings"
       title="Configure sapTools.localPackages.namePatterns"
+      ${detectedPackagesLoading ? 'disabled' : ''}
     >Configure</button>`;
 
   if (!detectedPackagesConfigured) {
     return `
       <div class="detected-packages-head">
-        <span class="detected-packages-title">NPM Packages</span>
+        <span class="detected-packages-title">Packages</span>
         <span class="detected-packages-actions">${configureButton}</span>
       </div>
       <p class="detected-packages-empty">Set a detection regex (<code>sapTools.localPackages.namePatterns</code>) to list packages here.</p>
+    `;
+  }
+
+  if (detectedPackagesLoading && detectedPackages.length === 0) {
+    return `
+      <div class="detected-packages-head">
+        <span class="detected-packages-title">Packages</span>
+        <span class="detected-packages-actions">${configureButton}</span>
+      </div>
+      <p class="detected-packages-empty">Scanning&#8230;</p>
     `;
   }
 
@@ -4449,26 +4468,20 @@ function renderDetectedPackagesInner() {
     body = `<ol class="detected-pkg-list">${rows}</ol>`;
   }
 
-  const patternsLabel =
-    detectedPackagesPatterns.length > 0
-      ? `<span class="detected-packages-patterns" title="${escapeHtml(detectedPackagesPatterns)}">${escapeHtml(detectedPackagesPatterns)}</span>`
-      : '';
-
   const buildAllButton =
     count > 0
       ? `<button
           type="button"
-          class="primary-action detected-packages-build"
+          class="small-action detected-packages-build"
           data-action="build-publish-all"
-          title="Build & publish all detected packages to the local registry, in dependency order"
+          title="Build &amp; publish all detected packages to the local registry, in dependency order"
           ${buildPublishInProgress ? 'disabled' : ''}
-        >${buildPublishInProgress ? 'Building&#8230;' : 'Build &amp; Publish all'}</button>`
+        >${buildPublishInProgress ? 'Building&#8230;' : 'Build All'}</button>`
       : '';
 
   return `
     <div class="detected-packages-head">
-      <span class="detected-packages-title">NPM Packages (${String(count)})</span>
-      ${patternsLabel}
+      <span class="detected-packages-title">Packages (${String(count)})</span>
       <span class="detected-packages-actions">
         ${buildAllButton}
         ${configureButton}

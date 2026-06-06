@@ -6,6 +6,7 @@ import {
 } from './cacheModels';
 import type {
   CachedAppEntry,
+  CachedLocalPackage,
   CachedOrgEntry,
   CachedRegionEntry,
   CachedSpaceEntry,
@@ -15,6 +16,7 @@ import type {
   CachedUserEntry,
   HanaTableDisplayCacheEntry,
   HanaTableListCacheEntry,
+  LocalPackagesCacheEntry,
   RegionAccessState,
   SyncIntervalHours,
 } from './cacheModels';
@@ -255,6 +257,38 @@ export class CacheStore {
     }
 
     return storedUser;
+  }
+
+  async getLocalPackages(
+    cacheKey: string
+  ): Promise<LocalPackagesCacheEntry | null> {
+    if (cacheKey.trim().length === 0) {
+      return null;
+    }
+    const state = await this.readState();
+    const entry = state.localPackages;
+    if (entry?.cacheKey !== cacheKey) {
+      return null;
+    }
+    return entry;
+  }
+
+  async setLocalPackages(
+    cacheKey: string,
+    packages: readonly CachedLocalPackage[]
+  ): Promise<void> {
+    if (cacheKey.trim().length === 0) {
+      return;
+    }
+    const entry: LocalPackagesCacheEntry = {
+      cacheKey,
+      packages: [...packages],
+      updatedAt: new Date().toISOString(),
+    };
+    await this.updateState((state) => ({
+      ...state,
+      localPackages: entry,
+    }));
   }
 
   async updateState(
@@ -637,6 +671,8 @@ function normalizeRegion(rawRegion: unknown): CachedRegionEntry | null {
     updatedAt,
   };
 }
+
+
 
 function normalizeOrgs(rawOrgs: unknown): readonly CachedOrgEntry[] {
   if (!Array.isArray(rawOrgs)) {

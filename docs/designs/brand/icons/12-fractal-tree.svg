@@ -1,0 +1,299 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <linearGradient id="I12-bg" x1="128" y1="0" x2="128" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#000C08"/>
+      <stop offset="50%"  stop-color="#020E0A"/>
+      <stop offset="100%" stop-color="#040F0B"/>
+    </linearGradient>
+
+    <!-- Branch glow -->
+    <filter id="I12-branchGlow" x="-30%" y="-10%" width="160%" height="120%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Leaf glow -->
+    <filter id="I12-leafGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Root glow -->
+    <filter id="I12-rootGlow" x="-20%" y="-10%" width="140%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="I12-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- BACKGROUND -->
+  <rect width="256" height="256" rx="46" fill="url(#I12-bg)"/>
+
+  <!-- Subtle ground ambiance -->
+  <ellipse cx="128" cy="232" rx="90" ry="16"
+           fill="#00FF88" opacity="0.04" clip-path="url(#I12-card)"/>
+
+  <!--
+    FRACTAL TREE — L-system inspired, 5 levels deep
+    Trunk base: (128, 230) pointing up
+    Each branch: parent endpoint becomes child base
+    Branching angle: ±32° from parent direction
+    Scale factor: 0.72 per level
+
+    Level 0 (trunk):  (128,230)→(128,170)  length=60
+    Level 1:
+      Left  branch from (128,170): angle=-32° from vertical → endpoint (128-32sin32°,170-32cos32°) using L1_len=43
+        = (128-22.8,170-36.4) = (105,134)
+      Right branch from (128,170): angle=+32° → (151,134)
+
+    Level 2 (from each L1 endpoint):
+      From (105,134) L bend  ±32° → L=31
+        LL: (105-31sin64°,134-31cos64°)=(105-27.9,134-13.5)=(77,121)
+        LR: (105+31sin0°, 134-31cos0°)=(105,103)
+      From (151,134) R bend  ±32° → L=31
+        RL: (151-31sin0°, 134-31cos0°)=(151,103)
+        RR: (151+31sin64°,134-31cos64°)=(179,121)
+
+    Level 3 (L=22 each, ±32° compounding):
+      From (77,121):
+        LLL: (77-22sin96°,121-22cos96°)=(77-21.9,121+2.3)=(55,123) [going left-down slightly]
+        LLR: (77+22sin32°,121-22cos32°)=(77+11.7,121-18.7)=(89,102)
+      From (105,103):
+        LRL: (105-22sin32°,103-22cos32°)=(105-11.7,103-18.7)=(93,84)
+        LRR: (105+22sin96°,103-22cos96°)=(105+21.9,103+2.3)=(127,105)
+      From (151,103):
+        RLL: (151-22sin96°,103-22cos96°)=(151-21.9,103+2.3)=(129,105)
+        RLR: (151+22sin32°,103-22cos32°)=(151+11.7,103-18.7)=(163,84)
+      From (179,121):
+        RRL: (179-22sin32°,121-22cos32°)=(179-11.7,121-18.7)=(167,102)
+        RRR: (179+22sin96°,121-22cos96°)=(179+21.9,121+2.3)=(201,123)
+
+    Level 4 (L=16, terminal leaves):
+      From (55,123): endpoints ~(42,110) and (62,108)
+      From (89,102): endpoints ~(76,89)  and (95,86)
+      From (93,84):  endpoints ~(80,71)  and (100,68)
+      From (127,105): endpoint ~(118,88) and (134,86)
+      From (129,105): endpoint ~(122,88) and (138,86) [merges with above approximately]
+      From (163,84): endpoint ~(152,68)  and (172,68)
+      From (167,102): endpoints ~(158,86) and (175,89)
+      From (201,123): endpoints ~(192,108) and (208,110)
+
+    Let me simplify the calculation and just hardcode aesthetically:
+  -->
+
+  <!-- ── LEVEL 0: TRUNK ── -->
+  <line x1="128" y1="234" x2="128" y2="172"
+        stroke="#22FF88" stroke-width="5" opacity="0.85"
+        filter="url(#I12-rootGlow)" clip-path="url(#I12-card)"/>
+  <line x1="128" y1="234" x2="128" y2="172"
+        stroke="white" stroke-width="1.5" opacity="0.5"
+        clip-path="url(#I12-card)"/>
+
+  <!-- ── LEVEL 1: PRIMARY BRANCHES ── -->
+  <!-- Left primary: (128,172)→(102,132) -->
+  <line x1="128" y1="172" x2="102" y2="132"
+        stroke="#1EE877" stroke-width="4" opacity="0.8"
+        filter="url(#I12-branchGlow)" clip-path="url(#I12-card)"/>
+  <!-- Right primary: (128,172)→(154,132) -->
+  <line x1="128" y1="172" x2="154" y2="132"
+        stroke="#1EE877" stroke-width="4" opacity="0.8"
+        filter="url(#I12-branchGlow)" clip-path="url(#I12-card)"/>
+
+  <!-- ── LEVEL 2: SECONDARY BRANCHES ── -->
+  <!-- From (102,132): -->
+  <line x1="102" y1="132" x2="74" y2="106"
+        stroke="#1AD469" stroke-width="2.8" opacity="0.75"
+        filter="url(#I12-branchGlow)" clip-path="url(#I12-card)"/>
+  <line x1="102" y1="132" x2="112" y2="100"
+        stroke="#1AD469" stroke-width="2.8" opacity="0.75"
+        filter="url(#I12-branchGlow)" clip-path="url(#I12-card)"/>
+  <!-- From (154,132): -->
+  <line x1="154" y1="132" x2="144" y2="100"
+        stroke="#1AD469" stroke-width="2.8" opacity="0.75"
+        filter="url(#I12-branchGlow)" clip-path="url(#I12-card)"/>
+  <line x1="154" y1="132" x2="182" y2="106"
+        stroke="#1AD469" stroke-width="2.8" opacity="0.75"
+        filter="url(#I12-branchGlow)" clip-path="url(#I12-card)"/>
+
+  <!-- ── LEVEL 3: TERTIARY BRANCHES ── -->
+  <!-- From (74,106): -->
+  <line x1="74" y1="106" x2="52" y2="86"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <line x1="74" y1="106" x2="82" y2="82"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <!-- From (112,100): -->
+  <line x1="112" y1="100" x2="98" y2="76"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <line x1="112" y1="100" x2="124" y2="72"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <!-- From (144,100): -->
+  <line x1="144" y1="100" x2="132" y2="72"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <line x1="144" y1="100" x2="158" y2="76"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <!-- From (182,106): -->
+  <line x1="182" y1="106" x2="174" y2="82"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+  <line x1="182" y1="106" x2="204" y2="86"
+        stroke="#14C058" stroke-width="2" opacity="0.7"
+        clip-path="url(#I12-card)"/>
+
+  <!-- ── LEVEL 4: QUATERNARY BRANCHES ── -->
+  <!-- From (52,86): -->
+  <line x1="52" y1="86" x2="38" y2="70"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="52" y1="86" x2="58" y2="66"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (82,82): -->
+  <line x1="82" y1="82" x2="72" y2="64"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="82" y1="82" x2="90" y2="62"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (98,76): -->
+  <line x1="98" y1="76" x2="88" y2="58"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="98" y1="76" x2="104" y2="56"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (124,72): -->
+  <line x1="124" y1="72" x2="114" y2="52"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="124" y1="72" x2="128" y2="48"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (132,72): -->
+  <line x1="132" y1="72" x2="128" y2="50"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="132" y1="72" x2="142" y2="52"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (158,76): -->
+  <line x1="158" y1="76" x2="152" y2="56"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="158" y1="76" x2="168" y2="58"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (174,82): -->
+  <line x1="174" y1="82" x2="166" y2="62"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="174" y1="82" x2="182" y2="64"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <!-- From (204,86): -->
+  <line x1="204" y1="86" x2="198" y2="66"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+  <line x1="204" y1="86" x2="218" y2="70"
+        stroke="#0EAA4A" stroke-width="1.3" opacity="0.65"
+        clip-path="url(#I12-card)"/>
+
+  <!-- ── TERMINAL LEAF NODES (bioluminescent dots) ── -->
+  <!-- Glow halos -->
+  <g fill="#00FF88" opacity="0.22" filter="url(#I12-leafGlow)" clip-path="url(#I12-card)">
+    <circle cx="38"  cy="70"  r="6"/>
+    <circle cx="58"  cy="66"  r="6"/>
+    <circle cx="72"  cy="64"  r="6"/>
+    <circle cx="90"  cy="62"  r="6"/>
+    <circle cx="88"  cy="58"  r="6"/>
+    <circle cx="104" cy="56"  r="6"/>
+    <circle cx="114" cy="52"  r="6"/>
+    <circle cx="128" cy="48"  r="8"/>
+    <circle cx="142" cy="52"  r="6"/>
+    <circle cx="152" cy="56"  r="6"/>
+    <circle cx="168" cy="58"  r="6"/>
+    <circle cx="166" cy="62"  r="6"/>
+    <circle cx="182" cy="64"  r="6"/>
+    <circle cx="198" cy="66"  r="6"/>
+    <circle cx="218" cy="70"  r="6"/>
+  </g>
+  <!-- Leaf bodies -->
+  <g fill="#22FF88" clip-path="url(#I12-card)">
+    <circle cx="38"  cy="70"  r="3"   opacity="0.9"/>
+    <circle cx="58"  cy="66"  r="3"   opacity="0.9"/>
+    <circle cx="72"  cy="64"  r="3"   opacity="0.9"/>
+    <circle cx="90"  cy="62"  r="3"   opacity="0.9"/>
+    <circle cx="88"  cy="58"  r="3"   opacity="0.9"/>
+    <circle cx="104" cy="56"  r="3"   opacity="0.9"/>
+    <circle cx="114" cy="52"  r="3.2" opacity="0.95"/>
+    <circle cx="128" cy="48"  r="4.5" opacity="1"/>
+    <circle cx="142" cy="52"  r="3.2" opacity="0.95"/>
+    <circle cx="152" cy="56"  r="3"   opacity="0.9"/>
+    <circle cx="168" cy="58"  r="3"   opacity="0.9"/>
+    <circle cx="166" cy="62"  r="3"   opacity="0.9"/>
+    <circle cx="182" cy="64"  r="3"   opacity="0.9"/>
+    <circle cx="198" cy="66"  r="3"   opacity="0.9"/>
+    <circle cx="218" cy="70"  r="3"   opacity="0.9"/>
+  </g>
+  <!-- White specular center -->
+  <g fill="white" opacity="0.7" clip-path="url(#I12-card)">
+    <circle cx="128" cy="48" r="1.8"/>
+    <circle cx="114" cy="52" r="1.2"/>
+    <circle cx="142" cy="52" r="1.2"/>
+  </g>
+
+  <!-- Junction nodes (branch points) -->
+  <g fill="#00CC66" opacity="0.8" clip-path="url(#I12-card)">
+    <circle cx="128" cy="172" r="3.5"/>
+    <circle cx="102" cy="132" r="3"/>
+    <circle cx="154" cy="132" r="3"/>
+    <circle cx="74"  cy="106" r="2.5"/>
+    <circle cx="112" cy="100" r="2.5"/>
+    <circle cx="144" cy="100" r="2.5"/>
+    <circle cx="182" cy="106" r="2.5"/>
+    <circle cx="52"  cy="86"  r="2"/>
+    <circle cx="82"  cy="82"  r="2"/>
+    <circle cx="98"  cy="76"  r="2"/>
+    <circle cx="124" cy="72"  r="2"/>
+    <circle cx="132" cy="72"  r="2"/>
+    <circle cx="158" cy="76"  r="2"/>
+    <circle cx="174" cy="82"  r="2"/>
+    <circle cx="204" cy="86"  r="2"/>
+  </g>
+
+  <!-- Ground roots (subtle) -->
+  <line x1="128" y1="234" x2="96"  y2="248"
+        stroke="#00AA44" stroke-width="2" opacity="0.3"
+        clip-path="url(#I12-card)"/>
+  <line x1="128" y1="234" x2="160" y2="248"
+        stroke="#00AA44" stroke-width="2" opacity="0.3"
+        clip-path="url(#I12-card)"/>
+  <line x1="128" y1="234" x2="128" y2="250"
+        stroke="#00AA44" stroke-width="2.5" opacity="0.4"
+        clip-path="url(#I12-card)"/>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="#00FF88" stroke-width="1" opacity="0.09"/>
+
+</svg>

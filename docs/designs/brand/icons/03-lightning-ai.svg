@@ -1,0 +1,164 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Card background -->
+    <linearGradient id="I03-bg" x1="0" y1="0" x2="256" y2="256"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#060A0F"/>
+      <stop offset="100%" stop-color="#040810"/>
+    </linearGradient>
+
+    <!-- Bolt fill: top yellow → bottom orange -->
+    <linearGradient id="I03-bolt" x1="128" y1="24" x2="128" y2="232"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FFF176"/>
+      <stop offset="50%"  stop-color="#FFB300"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+
+    <!-- Bolt outer glow (electric effect) -->
+    <filter id="I03-boltGlow" x="-20%" y="-5%" width="140%" height="110%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#FFD600" flood-opacity="0.4" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Neural node glow (cool blue) -->
+    <filter id="I03-neuralGlow" x="-200%" y="-200%" width="500%" height="500%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Spark glow (tip of bolt) -->
+    <filter id="I03-sparkGlow" x="-300%" y="-300%" width="700%" height="700%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Clip to bolt shape (for neural overlay) -->
+    <clipPath id="I03-boltClip">
+      <polygon points="158,24 90,24 76,138 122,138 106,232 174,112 130,112"/>
+    </clipPath>
+
+    <clipPath id="I03-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="256" height="256" rx="46" fill="url(#I03-bg)"/>
+
+  <!-- Subtle warm ambient behind bolt -->
+  <ellipse cx="128" cy="128" rx="90" ry="110"
+           fill="#FF8F00" opacity="0.04" clip-path="url(#I03-card)"/>
+
+  <!-- ── BOLT OUTER GLOW ──  -->
+  <polygon points="158,24 90,24 76,138 122,138 106,232 174,112 130,112"
+           fill="url(#I03-bolt)" opacity="0.3"
+           filter="url(#I03-boltGlow)"
+           clip-path="url(#I03-card)"/>
+
+  <!-- ── BOLT MAIN BODY ── -->
+  <polygon points="158,24 90,24 76,138 122,138 106,232 174,112 130,112"
+           fill="url(#I03-bolt)"/>
+
+  <!-- Bolt inner highlight (left edge gets more light) -->
+  <polygon points="158,24 90,24 76,138 122,138 106,232 174,112 130,112"
+           fill="none" stroke="#FFF9C4" stroke-width="2" opacity="0.5"/>
+
+  <!-- Left-face bright edge highlight -->
+  <polyline points="90,24 76,138"
+            stroke="#FFFDE7" stroke-width="2.5" stroke-linecap="round"
+            fill="none" opacity="0.7"/>
+
+  <!-- ── NEURAL NETWORK OVERLAY (inside bolt, clipped) ── -->
+  <!--
+    Neural nodes inside bolt:
+    D1: (120, 52)  - upper section
+    D2: (100, 80)  - upper left
+    D3: (140, 88)  - upper right
+    D4: (108, 114) - mid above bend
+    D5: (125, 128) - bend center
+    D6: (118, 155) - lower left
+    D7: (138, 160) - lower right
+    D8: (100, 184) - bottom left
+    D9: (128, 195) - bottom center
+    D10: (145, 206) - bottom right
+  -->
+
+  <!-- Neural connections -->
+  <g clip-path="url(#I03-boltClip)" stroke="#00B4FF" stroke-width="1.5"
+     stroke-linecap="round" opacity="0.55" fill="none">
+    <line x1="120" y1="52"  x2="100" y2="80"/>    <!-- D1-D2 -->
+    <line x1="120" y1="52"  x2="140" y2="88"/>    <!-- D1-D3 -->
+    <line x1="100" y1="80"  x2="108" y2="114"/>   <!-- D2-D4 -->
+    <line x1="140" y1="88"  x2="108" y2="114"/>   <!-- D3-D4 -->
+    <line x1="100" y1="80"  x2="140" y2="88"/>    <!-- D2-D3 -->
+    <line x1="108" y1="114" x2="125" y2="128"/>   <!-- D4-D5 -->
+    <line x1="125" y1="128" x2="118" y2="155"/>   <!-- D5-D6 -->
+    <line x1="125" y1="128" x2="138" y2="160"/>   <!-- D5-D7 -->
+    <line x1="118" y1="155" x2="138" y2="160"/>   <!-- D6-D7 -->
+    <line x1="118" y1="155" x2="100" y2="184"/>   <!-- D6-D8 -->
+    <line x1="138" y1="160" x2="128" y2="195"/>   <!-- D7-D9 -->
+    <line x1="100" y1="184" x2="128" y2="195"/>   <!-- D8-D9 -->
+    <line x1="128" y1="195" x2="145" y2="206"/>   <!-- D9-D10 -->
+    <line x1="100" y1="184" x2="145" y2="206"/>   <!-- D8-D10 -->
+  </g>
+
+  <!-- Neural node halos -->
+  <g clip-path="url(#I03-boltClip)" fill="#00D4FF" opacity="0.35"
+     filter="url(#I03-neuralGlow)">
+    <circle cx="120" cy="52"  r="6"/>
+    <circle cx="125" cy="128" r="8"/>
+    <circle cx="128" cy="195" r="6"/>
+  </g>
+
+  <!-- Neural node bodies -->
+  <g clip-path="url(#I03-boltClip)" fill="#00BFFF" opacity="0.85">
+    <circle cx="120" cy="52"  r="3.5"/>
+    <circle cx="100" cy="80"  r="3"/>
+    <circle cx="140" cy="88"  r="3"/>
+    <circle cx="108" cy="114" r="3"/>
+    <circle cx="125" cy="128" r="4.5"/>   <!-- center node, biggest -->
+    <circle cx="118" cy="155" r="3"/>
+    <circle cx="138" cy="160" r="3"/>
+    <circle cx="100" cy="184" r="3"/>
+    <circle cx="128" cy="195" r="3.5"/>
+    <circle cx="145" cy="206" r="2.5"/>
+  </g>
+
+  <!-- ── SPARKS at top of bolt ── -->
+  <!-- Small radiating lines from top tip area -->
+  <g stroke="#FFFDE7" stroke-width="1.5" stroke-linecap="round" opacity="0.6"
+     clip-path="url(#I03-card)">
+    <line x1="124" y1="24" x2="116" y2="8"/>    <!-- top spark up-left -->
+    <line x1="124" y1="24" x2="135" y2="10"/>   <!-- top spark up-right -->
+    <line x1="124" y1="24" x2="108" y2="16"/>   <!-- top spark left -->
+    <line x1="124" y1="24" x2="142" y2="18"/>   <!-- top spark right -->
+  </g>
+
+  <!-- Spark glow at tip -->
+  <circle cx="124" cy="24" r="6"
+          fill="#FFF176" opacity="0.5"
+          filter="url(#I03-sparkGlow)"
+          clip-path="url(#I03-card)"/>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="white" stroke-width="1.5" opacity="0.07"/>
+
+</svg>

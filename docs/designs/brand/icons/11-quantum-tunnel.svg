@@ -1,0 +1,189 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <radialGradient id="I11-bg" cx="128" cy="128" r="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#020A1A"/>
+      <stop offset="70%"  stop-color="#010610"/>
+      <stop offset="100%" stop-color="#000408"/>
+    </radialGradient>
+
+    <!-- Tunnel depth gradient -->
+    <linearGradient id="I11-tunnelDepth" x1="0" y1="0" x2="256" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#00FFFF" stop-opacity="0.8"/>
+      <stop offset="40%"  stop-color="#0088FF" stop-opacity="0.3"/>
+      <stop offset="50%"  stop-color="#0044AA" stop-opacity="0.05"/>
+      <stop offset="60%"  stop-color="#0088FF" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#00FFFF" stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- Barrier gradient -->
+    <linearGradient id="I11-barrier" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FF6B00" stop-opacity="0"/>
+      <stop offset="30%"  stop-color="#FF6B00" stop-opacity="0.9"/>
+      <stop offset="50%"  stop-color="#FFB347" stop-opacity="1"/>
+      <stop offset="70%"  stop-color="#FF6B00" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#FF6B00" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Particle glow -->
+    <filter id="I11-particleGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Wave glow -->
+    <filter id="I11-waveGlow" x="-10%" y="-40%" width="120%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Tunnel rings glow -->
+    <filter id="I11-ringGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="I11-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- BACKGROUND -->
+  <rect width="256" height="256" rx="46" fill="url(#I11-bg)"/>
+
+  <!-- ── TUNNEL RINGS (receding into center — perspective illusion) ── -->
+  <!-- Outer rings (large, bright — near end of tunnel) -->
+  <ellipse cx="128" cy="128" rx="108" ry="108"
+           fill="none" stroke="#003A5C" stroke-width="1.5" opacity="0.7"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="96" ry="96"
+           fill="none" stroke="#004A70" stroke-width="1.2" opacity="0.65"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="82" ry="82"
+           fill="none" stroke="#005880" stroke-width="1" opacity="0.6"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="66" ry="66"
+           fill="none" stroke="#006A94" stroke-width="1" opacity="0.55"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="50" ry="50"
+           fill="none" stroke="#0082B0" stroke-width="0.8" opacity="0.5"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="36" ry="36"
+           fill="none" stroke="#00A0CC" stroke-width="0.8" opacity="0.45"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="22" ry="22"
+           fill="none" stroke="#00C4E8" stroke-width="0.6" opacity="0.4"
+           clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="10" ry="10"
+           fill="none" stroke="#00E8FF" stroke-width="0.5" opacity="0.35"
+           clip-path="url(#I11-card)"/>
+
+  <!-- Glowing tunnel rings (front two) -->
+  <ellipse cx="128" cy="128" rx="108" ry="108"
+           fill="none" stroke="#00CCFF" stroke-width="2.5" opacity="0.55"
+           filter="url(#I11-ringGlow)" clip-path="url(#I11-card)"/>
+  <ellipse cx="128" cy="128" rx="82" ry="82"
+           fill="none" stroke="#0099EE" stroke-width="1.5" opacity="0.4"
+           filter="url(#I11-ringGlow)" clip-path="url(#I11-card)"/>
+
+  <!-- ── POTENTIAL BARRIER (glowing vertical band in center) ── -->
+  <!-- Barrier fill -->
+  <rect x="112" y="20" width="28" height="216"
+        fill="url(#I11-barrier)" opacity="0.18"
+        clip-path="url(#I11-card)"/>
+  <!-- Barrier left edge -->
+  <line x1="112" y1="20" x2="112" y2="236"
+        stroke="#FF8C00" stroke-width="1.5" opacity="0.7"
+        clip-path="url(#I11-card)"/>
+  <!-- Barrier right edge -->
+  <line x1="140" y1="20" x2="140" y2="236"
+        stroke="#FF8C00" stroke-width="1.5" opacity="0.7"
+        clip-path="url(#I11-card)"/>
+  <!-- Barrier center core -->
+  <line x1="126" y1="20" x2="126" y2="236"
+        stroke="#FFCC66" stroke-width="0.8" opacity="0.4"
+        clip-path="url(#I11-card)"/>
+  <line x1="130" y1="20" x2="130" y2="236"
+        stroke="#FFCC66" stroke-width="0.8" opacity="0.4"
+        clip-path="url(#I11-card)"/>
+
+  <!-- ── INCOMING WAVE FUNCTION (left side) ── -->
+  <!-- Wave before barrier — high amplitude sinusoid -->
+  <!-- Using path approximation of sin wave from x=18 to x=112 -->
+  <!-- Amplitude 32px, wavelength ~40px, center y=128 -->
+  <path d="M 18,128 C 23,96 33,96 38,128 C 43,160 53,160 58,128 C 63,96 73,96 78,128 C 83,160 93,160 98,128 C 103,96 108,96 112,128"
+        fill="none" stroke="#00EEFF" stroke-width="2.5" opacity="0.85"
+        filter="url(#I11-waveGlow)" clip-path="url(#I11-card)"/>
+  <path d="M 18,128 C 23,96 33,96 38,128 C 43,160 53,160 58,128 C 63,96 73,96 78,128 C 83,160 93,160 98,128 C 103,96 108,96 112,128"
+        fill="none" stroke="white" stroke-width="1" opacity="0.5"
+        clip-path="url(#I11-card)"/>
+
+  <!-- ── EVANESCENT WAVE (inside barrier — exponential decay) ── -->
+  <!-- Decays rapidly to near-zero: from x=112 to x=140 -->
+  <path d="M 112,128 C 116,118 120,114 124,112 C 128,111 132,111 136,112 C 138,112.5 140,113 140,113"
+        fill="none" stroke="#FF9900" stroke-width="2" opacity="0.75"
+        filter="url(#I11-waveGlow)" clip-path="url(#I11-card)"/>
+
+  <!-- ── TRANSMITTED WAVE (right side — lower amplitude, phase shifted) ── -->
+  <!-- ~35% amplitude of incoming wave -->
+  <path d="M 140,113 C 144,96 154,96 158,113 C 162,130 172,130 176,113 C 180,96 190,96 194,113 C 198,130 208,130 212,113 C 216,96 222,96 226,113"
+        fill="none" stroke="#00EEFF" stroke-width="1.8" opacity="0.55"
+        filter="url(#I11-waveGlow)" clip-path="url(#I11-card)"/>
+  <path d="M 140,113 C 144,96 154,96 158,113 C 162,130 172,130 176,113 C 180,96 190,96 194,113 C 198,130 208,130 212,113 C 216,96 222,96 226,113"
+        fill="none" stroke="white" stroke-width="0.8" opacity="0.35"
+        clip-path="url(#I11-card)"/>
+
+  <!-- ── INCOMING PARTICLE (left of barrier — glowing sphere) ── -->
+  <circle cx="58" cy="128" r="14"
+          fill="#00CCFF" opacity="0.18"
+          filter="url(#I11-particleGlow)" clip-path="url(#I11-card)"/>
+  <circle cx="58" cy="128" r="7"  fill="#00EEFF" opacity="0.9"/>
+  <circle cx="58" cy="128" r="3.5" fill="white" opacity="0.95"/>
+
+  <!-- Particle motion trail -->
+  <line x1="22" y1="128" x2="44" y2="128"
+        stroke="#00CCFF" stroke-width="1.5" opacity="0.4"
+        stroke-dasharray="4 3" clip-path="url(#I11-card)"/>
+
+  <!-- ── TUNNELED PARTICLE (right of barrier — dimmer, ghostly) ── -->
+  <circle cx="196" cy="113" r="12"
+          fill="#00AADD" opacity="0.12"
+          filter="url(#I11-particleGlow)" clip-path="url(#I11-card)"/>
+  <circle cx="196" cy="113" r="5.5" fill="#00CCEE" opacity="0.65"/>
+  <circle cx="196" cy="113" r="2.5" fill="white" opacity="0.7"/>
+
+  <!-- Probability arrows — indicating direction -->
+  <!-- Left arrow head -->
+  <polygon points="52,122 44,128 52,134" fill="#00DDFF" opacity="0.6"/>
+  <!-- Right arrow head -->
+  <polygon points="204,107 212,113 204,119" fill="#00BBDD" opacity="0.45"/>
+
+  <!-- ── PROBABILITY DENSITY FILL (under left wave) ── -->
+  <path d="M 18,128 C 23,96 33,96 38,128 C 43,160 53,160 58,128 C 63,96 73,96 78,128 C 83,160 93,160 98,128 C 103,96 108,96 112,128 L 112,128 L 18,128 Z"
+        fill="#00AAFF" opacity="0.05" clip-path="url(#I11-card)"/>
+
+  <!-- ── QUANTUM PROBABILITY DOTS (scattered — wave function collapse) ── -->
+  <g fill="#00FFFF" opacity="0.5" clip-path="url(#I11-card)">
+    <circle cx="32"  cy="128" r="1.2"/>
+    <circle cx="68"  cy="128" r="1.5"/>
+    <circle cx="92"  cy="128" r="1"/>
+    <circle cx="165" cy="113" r="1.2"/>
+    <circle cx="185" cy="113" r="1"/>
+    <circle cx="218" cy="113" r="1.2"/>
+  </g>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="#00CCFF" stroke-width="1" opacity="0.1"/>
+
+</svg>

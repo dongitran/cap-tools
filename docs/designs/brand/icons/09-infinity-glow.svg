@@ -1,0 +1,194 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Dark background with faint purple tint -->
+    <radialGradient id="I09-bg" cx="128" cy="128" r="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0C0420"/>
+      <stop offset="65%"  stop-color="#060114"/>
+      <stop offset="100%" stop-color="#040010"/>
+    </radialGradient>
+
+    <!-- Loop glow layers -->
+    <filter id="I09-outerGlow" x="-25%" y="-30%" width="150%" height="160%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="I09-midGlow" x="-15%" y="-20%" width="130%" height="140%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="I09-sharpGlow" x="-10%" y="-15%" width="120%" height="130%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Center crossing glow -->
+    <filter id="I09-crossGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="I09-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="256" height="256" rx="46" fill="url(#I09-bg)"/>
+
+  <!-- Ambient field -->
+  <ellipse cx="128" cy="128" rx="110" ry="70"
+           fill="#7C3AED" opacity="0.05" clip-path="url(#I09-card)"/>
+
+  <!-- ══════════════════════════════════════════════
+       INFINITY/LEMNISCATE PATH
+       The lemniscate of Bernoulli, centered at (128,128)
+
+       Standard parametric: x = a*cos(t)/(1+sin²(t)), y = a*sin(t)*cos(t)/(1+sin²(t))
+       For SVG bezier approximation of ∞ symbol, use two opposing Bézier curves:
+
+       Left lobe (center ~85, 128):
+       Right lobe (center ~171, 128):
+
+       The ∞ symbol drawn as a path:
+       Upper path (going right): start at (128,128), up-right, loop around right center, back
+       Lower path (going left): start at (128,128), down-left, loop around left center, back
+
+       Bezier ∞ approximation (well-known SVG approach):
+       The crossing is at (128, 128).
+
+       Right lobe: M 128,128 C 150,88 214,88 214,128 C 214,168 150,168 128,128
+       Left lobe:  M 128,128 C 106,88 42,88 42,128 C 42,168 106,168 128,128
+
+       This creates a clean ∞ shape. Let me use scale factor for better size:
+       Using a=86 (half-width of the symbol):
+       Right center: (128+43, 128) = (171, 128)
+       Left center:  (128-43, 128) = (85, 128)
+       Top/bottom extent: ±40px from y=128
+
+       Right lobe: M 128,128 C 150,86 214,86 214,128 C 214,170 150,170 128,128
+       Left lobe:  M 128,128 C 106,86 42,86 42,128 C 42,170 106,170 128,128
+  ══════════════════════════════════════════════ -->
+
+  <!-- ── OUTER AURA ── -->
+  <!-- Right lobe aura (purple) -->
+  <path d="M 128,128 C 150,86 214,86 214,128 C 214,170 150,170 128,128"
+        fill="none" stroke="#7C3AED" stroke-width="24" stroke-linecap="round"
+        opacity="0.12" filter="url(#I09-outerGlow)"
+        clip-path="url(#I09-card)"/>
+  <!-- Left lobe aura (cyan) -->
+  <path d="M 128,128 C 106,86 42,86 42,128 C 42,170 106,170 128,128"
+        fill="none" stroke="#0EA5E9" stroke-width="24" stroke-linecap="round"
+        opacity="0.12" filter="url(#I09-outerGlow)"
+        clip-path="url(#I09-card)"/>
+
+  <!-- ── MID CORONA ── -->
+  <path d="M 128,128 C 150,86 214,86 214,128 C 214,170 150,170 128,128"
+        fill="none" stroke="#A855F7" stroke-width="12" stroke-linecap="round"
+        opacity="0.28" filter="url(#I09-midGlow)"
+        clip-path="url(#I09-card)"/>
+  <path d="M 128,128 C 106,86 42,86 42,128 C 42,170 106,170 128,128"
+        fill="none" stroke="#22D3EE" stroke-width="12" stroke-linecap="round"
+        opacity="0.28" filter="url(#I09-midGlow)"
+        clip-path="url(#I09-card)"/>
+
+  <!-- ── INNER BRIGHT TUBE ── -->
+  <!-- Right lobe: starts purple at crossing, transitions to magenta at far right -->
+  <path d="M 128,128 C 150,86 214,86 214,128 C 214,170 150,170 128,128"
+        fill="none" stroke="#C084FC" stroke-width="5.5" stroke-linecap="round"
+        opacity="0.82" filter="url(#I09-sharpGlow)"
+        clip-path="url(#I09-card)"/>
+  <!-- Left lobe: starts cyan at crossing, transitions to blue at far left -->
+  <path d="M 128,128 C 106,86 42,86 42,128 C 42,170 106,170 128,128"
+        fill="none" stroke="#38BDF8" stroke-width="5.5" stroke-linecap="round"
+        opacity="0.82" filter="url(#I09-sharpGlow)"
+        clip-path="url(#I09-card)"/>
+
+  <!-- ── CORE WHITE LINE (hottest center of tube) ── -->
+  <path d="M 128,128 C 150,86 214,86 214,128 C 214,170 150,170 128,128"
+        fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"
+        opacity="0.45"
+        clip-path="url(#I09-card)"/>
+  <path d="M 128,128 C 106,86 42,86 42,128 C 42,170 106,170 128,128"
+        fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"
+        opacity="0.45"
+        clip-path="url(#I09-card)"/>
+
+  <!-- ══════════════════════════════════════════════
+       PARTICLES flowing along the ∞ path
+       Right lobe particles (purple tones):
+       - Top-right: (171, 88) — topmost of right lobe
+       - Far right: (214, 128)
+       - Bottom-right: (171, 168)
+       Left lobe particles (cyan tones):
+       - Top-left: (85, 88)
+       - Far left: (42, 128)
+       - Bottom-left: (85, 168)
+  ══════════════════════════════════════════════ -->
+
+  <!-- Right lobe particles -->
+  <g fill="#C084FC" clip-path="url(#I09-card)">
+    <circle cx="162" cy="91"  r="3.5" opacity="0.9"/>
+    <circle cx="200" cy="100" r="3"   opacity="0.82"/>
+    <circle cx="214" cy="128" r="4"   opacity="0.88"/>  <!-- far right -->
+    <circle cx="200" cy="156" r="3"   opacity="0.82"/>
+    <circle cx="162" cy="165" r="3.5" opacity="0.9"/>
+  </g>
+  <!-- Right particle glow halos -->
+  <g fill="#C084FC" opacity="0.25" filter="url(#I09-crossGlow)" clip-path="url(#I09-card)">
+    <circle cx="214" cy="128" r="8"/>
+  </g>
+
+  <!-- Left lobe particles -->
+  <g fill="#38BDF8" clip-path="url(#I09-card)">
+    <circle cx="94"  cy="91"  r="3.5" opacity="0.9"/>
+    <circle cx="56"  cy="100" r="3"   opacity="0.82"/>
+    <circle cx="42"  cy="128" r="4"   opacity="0.88"/>  <!-- far left -->
+    <circle cx="56"  cy="156" r="3"   opacity="0.82"/>
+    <circle cx="94"  cy="165" r="3.5" opacity="0.9"/>
+  </g>
+  <!-- Left particle glow halos -->
+  <g fill="#38BDF8" opacity="0.25" filter="url(#I09-crossGlow)" clip-path="url(#I09-card)">
+    <circle cx="42" cy="128" r="8"/>
+  </g>
+
+  <!-- ══════════════════════════════════════════════
+       CENTER CROSSING — where both loops meet
+       This is the most energetic point
+  ══════════════════════════════════════════════ -->
+  <!-- Crossing glow -->
+  <circle cx="128" cy="128" r="20"
+          fill="white" opacity="0.07" filter="url(#I09-crossGlow)"
+          clip-path="url(#I09-card)"/>
+  <!-- Crossing point body -->
+  <circle cx="128" cy="128" r="7"  fill="#E879F9" opacity="0.88"/>
+  <circle cx="128" cy="128" r="4"  fill="white" opacity="0.9"/>
+  <circle cx="128" cy="128" r="2"  fill="white"/>
+
+  <!-- Crossing point glow ring -->
+  <circle cx="128" cy="128" r="12"
+          fill="none" stroke="#E879F9" stroke-width="1.5"
+          opacity="0.4" clip-path="url(#I09-card)"/>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="#A855F7" stroke-width="1" opacity="0.1"/>
+
+</svg>

@@ -1,0 +1,181 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Deep dark quantum field background -->
+    <radialGradient id="I05-bg" cx="128" cy="128" r="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#000A1A"/>
+      <stop offset="60%"  stop-color="#020610"/>
+      <stop offset="100%" stop-color="#050210"/>
+    </radialGradient>
+
+    <!-- Quantum core glow -->
+    <radialGradient id="I05-core" cx="128" cy="128" r="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="40%"  stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </radialGradient>
+
+    <!-- Lobe glow (probability cloud) -->
+    <filter id="I05-lobeGlow" x="-50%" y="-50%" width="200%" height="200%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Ring glow -->
+    <filter id="I05-ringGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Core star glow -->
+    <filter id="I05-coreGlow" x="-150%" y="-150%" width="400%" height="400%"
+            color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="I05-card">
+      <rect width="256" height="256" rx="46"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── BACKGROUND ── -->
+  <rect width="256" height="256" rx="46" fill="url(#I05-bg)"/>
+
+  <!-- ══════════════════════════════
+       QUANTUM INTERFERENCE RINGS
+       Center (128,128), radii: 18,32,46,60,74,88,102
+       Constructive (bright): r=18, 46, 74, 102
+       Destructive (dim):     r=32, 60, 88
+  ══════════════════════════════ -->
+
+  <!-- Constructive rings (bright — wave peaks) -->
+  <g fill="none" filter="url(#I05-ringGlow)" clip-path="url(#I05-card)">
+    <circle cx="128" cy="128" r="18"  stroke="#22D3EE" stroke-width="2.2" opacity="0.92"/>
+    <circle cx="128" cy="128" r="46"  stroke="#0EA5E9" stroke-width="1.8" opacity="0.75"/>
+    <circle cx="128" cy="128" r="74"  stroke="#0284C7" stroke-width="1.5" opacity="0.58"/>
+    <circle cx="128" cy="128" r="102" stroke="#075985" stroke-width="1.2" opacity="0.40"/>
+  </g>
+
+  <!-- Destructive rings (dim — wave troughs) -->
+  <g fill="none">
+    <circle cx="128" cy="128" r="32" stroke="#0A2A40" stroke-width="1"   opacity="0.55"/>
+    <circle cx="128" cy="128" r="60" stroke="#071F30" stroke-width="0.8" opacity="0.45"/>
+    <circle cx="128" cy="128" r="88" stroke="#050F20" stroke-width="0.6" opacity="0.35"/>
+  </g>
+
+  <!-- ══════════════════════════════
+       QUANTUM PROBABILITY LOBES (p-orbital shape)
+       4 lobes at 0°, 90°, 180°, 270°
+       Each lobe: elongated bright ellipse along axis
+  ══════════════════════════════ -->
+
+  <!-- Horizontal lobes (0° and 180°) -->
+  <!-- Right lobe -->
+  <ellipse cx="164" cy="128" rx="40" ry="18"
+           fill="#22D3EE" opacity="0.12" filter="url(#I05-lobeGlow)"
+           clip-path="url(#I05-card)"/>
+  <ellipse cx="164" cy="128" rx="28" ry="10"
+           fill="#22D3EE" opacity="0.25" clip-path="url(#I05-card)"/>
+
+  <!-- Left lobe -->
+  <ellipse cx="92" cy="128" rx="40" ry="18"
+           fill="#22D3EE" opacity="0.12" filter="url(#I05-lobeGlow)"
+           clip-path="url(#I05-card)"/>
+  <ellipse cx="92" cy="128" rx="28" ry="10"
+           fill="#22D3EE" opacity="0.25" clip-path="url(#I05-card)"/>
+
+  <!-- Vertical lobes (90° and 270°) -->
+  <!-- Top lobe -->
+  <ellipse cx="128" cy="92" rx="18" ry="40"
+           fill="#60A5FA" opacity="0.12" filter="url(#I05-lobeGlow)"
+           clip-path="url(#I05-card)"/>
+  <ellipse cx="128" cy="92" rx="10" ry="28"
+           fill="#60A5FA" opacity="0.22" clip-path="url(#I05-card)"/>
+
+  <!-- Bottom lobe -->
+  <ellipse cx="128" cy="164" rx="18" ry="40"
+           fill="#60A5FA" opacity="0.12" filter="url(#I05-lobeGlow)"
+           clip-path="url(#I05-card)"/>
+  <ellipse cx="128" cy="164" rx="10" ry="28"
+           fill="#60A5FA" opacity="0.22" clip-path="url(#I05-card)"/>
+
+  <!-- ══════════════════════════════
+       REFERENCE AXES (nodal planes)
+  ══════════════════════════════ -->
+  <!-- Horizontal and vertical nodal lines -->
+  <line x1="16" y1="128" x2="240" y2="128"
+        stroke="#0A2A3A" stroke-width="1" opacity="0.6"/>
+  <line x1="128" y1="16" x2="128" y2="240"
+        stroke="#0A2A3A" stroke-width="1" opacity="0.6"/>
+  <!-- Diagonal nodal lines at 45° and 135° -->
+  <line x1="44"  y1="44"  x2="212" y2="212"
+        stroke="#071520" stroke-width="0.7" opacity="0.5"/>
+  <line x1="212" y1="44"  x2="44"  y2="212"
+        stroke="#071520" stroke-width="0.7" opacity="0.5"/>
+
+  <!-- ══════════════════════════════
+       PROBABILITY NODES (bright dots at ring-lobe intersections)
+  ══════════════════════════════ -->
+  <!-- On horizontal axis, at constructive ring radii: -->
+  <!-- Right side: -->
+  <g fill="#22D3EE">
+    <circle cx="146" cy="128" r="3.5" opacity="0.9"/>   <!-- r=18 right -->
+    <circle cx="174" cy="128" r="4.5" opacity="0.85"/>  <!-- r=46 right -->
+    <circle cx="202" cy="128" r="3.5" opacity="0.7"/>   <!-- r=74 right -->
+    <circle cx="230" cy="128" r="2.5" opacity="0.5"/>   <!-- r=102 right -->
+  </g>
+  <!-- Left side: -->
+  <g fill="#22D3EE">
+    <circle cx="110" cy="128" r="3.5" opacity="0.9"/>   <!-- r=18 left -->
+    <circle cx="82"  cy="128" r="4.5" opacity="0.85"/>  <!-- r=46 left -->
+    <circle cx="54"  cy="128" r="3.5" opacity="0.7"/>   <!-- r=74 left -->
+    <circle cx="26"  cy="128" r="2.5" opacity="0.5"/>   <!-- r=102 left -->
+  </g>
+  <!-- Top: -->
+  <g fill="#60A5FA">
+    <circle cx="128" cy="110" r="3.5" opacity="0.9"/>   <!-- r=18 top -->
+    <circle cx="128" cy="82"  r="4.5" opacity="0.85"/>  <!-- r=46 top -->
+    <circle cx="128" cy="54"  r="3.5" opacity="0.7"/>   <!-- r=74 top -->
+    <circle cx="128" cy="26"  r="2.5" opacity="0.5"/>   <!-- r=102 top -->
+  </g>
+  <!-- Bottom: -->
+  <g fill="#60A5FA">
+    <circle cx="128" cy="146" r="3.5" opacity="0.9"/>
+    <circle cx="128" cy="174" r="4.5" opacity="0.85"/>
+    <circle cx="128" cy="202" r="3.5" opacity="0.7"/>
+    <circle cx="128" cy="230" r="2.5" opacity="0.5"/>
+  </g>
+
+  <!-- Node glow halos for bright ring nodes -->
+  <g fill="#22D3EE" opacity="0.3" filter="url(#I05-coreGlow)">
+    <circle cx="174" cy="128" r="8"/>
+    <circle cx="82"  cy="128" r="8"/>
+    <circle cx="128" cy="82"  r="8"/>
+    <circle cx="128" cy="174" r="8"/>
+  </g>
+
+  <!-- ── QUANTUM CORE ── -->
+  <circle cx="128" cy="128" r="18"
+          fill="#0EA5E9" opacity="0.2" filter="url(#I05-coreGlow)"
+          clip-path="url(#I05-card)"/>
+  <circle cx="128" cy="128" r="9"  fill="url(#I05-core)"/>
+  <circle cx="128" cy="128" r="5"  fill="white" opacity="0.95"/>
+  <circle cx="128" cy="128" r="2.5" fill="white"/>
+
+  <!-- ── INNER BORDER ── -->
+  <rect x="3" y="3" width="250" height="250" rx="44"
+        fill="none" stroke="#22D3EE" stroke-width="1" opacity="0.08"/>
+
+</svg>
