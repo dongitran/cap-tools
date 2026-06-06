@@ -1886,7 +1886,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   background: var(--frame-bg);
   overflow: hidden;
   flex: 0 1 auto;
-  max-height: 50%;
+  max-height: 40%;
 }
 
 .detected-packages-head {

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.30 (stable)
+- **UI/UX Tweaks:** Adjusted layout balance in the service export tab so the Packages list takes up to a maximum of 40% height, granting the Apps list a minimum of 60% height.
+
 ## 0.10.29 (stable)
 - **Refactoring:** Split `prototype.css` into multiple modular source files (`src/styles/`) and integrated CSS compilation into the automated build script to improve maintainability with zero UI regressions.
 
