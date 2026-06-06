@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.26 (stable)
+- **Refactoring:** Split `prototype.js` into multiple modular source files (`src/`) and added an automated build script to concatenate them back into `assets/prototype.js` to improve maintainability while ensuring zero regression in runtime scope or VS Code webview execution.
+
 ## 0.10.25 (stable)
 - Fine-tune package list layout to precisely match the app log list styling.
 

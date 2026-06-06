@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.10.25",
+  "version": "0.10.26",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -66,7 +66,10 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["appName", "folderName"],
+              "required": [
+                "appName",
+                "folderName"
+              ],
               "properties": {
                 "appName": {
                   "type": "string",
@@ -96,7 +99,10 @@
             "type": "string",
             "scope": "application",
             "default": "prerelease-timestamp",
-            "enum": ["prerelease-timestamp", "none"],
+            "enum": [
+              "prerelease-timestamp",
+              "none"
+            ],
             "markdownEnumDescriptions": [
               "Before publishing, temporarily set a unique prerelease version (`<base>-local.<timestamp>`) so the local registry accepts the republish, then restore the original version in `package.json`.",
               "Publish the version as-is. Republishing the same version will fail unless you bump it yourself."
@@ -246,7 +252,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postbuild": "node ./scripts/vendor-hdb.mjs && node ./scripts/vendor-table-name-formatters.mjs && node ./scripts/vendor-cf-sync.mjs",
+    "build:prototype": "node ./scripts/build-prototype.mjs",
+    "postbuild": "node ./scripts/vendor-hdb.mjs && node ./scripts/vendor-table-name-formatters.mjs && node ./scripts/vendor-cf-sync.mjs && npm run build:prototype",
     "watch": "tsc -watch -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\"",
