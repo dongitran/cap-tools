@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.27 (stable)
+- **UI/UX Tweaks:**
+  - Prevent package row height jump during build state transitions by normalizing button and status indicator heights.
+  - Remove hover shift (`translateY(-1px)`) and reduce width for package "Build" buttons.
+  - Add padding to empty packages message.
+  - Make package list take up to a maximum of 50% available vertical space, splitting fairly with the App logs list.
+  - Rename "Export Service Artifacts" tab title to "Services & Packages".
+
 ## 0.10.26 (stable)
 - **Refactoring:** Split `prototype.js` into multiple modular source files (`src/`) and added an automated build script to concatenate them back into `assets/prototype.js` to improve maintainability while ensuring zero regression in runtime scope or VS Code webview execution.
 

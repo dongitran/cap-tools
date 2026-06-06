@@ -1874,7 +1874,8 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   border-radius: 10px;
   background: var(--frame-bg);
   overflow: hidden;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-height: 50%;
 }
 
 .detected-packages-head {
@@ -1922,6 +1923,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 .detected-packages-empty {
   margin: 0;
+  padding: 0 10px 8px;
   font-size: 0.66rem;
   color: var(--muted-color);
 }
@@ -1953,7 +1955,6 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   padding: 0;
   display: flex;
   flex-direction: column;
-  max-height: 160px;
   overflow: auto;
 }
 
@@ -2020,14 +2021,15 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease;
-  padding: 2px 8px;
-  min-width: 69px;
+  padding: 1px 8px;
+  min-width: 56px;
+  min-height: 18px;
   font-size: 0.6rem;
   z-index: 1;
 }
 
 .detected-pkg-single-build:hover {
-  transform: none;
+  transform: none !important;
 }
 
 .detected-pkg:hover .detected-pkg-single-build {
@@ -2060,6 +2062,7 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   display: inline-flex;
   align-items: center;
   min-width: 84px;
+  min-height: 18px;
   justify-content: flex-end;
   font-size: 0.6rem;
   font-weight: 600;

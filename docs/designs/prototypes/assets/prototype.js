@@ -4428,7 +4428,7 @@ function renderServiceExportTab() {
     <section class="group-card service-export-tab" aria-label="Service artifact export">
       <header class="service-export-header">
         <h2>
-          Export Service Artifacts
+          Services & Packages
           ${renderRegistryBadge()}
         </h2>
       </header>
@@ -4459,7 +4459,7 @@ function renderServiceExportTab() {
           data-role="service-export-search"
           value="${escapeHtml(serviceExportSearchKeyword)}"
           placeholder="Search services or mapped paths"
-          aria-label="Search services in Export Service Artifacts"
+          aria-label="Search services in Services & Packages"
         />
       </label>
 
