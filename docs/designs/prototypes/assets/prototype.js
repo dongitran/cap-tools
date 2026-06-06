@@ -4536,8 +4536,8 @@ function updateSinglePackageBuildUI(pkgName) {
 
     const roundLabel = pkg && typeof pkg.round === 'number' ? `${String(pkg.round + 1)}` : '—';
     li.innerHTML = `
-      <span class="detected-pkg-name" title="${escapeHtml(pkgName)}">${escapeHtml(pkgName)}</span>
       <span class="detected-pkg-order" title="Build order">#${escapeHtml(roundLabel)}</span>
+      <span class="detected-pkg-name" title="${escapeHtml(pkgName)}">${escapeHtml(pkgName)}</span>
       ${actionCell}
     `;
   }
@@ -4633,8 +4633,8 @@ function renderDetectedPackagesInner() {
           (hasResult ? ' is-result' : '');
         return `
           <li class="${rowClass}" data-pkg-name="${escapeHtml(pkg.name)}">
-            <span class="detected-pkg-name" title="${escapeHtml(pkg.name)}">${escapeHtml(pkg.name)}</span>
             <span class="detected-pkg-order" title="Build order">#${escapeHtml(roundLabel)}</span>
+            <span class="detected-pkg-name" title="${escapeHtml(pkg.name)}">${escapeHtml(pkg.name)}</span>
             ${actionCell}
           </li>`;
       })

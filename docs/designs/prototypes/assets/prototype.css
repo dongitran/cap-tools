@@ -1870,10 +1870,9 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 .detected-packages {
   display: flex;
   flex-direction: column;
-  gap: 0;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: transparent;
+  border-radius: 10px;
+  background: var(--frame-bg);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -1960,14 +1959,12 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 .detected-pkg {
   display: grid;
-  /* name | order-badge | action */
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  /* order-badge | name | action */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  font-size: 0.69rem;
-  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 76%, var(--mix-base));
-  padding: 7px 10px;
-  min-height: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 74%, var(--mix-base));
 }
 
 .detected-pkg:last-child {
@@ -1976,13 +1973,18 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 /* Build order number — muted, compact */
 .detected-pkg-order {
-  font-size: 0.6rem;
-  font-weight: 600;
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--muted-color);
   white-space: nowrap;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  border-radius: 999px;
+  padding: 2px 7px;
 }
 
 .detected-pkg-name {
+  font-size: 0.69rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
