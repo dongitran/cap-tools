@@ -2201,7 +2201,7 @@ function handleServiceExportAction(action, actionElement) {
     buildPublishInProgress = true;
     buildPublishOrder = [];
     buildPublishStatuses = {};
-    buildPublishResultMessage = \`Building & publishing \${packageName}…\`;
+    buildPublishResultMessage = `Building & publishing ${packageName}…`;
     buildPublishResultTone = 'info';
     vscodeApi.postMessage({
       type: BUILD_SINGLE_PACKAGE_MESSAGE_TYPE,

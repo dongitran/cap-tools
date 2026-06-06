@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.12 (stable)
+- Fix WebView syntax error preventing the UI from loading.
+
 ## 0.10.11 (stable)
 - Removed "no build" UI flag; packages without a build script now appear normally.
 - Added a "Build" button to each package in the detected local packages list, appearing on hover to build & publish a single package.
