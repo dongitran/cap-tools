@@ -1,0 +1,452 @@
+:root {
+  --design-page-bg: #fff7eb;
+  --design-frame-bg: #fffdfa;
+  --design-surface-bg: #fff5e6;
+  --design-border-color: #efd1a8;
+  --design-text-color: #4d2f12;
+  --design-muted-color: #845f34;
+  --design-accent-color: #dd7a12;
+  --design-accent-soft: #ffe3c0;
+  --design-chip-text: #6f3f09;
+  --design-panel-shadow: none;
+  --design-title-font: "Gill Sans", "Trebuchet MS", sans-serif;
+  --design-body-font: "Verdana", "Tahoma", sans-serif;
+  --page-bg: var(--design-page-bg);
+  --frame-bg: var(--design-frame-bg);
+  --surface-bg: var(--design-surface-bg);
+  --border-color: var(--design-border-color);
+  --text-color: var(--design-text-color);
+  --muted-color: var(--design-muted-color);
+  --accent-color: var(--design-accent-color);
+  --accent-soft: var(--design-accent-soft);
+  --chip-text: var(--design-chip-text);
+  --mix-base: #ffffff;
+  --mix-ink: #000000;
+  --focus-ring-color: #0078d4;
+  --state-success-fg: #0b5f31;
+  --state-success-bg: #dff6e7;
+  --state-success-border: #9ad5ad;
+  --state-danger-fg: #7a2a1e;
+  --state-danger-bg: #ffebe6;
+  --state-danger-border: #efb2a7;
+  --pattern-opacity: 0.38;
+  --panel-shadow: var(--design-panel-shadow);
+  --title-font: var(--design-title-font);
+  --body-font: var(--design-body-font);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body.prototype-page {
+  background: var(--page-bg);
+  color: var(--text-color);
+  font-family: var(--body-font);
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+body.prototype-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--pattern-opacity);
+  z-index: 0;
+}
+
+body.vscode-light.prototype-page {
+  --page-bg: color-mix(
+    in oklab,
+    var(--design-page-bg) 72%,
+    var(--vscode-sideBar-background, #f3f4f9)
+  );
+  --frame-bg: color-mix(
+    in oklab,
+    var(--design-frame-bg) 72%,
+    var(--vscode-editorWidget-background, #ffffff)
+  );
+  --surface-bg: color-mix(in oklab, var(--design-surface-bg) 76%, var(--frame-bg));
+  --border-color: color-mix(
+    in oklab,
+    var(--design-border-color) 70%,
+    var(--vscode-sideBar-border, #d8dee9)
+  );
+  --text-color: color-mix(
+    in oklab,
+    var(--design-text-color) 82%,
+    var(--vscode-foreground, #1f2937)
+  );
+  --muted-color: color-mix(in oklab, var(--design-muted-color) 78%, var(--text-color));
+  --accent-color: color-mix(
+    in oklab,
+    var(--design-accent-color) 68%,
+    var(--vscode-button-background, #0e639c)
+  );
+  --accent-soft: color-mix(in oklab, var(--design-accent-soft) 72%, var(--frame-bg));
+  --chip-text: color-mix(in oklab, var(--design-chip-text) 82%, var(--text-color));
+  --focus-ring-color: var(--vscode-focusBorder, #005fb8);
+  --state-success-fg: #0f6b3d;
+  --state-success-bg: #e2f6e9;
+  --state-success-border: #a8dbba;
+  --state-danger-fg: #8a3022;
+  --state-danger-bg: #ffebe5;
+  --state-danger-border: #f2b9ae;
+  --pattern-opacity: 0.24;
+}
+
+body.vscode-dark.prototype-page {
+  --page-bg: color-mix(
+    in oklab,
+    var(--vscode-sideBar-background, #1f1f1f) 90%,
+    #06080d
+  );
+  --frame-bg: color-mix(
+    in oklab,
+    var(--page-bg) 82%,
+    #0a1019
+  );
+  --surface-bg: color-mix(in oklab, var(--frame-bg) 88%, #121a29);
+  --border-color: color-mix(
+    in oklab,
+    var(--vscode-sideBar-border, #3f4a5a) 75%,
+    #596783
+  );
+  --text-color: color-mix(in oklab, var(--vscode-foreground, #d4d4d4) 92%, #e7ecf2);
+  --muted-color: color-mix(in oklab, var(--text-color) 60%, var(--frame-bg));
+  --accent-color: color-mix(
+    in oklab,
+    var(--design-accent-color) 46%,
+    var(--vscode-button-background, #0e639c)
+  );
+  --accent-soft: color-mix(in oklab, var(--accent-color) 18%, var(--frame-bg));
+  --chip-text: color-mix(in oklab, var(--accent-color) 36%, var(--text-color));
+  --mix-base: #090f18;
+  --mix-ink: #f4f9ff;
+  --focus-ring-color: var(--vscode-focusBorder, #3794ff);
+  --state-success-fg: #81dfb2;
+  --state-success-bg: color-mix(in oklab, #11895e 28%, var(--frame-bg));
+  --state-success-border: color-mix(in oklab, #81dfb2 48%, var(--frame-bg));
+  --state-danger-fg: #ffad9f;
+  --state-danger-bg: color-mix(in oklab, #973d32 28%, var(--frame-bg));
+  --state-danger-border: color-mix(in oklab, #ffad9f 46%, var(--frame-bg));
+  --pattern-opacity: 0.08;
+}
+
+body.vscode-high-contrast.prototype-page,
+body.vscode-high-contrast-light.prototype-page {
+  --page-bg: var(--vscode-editor-background, #000000);
+  --frame-bg: var(--vscode-editor-background, #000000);
+  --surface-bg: var(--vscode-editor-background, #000000);
+  --border-color: var(--vscode-contrastBorder, #ffffff);
+  --text-color: var(--vscode-foreground, #ffffff);
+  --muted-color: var(--vscode-descriptionForeground, #ffffff);
+  --accent-color: var(--vscode-focusBorder, #f8d66d);
+  --accent-soft: color-mix(in oklab, var(--accent-color) 18%, var(--frame-bg));
+  --chip-text: var(--text-color);
+  --mix-base: #000000;
+  --mix-ink: #ffffff;
+  --focus-ring-color: var(--vscode-focusBorder, #f8d66d);
+  --state-success-fg: #ffffff;
+  --state-success-bg: #1e3a1e;
+  --state-success-border: #7ee081;
+  --state-danger-fg: #ffffff;
+  --state-danger-bg: #4a1f1f;
+  --state-danger-border: #ff9f9f;
+  --pattern-opacity: 0.08;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+body.pattern-grid::before {
+  background-image:
+    linear-gradient(transparent 95%, color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 95%),
+    linear-gradient(90deg, transparent 95%, color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 95%);
+  background-size: 34px 34px;
+}
+
+body.pattern-diagonal::before {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 22px,
+    color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 22px,
+    color-mix(in oklab, var(--accent-color) 18%, var(--mix-base)) 26px
+  );
+}
+
+body.pattern-rings::before {
+  background-image: radial-gradient(
+      circle at 12% 20%,
+      color-mix(in oklab, var(--accent-color) 22%, var(--mix-base)) 0,
+      transparent 42%
+    ),
+    radial-gradient(circle at 88% 12%, color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)) 0, transparent 48%),
+    radial-gradient(circle at 50% 85%, color-mix(in oklab, var(--accent-color) 16%, var(--mix-base)) 0, transparent 50%);
+}
+
+body.pattern-gradient::before {
+  background: linear-gradient(
+    130deg,
+    color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)) 0%,
+    transparent 34%,
+    color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)) 100%
+  );
+}
+
+body.pattern-paper::before {
+  background-image:
+    radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)), transparent 33%),
+    radial-gradient(circle at 80% 0%, color-mix(in oklab, var(--accent-color) 10%, var(--mix-base)), transparent 30%);
+}
+
+body.pattern-bars::before {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 38px,
+    color-mix(in oklab, var(--accent-color) 14%, var(--mix-base)) 38px,
+    color-mix(in oklab, var(--accent-color) 14%, var(--mix-base)) 46px
+  );
+}
+
+body.pattern-wave::before {
+  background-image: repeating-radial-gradient(
+    circle at 0 100%,
+    transparent 0,
+    transparent 14px,
+    color-mix(in oklab, var(--accent-color) 15%, var(--mix-base)) 14px,
+    color-mix(in oklab, var(--accent-color) 15%, var(--mix-base)) 17px
+  );
+}
+
+body.pattern-mesh::before {
+  background-image:
+    linear-gradient(30deg, color-mix(in oklab, var(--accent-color) 15%, var(--mix-base)) 0, transparent 38%),
+    linear-gradient(150deg, color-mix(in oklab, var(--accent-color) 12%, var(--mix-base)) 0, transparent 40%);
+}
+
+body.pattern-canvas::before {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 12px,
+      color-mix(in oklab, var(--accent-color) 10%, var(--mix-base)) 12px,
+      color-mix(in oklab, var(--accent-color) 10%, var(--mix-base)) 13px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 12px,
+      color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)) 12px,
+      color-mix(in oklab, var(--accent-color) 8%, var(--mix-base)) 13px
+    );
+}
+
+body.pattern-dots::before {
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--accent-color) 20%, var(--mix-base)) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 18px 18px;
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+  height: 100dvh;
+  min-height: 100dvh;
+  min-width: 0;
+}
+
+.prototype-shell {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  background: var(--frame-bg);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.shell-header {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--surface-bg) 90%, var(--frame-bg));
+}
+
+.shell-header h1 {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.shell-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.header-icon-button {
+  border: 1px solid color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 84%, var(--frame-bg));
+  color: var(--chip-text);
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.header-icon-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--accent-color) 56%, var(--mix-base));
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--frame-bg));
+}
+
+.shell-subline {
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--muted-color);
+}
+
+.design-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--accent-color) 32%, var(--mix-base));
+  background: var(--accent-soft);
+  color: var(--chip-text);
+  padding: 5px 9px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.meta-strip {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-bg);
+  padding: 9px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.meta-strip p {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--muted-color);
+}
+
+.meta-strip strong {
+  align-self: center;
+  font-family: var(--title-font);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+.groups {
+  padding: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  grid-template-columns: 1fr;
+  min-height: 0;
+}
+
+.prototype-shell.mode-selection > .groups {
+  grid-row: 3;
+}
+
+.prototype-shell.mode-selection > .selection-tabs {
+  grid-row: 2;
+}
+
+.prototype-shell.mode-selection > .selection-quick-panel {
+  grid-row: 3;
+}
+
+.groups::-webkit-scrollbar {
+  width: 10px;
+}
+
+.groups::-webkit-scrollbar-track {
+  background: color-mix(in oklab, var(--surface-bg) 75%, var(--mix-base));
+}
+
+.groups::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--accent-color) 35%, var(--mix-base));
+  border-radius: 999px;
+}
+
+.selection-tabs {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in oklab, var(--surface-bg) 90%, var(--mix-base));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.selection-quick-panel {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+  min-height: 0;
+}
+
+.selection-custom-panel {
+  min-height: 0;
+}
+
+.quick-empty-state {
+  padding: 20px;
+  color: var(--muted-color);
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 1.45;
+}
+
+.quick-empty-state p {
+  margin: 0 0 8px;
+}
+
+.quick-empty-state p:last-child {
+  margin-bottom: 0;
+}
+
+.stage-slot {
+  display: contents;
+}

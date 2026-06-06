@@ -1,0 +1,321 @@
+.service-export-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.service-export-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-export-header h2 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-family: var(--title-font);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Inline registry status badge in the Export Service Artifacts header. */
+.registry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.registry-badge.is-running {
+  background: color-mix(in oklab, var(--state-success-fg) 14%, transparent);
+  color: var(--state-success-fg);
+  border: 1px solid color-mix(in oklab, var(--state-success-fg) 30%, transparent);
+}
+
+.registry-badge.is-installing {
+  background: color-mix(in oklab, var(--accent-color) 14%, transparent);
+  color: var(--accent-color);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 30%, transparent);
+}
+
+.service-export-subline {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted-color);
+}
+
+.service-export-search-row,
+.app-log-search-row,
+.sql-app-search-row,
+.sql-table-search-row {
+  display: block;
+}
+
+.search-input-with-icon {
+  position: relative;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  color: var(--muted-color);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.service-export-search,
+.app-log-search,
+.sql-app-search,
+.sql-table-search {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));
+  border-radius: 8px;
+  background: var(--frame-bg);
+  color: var(--text-color);
+  font-size: 0.69rem;
+  padding: 0 9px 0 31px;
+}
+
+.sql-table-search-row {
+  padding: 5px 6px 4px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+}
+
+.sql-table-search:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.service-export-root-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-export-path {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--chip-text);
+  border: 1px solid color-mix(in oklab, var(--border-color) 78%, var(--mix-base));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
+  padding: 7px 9px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-export-select-root {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .service-export-root-row {
+    flex-wrap: wrap;
+  }
+
+  .service-export-select-root {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.service-mapping-list {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--frame-bg);
+  flex: 1 1 0;
+  max-height: none;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.service-map-row {
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 76%, var(--mix-base));
+  background: transparent;
+  color: inherit;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  width: 100%;
+  min-width: 0;
+}
+
+.service-map-row:last-child {
+  border-bottom: 0;
+}
+
+.service-map-row:hover {
+  background: color-mix(in oklab, var(--accent-soft) 36%, var(--mix-base));
+}
+
+.service-map-row.is-selected {
+  background: color-mix(in oklab, var(--accent-soft) 62%, var(--mix-base));
+  border-left: 2px solid color-mix(in oklab, var(--accent-color) 62%, var(--mix-base));
+}
+
+.service-map-row.is-unmapped {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.service-map-row.is-conflict {
+  cursor: default;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) auto;
+}
+
+.service-map-row.is-conflict:hover {
+  background: transparent;
+}
+
+.service-map-row.is-conflict.is-resolved {
+  border-left: 2px solid color-mix(in oklab, var(--accent-color) 62%, var(--mix-base));
+  background: color-mix(in oklab, var(--accent-soft) 34%, var(--mix-base));
+}
+
+.service-map-row.is-unmapped:hover {
+  background: transparent;
+}
+
+.service-map-picker {
+  min-width: 0;
+}
+
+.service-map-picker select {
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--frame-bg) 90%, var(--mix-base));
+  color: var(--text-color);
+  font-size: 0.64rem;
+  padding: 4px 8px;
+}
+
+.service-map-name {
+  font-size: 0.69rem;
+  color: var(--text-color);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-map-path {
+  font-size: 0.65rem;
+  color: var(--muted-color);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.service-map-state {
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--chip-text);
+  background: color-mix(in oklab, var(--surface-bg) 86%, var(--mix-base));
+}
+
+.service-map-row.is-unmapped .service-map-state {
+  color: var(--state-danger-fg);
+  border-color: var(--state-danger-border);
+  background: color-mix(in oklab, var(--state-danger-bg) 80%, var(--mix-base));
+}
+
+/* The mapped folder path lives in this badge's tooltip (hover to view), so it no
+   longer takes up a full row column. */
+.service-map-state-mapped {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.service-export-selected {
+  margin: 0;
+  font-size: 0.69rem;
+  color: var(--muted-color);
+}
+
+.service-export-actions {
+  margin-top: 2px;
+}
+
+.service-export-button {
+  min-width: 132px;
+  border-color: #0f7f70;
+  background: linear-gradient(180deg, #15a58f, #0f7f70);
+  color: #f6fffd;
+}
+
+.service-export-sqltools-button {
+  min-height: 36px;
+}
+
+.service-export-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+body.vscode-dark.prototype-page .service-export-button {
+  border-color: #58c9b6;
+  background: linear-gradient(180deg, #2aa995, #157b6b);
+  color: #eafffa;
+}
+
+body.vscode-high-contrast.prototype-page .service-export-button,
+body.vscode-high-contrast-light.prototype-page .service-export-button {
+  border-color: var(--focus-ring-color);
+  background: var(--focus-ring-color);
+  color: var(--mix-base);
+}
+
+.service-export-status {
+  margin: 0;
+  font-size: 0.68rem;
+}
+
+.service-export-status.is-info {
+  color: var(--chip-text);
+}
+
+.service-export-status.is-success {
+  color: var(--state-success-fg);
+}
+
+.service-export-status.is-error {
+  color: var(--state-danger-fg);
+}
+
+/* local-registry-row styles removed — registry is now a badge in the header */

@@ -20,22 +20,51 @@ const files = [
   '08-cf-logs.js'
 ];
 
-let concatenatedCode = '';
+const cssFiles = [
+  '00-base.css',
+  '01-layout-cards.css',
+  '02-components.css',
+  '03-logs-panel.css',
+  '04-service-export.css',
+  '05-packages.css',
+  '06-hana-sql.css'
+];
 
-for (const file of files) {
-  const filePath = path.join(srcDir, file);
-  if (!fs.existsSync(filePath)) {
-    console.error(`Missing source file: ${file}`);
-    process.exit(1);
+function buildFile(files, srcSubdir, destFileName) {
+  const destFile = path.join(__dirname, '../docs/designs/prototypes/assets', destFileName);
+  let concatenatedCode = '';
+  
+  const isCss = destFileName.endsWith('.css');
+  
+  for (const file of files) {
+    const filePath = path.join(__dirname, '../docs/designs/prototypes/src', srcSubdir, file);
+    if (!fs.existsSync(filePath)) {
+      console.error(`Missing source file: ${file} at ${filePath}`);
+      process.exit(1);
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    
+    if (isCss) {
+      concatenatedCode += `/* --- BEGIN ${file} --- */\n`;
+    } else {
+      concatenatedCode += `// --- BEGIN ${file} ---\n`;
+    }
+    
+    concatenatedCode += content;
+    if (!content.endsWith('\n')) {
+      concatenatedCode += '\n';
+    }
+    
+    if (isCss) {
+      concatenatedCode += `/* --- END ${file} --- */\n\n`;
+    } else {
+      concatenatedCode += `// --- END ${file} ---\n\n`;
+    }
   }
-  const content = fs.readFileSync(filePath, 'utf8');
-  concatenatedCode += `// --- BEGIN ${file} ---\n`;
-  concatenatedCode += content;
-  if (!content.endsWith('\n')) {
-    concatenatedCode += '\n';
-  }
-  concatenatedCode += `// --- END ${file} ---\n\n`;
+  
+  fs.writeFileSync(destFile, concatenatedCode);
+  console.log(`Successfully built ${destFileName} from ${files.length} source files.`);
 }
 
-fs.writeFileSync(destFile, concatenatedCode);
-console.log(`Successfully built prototype.js from ${files.length} source files.`);
+buildFile(files, '', 'prototype.js');
+buildFile(cssFiles, 'styles', 'prototype.css');

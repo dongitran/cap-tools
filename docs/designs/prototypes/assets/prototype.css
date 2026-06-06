@@ -1,3 +1,4 @@
+/* --- BEGIN 00-base.css --- */
 :root {
   --design-page-bg: #fff7eb;
   --design-frame-bg: #fffdfa;
@@ -450,7 +451,9 @@ body.pattern-dots::before {
 .stage-slot {
   display: contents;
 }
+/* --- END 00-base.css --- */
 
+/* --- BEGIN 01-layout-cards.css --- */
 .group-card {
   border: 1px solid var(--border-color);
   background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
@@ -935,7 +938,9 @@ body.pattern-dots::before {
   font-size: 0.85rem;
   line-height: 1.4;
 }
+/* --- END 01-layout-cards.css --- */
 
+/* --- BEGIN 02-components.css --- */
 .stage-loading {
   color: var(--muted-color);
 }
@@ -1374,7 +1379,9 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   font-size: 0.77rem;
   color: var(--muted-color);
 }
+/* --- END 02-components.css --- */
 
+/* --- BEGIN 03-logs-panel.css --- */
 .logs-panel {
   display: grid;
   gap: 9px;
@@ -1544,7 +1551,9 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   font-size: 0.62rem;
   font-weight: 700;
 }
+/* --- END 03-logs-panel.css --- */
 
+/* --- BEGIN 04-service-export.css --- */
 .service-export-tab {
   display: flex;
   flex-direction: column;
@@ -1866,7 +1875,9 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 }
 
 /* local-registry-row styles removed — registry is now a badge in the header */
+/* --- END 04-service-export.css --- */
 
+/* --- BEGIN 05-packages.css --- */
 .detected-packages {
   display: flex;
   flex-direction: column;
@@ -2323,7 +2334,9 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   font-size: 0.72rem;
   color: var(--muted-color);
 }
+/* --- END 05-packages.css --- */
 
+/* --- BEGIN 06-hana-sql.css --- */
 .sql-workbench {
   display: grid;
   gap: 10px;
@@ -3156,3 +3169,5 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
     justify-self: start;
   }
 }
+/* --- END 06-hana-sql.css --- */
+

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.29 (stable)
+- **Refactoring:** Split `prototype.css` into multiple modular source files (`src/styles/`) and integrated CSS compilation into the automated build script to improve maintainability with zero UI regressions.
+
 ## 0.10.27 (stable)
 - **UI/UX Tweaks:**
   - Prevent package row height jump during build state transitions by normalizing button and status indicator heights.
