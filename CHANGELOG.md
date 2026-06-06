@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.19 (stable)
+- Fix local package building to run `pnpm i --shamefully-hoist` before `npm run build` to ensure dependencies are present.
+
 ## 0.10.18 (stable)
 - Hide the package version in the detected packages list (it never changes during normal use, so it added noise).
 - Remove the "Mapped x/x services" summary line — the mapping rows already convey that state.

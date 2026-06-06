@@ -16,6 +16,7 @@ export async function buildPackage(
   if (pkg.buildScript === undefined) {
     return 'skipped';
   }
+  await runCommand('pnpm', ['i', '--shamefully-hoist'], { cwd: pkg.dir, onOutput });
   await runCommand('npm', ['run', 'build'], { cwd: pkg.dir, onOutput });
   return 'built';
 }
