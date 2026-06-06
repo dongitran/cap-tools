@@ -1673,7 +1673,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   background: transparent;
   color: inherit;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   text-align: left;
@@ -1766,6 +1766,14 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   color: var(--state-danger-fg);
   border-color: var(--state-danger-border);
   background: color-mix(in oklab, var(--state-danger-bg) 80%, var(--mix-base));
+}
+
+/* The mapped folder path lives in this badge's tooltip (hover to view), so it no
+   longer takes up a full row column. */
+.service-map-state-mapped {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }
 
 .service-export-selected {

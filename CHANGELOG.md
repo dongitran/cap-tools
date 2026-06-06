@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.6 (stable)
+- Apps tab service mapping rows are more compact. The long local folder path is no longer shown inline for mapped services, and the "No matching local folder" text is dropped for unmapped ones. The mapped folder path now appears as a tooltip when you hover the "Mapped" badge, so the row no longer wastes space on a long path.
+
 ## 0.10.5 (stable)
 - Apps tab can now build and publish locally-developed npm packages to a self-hosted local registry. Pick your root folder of sibling repos, set `sapTools.localPackages.namePatterns` (e.g. `@example/`) to mark which repos are packages, and each mapped service shows a **Build & Publish** button. SAP Tools scans the packages, builds a dependency graph, and — in topological order (a package builds only after everything it depends on) — runs each package's `npm run build`, publishes it to a managed Verdaccio registry (auto-installed under `~/.saptools/verdaccio`, started/stopped from the tab), and finally reinstalls them in the service so it picks up the fresh versions. Packages are published under the dist-tag the service requests (e.g. `staging`) with a unique prerelease version each run; the package's own `version` is restored afterward so its git tree stays clean. Build progress and a per-package status list show in the tab; full build/publish logs stream to the `SAP Tools: NPM Build` output channel.
 

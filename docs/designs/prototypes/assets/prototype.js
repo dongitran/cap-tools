@@ -4463,9 +4463,6 @@ function renderServiceExportMappingRows(
 
   const mappedRows = mappingRows.map((mapping) => {
     const isSelected = selectedServiceExportAppId === mapping.appId;
-    const folderPathLabel = mapping.isMapped
-      ? formatServiceMapPathLabel(mapping.folderPath)
-      : 'No matching local folder';
 
     if (mapping.hasConflict) {
       const optionsMarkup = [
@@ -4492,7 +4489,6 @@ function renderServiceExportMappingRows(
       return `
         <div class="service-map-row is-unmapped" aria-disabled="true">
           <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
-          <span class="service-map-path" title="${escapeHtml(folderPathLabel)}">${escapeHtml(folderPathLabel)}</span>
           <span class="service-map-state">Unmapped</span>
         </div>
       `;
@@ -4509,8 +4505,10 @@ function renderServiceExportMappingRows(
           data-app-id="${escapeHtml(mapping.appId)}"
         >
           <span class="service-map-name">${escapeHtml(mapping.appName)}</span>
-          <span class="service-map-path" title="${escapeHtml(mapping.folderPath)}">${escapeHtml(folderPathLabel)}</span>
-          <span class="service-map-state">Mapped</span>
+          <span
+            class="service-map-state service-map-state-mapped"
+            title="${escapeHtml(mapping.folderPath)}"
+          >Mapped</span>
         </button>
         <button
           type="button"

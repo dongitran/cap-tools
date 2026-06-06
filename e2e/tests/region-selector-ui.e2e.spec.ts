@@ -1921,21 +1921,17 @@ test.describe('SAP Tools region selector', () => {
         const exportSqltoolsButton = document.querySelector(
           '[data-action="export-sqltools-config"]'
         );
-        const mapPathCell = document.querySelector('.service-map-path');
 
         if (
           !(exportArtifactsButton instanceof HTMLElement) ||
-          !(exportSqltoolsButton instanceof HTMLElement) ||
-          !(mapPathCell instanceof HTMLElement)
+          !(exportSqltoolsButton instanceof HTMLElement)
         ) {
           return null;
         }
 
-        const mapPathStyle = getComputedStyle(mapPathCell);
         return {
           exportArtifactsHeight: Math.round(exportArtifactsButton.getBoundingClientRect().height),
           exportSqltoolsHeight: Math.round(exportSqltoolsButton.getBoundingClientRect().height),
-          mapPathTextOverflow: mapPathStyle.textOverflow,
         };
       });
       expect(exportSnapshot).not.toBeNull();
@@ -1945,13 +1941,12 @@ test.describe('SAP Tools region selector', () => {
       expect(
         Math.abs(exportSnapshot.exportArtifactsHeight - exportSnapshot.exportSqltoolsHeight)
       ).toBeLessThanOrEqual(1);
-      expect(exportSnapshot.mapPathTextOverflow).toBe('clip');
     } finally {
       await cleanupExtensionHost(session);
     }
   });
 
-  test('User can see leading ellipsis in service mapping path when root path is long', async () => {
+  test('User can see the mapped folder path via the Mapped badge tooltip when root path is long', async () => {
     const fixtureRootPath = createLongServiceRootMappingFixture();
     const session = await launchExtensionHost({
       extraEnv: {
@@ -1975,12 +1970,13 @@ test.describe('SAP Tools region selector', () => {
       });
       await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
 
-      const apiPathCell = webviewFrame.locator('.service-map-row', {
+      // The long folder path is no longer rendered inline to save row space; it is
+      // exposed through the "Mapped" badge tooltip instead.
+      const apiMappedBadge = webviewFrame.locator('.service-map-row', {
         has: webviewFrame.locator('.service-map-name', { hasText: 'finance-uat-api' }),
-      }).locator('.service-map-path');
-      await expect(apiPathCell).toBeVisible();
-      await expect(apiPathCell).toHaveText(/^\.\.\./);
-      await expect(apiPathCell).toContainText('/finance_uat_api');
+      }).locator('.service-map-state');
+      await expect(apiMappedBadge).toHaveText(/^Mapped$/);
+      await expect(apiMappedBadge).toHaveAttribute('title', /\/finance_uat_api$/);
 
       const mappingListSizeSnapshot = await webviewFrame.evaluate(() => {
         const mappingList = document.querySelector('.service-mapping-list');
