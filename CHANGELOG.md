@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.23 (stable)
+- Replace full error text in package list with a compact red ⚠ icon to prevent layout breakage on build errors.
+- Hover the error icon to see the full error message via native tooltip.
+- Click the error icon to copy the error message to clipboard (brief green flash confirms copy).
+
 ## 0.10.22 (stable)
 - Fix package list scroll jumping on UI re-renders by explicitly preserving and restoring the scroll position of both the package list and the main view.
 - Support local registry state updates dynamically without requiring a full package list redraw.

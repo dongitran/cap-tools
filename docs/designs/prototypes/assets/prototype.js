@@ -2303,6 +2303,16 @@ function handleServiceExportAction(action, actionElement) {
     return true;
   }
 
+  if (action === 'copy-build-error') {
+    const errorText = actionElement.dataset.error ?? '';
+    if (errorText.length > 0 && navigator.clipboard?.writeText !== undefined) {
+      void navigator.clipboard.writeText(errorText);
+      actionElement.classList.add('is-copied');
+      setTimeout(() => actionElement.classList.remove('is-copied'), 1200);
+    }
+    return true;
+  }
+
   return null;
 }
 
@@ -4520,9 +4530,18 @@ function updateSinglePackageBuildUI(pkgName) {
     
     let actionCell;
     if (hasResult) {
-      const tone = buildResultSuccess ? 'is-success' : 'is-error';
-      const resultText = buildResultSuccess ? '✓ Built &amp; published' : escapeHtml(buildResultMessage);
-      actionCell = `<span class="detected-pkg-result ${tone}" title="${escapeHtml(buildResultMessage)}">${resultText}</span>`;
+      if (buildResultSuccess) {
+        actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Built &amp; published</span>`;
+      } else {
+        actionCell = `<button
+          type="button"
+          class="detected-pkg-error-icon"
+          data-action="copy-build-error"
+          data-error="${escapeHtml(buildResultMessage)}"
+          title="${escapeHtml(buildResultMessage)}"
+          aria-label="Build error – click to copy"
+        >⚠</button>`;
+      }
     } else if (isBuilding) {
       actionCell = `<button
         type="button"
@@ -4617,9 +4636,18 @@ function renderDetectedPackagesInner() {
 
         let actionCell;
         if (hasResult) {
-          const tone = buildResultSuccess ? 'is-success' : 'is-error';
-          const resultText = buildResultSuccess ? '✓ Built &amp; published' : escapeHtml(buildResultMessage);
-          actionCell = `<span class="detected-pkg-result ${tone}" title="${escapeHtml(buildResultMessage)}">${resultText}</span>`;
+          if (buildResultSuccess) {
+            actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Built &amp; published</span>`;
+          } else {
+            actionCell = `<button
+              type="button"
+              class="detected-pkg-error-icon"
+              data-action="copy-build-error"
+              data-error="${escapeHtml(buildResultMessage)}"
+              title="${escapeHtml(buildResultMessage)}"
+              aria-label="Build error – click to copy"
+            >⚠</button>`;
+          }
         } else if (isBuilding) {
           actionCell = `<button
             type="button"
