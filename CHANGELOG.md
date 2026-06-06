@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.7 (stable)
+- Fixed the Apps tab layout: the "Search services or mapped paths" box no longer jumps down and breaks the layout. The tab used a fixed-row grid, so inserting the local registry row pushed the flexible (scrollable) row onto the search box; it now uses a flexbox column that is robust to added sections.
+- The Apps tab now shows a separate "NPM Packages" list below the services. It scans the selected root folder using `sapTools.localPackages.namePatterns` (you can set multiple comma-separated regexes) and lists each detected local package with its build order (lower builds first) and version, independent of the Cloud Foundry service list. A "Configure" button opens the setting when no pattern is set.
+- Removed the "Scope: …" subline under the "Export Service Artifacts" heading and the "Export SQLTools Config" button to declutter the tab.
+
 ## 0.10.6 (stable)
 - Apps tab service mapping rows are more compact. The long local folder path is no longer shown inline for mapped services, and the "No matching local folder" text is dropped for unmapped ones. The mapped folder path now appears as a tooltip when you hover the "Mapped" badge, so the row no longer wastes space on a long path.
 

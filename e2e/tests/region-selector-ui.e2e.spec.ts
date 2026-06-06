@@ -1432,10 +1432,6 @@ test.describe('SAP Tools region selector', () => {
       await expect(
         webviewFrame.getByRole('button', { name: 'Export Artifacts' })
       ).toBeDisabled();
-      // Export SQLTools Config button must be present and disabled without a selected service
-      await expect(
-        webviewFrame.getByRole('button', { name: 'Export SQLTools Config' })
-      ).toBeDisabled();
 
       await expect(webviewFrame.locator('.service-export-root-row')).toHaveCount(1);
       await expect(
@@ -1460,7 +1456,7 @@ test.describe('SAP Tools region selector', () => {
     }
   });
 
-  test('User can enable SQLTools Config export after selecting a mapped service', async () => {
+  test('User can enable artifact export after selecting a mapped service', async () => {
     const fixtureRootPath = createServiceRootMappingFixture();
     const session = await launchExtensionHost({
       extraEnv: {
@@ -1490,12 +1486,9 @@ test.describe('SAP Tools region selector', () => {
       );
       await expect(mappedStateCells).toHaveCount(3, { timeout: 10000 });
 
-      // Both export buttons are still disabled — no service selected yet
+      // The Export Artifacts button is still disabled — no service selected yet
       await expect(
         webviewFrame.getByRole('button', { name: 'Export Artifacts' })
-      ).toBeDisabled();
-      await expect(
-        webviewFrame.getByRole('button', { name: 'Export SQLTools Config' })
       ).toBeDisabled();
 
       // Select the first mapped service row
@@ -1503,12 +1496,9 @@ test.describe('SAP Tools region selector', () => {
         webviewFrame.locator('.service-map-row').filter({ hasText: 'finance_uat_api' }).first()
       );
 
-      // Both export buttons must become enabled after service selection
+      // The Export Artifacts button must become enabled after service selection
       await expect(
         webviewFrame.getByRole('button', { name: 'Export Artifacts' })
-      ).toBeEnabled({ timeout: 5000 });
-      await expect(
-        webviewFrame.getByRole('button', { name: 'Export SQLTools Config' })
       ).toBeEnabled({ timeout: 5000 });
     } finally {
       await cleanupExtensionHost(session);
@@ -1914,33 +1904,9 @@ test.describe('SAP Tools region selector', () => {
       );
 
       await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
-      const exportSnapshot = await webviewFrame.evaluate(() => {
-        const exportArtifactsButton = document.querySelector(
-          '[data-action="export-service-artifacts"]'
-        );
-        const exportSqltoolsButton = document.querySelector(
-          '[data-action="export-sqltools-config"]'
-        );
-
-        if (
-          !(exportArtifactsButton instanceof HTMLElement) ||
-          !(exportSqltoolsButton instanceof HTMLElement)
-        ) {
-          return null;
-        }
-
-        return {
-          exportArtifactsHeight: Math.round(exportArtifactsButton.getBoundingClientRect().height),
-          exportSqltoolsHeight: Math.round(exportSqltoolsButton.getBoundingClientRect().height),
-        };
-      });
-      expect(exportSnapshot).not.toBeNull();
-      if (exportSnapshot === null) {
-        return;
-      }
-      expect(
-        Math.abs(exportSnapshot.exportArtifactsHeight - exportSnapshot.exportSqltoolsHeight)
-      ).toBeLessThanOrEqual(1);
+      await expect(
+        webviewFrame.getByRole('button', { name: 'Export Artifacts' })
+      ).toBeVisible();
     } finally {
       await cleanupExtensionHost(session);
     }

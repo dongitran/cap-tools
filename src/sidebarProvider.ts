@@ -48,6 +48,8 @@ import { writeScopeIfChanged, type SharedCfScope } from './scopeSync';
 import { readLocalPackagesConfig } from './localPackages/localPackagesConfig';
 import { VerdaccioManager } from './localPackages/verdaccioManager';
 import { runBuildPublishForService } from './localPackages/buildPublishOrchestrator';
+import { scanLocalPackages } from './localPackages/localPackageScanner';
+import { buildDependencyOrder } from './localPackages/dependencyGraph';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
@@ -83,6 +85,7 @@ const MSG_BUILD_PUBLISH_PACKAGES = 'sapTools.buildPublishPackages';
 const MSG_LOCAL_REGISTRY_START = 'sapTools.localRegistryStart';
 const MSG_LOCAL_REGISTRY_STOP = 'sapTools.localRegistryStop';
 const MSG_LOCAL_REGISTRY_STATUS = 'sapTools.localRegistryStatus';
+const MSG_OPEN_LOCAL_PACKAGES_SETTINGS = 'sapTools.openLocalPackagesSettings';
 const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
 const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
 const BUILTIN_EXTENSION_OPEN_COMMAND = 'extension.open';
@@ -113,6 +116,7 @@ const MSG_REFRESH_HANA_TABLES = 'sapTools.refreshHanaTables';
 const MSG_CF_TOPOLOGY = 'sapTools.cfTopology';
 const MSG_TOPOLOGY_SCOPE_RESOLVED = 'sapTools.topologyScopeResolved';
 const MSG_LOCAL_REGISTRY_STATE = 'sapTools.localRegistryState';
+const MSG_LOCAL_PACKAGES_LOADED = 'sapTools.localPackagesLoaded';
 const MSG_BUILD_PUBLISH_PREVIEW = 'sapTools.buildPublishPreview';
 const MSG_BUILD_PUBLISH_PROGRESS = 'sapTools.buildPublishProgress';
 const MSG_BUILD_PUBLISH_RESULT = 'sapTools.buildPublishResult';
@@ -524,6 +528,14 @@ export class RegionSidebarProvider
       return;
     }
 
+    if (type === MSG_OPEN_LOCAL_PACKAGES_SETTINGS) {
+      await vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        'sapTools.localPackages.namePatterns'
+      );
+      return;
+    }
+
     if (type === MSG_UPDATE_SYNC_INTERVAL && isUpdateSyncIntervalMessage(message)) {
       const payload = readUpdateSyncIntervalPayload(message);
       const snapshot = await this.cacheSyncService.updateSyncInterval(
@@ -561,6 +573,7 @@ export class RegionSidebarProvider
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
     });
+    void this.postDetectedLocalPackages();
 
     this.postCfTopologySnapshot(this.resolveCfTopologySync());
     void this.pushCfTopology();
@@ -1471,6 +1484,9 @@ export class RegionSidebarProvider
   }
 
   private async refreshServiceFolderMappings(): Promise<void> {
+    // Scan for local npm packages independently of the CF-app service mapping below.
+    void this.postDetectedLocalPackages();
+
     if (this.selectedLocalRootFolderPath.length === 0) {
       this.postMessage({
         type: MSG_SERVICE_FOLDER_MAPPINGS_ERROR,
@@ -2024,6 +2040,63 @@ export class RegionSidebarProvider
   private async postRegistryState(): Promise<void> {
     const status = await this.verdaccioManager.status();
     this.postMessage({ type: MSG_LOCAL_REGISTRY_STATE, ...status });
+  }
+
+  /**
+   * Scans the selected root folder for locally-developed npm packages (by the
+   * configured name regex), computes their build order, and pushes the list to the
+   * webview as a separate "Detected packages" list, independent of the CF-app service
+   * mapping list.
+   */
+  private async postDetectedLocalPackages(): Promise<void> {
+    const rootFolderPath = this.selectedLocalRootFolderPath.trim();
+    const patterns = readLocalPackagesConfig().namePatterns.trim();
+
+    if (rootFolderPath.length === 0 || patterns.length === 0) {
+      this.postMessage({
+        type: MSG_LOCAL_PACKAGES_LOADED,
+        configured: patterns.length > 0,
+        patterns,
+        packages: [],
+      });
+      return;
+    }
+
+    try {
+      const packages = await scanLocalPackages(rootFolderPath, patterns);
+      const roundByName = new Map<string, number>();
+      try {
+        const order = buildDependencyOrder(
+          packages.map((pkg) => ({ name: pkg.name, deps: pkg.dependencyNames }))
+        );
+        order.rounds.forEach((round, index) => {
+          for (const name of round) {
+            roundByName.set(name, index);
+          }
+        });
+      } catch {
+        // Dependency cycle — leave rounds unset; the list still shows the packages.
+      }
+      this.postMessage({
+        type: MSG_LOCAL_PACKAGES_LOADED,
+        configured: true,
+        patterns,
+        packages: packages.map((pkg) => ({
+          name: pkg.name,
+          version: pkg.version,
+          hasBuildScript: pkg.buildScript !== undefined,
+          round: roundByName.get(pkg.name) ?? null,
+        })),
+      });
+    } catch (error) {
+      this.postMessage({
+        type: MSG_LOCAL_PACKAGES_LOADED,
+        configured: true,
+        patterns,
+        packages: [],
+        error: error instanceof Error ? error.message : 'Failed to scan local packages.',
+      });
+    }
   }
 
   private postBuildResult(appId: string, success: boolean, message: string): void {

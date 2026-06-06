@@ -142,6 +142,7 @@ const BUILD_PUBLISH_PACKAGES_MESSAGE_TYPE = 'sapTools.buildPublishPackages';
 const LOCAL_REGISTRY_START_MESSAGE_TYPE = 'sapTools.localRegistryStart';
 const LOCAL_REGISTRY_STOP_MESSAGE_TYPE = 'sapTools.localRegistryStop';
 const LOCAL_REGISTRY_STATUS_MESSAGE_TYPE = 'sapTools.localRegistryStatus';
+const OPEN_LOCAL_PACKAGES_SETTINGS_MESSAGE_TYPE = 'sapTools.openLocalPackagesSettings';
 const REFRESH_SERVICE_FOLDER_MAPPINGS_MESSAGE_TYPE =
   'sapTools.refreshServiceFolderMappings';
 const SELECT_SERVICE_FOLDER_MAPPING_MESSAGE_TYPE = 'sapTools.selectServiceFolderMapping';
@@ -201,6 +202,10 @@ let buildPublishOrder = [];
 let buildPublishStatuses = {};
 let buildPublishResultMessage = '';
 let buildPublishResultTone = 'info';
+let detectedPackages = [];
+let detectedPackagesConfigured = false;
+let detectedPackagesPatterns = '';
+let detectedPackagesError = '';
 let hanaServiceOptions = null;
 let selectedHanaServiceId = '';
 let sqlAppSearchKeyword = '';
@@ -621,6 +626,17 @@ window.addEventListener('message', (event) => {
         : success
           ? 'Build & publish completed.'
           : 'Build & publish failed.';
+    refreshUiAfterServiceExportStateChange();
+    return;
+  }
+
+  if (msg.type === 'sapTools.localPackagesLoaded') {
+    detectedPackagesConfigured = msg.configured === true;
+    detectedPackagesPatterns = typeof msg.patterns === 'string' ? msg.patterns : '';
+    detectedPackagesError = typeof msg.error === 'string' ? msg.error : '';
+    detectedPackages = Array.isArray(msg.packages)
+      ? msg.packages.filter((pkg) => isRecord(pkg) && typeof pkg.name === 'string')
+      : [];
     refreshUiAfterServiceExportStateChange();
     return;
   }
@@ -1299,13 +1315,6 @@ function refreshWorkspaceAppsView() {
   const rootFolderLabel =
     localServiceRootFolderPath.length > 0 ? localServiceRootFolderPath : 'Not selected';
 
-  const sublineElement = exportTab.querySelector('[data-role="service-export-subline"]');
-  if (!(sublineElement instanceof HTMLElement)) {
-    renderPrototype();
-    return;
-  }
-  sublineElement.innerHTML = `Scope: <strong>${escapeHtml(selectedSpaceLabel)}</strong>`;
-
   const rootPathElement = exportTab.querySelector('[data-role="service-export-path"]');
   if (!(rootPathElement instanceof HTMLElement)) {
     renderPrototype();
@@ -1332,6 +1341,14 @@ function refreshWorkspaceAppsView() {
       totalRowCount: mappingRows.length,
     });
 
+  const detectedPackagesElement = exportTab.querySelector('[data-role="detected-packages"]');
+  if (detectedPackagesElement instanceof HTMLElement) {
+    detectedPackagesElement.innerHTML = renderDetectedPackagesInner();
+  } else if (localServiceRootFolderPath.length > 0) {
+    renderPrototype();
+    return;
+  }
+
   const exportSearchInput = exportTab.querySelector('[data-role="service-export-search"]');
   if (exportSearchInput instanceof HTMLInputElement) {
     exportSearchInput.value = serviceExportSearchKeyword;
@@ -1349,11 +1366,6 @@ function refreshWorkspaceAppsView() {
   const exportButton = exportTab.querySelector('[data-action="export-service-artifacts"]');
   if (exportButton instanceof HTMLButtonElement) {
     exportButton.disabled = !canExport;
-  }
-
-  const sqlToolsButton = exportTab.querySelector('[data-action="export-sqltools-config"]');
-  if (sqlToolsButton instanceof HTMLButtonElement) {
-    sqlToolsButton.disabled = !canExport;
   }
 
   const statusElement = exportTab.querySelector('[data-role="service-export-status"]');
@@ -2188,6 +2200,13 @@ function handleServiceExportAction(action, actionElement) {
     });
     if (!localRegistryRunning) {
       localRegistryInstalling = true;
+    }
+    return true;
+  }
+
+  if (action === 'open-local-packages-settings') {
+    if (vscodeApi !== null) {
+      vscodeApi.postMessage({ type: OPEN_LOCAL_PACKAGES_SETTINGS_MESSAGE_TYPE });
     }
     return true;
   }
@@ -4273,9 +4292,6 @@ function renderServiceExportTab() {
     <section class="group-card service-export-tab" aria-label="Service artifact export">
       <header class="service-export-header">
         <h2>Export Service Artifacts</h2>
-        <p class="service-export-subline" data-role="service-export-subline">
-          Scope: <strong>${escapeHtml(selectedSpaceLabel)}</strong>
-        </p>
       </header>
 
       <section class="service-export-root-row">
@@ -4325,6 +4341,8 @@ function renderServiceExportTab() {
         }
       </section>
 
+      ${renderDetectedPackagesList()}
+
       <p class="service-export-selected">
         Selected service: <strong data-role="service-export-selected-label">${escapeHtml(selectedServiceLabel)}</strong>
       </p>
@@ -4337,14 +4355,6 @@ function renderServiceExportTab() {
           ${canExport ? '' : 'disabled'}
         >
           Export Artifacts
-        </button>
-        <button
-          type="button"
-          class="secondary-action service-export-sqltools-button"
-          data-action="export-sqltools-config"
-          ${canExport ? '' : 'disabled'}
-        >
-          Export SQLTools Config
         </button>
       </div>
 
@@ -4383,6 +4393,87 @@ function renderLocalRegistryRow() {
       </button>
     </section>
   `;
+}
+
+function renderDetectedPackagesList() {
+  if (localServiceRootFolderPath.length === 0) {
+    return '';
+  }
+  return `
+    <section class="detected-packages" data-role="detected-packages" aria-label="Detected npm packages">
+      ${renderDetectedPackagesInner()}
+    </section>
+  `;
+}
+
+function renderDetectedPackagesInner() {
+  const configureButton = `
+    <button
+      type="button"
+      class="small-action detected-packages-config"
+      data-action="open-local-packages-settings"
+      title="Configure sapTools.localPackages.namePatterns"
+    >Configure</button>`;
+
+  if (!detectedPackagesConfigured) {
+    return `
+      <div class="detected-packages-head">
+        <span class="detected-packages-title">NPM Packages</span>
+        ${configureButton}
+      </div>
+      <p class="detected-packages-empty">Set a detection regex (<code>sapTools.localPackages.namePatterns</code>) to list packages here.</p>
+    `;
+  }
+
+  const count = detectedPackages.length;
+  let body;
+  if (detectedPackagesError.length > 0) {
+    body = `<p class="detected-packages-empty is-error">${escapeHtml(detectedPackagesError)}</p>`;
+  } else if (count === 0) {
+    body = '<p class="detected-packages-empty">No packages matched the regex under the root folder.</p>';
+  } else {
+    const rows = detectedPackages
+      .slice()
+      .sort(
+        (left, right) =>
+          roundOrInfinity(left) - roundOrInfinity(right) ||
+          left.name.localeCompare(right.name)
+      )
+      .map((pkg) => {
+        const roundLabel = typeof pkg.round === 'number' ? `Build ${String(pkg.round + 1)}` : '—';
+        const noBuild = pkg.hasBuildScript
+          ? ''
+          : '<span class="detected-pkg-flag" title="No build script — published without building">no build</span>';
+        const version = typeof pkg.version === 'string' ? pkg.version : '';
+        return `
+          <li class="detected-pkg">
+            <span class="detected-pkg-round" title="Build order (lower builds first)">${escapeHtml(roundLabel)}</span>
+            <span class="detected-pkg-name" title="${escapeHtml(pkg.name)}">${escapeHtml(pkg.name)}</span>
+            <span class="detected-pkg-version" title="${escapeHtml(version)}">${escapeHtml(version)}</span>
+            ${noBuild}
+          </li>`;
+      })
+      .join('');
+    body = `<ol class="detected-pkg-list">${rows}</ol>`;
+  }
+
+  const patternsLabel =
+    detectedPackagesPatterns.length > 0
+      ? `<span class="detected-packages-patterns" title="${escapeHtml(detectedPackagesPatterns)}">${escapeHtml(detectedPackagesPatterns)}</span>`
+      : '';
+
+  return `
+    <div class="detected-packages-head">
+      <span class="detected-packages-title">NPM Packages (${String(count)})</span>
+      ${patternsLabel}
+      ${configureButton}
+    </div>
+    ${body}
+  `;
+}
+
+function roundOrInfinity(pkg) {
+  return typeof pkg.round === 'number' ? pkg.round : Number.MAX_SAFE_INTEGER;
 }
 
 function renderLocalPackageBuildPanel() {

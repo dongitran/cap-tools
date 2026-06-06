@@ -1545,9 +1545,8 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .service-export-tab {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   height: 100%;
   min-height: 0;
@@ -1658,6 +1657,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   border: 1px solid var(--border-color);
   border-radius: 10px;
   background: var(--frame-bg);
+  flex: 1 1 0;
   max-height: none;
   min-height: 0;
   overflow: auto;
@@ -1980,6 +1980,101 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
 
 .build-panel-result.tone-info {
   color: var(--chip-text);
+}
+
+.detected-packages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent-soft) 10%, var(--frame-bg));
+  padding: 8px 10px;
+  flex: 0 0 auto;
+}
+
+.detected-packages-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detected-packages-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.detected-packages-patterns {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.62rem;
+  color: var(--muted-color);
+}
+
+.detected-packages-config {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.detected-packages-empty {
+  margin: 0;
+  font-size: 0.66rem;
+  color: var(--muted-color);
+}
+
+.detected-packages-empty.is-error {
+  color: var(--state-danger-fg);
+}
+
+.detected-pkg-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.detected-pkg {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.66rem;
+}
+
+.detected-pkg-round {
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  background: color-mix(in oklab, var(--accent-color) 26%, var(--frame-bg));
+  color: var(--text-color);
+  white-space: nowrap;
+}
+
+.detected-pkg-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detected-pkg-version {
+  color: var(--muted-color);
+  font-size: 0.6rem;
+  white-space: nowrap;
+}
+
+.detected-pkg-flag {
+  color: var(--state-danger-fg);
+  font-size: 0.56rem;
+  white-space: nowrap;
 }
 
 .panel-logs-bridge {
