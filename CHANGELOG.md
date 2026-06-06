@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.16 (stable)
+- Remove sensitive internal keywords from the codebase.
+
+## 0.10.15 (stable)
+- Generalize `prePublishScript` setting description to emphasize task automation.
+- Update default dist-tag for local packages to `local`.
+- Adjust Configure button behavior to show all local package and registry settings together.
+
 ## 0.10.14 (stable)
 - Fix the Configure button targeting a specific setting, now it shows all local packages settings.
 - Improve the layout of the package list so the version aligns to the right edge and the Build button overlays perfectly on hover.

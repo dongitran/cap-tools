@@ -35,7 +35,7 @@ async function writePackage(
 describe('compileNamePatterns', () => {
   it('splits on commas and matches a scope prefix literally', () => {
     const patterns = compileNamePatterns('@example/, @acme/');
-    expect(matchesAnyPattern('@example/core', patterns)).toBe(true);
+    expect(matchesAnyPattern('@example/demo', patterns)).toBe(true);
     expect(matchesAnyPattern('@acme/widgets', patterns)).toBe(true);
     expect(matchesAnyPattern('@other/thing', patterns)).toBe(false);
   });
@@ -56,14 +56,14 @@ describe('scanLocalPackages', () => {
   it('detects packages by name, captures build script + deps, skips services', async () => {
     const root = await makeRoot();
     await writePackage(join(root, 'core'), {
-      name: '@example/core',
+      name: '@example/demo',
       version: '1.0.0-staging-5',
       // no build script — must still be detected (key off name, not scripts)
     });
     await writePackage(join(root, 'config'), {
       name: '@example/config',
       version: '1.0.0-staging-19',
-      dependencies: { '@example/core': 'staging', '@sap/cds': '9.1.0' },
+      dependencies: { '@example/demo': 'staging', '@sap/cds': '9.1.0' },
       scripts: { build: 'cds build --production' },
     });
     await writePackage(join(root, 'service-app'), {
@@ -72,26 +72,26 @@ describe('scanLocalPackages', () => {
       dependencies: { '@example/config': 'staging' },
     });
 
-    const packages = await scanLocalPackages(root, '@example/(core|config)');
+    const packages = await scanLocalPackages(root, '@example/(demo|config)');
 
     expect(packages.map((p) => p.name)).toEqual([
       '@example/config',
-      '@example/core',
+      '@example/demo',
     ]);
 
-    const core = packages.find((p) => p.name === '@example/core');
+    const core = packages.find((p) => p.name === '@example/demo');
     expect(core?.buildScript).toBeUndefined();
 
     const config = packages.find((p) => p.name === '@example/config');
     expect(config?.buildScript).toBe('cds build --production');
-    expect(config?.dependencyNames).toContain('@example/core');
-    expect(config?.dependencySpecs['@example/core']).toBe('staging');
+    expect(config?.dependencyNames).toContain('@example/demo');
+    expect(config?.dependencySpecs['@example/demo']).toBe('staging');
   });
 
   it('does not descend into node_modules', async () => {
     const root = await makeRoot();
     await writePackage(join(root, 'node_modules', '@example', 'core'), {
-      name: '@example/core',
+      name: '@example/demo',
       version: '1.0.0',
     });
 
@@ -101,7 +101,7 @@ describe('scanLocalPackages', () => {
 
   it('returns nothing when no patterns are configured', async () => {
     const root = await makeRoot();
-    await writePackage(join(root, 'core'), { name: '@example/core' });
+    await writePackage(join(root, 'core'), { name: '@example/demo' });
     expect(await scanLocalPackages(root, '')).toEqual([]);
   });
 });

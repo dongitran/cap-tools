@@ -11,8 +11,8 @@ import {
 // A small package set mirroring the layout the feature was designed against:
 // two roots (core, utils) and three packages that depend on them.
 const PACKAGES: PackageNode[] = [
-  { name: '@example/core', deps: [] },
-  { name: '@example/config', deps: ['@example/core'] },
+  { name: '@example/demo', deps: [] },
+  { name: '@example/config', deps: ['@example/demo'] },
   { name: '@example/utils', deps: [] },
   { name: '@example/api', deps: ['@example/utils'] },
   { name: '@example/docs', deps: ['@example/utils'] },
@@ -22,14 +22,14 @@ describe('buildDependencyOrder', () => {
   it('groups packages into topological rounds (roots first)', () => {
     const { rounds } = buildDependencyOrder(PACKAGES);
     expect(rounds).toEqual([
-      ['@example/core', '@example/utils'],
+      ['@example/demo', '@example/utils'],
       ['@example/api', '@example/config', '@example/docs'],
     ]);
   });
 
   it('places every dependency before the package that needs it', () => {
     const { ordered } = buildDependencyOrder(PACKAGES);
-    expect(ordered.indexOf('@example/core')).toBeLessThan(
+    expect(ordered.indexOf('@example/demo')).toBeLessThan(
       ordered.indexOf('@example/config')
     );
     expect(ordered.indexOf('@example/utils')).toBeLessThan(
@@ -83,20 +83,20 @@ describe('resolveServiceClosure', () => {
     expect([...closure].sort()).toEqual([
       '@example/api',
       '@example/config',
-      '@example/core',
+      '@example/demo',
       '@example/utils',
     ]);
   });
 
   it('ignores service dependencies that are not local packages', () => {
-    const closure = resolveServiceClosure(['@sap/cds', '@example/core'], PACKAGES);
-    expect([...closure]).toEqual(['@example/core']);
+    const closure = resolveServiceClosure(['@sap/cds', '@example/demo'], PACKAGES);
+    expect([...closure]).toEqual(['@example/demo']);
   });
 });
 
 describe('buildOrderForService', () => {
   it('orders just the needed subset', () => {
     const { ordered } = buildOrderForService(['@example/config'], PACKAGES);
-    expect(ordered).toEqual(['@example/core', '@example/config']);
+    expect(ordered).toEqual(['@example/demo', '@example/config']);
   });
 });

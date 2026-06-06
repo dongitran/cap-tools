@@ -3,7 +3,7 @@ import { runCommand } from './processRunner';
 
 /**
  * Runs a single local package's `npm run build`. Packages without a `build` script
- * (e.g. dependency-only packages like `@example/core`) are reported as `skipped`
+ * (e.g. dependency-only packages like `@example/demo`) are reported as `skipped`
  * — they still need to be published, just not compiled.
  */
 

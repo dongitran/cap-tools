@@ -16,7 +16,7 @@ export interface LocalPackage {
   readonly buildScript: string | undefined;
   /** All dependency names declared by the package (deps + optional/peer not included). */
   readonly dependencyNames: readonly string[];
-  /** name → version spec for the package's `dependencies` (e.g. `@example/core` → `staging`). */
+  /** name → version spec for the package's `dependencies` (e.g. `@example/demo` → `staging`). */
   readonly dependencySpecs: Readonly<Record<string, string>>;
 }
 
