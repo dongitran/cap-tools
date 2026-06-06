@@ -1154,7 +1154,8 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   background: color-mix(in oklab, var(--surface-bg) 84%, var(--frame-bg));
   color: var(--text-color);
   border-radius: 8px;
-  min-height: 32px;
+  /* Reduced by 18% from original 32px */
+  min-height: 26px;
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
@@ -1554,14 +1555,47 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .service-export-header {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .service-export-header h2 {
   margin: 0;
   font-size: 0.86rem;
   font-family: var(--title-font);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Inline registry status badge in the Export Service Artifacts header. */
+.registry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.registry-badge.is-running {
+  background: color-mix(in oklab, var(--state-success-fg) 14%, transparent);
+  color: var(--state-success-fg);
+  border: 1px solid color-mix(in oklab, var(--state-success-fg) 30%, transparent);
+}
+
+.registry-badge.is-installing {
+  background: color-mix(in oklab, var(--accent-color) 14%, transparent);
+  color: var(--accent-color);
+  border: 1px solid color-mix(in oklab, var(--accent-color) 30%, transparent);
 }
 
 .service-export-subline {
@@ -1831,55 +1865,16 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   color: var(--state-danger-fg);
 }
 
-.local-registry-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 2px 2px;
-  font-size: 0.68rem;
-}
-
-.local-registry-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  background: var(--muted-color);
-}
-
-.local-registry-dot.is-running {
-  background: var(--state-success-fg);
-}
-
-.local-registry-dot.is-stopped {
-  background: color-mix(in oklab, var(--muted-color) 70%, var(--mix-base));
-}
-
-.local-registry-dot.is-installing {
-  background: var(--accent-color);
-}
-
-.local-registry-state {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--muted-color);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.local-registry-toggle {
-  flex: 0 0 auto;
-}
+/* local-registry-row styles removed — registry is now a badge in the header */
 
 .detected-packages {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--accent-soft) 10%, var(--frame-bg));
-  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  overflow: hidden;
   flex: 0 0 auto;
 }
 
@@ -1887,6 +1882,8 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .detected-packages-title {
@@ -1957,27 +1954,31 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
   max-height: 160px;
   overflow: auto;
 }
 
 .detected-pkg {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* name | order-badge | action */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
-  font-size: 0.66rem;
-  min-height: 22px;
+  font-size: 0.69rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-color) 76%, var(--mix-base));
+  padding: 7px 10px;
+  min-height: 0;
 }
 
-.detected-pkg-round {
-  border-radius: 6px;
-  padding: 1px 6px;
-  font-size: 0.58rem;
+.detected-pkg:last-child {
+  border-bottom: 0;
+}
+
+/* Build order number — muted, compact */
+.detected-pkg-order {
+  font-size: 0.6rem;
   font-weight: 600;
-  background: color-mix(in oklab, var(--accent-color) 26%, var(--frame-bg));
-  color: var(--text-color);
+  color: var(--muted-color);
   white-space: nowrap;
 }
 
@@ -1986,12 +1987,24 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-color);
   transition: opacity 0.15s ease;
 }
 
 /* Dim the package name while its build is running, signalling the row is busy. */
 .detected-pkg.is-building .detected-pkg-name {
   opacity: 0.55;
+}
+
+/* Inline building state indicator (replaces the Build button while running). */
+.detected-pkg-state.is-building {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--muted-color);
+  white-space: nowrap;
 }
 
 .detected-pkg-single-build {
@@ -2006,7 +2019,6 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   pointer-events: none;
   transition: opacity 0.15s ease;
   padding: 2px 8px;
-  /* Reduced width by 18% from 84px */
   min-width: 69px;
   font-size: 0.6rem;
   z-index: 1;

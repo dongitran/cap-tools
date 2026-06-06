@@ -1382,9 +1382,16 @@ function refreshWorkspaceAppsView() {
       totalRowCount: mappingRows.length,
     });
 
-  const registryRowElement = exportTab.querySelector('.local-registry-row');
-  if (registryRowElement instanceof HTMLElement) {
-    registryRowElement.outerHTML = renderLocalRegistryRow();
+  const registryBadgeElement = exportTab.querySelector('[data-role="registry-badge"]');
+  const newBadgeHtml = renderRegistryBadge();
+  if (registryBadgeElement !== null) {
+    registryBadgeElement.outerHTML = newBadgeHtml;
+  } else if (newBadgeHtml.length > 0) {
+    // Badge newly appeared — re-render the header h2.
+    const h2 = exportTab.querySelector('.service-export-header h2');
+    if (h2 instanceof HTMLElement) {
+      h2.innerHTML = `Export Service Artifacts ${newBadgeHtml}`;
+    }
   }
 
   const detectedPackagesElement = exportTab.querySelector('[data-role="detected-packages"]');
@@ -1415,15 +1422,6 @@ function refreshWorkspaceAppsView() {
   if (exportSearchInput instanceof HTMLInputElement) {
     exportSearchInput.value = serviceExportSearchKeyword;
   }
-
-  const selectedLabelElement = exportTab.querySelector(
-    '[data-role="service-export-selected-label"]'
-  );
-  if (!(selectedLabelElement instanceof HTMLElement)) {
-    renderPrototype();
-    return;
-  }
-  selectedLabelElement.textContent = selectedServiceLabel;
 
   const exportButton = exportTab.querySelector('[data-action="export-service-artifacts"]');
   if (exportButton instanceof HTMLButtonElement) {
@@ -2220,7 +2218,7 @@ function handleServiceExportAction(action, actionElement) {
     }
     selectedServiceExportAppId = appId;
     serviceExportStatusTone = 'info';
-    serviceExportStatusMessage = `Selected ${mapping.appName} for export.`;
+    serviceExportStatusMessage = '';
     return true;
   }
 
@@ -4407,7 +4405,10 @@ function renderServiceExportTab() {
   return `
     <section class="group-card service-export-tab" aria-label="Service artifact export">
       <header class="service-export-header">
-        <h2>Export Service Artifacts</h2>
+        <h2>
+          Export Service Artifacts
+          ${renderRegistryBadge()}
+        </h2>
       </header>
 
       <section class="service-export-root-row">
@@ -4427,8 +4428,6 @@ function renderServiceExportTab() {
           Select Root Folder
         </button>
       </section>
-
-      ${renderLocalRegistryRow()}
 
       <label class="service-export-search-row search-input-with-icon">
         <span class="search-input-icon" aria-hidden="true">&#128269;</span>
@@ -4459,10 +4458,6 @@ function renderServiceExportTab() {
 
       ${renderDetectedPackagesList()}
 
-      <p class="service-export-selected">
-        Selected service: <strong data-role="service-export-selected-label">${escapeHtml(selectedServiceLabel)}</strong>
-      </p>
-
       <div class="toolbar-row service-export-actions" role="group" aria-label="Service export actions">
         <button
           type="button"
@@ -4479,35 +4474,14 @@ function renderServiceExportTab() {
   `;
 }
 
-function renderLocalRegistryRow() {
-  const stateLabel = localRegistryInstalling
-    ? 'Installing…'
-    : localRegistryRunning
-      ? `Running · ${escapeHtml(localRegistryUrl)}`
-      : 'Stopped';
-  const stateClass = localRegistryInstalling
-    ? 'is-installing'
-    : localRegistryRunning
-      ? 'is-running'
-      : 'is-stopped';
-  const toggleLabel = localRegistryRunning ? 'Stop Registry' : 'Start Registry';
-
-  return `
-    <section class="local-registry-row" aria-label="Local package registry">
-      <span class="local-registry-dot ${stateClass}" aria-hidden="true"></span>
-      <span class="local-registry-state" data-role="local-registry-state">
-        Local registry: ${stateLabel}
-      </span>
-      <button
-        type="button"
-        class="secondary-action local-registry-toggle"
-        data-action="local-registry-toggle"
-        ${localRegistryInstalling ? 'disabled' : ''}
-      >
-        ${toggleLabel}
-      </button>
-    </section>
-  `;
+function renderRegistryBadge() {
+  if (localRegistryInstalling) {
+    return `<span class="registry-badge is-installing" data-role="registry-badge" aria-label="Registry installing">Installing…</span>`;
+  }
+  if (localRegistryRunning) {
+    return `<span class="registry-badge is-running" data-role="registry-badge" title="${escapeHtml(localRegistryUrl)}" aria-label="Registry running">● Registry</span>`;
+  }
+  return '';
 }
 
 function renderDetectedPackagesList() {
@@ -4531,7 +4505,7 @@ function updateSinglePackageBuildUI(pkgName) {
     let actionCell;
     if (hasResult) {
       if (buildResultSuccess) {
-        actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Built &amp; published</span>`;
+        actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Published</span>`;
       } else {
         actionCell = `<button
           type="button"
@@ -4543,14 +4517,7 @@ function updateSinglePackageBuildUI(pkgName) {
         >⚠</button>`;
       }
     } else if (isBuilding) {
-      actionCell = `<button
-        type="button"
-        class="small-action detected-pkg-single-build is-building"
-        data-action="build-single-package"
-        data-package="${escapeHtml(pkgName)}"
-        disabled
-        aria-busy="true"
-      ><span class="detected-pkg-spinner" aria-hidden="true"></span>Build</button>`;
+      actionCell = `<span class="detected-pkg-state is-building" aria-busy="true"><span class="detected-pkg-spinner" aria-hidden="true"></span>Building…</span>`;
     } else {
       actionCell = `<button
         type="button"
@@ -4567,10 +4534,10 @@ function updateSinglePackageBuildUI(pkgName) {
       document.activeElement.blur();
     }
 
-    const roundLabel = pkg && typeof pkg.round === 'number' ? `Build ${String(pkg.round + 1)}` : '—';
+    const roundLabel = pkg && typeof pkg.round === 'number' ? `${String(pkg.round + 1)}` : '—';
     li.innerHTML = `
-      <span class="detected-pkg-round" title="Build order (lower builds first)">${escapeHtml(roundLabel)}</span>
       <span class="detected-pkg-name" title="${escapeHtml(pkgName)}">${escapeHtml(pkgName)}</span>
+      <span class="detected-pkg-order" title="Build order">#${escapeHtml(roundLabel)}</span>
       ${actionCell}
     `;
   }
@@ -4630,14 +4597,14 @@ function renderDetectedPackagesInner() {
           left.name.localeCompare(right.name)
       )
       .map((pkg) => {
-        const roundLabel = typeof pkg.round === 'number' ? `Build ${String(pkg.round + 1)}` : '—';
+        const roundLabel = typeof pkg.round === 'number' ? `${String(pkg.round + 1)}` : '—';
         const isBuilding = buildingPackageName === pkg.name;
         const hasResult = buildResultPackageName === pkg.name;
 
         let actionCell;
         if (hasResult) {
           if (buildResultSuccess) {
-            actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Built &amp; published</span>`;
+            actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Published</span>`;
           } else {
             actionCell = `<button
               type="button"
@@ -4649,14 +4616,7 @@ function renderDetectedPackagesInner() {
             >⚠</button>`;
           }
         } else if (isBuilding) {
-          actionCell = `<button
-            type="button"
-            class="small-action detected-pkg-single-build is-building"
-            data-action="build-single-package"
-            data-package="${escapeHtml(pkg.name)}"
-            disabled
-            aria-busy="true"
-          ><span class="detected-pkg-spinner" aria-hidden="true"></span>Build</button>`;
+          actionCell = `<span class="detected-pkg-state is-building" aria-busy="true"><span class="detected-pkg-spinner" aria-hidden="true"></span>Building…</span>`;
         } else {
           actionCell = `<button
             type="button"
@@ -4673,8 +4633,8 @@ function renderDetectedPackagesInner() {
           (hasResult ? ' is-result' : '');
         return `
           <li class="${rowClass}" data-pkg-name="${escapeHtml(pkg.name)}">
-            <span class="detected-pkg-round" title="Build order (lower builds first)">${escapeHtml(roundLabel)}</span>
             <span class="detected-pkg-name" title="${escapeHtml(pkg.name)}">${escapeHtml(pkg.name)}</span>
+            <span class="detected-pkg-order" title="Build order">#${escapeHtml(roundLabel)}</span>
             ${actionCell}
           </li>`;
       })

@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.10.23 (stable)
+## 0.10.24 (stable)
+- Reduce height of "Build All" and "Configure" buttons by 18%.
+- Remove "Selected service: ..." and "Selected ... for export." UI lines.
+- Move local registry status from a standalone row to a compact inline badge next to "Export Service Artifacts" heading (no more Start/Stop registry button).
+- Restyle package list rows to match the service mapping list style (bordered rows, flat background, name-first layout).
+
+
 - Replace full error text in package list with a compact red ⚠ icon to prevent layout breakage on build errors.
 - Hover the error icon to see the full error message via native tooltip.
 - Click the error icon to copy the error message to clipboard (brief green flash confirms copy).
