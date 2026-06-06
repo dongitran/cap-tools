@@ -2006,10 +2006,14 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   pointer-events: none;
   transition: opacity 0.15s ease;
   padding: 2px 8px;
-  /* Roughly double the previous compact width for an easier hover target. */
-  min-width: 84px;
+  /* Reduced width by 18% from 84px */
+  min-width: 69px;
   font-size: 0.6rem;
   z-index: 1;
+}
+
+.detected-pkg-single-build:hover {
+  transform: none;
 }
 
 .detected-pkg:hover .detected-pkg-single-build {

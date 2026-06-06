@@ -618,7 +618,9 @@ window.addEventListener('message', (event) => {
         status: typeof msg.status === 'string' ? msg.status : '',
         message: typeof msg.message === 'string' ? msg.message : '',
       };
-      refreshUiAfterServiceExportStateChange();
+      if (buildingPackageName.length === 0) {
+        refreshUiAfterServiceExportStateChange();
+      }
     }
     return;
   }
@@ -645,24 +647,20 @@ window.addEventListener('message', (event) => {
         clearTimeout(buildResultTimer);
         buildResultTimer = null;
       }
+      updateSinglePackageBuildUI(pkgName);
       if (success) {
         // Keep the green confirmation for ~2s, then quietly fade it away.
         buildResultTimer = setTimeout(() => {
           buildResultTimer = null;
-          if (buildResultPackageName === pkgName) {
-            buildResultPackageName = '';
-            buildResultMessage = '';
-            refreshUiAfterServiceExportStateChange();
-          }
+          buildResultPackageName = '';
+          updateSinglePackageBuildUI(pkgName);
         }, 2000);
       }
+    } else {
+      buildPublishResultMessage = resultText;
+      buildPublishResultTone = success ? 'success' : 'error';
       refreshUiAfterServiceExportStateChange();
-      return;
     }
-
-    buildPublishResultTone = success ? 'success' : 'error';
-    buildPublishResultMessage = resultText;
-    refreshUiAfterServiceExportStateChange();
     return;
   }
 
@@ -2258,7 +2256,7 @@ function handleServiceExportAction(action, actionElement) {
       type: BUILD_SINGLE_PACKAGE_MESSAGE_TYPE,
       payload: { packageName },
     });
-    refreshUiAfterServiceExportStateChange();
+    updateSinglePackageBuildUI(packageName);
     return true;
   }
 
@@ -4478,6 +4476,59 @@ function renderDetectedPackagesList() {
   `;
 }
 
+function updateSinglePackageBuildUI(pkgName) {
+  const li = document.querySelector(`li[data-pkg-name="${CSS.escape(pkgName)}"]`);
+  if (li) {
+    const isBuilding = buildingPackageName === pkgName;
+    const hasResult = buildResultPackageName === pkgName;
+    const pkg = detectedPackages.find((p) => p.name === pkgName);
+    
+    let actionCell;
+    if (hasResult) {
+      const tone = buildResultSuccess ? 'is-success' : 'is-error';
+      const resultText = buildResultSuccess ? '✓ Built &amp; published' : escapeHtml(buildResultMessage);
+      actionCell = `<span class="detected-pkg-result ${tone}" title="${escapeHtml(buildResultMessage)}">${resultText}</span>`;
+    } else if (isBuilding) {
+      actionCell = `<button
+        type="button"
+        class="small-action detected-pkg-single-build is-building"
+        data-action="build-single-package"
+        data-package="${escapeHtml(pkgName)}"
+        disabled
+        aria-busy="true"
+      ><span class="detected-pkg-spinner" aria-hidden="true"></span>Build</button>`;
+    } else {
+      actionCell = `<button
+        type="button"
+        class="small-action detected-pkg-single-build"
+        data-action="build-single-package"
+        data-package="${escapeHtml(pkgName)}"
+        title="Build & publish ${escapeHtml(pkgName)}"
+      >Build</button>`;
+    }
+    
+    li.className = 'detected-pkg' + (isBuilding ? ' is-building' : '') + (hasResult ? ' is-result' : '');
+    
+    const roundLabel = pkg && typeof pkg.round === 'number' ? `Build ${String(pkg.round + 1)}` : '—';
+    li.innerHTML = `
+      <span class="detected-pkg-round" title="Build order (lower builds first)">${escapeHtml(roundLabel)}</span>
+      <span class="detected-pkg-name" title="${escapeHtml(pkgName)}">${escapeHtml(pkgName)}</span>
+      ${actionCell}
+    `;
+  }
+  
+  const buildAllBtn = document.querySelector('.detected-packages-build');
+  if (buildAllBtn instanceof HTMLButtonElement) {
+    if (buildPublishInProgress) {
+      buildAllBtn.disabled = true;
+      buildAllBtn.innerHTML = 'Building&#8230;';
+    } else {
+      buildAllBtn.disabled = false;
+      buildAllBtn.textContent = 'Build All';
+    }
+  }
+}
+
 function renderDetectedPackagesInner() {
   const loadingIndicator = detectedPackagesLoading
     ? '<span class="sql-tables-spinner" aria-hidden="true" title="Scanning..."></span>'
@@ -4554,7 +4605,7 @@ function renderDetectedPackagesInner() {
           (isBuilding ? ' is-building' : '') +
           (hasResult ? ' is-result' : '');
         return `
-          <li class="${rowClass}">
+          <li class="${rowClass}" data-pkg-name="${escapeHtml(pkg.name)}">
             <span class="detected-pkg-round" title="Build order (lower builds first)">${escapeHtml(roundLabel)}</span>
             <span class="detected-pkg-name" title="${escapeHtml(pkg.name)}">${escapeHtml(pkg.name)}</span>
             ${actionCell}

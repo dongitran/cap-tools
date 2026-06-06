@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.21 (stable)
+- Fix local package list scroll position jumping to the top when initiating a single package build.
+- Remove hover transform effect on the single package build button and adjust its width.
+
 ## 0.10.20 (stable)
 - Fix `pnpm install` during local package build to correctly use the local Verdaccio registry instead of the public npm registry.
 
