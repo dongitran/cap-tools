@@ -246,9 +246,17 @@ function updateSinglePackageBuildUI(pkgName) {
     const isRunning = statusObj?.status === 'running';
 
     let actionCell;
+    const buildButtonHtml = `<button
+      type="button"
+      class="small-action detected-pkg-single-build"
+      data-action="build-single-package"
+      data-package="${escapeHtml(pkgName)}"
+      title="Build & publish ${escapeHtml(pkgName)}"
+    >Build</button>`;
+
     if (singleHasResult) {
       if (buildResultSuccess) {
-        actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Published</span>`;
+        actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Published</span>${buildButtonHtml}`;
       } else {
         actionCell = `<button
           type="button"
@@ -269,18 +277,12 @@ function updateSinglePackageBuildUI(pkgName) {
         aria-label="Build error – click to copy"
       >⚠</button>`;
     } else if (isDone) {
-      actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(statusObj.message || 'Built & published')}">✓ Published</span>`;
+      actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(statusObj.message || 'Built & published')}">✓ Published</span>${buildButtonHtml}`;
     } else if (isRunning || isSingleBuilding) {
       const phaseLabel = isRunning ? (statusObj.phase === 'publish' ? 'Publishing…' : 'Building…') : 'Building…';
       actionCell = `<button type="button" class="small-action detected-pkg-single-build" disabled><span class="detected-pkg-spinner" aria-hidden="true" style="width:10px;height:10px;border-width:2px;flex-shrink:0;margin-right:4px;"></span>${phaseLabel}</button>`;
     } else {
-      actionCell = `<button
-        type="button"
-        class="small-action detected-pkg-single-build"
-        data-action="build-single-package"
-        data-package="${escapeHtml(pkgName)}"
-        title="Build & publish ${escapeHtml(pkgName)}"
-      >Build</button>`;
+      actionCell = buildButtonHtml;
     }
     
     li.className = 'detected-pkg' + ((isRunning || isSingleBuilding) ? ' is-building' : '') + (singleHasResult || isDone || isFailed ? ' is-result' : '');
@@ -365,9 +367,17 @@ function renderDetectedPackagesInner() {
         const isRunning = statusObj?.status === 'running';
 
         let actionCell;
+        const buildButtonHtml = `<button
+          type="button"
+          class="small-action detected-pkg-single-build"
+          data-action="build-single-package"
+          data-package="${escapeHtml(pkg.name)}"
+          title="Build & publish ${escapeHtml(pkg.name)}"
+        >Build</button>`;
+
         if (singleHasResult) {
           if (buildResultSuccess) {
-            actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Published</span>`;
+            actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(buildResultMessage)}">✓ Published</span>${buildButtonHtml}`;
           } else {
             actionCell = `<button
               type="button"
@@ -388,18 +398,12 @@ function renderDetectedPackagesInner() {
             aria-label="Build error – click to copy"
           >⚠</button>`;
         } else if (isDone) {
-          actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(statusObj.message || 'Built & published')}">✓ Published</span>`;
+          actionCell = `<span class="detected-pkg-result is-success" title="${escapeHtml(statusObj.message || 'Built & published')}">✓ Published</span>${buildButtonHtml}`;
         } else if (isRunning || isSingleBuilding) {
           const phaseLabel = isRunning ? (statusObj.phase === 'publish' ? 'Publishing…' : 'Building…') : 'Building…';
           actionCell = `<button type="button" class="small-action detected-pkg-single-build" disabled><span class="detected-pkg-spinner" aria-hidden="true" style="width:10px;height:10px;border-width:2px;flex-shrink:0;margin-right:4px;"></span>${phaseLabel}</button>`;
         } else {
-          actionCell = `<button
-            type="button"
-            class="small-action detected-pkg-single-build"
-            data-action="build-single-package"
-            data-package="${escapeHtml(pkg.name)}"
-            title="Build & publish ${escapeHtml(pkg.name)}"
-          >Build</button>`;
+          actionCell = buildButtonHtml;
         }
 
         const rowClass =

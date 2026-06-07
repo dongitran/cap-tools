@@ -2081,7 +2081,13 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   font-size: 0.6rem;
   font-weight: 600;
   white-space: nowrap;
+  transition: opacity 0.15s ease;
   animation: detected-pkg-result-in 0.2s ease;
+}
+
+.detected-pkg:hover .detected-pkg-result {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .detected-pkg-result.is-success {

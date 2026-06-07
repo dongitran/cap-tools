@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.37 (stable)
+- **Feature:** Added the ability to hover over a "Published" package row to reveal the "Build" button again, allowing users to quickly manually trigger rebuilds for already-published packages.
+
 ## 0.10.36 (stable)
 - **Fix:** Fixed progress calculation exceeding 100% by ensuring only the final 'publish' phase completion is counted toward the total.
 - **Fix:** Eliminated visual flickering of previously published package labels by preventing full UI list re-renders during progress ticks.
