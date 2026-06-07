@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.36 (stable)
+- **Fix:** Fixed progress calculation exceeding 100% by ensuring only the final 'publish' phase completion is counted toward the total.
+- **Fix:** Eliminated visual flickering of previously published package labels by preventing full UI list re-renders during progress ticks.
+- **Fix:** Ensure the "Building..." loading spinner displays immediately and stably on the active package row during a "Build All" run.
+
 ## 0.10.35 (stable)
 - **Fix:** Restored the "Build" button as a disabled button with a spinner during single-package builds, rather than replacing it with plain text.
 - **Fix:** Fixed an issue where "Published" labels on previously built packages would disappear when building another package individually.

@@ -636,18 +636,13 @@ window.addEventListener('message', (event) => {
       };
       // When a package finishes successfully in a Build All run, show its Published badge
       // and increment the completed counter for progress tracking.
-      if (newStatus === 'done' && prevStatus?.status !== 'done' && buildingPackageName.length === 0) {
+      if (msg.phase === 'publish' && newStatus === 'done' && prevStatus?.status !== 'done' && buildingPackageName.length === 0) {
         buildResultPackageName = msg.packageName;
         buildResultSuccess = true;
         buildResultMessage = 'Built & published';
         buildPublishCompletedCount += 1;
-        updateSinglePackageBuildUI(msg.packageName);
-      } else if (buildingPackageName.length === 0) {
-        refreshUiAfterServiceExportStateChange();
-      } else {
-        // Update the row individually if we're in a single-package build flow
-        updateSinglePackageBuildUI(msg.packageName);
       }
+      updateSinglePackageBuildUI(msg.packageName);
     }
     return;
   }
@@ -4611,7 +4606,7 @@ function updateSinglePackageBuildUI(pkgName) {
   if (buildAllBtn instanceof HTMLButtonElement) {
     if (buildPublishInProgress && buildPublishOrder.length > 0) {
       buildAllBtn.disabled = true;
-      const total = detectedPackages.length;
+      const total = buildPublishOrder.length;
       const pct = total > 0 ? Math.round((buildPublishCompletedCount / total) * 100) : 0;
       buildAllBtn.innerHTML = `<span class="detected-pkg-spinner" aria-hidden="true" style="width:10px;height:10px;border-width:2px;flex-shrink:0"></span>Build All – ${String(pct)}%`;
     } else if (buildPublishInProgress) {

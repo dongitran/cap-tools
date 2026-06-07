@@ -301,7 +301,7 @@ function updateSinglePackageBuildUI(pkgName) {
   if (buildAllBtn instanceof HTMLButtonElement) {
     if (buildPublishInProgress && buildPublishOrder.length > 0) {
       buildAllBtn.disabled = true;
-      const total = detectedPackages.length;
+      const total = buildPublishOrder.length;
       const pct = total > 0 ? Math.round((buildPublishCompletedCount / total) * 100) : 0;
       buildAllBtn.innerHTML = `<span class="detected-pkg-spinner" aria-hidden="true" style="width:10px;height:10px;border-width:2px;flex-shrink:0"></span>Build All – ${String(pct)}%`;
     } else if (buildPublishInProgress) {
