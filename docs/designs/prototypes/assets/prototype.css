@@ -2090,6 +2090,18 @@ body.vscode-high-contrast-light.prototype-page .service-export-button {
   pointer-events: none;
 }
 
+/* While Build All is active, prevent the Build button from appearing on hover for non-building rows */
+.detected-pkg-list.is-build-all-active .detected-pkg:not(.is-building):hover .detected-pkg-single-build {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* While Build All is active, keep the Published badge visible on hover for non-building rows */
+.detected-pkg-list.is-build-all-active .detected-pkg:not(.is-building):hover .detected-pkg-result {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .detected-pkg-result.is-success {
   color: var(--state-success-fg);
 }

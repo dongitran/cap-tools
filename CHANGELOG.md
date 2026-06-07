@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.39 (stable)
+- **UI:** The "Build All" button is now simply disabled (without showing a 0% progress indicator) when a single package build is triggered.
+- **UI:** During a "Build All" operation, hovering over any package row will no longer reveal the "Build" button. The hover capability is restored only after the entire "Build All" process completes.
+
 ## 0.10.38 (stable)
 - **Fix:** Fixed a JavaScript ReferenceError (`pkg is not defined`) in `updateSinglePackageBuildUI` that was causing the UI updates to silently crash when clicking the "Build" button or during progress updates.
 

@@ -302,13 +302,14 @@ function updateSinglePackageBuildUI(pkgName) {
   
   const buildAllBtn = document.querySelector('.detected-packages-build');
   if (buildAllBtn instanceof HTMLButtonElement) {
-    if (buildPublishInProgress && buildPublishOrder.length > 0) {
+    if (buildPublishInProgress && buildPublishOrder.length > 0 && buildingPackageName.length === 0) {
       buildAllBtn.disabled = true;
       const total = buildPublishOrder.length;
       const pct = total > 0 ? Math.round((buildPublishCompletedCount / total) * 100) : 0;
       buildAllBtn.innerHTML = `<span class="detected-pkg-spinner" aria-hidden="true" style="width:10px;height:10px;border-width:2px;flex-shrink:0"></span>Build All – ${String(pct)}%`;
     } else if (buildPublishInProgress) {
       buildAllBtn.disabled = true;
+      buildAllBtn.innerHTML = 'Build All';
     } else {
       buildAllBtn.disabled = false;
       buildAllBtn.textContent = 'Build All';
@@ -419,13 +420,14 @@ function renderDetectedPackagesInner() {
           </li>`;
       })
       .join('');
-    body = `<ol class="detected-pkg-list">${rows}</ol>`;
+    const listClass = buildPublishInProgress && buildingPackageName.length === 0 ? 'detected-pkg-list is-build-all-active' : 'detected-pkg-list';
+    body = `<ol class="${listClass}">${rows}</ol>`;
   }
 
   const buildAllButton =
     count > 0
       ? (() => {
-          if (buildPublishInProgress && buildPublishOrder.length > 0) {
+          if (buildPublishInProgress && buildPublishOrder.length > 0 && buildingPackageName.length === 0) {
             const total = count;
             const pct = total > 0 ? Math.round((buildPublishCompletedCount / total) * 100) : 0;
             return `<button
