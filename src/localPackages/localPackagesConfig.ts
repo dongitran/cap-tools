@@ -31,6 +31,7 @@ export interface LocalRegistryConfig {
 export interface LocalPackagesConfig {
   readonly namePatterns: string;
   readonly prePublishScript: string;
+  readonly packageJsonTagPlaceholder: string;
   readonly versionBumpStrategy: VersionBumpStrategy;
   /**
    * Delete a package-level .npmrc before dependency install/build to avoid stale
@@ -48,6 +49,7 @@ export function readLocalPackagesConfig(
 
   const namePatterns = readString(config, 'localPackages.namePatterns', '');
   const prePublishScript = readString(config, 'localPackages.prePublishScript', '');
+  const packageJsonTagPlaceholder = readString(config, 'localPackages.packageJsonTagPlaceholder', '');
   const versionBumpStrategy = readVersionBumpStrategy(config);
   const deleteNpmrcBeforeBuild = config.get<boolean>(
     'localPackages.deleteNpmrcBeforeBuild',
@@ -66,6 +68,7 @@ export function readLocalPackagesConfig(
   return {
     namePatterns,
     prePublishScript,
+    packageJsonTagPlaceholder,
     versionBumpStrategy,
     deleteNpmrcBeforeBuild,
     installInServiceAfterPublish,

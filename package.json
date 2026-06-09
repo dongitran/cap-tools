@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.10.43",
+  "version": "0.10.44",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -94,6 +94,12 @@
             "default": "",
             "editPresentation": "multilineText",
             "markdownDescription": "Optional JavaScript code (executed via `node -e`) to run in the package folder before building and publishing. Use this to automate tasks, modify files, or prepare the package prior to the pipeline. You can use standard Node APIs like `fs` and `path`."
+          },
+          "sapTools.localPackages.packageJsonTagPlaceholder": {
+            "type": "string",
+            "scope": "application",
+            "default": "",
+            "markdownDescription": "A placeholder string used in dependency version fields of `package.json` (e.g. `${BRANCH}`) that SAP Tools replaces with the active dist-tag (e.g. `cf-finance-prod`) before building each package. The original `package.json` is automatically restored after publishing. Leave empty to disable."
           },
           "sapTools.localPackages.versionBumpStrategy": {
             "type": "string",

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.44 (stable)
+- **Feature:** Added `sapTools.localPackages.packageJsonTagPlaceholder` setting. When set (e.g. `${BRANCH}`), SAP Tools finds that string in each package's `package.json` and temporarily replaces it with the active CF dist-tag (e.g. `cf-finance-prod`) before building, then automatically restores the original file after publishing — keeping the git tree clean.
+
 ## 0.10.43 (stable)
 - **Fix:** Failed package rows now include the retry Build action on hover, matching published rows while keeping the warning icon visible at rest for error details.
 

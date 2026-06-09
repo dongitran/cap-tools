@@ -1,3 +1,6 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { buildDependencyOrder, type PackageNode } from './dependencyGraph';
 import type { LocalPackagesConfig } from './localPackagesConfig';
 import { scanLocalPackages, type LocalPackage } from './localPackageScanner';
@@ -79,6 +82,7 @@ export async function runBuildPublishAll(
 
   const total = order.length;
   const tag = request.config.registry.defaultTag;
+  const tagPlaceholder = request.config.packageJsonTagPlaceholder.trim();
   let builtCount = 0;
   let skippedCount = 0;
 
@@ -89,7 +93,18 @@ export async function runBuildPublishAll(
       continue;
     }
 
+    const packageJsonPath = join(pkg.dir, 'package.json');
+    let originalPackageJsonContent: string | undefined;
+
     try {
+      if (tagPlaceholder.length > 0) {
+        const content = await readFile(packageJsonPath, 'utf8');
+        if (content.includes(tagPlaceholder)) {
+          originalPackageJsonContent = content;
+          await writeFile(packageJsonPath, content.replaceAll(tagPlaceholder, tag), 'utf8');
+        }
+      }
+
       if (request.config.prePublishScript.length > 0) {
         request.onProgress({
           packageName: name,
@@ -159,6 +174,10 @@ export async function runBuildPublishAll(
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      if (originalPackageJsonContent !== undefined) {
+        await writeFile(packageJsonPath, originalPackageJsonContent, 'utf8');
+      }
     }
   }
 
