@@ -82,7 +82,10 @@ export async function runBuildPublishAll(
 
   const total = order.length;
   const tag = request.config.registry.defaultTag;
-  const tagPlaceholder = request.config.packageJsonTagPlaceholder.trim();
+  const tagPlaceholders = request.config.packageJsonTagPlaceholder
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
   let builtCount = 0;
   let skippedCount = 0;
 
@@ -97,11 +100,16 @@ export async function runBuildPublishAll(
     let originalPackageJsonContent: string | undefined;
 
     try {
-      if (tagPlaceholder.length > 0) {
+      if (tagPlaceholders.length > 0) {
         const content = await readFile(packageJsonPath, 'utf8');
-        if (content.includes(tagPlaceholder)) {
+        const hasAny = tagPlaceholders.some((p) => content.includes(p));
+        if (hasAny) {
           originalPackageJsonContent = content;
-          await writeFile(packageJsonPath, content.replaceAll(tagPlaceholder, tag), 'utf8');
+          const patched = tagPlaceholders.reduce(
+            (acc, placeholder) => acc.replaceAll(placeholder, tag),
+            content
+          );
+          await writeFile(packageJsonPath, patched, 'utf8');
         }
       }
 

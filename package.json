@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.10.44",
+  "version": "0.10.45",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -99,7 +99,7 @@
             "type": "string",
             "scope": "application",
             "default": "",
-            "markdownDescription": "A placeholder string used in dependency version fields of `package.json` (e.g. `${BRANCH}`) that SAP Tools replaces with the active dist-tag (e.g. `cf-finance-prod`) before building each package. The original `package.json` is automatically restored after publishing. Leave empty to disable."
+            "markdownDescription": "Comma-separated placeholder strings used in dependency version fields of `package.json` (e.g. `${BRANCH}, {branch}`) that SAP Tools replaces with the active dist-tag (e.g. `cf-finance-prod`) before building each package. Each entry is trimmed. The original `package.json` is automatically restored after publishing. Leave empty to disable."
           },
           "sapTools.localPackages.versionBumpStrategy": {
             "type": "string",

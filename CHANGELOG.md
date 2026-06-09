@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.45 (stable)
+- **Enhancement:** `sapTools.localPackages.packageJsonTagPlaceholder` now accepts multiple comma-separated placeholders (e.g. `${BRANCH}, {branch}`); each is trimmed and all occurrences in `package.json` are replaced with the active CF dist-tag before building.
+
 ## 0.10.44 (stable)
 - **Feature:** Added `sapTools.localPackages.packageJsonTagPlaceholder` setting. When set (e.g. `${BRANCH}`), SAP Tools finds that string in each package's `package.json` and temporarily replaces it with the active CF dist-tag (e.g. `cf-finance-prod`) before building, then automatically restores the original file after publishing — keeping the git tree clean.
 
