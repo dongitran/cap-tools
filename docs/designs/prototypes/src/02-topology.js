@@ -152,7 +152,11 @@ appElement.addEventListener('change', (event) => {
 });
 
 function shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeAction) {
-  const isLogsAction = action === 'start-app-logging' || action === 'stop-app-logging';
+  const isLogsAction =
+    action === 'start-app-logging' ||
+    action === 'stop-app-logging' ||
+    action === 'pause-app-logging' ||
+    action === 'resume-app-logging';
   if (!isLogsAction) {
     return false;
   }
@@ -285,7 +289,11 @@ function refreshWorkspaceLogsView() {
     renderPrototype();
     return;
   }
-  activeAppsElement.innerHTML = renderActiveAppsLogList(availableApps, activeApps);
+  activeAppsElement.innerHTML = renderActiveAppsLogList(
+    availableApps,
+    activeApps,
+    new Set(pausedAppLogIds)
+  );
 
   const startButton = logsPanel.querySelector('[data-action="start-app-logging"]');
   if (startButton instanceof HTMLButtonElement) {

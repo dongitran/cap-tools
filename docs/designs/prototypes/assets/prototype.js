@@ -135,6 +135,7 @@ const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
 const SPACE_SELECTED_MESSAGE_TYPE = 'sapTools.spaceSelected';
 const ACTIVE_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.activeAppsChanged';
+const PAUSED_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.pausedAppsChanged';
 const UPDATE_SYNC_INTERVAL_MESSAGE_TYPE = 'sapTools.updateSyncInterval';
 const SYNC_NOW_MESSAGE_TYPE = 'sapTools.syncNow';
 const LOGOUT_MESSAGE_TYPE = 'sapTools.logout';
@@ -739,6 +740,7 @@ let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
 let selectedAppLogIds = [];
 let activeAppLogIds = [];
+let pausedAppLogIds = [];
 let pendingSelectionMotion = null;
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
 const DESIGN_THEME_CLASS_PREFIX = 'theme-';
@@ -1205,7 +1207,11 @@ appElement.addEventListener('change', (event) => {
 });
 
 function shouldRefreshWorkspaceLogsOnly(action, modeBeforeAction, tabBeforeAction) {
-  const isLogsAction = action === 'start-app-logging' || action === 'stop-app-logging';
+  const isLogsAction =
+    action === 'start-app-logging' ||
+    action === 'stop-app-logging' ||
+    action === 'pause-app-logging' ||
+    action === 'resume-app-logging';
   if (!isLogsAction) {
     return false;
   }
@@ -1338,7 +1344,11 @@ function refreshWorkspaceLogsView() {
     renderPrototype();
     return;
   }
-  activeAppsElement.innerHTML = renderActiveAppsLogList(availableApps, activeApps);
+  activeAppsElement.innerHTML = renderActiveAppsLogList(
+    availableApps,
+    activeApps,
+    new Set(pausedAppLogIds)
+  );
 
   const startButton = logsPanel.querySelector('[data-action="start-app-logging"]');
   if (startButton instanceof HTMLButtonElement) {
@@ -2411,11 +2421,54 @@ function handleLogsControlAction(action, actionElement) {
 
     const appName =
       resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    const wasPaused = pausedAppLogIds.includes(appId);
     activeAppLogIds = activeAppLogIds.filter((activeAppId) => activeAppId !== appId);
     selectedAppLogIds = selectedAppLogIds.filter((selectedAppId) => selectedAppId !== appId);
+    pausedAppLogIds = pausedAppLogIds.filter((pausedAppId) => pausedAppId !== appId);
     postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
+    if (wasPaused) {
+      postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
+    }
     lastSyncLabel = formatNow();
     statusMessage = `Stopped logging for ${appName}.`;
+    return true;
+  }
+
+  if (action === 'pause-app-logging') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+
+    if (!activeAppLogIds.includes(appId) || pausedAppLogIds.includes(appId)) {
+      return true;
+    }
+
+    const appName =
+      resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    pausedAppLogIds = [...pausedAppLogIds, appId];
+    postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
+    lastSyncLabel = formatNow();
+    statusMessage = `Paused logging for ${appName}. Collected logs stay in the CFLogs panel.`;
+    return true;
+  }
+
+  if (action === 'resume-app-logging') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+
+    if (!pausedAppLogIds.includes(appId)) {
+      return true;
+    }
+
+    const appName =
+      resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    pausedAppLogIds = pausedAppLogIds.filter((pausedAppId) => pausedAppId !== appId);
+    postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
+    lastSyncLabel = formatNow();
+    statusMessage = `Resumed logging for ${appName}.`;
     return true;
   }
 
@@ -3009,6 +3062,17 @@ function postActiveAppsChanged(appNames) {
 
   vscodeApi.postMessage({
     type: ACTIVE_APPS_CHANGED_MESSAGE_TYPE,
+    appNames,
+  });
+}
+
+function postPausedAppsChanged(appNames) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: PAUSED_APPS_CHANGED_MESSAGE_TYPE,
     appNames,
   });
 }
@@ -4384,10 +4448,11 @@ function renderLogsTab() {
   const visibleApps = filterLoggableCatalogApps(filterAppCatalogRows(availableApps));
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
+  const pausedApps = new Set(pausedAppLogIds);
   const startableSelectionCount = getStartableSelectionCount(activeApps);
   const spaceLabel = selectedSpaceId.length > 0 ? selectedSpaceId : 'current-space';
   const catalogMarkup = renderCatalogByState(visibleApps, selectedApps, activeApps);
-  const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps);
+  const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps, pausedApps);
   const statusMarkup =
     statusMessage.length === 0
       ? '<p class="status-note" data-role="app-log-status" hidden></p>'
@@ -4944,18 +5009,32 @@ function getStartableSelectionCount(activeApps) {
   return selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
 }
 
-function renderActiveAppsLogList(availableApps, activeAppIds) {
+function renderActiveAppsLogList(availableApps, activeAppIds, pausedAppIds) {
   const activeItems = availableApps.filter((app) => activeAppIds.has(app.id));
   if (activeItems.length === 0) {
     return '<p class="logs-empty-message">No active app logs yet.</p>';
   }
 
+  const pausedIds = pausedAppIds instanceof Set ? pausedAppIds : new Set();
   const rowsMarkup = activeItems
     .map((app) => {
+      const isPaused = pausedIds.has(app.id);
+      const statePill = isPaused
+        ? '<span class="active-app-pill is-paused">Paused</span>'
+        : '<span class="active-app-pill">Live</span>';
+      const pauseResumeButton = isPaused
+        ? `<button type="button" class="small-action app-log-resume" data-action="resume-app-logging" data-app-id="${app.id}" title="Resume streaming; lines collected while paused are flushed to the CFLogs panel">
+              Resume
+            </button>`
+        : `<button type="button" class="small-action app-log-pause" data-action="pause-app-logging" data-app-id="${app.id}" title="Pause the live display; the session and collected logs stay in the CFLogs panel">
+              Pause
+            </button>`;
       return `
-        <div class="active-app-row">
+        <div class="active-app-row${isPaused ? ' is-paused' : ''}">
           <span class="active-app-name">${escapeHtml(app.name)}</span>
           <span class="active-app-meta">
+            ${statePill}
+            ${pauseResumeButton}
             <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
               Stop
             </button>
@@ -6483,9 +6562,14 @@ function resetSqlWorkbenchState() {
 
 function resetActiveAppLoggingState() {
   const hadActiveApps = activeAppLogIds.length > 0;
+  const hadPausedApps = pausedAppLogIds.length > 0;
   selectedAppLogIds = [];
   activeAppLogIds = [];
+  pausedAppLogIds = [];
   statusMessage = '';
+  if (hadPausedApps) {
+    postPausedAppsChanged([]);
+  }
   if (hadActiveApps) {
     postActiveAppsChanged([]);
   }
@@ -6495,7 +6579,9 @@ function pruneSelectedAppIds() {
   const allowedAppIds = new Set(resolveCurrentSpaceApps().map((app) => app.id));
   selectedAppLogIds = selectedAppLogIds.filter((appId) => allowedAppIds.has(appId));
   activeAppLogIds = activeAppLogIds.filter((appId) => allowedAppIds.has(appId));
+  pausedAppLogIds = pausedAppLogIds.filter((appId) => activeAppLogIds.includes(appId));
   postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
+  postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
 }
 
 function formatNow() {

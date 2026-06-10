@@ -82,10 +82,11 @@ function renderLogsTab() {
   const visibleApps = filterLoggableCatalogApps(filterAppCatalogRows(availableApps));
   const selectedApps = new Set(selectedAppLogIds);
   const activeApps = new Set(activeAppLogIds);
+  const pausedApps = new Set(pausedAppLogIds);
   const startableSelectionCount = getStartableSelectionCount(activeApps);
   const spaceLabel = selectedSpaceId.length > 0 ? selectedSpaceId : 'current-space';
   const catalogMarkup = renderCatalogByState(visibleApps, selectedApps, activeApps);
-  const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps);
+  const activeAppsMarkup = renderActiveAppsLogList(availableApps, activeApps, pausedApps);
   const statusMarkup =
     statusMessage.length === 0
       ? '<p class="status-note" data-role="app-log-status" hidden></p>'
@@ -642,18 +643,32 @@ function getStartableSelectionCount(activeApps) {
   return selectedAppLogIds.filter((appId) => !activeApps.has(appId)).length;
 }
 
-function renderActiveAppsLogList(availableApps, activeAppIds) {
+function renderActiveAppsLogList(availableApps, activeAppIds, pausedAppIds) {
   const activeItems = availableApps.filter((app) => activeAppIds.has(app.id));
   if (activeItems.length === 0) {
     return '<p class="logs-empty-message">No active app logs yet.</p>';
   }
 
+  const pausedIds = pausedAppIds instanceof Set ? pausedAppIds : new Set();
   const rowsMarkup = activeItems
     .map((app) => {
+      const isPaused = pausedIds.has(app.id);
+      const statePill = isPaused
+        ? '<span class="active-app-pill is-paused">Paused</span>'
+        : '<span class="active-app-pill">Live</span>';
+      const pauseResumeButton = isPaused
+        ? `<button type="button" class="small-action app-log-resume" data-action="resume-app-logging" data-app-id="${app.id}" title="Resume streaming; lines collected while paused are flushed to the CFLogs panel">
+              Resume
+            </button>`
+        : `<button type="button" class="small-action app-log-pause" data-action="pause-app-logging" data-app-id="${app.id}" title="Pause the live display; the session and collected logs stay in the CFLogs panel">
+              Pause
+            </button>`;
       return `
-        <div class="active-app-row">
+        <div class="active-app-row${isPaused ? ' is-paused' : ''}">
           <span class="active-app-name">${escapeHtml(app.name)}</span>
           <span class="active-app-meta">
+            ${statePill}
+            ${pauseResumeButton}
             <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
               Stop
             </button>

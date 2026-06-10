@@ -144,6 +144,25 @@ describe('Extension manifest feature surface', () => {
     );
   });
 
+  it('contributes the CF logs file-log directory setting', () => {
+    const manifest = readExtensionManifest();
+    const configuration = manifest.contributes['configuration'];
+    expect(Array.isArray(configuration)).toBe(true);
+
+    const properties = configuration
+      .filter(isRecord)
+      .map((entry) => readRecord(entry['properties']))
+      .find((entry) => entry['sapTools.cfLogs.fileLogDirectory'] !== undefined);
+
+    expect(properties?.['sapTools.cfLogs.fileLogDirectory']).toEqual(
+      expect.objectContaining({
+        default: '',
+        scope: 'application',
+        type: 'string',
+      })
+    );
+  });
+
   it('leaves the local registry default tag empty so runtime can derive it from scope', () => {
     const manifest = readExtensionManifest();
     const configuration = manifest.contributes['configuration'];

@@ -1,11 +1,14 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { CfLogStreamHandle } from './cfClient';
+
+const fileLogTestConfig = vi.hoisted(() => ({ directory: '' }));
 
 vi.mock('vscode', () => ({
   commands: {
@@ -15,6 +18,17 @@ vi.mock('vscode', () => ({
     joinPath: vi.fn(() => ({
       toString: () => 'mock-uri',
     })),
+  },
+  window: {
+    showWarningMessage: vi.fn(),
+  },
+  workspace: {
+    getConfiguration: vi.fn(() => ({
+      get: vi.fn((key: string): unknown =>
+        key === 'fileLogDirectory' ? fileLogTestConfig.directory : undefined
+      ),
+    })),
+    workspaceFolders: undefined,
   },
 }));
 
@@ -228,6 +242,183 @@ describe('CfLogsPanelProvider session healing', () => {
     expect(access.filterSessionNotReadyLines(stream, ['No org targeted'])).toEqual([
       'No org targeted',
     ]);
+  });
+});
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readStreamStates(webview: MockWebview, appName: string): string[] {
+  return webview.htmlMessages
+    .filter(isRecordValue)
+    .filter(
+      (message) =>
+        message['type'] === 'sapTools.logsStreamState' && message['appName'] === appName
+    )
+    .map((message) => String(message['status']));
+}
+
+function readAppendedLineBatches(webview: MockWebview, appName: string): string[][] {
+  return webview.htmlMessages
+    .filter(isRecordValue)
+    .filter(
+      (message) => message['type'] === 'sapTools.logsAppend' && message['appName'] === appName
+    )
+    .map((message) =>
+      Array.isArray(message['lines']) ? message['lines'].map((line) => String(line)) : []
+    );
+}
+
+interface CfLogsPanelMessageAccess {
+  handleWebviewMessage(message: unknown): Promise<void>;
+}
+
+describe('CfLogsPanelProvider file logging', () => {
+  it('renders the file-log dropdown left of the gear button defaulting to stream-only', () => {
+    const provider = createProviderForSettings();
+    const webview = createMockWebview();
+
+    provider.resolveWebviewView(
+      { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+    );
+
+    const dropdownIndex = webview.html.indexOf('id="file-log-select"');
+    const gearIndex = webview.html.indexOf('id="settings-toggle"');
+    expect(dropdownIndex).toBeGreaterThan(-1);
+    expect(gearIndex).toBeGreaterThan(dropdownIndex);
+    expect(webview.html).toMatch(/<option value="off" selected>/);
+    expect(webview.html).toContain('<option value="file">');
+    expect(
+      webview.htmlMessages.some(
+        (message) =>
+          isRecordValue(message) &&
+          message['type'] === 'sapTools.fileLogSettingInit' &&
+          message['fileLogMode'] === 'off' &&
+          typeof message['fileLogDirectory'] === 'string' &&
+          message['fileLogDirectory'].length > 0
+      )
+    ).toBe(true);
+  });
+
+  it('writes streamed lines to a per-app timestamped file while Log to file is on', async () => {
+    fileLogTestConfig.directory = mkdtempSync(join(tmpdir(), 'saptools-cflogs-'));
+    try {
+      const provider = createProviderForSettings();
+      const webview = createMockWebview();
+      provider.resolveWebviewView(
+        { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+      );
+
+      await (provider as unknown as CfLogsPanelMessageAccess).handleWebviewMessage({
+        type: 'sapTools.saveFileLogSetting',
+        fileLogMode: 'file',
+      });
+
+      const access = provider as unknown as CfLogsPanelTestAccess;
+      const mockProcess = createMockProcess();
+      const stream = createStream('finance-uat-api', mockProcess, vi.fn());
+      access.runningStreams.set(stream.appName, stream);
+      access.attachStreamListeners(stream);
+      mockProcess.stdout.emit(
+        'data',
+        Buffer.from(
+          '2026-04-12T09:14:31.73+0700 [APP/PROC/WEB/0] OUT line-one\nsecond-line\n'
+        )
+      );
+
+      provider.dispose();
+
+      await vi.waitFor(() => {
+        const files = readdirSync(fileLogTestConfig.directory);
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatch(
+          /^finance-uat-api_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(_\d+)?\.log$/
+        );
+        const content = readFileSync(
+          join(fileLogTestConfig.directory, files[0] ?? ''),
+          'utf8'
+        );
+        expect(content).toContain('line-one');
+        expect(content).toContain('second-line');
+      });
+    } finally {
+      rmSync(fileLogTestConfig.directory, { recursive: true, force: true });
+      fileLogTestConfig.directory = '';
+    }
+  });
+
+  it('keeps streaming without writing files while the dropdown stays off', () => {
+    fileLogTestConfig.directory = mkdtempSync(join(tmpdir(), 'saptools-cflogs-off-'));
+    try {
+      const provider = createProviderForSettings();
+      const webview = createMockWebview();
+      provider.resolveWebviewView(
+        { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+      );
+
+      const access = provider as unknown as CfLogsPanelTestAccess;
+      const mockProcess = createMockProcess();
+      const stream = createStream('finance-uat-api', mockProcess, vi.fn());
+      access.runningStreams.set(stream.appName, stream);
+      access.attachStreamListeners(stream);
+      mockProcess.stdout.emit('data', Buffer.from('stream-only-line\n'));
+
+      provider.dispose();
+
+      expect(readdirSync(fileLogTestConfig.directory)).toHaveLength(0);
+    } finally {
+      rmSync(fileLogTestConfig.directory, { recursive: true, force: true });
+      fileLogTestConfig.directory = '';
+    }
+  });
+});
+
+describe('CfLogsPanelProvider pause and resume', () => {
+  it('keeps the session and buffers new lines while paused, then flushes on resume', () => {
+    const provider = createProviderForSettings();
+    const webview = createMockWebview();
+    provider.resolveWebviewView(
+      { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+    );
+    provider.updateActiveApps(['finance-uat-api']);
+
+    const access = provider as unknown as CfLogsPanelTestAccess;
+    const mockProcess = createMockProcess();
+    const stop = vi.fn();
+    const stream = createStream('finance-uat-api', mockProcess, stop);
+    access.runningStreams.set(stream.appName, stream);
+    access.attachStreamListeners(stream);
+
+    provider.updatePausedApps(['finance-uat-api']);
+    expect(readStreamStates(webview, 'finance-uat-api').at(-1)).toBe('paused');
+
+    mockProcess.stdout.emit('data', Buffer.from('while-paused-line\n'));
+    expect(readAppendedLineBatches(webview, 'finance-uat-api')).toEqual([]);
+    // The cf logs process keeps running — pause only freezes the display.
+    expect(stop).not.toHaveBeenCalled();
+
+    provider.updatePausedApps([]);
+    expect(readAppendedLineBatches(webview, 'finance-uat-api')).toEqual([
+      ['while-paused-line'],
+    ]);
+    expect(readStreamStates(webview, 'finance-uat-api').at(-1)).toBe('streaming');
+  });
+
+  it('keeps the paused badge while background reconnect states arrive', () => {
+    const provider = createProviderForSettings();
+    const webview = createMockWebview();
+    provider.resolveWebviewView(
+      { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+    );
+    provider.updateActiveApps(['finance-uat-api']);
+    provider.updatePausedApps(['finance-uat-api']);
+
+    (provider as unknown as {
+      postStreamState(appName: string, status: string, message?: string): void;
+    }).postStreamState('finance-uat-api', 'reconnecting', 'Retrying in 1000 ms.');
+
+    expect(readStreamStates(webview, 'finance-uat-api').at(-1)).toBe('paused');
   });
 });
 

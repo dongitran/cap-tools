@@ -11,6 +11,8 @@ const SAVE_LOG_LIMIT_SETTING_MESSAGE_TYPE = 'sapTools.saveLogLimitSetting';
 const LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.logLimitSettingInit';
 const SAVE_MESSAGE_HEIGHT_LIMIT_SETTING_MESSAGE_TYPE = 'sapTools.saveMessageHeightLimitSetting';
 const MESSAGE_HEIGHT_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.messageHeightLimitSettingInit';
+const SAVE_FILE_LOG_SETTING_MESSAGE_TYPE = 'sapTools.saveFileLogSetting';
+const FILE_LOG_SETTING_INIT_MESSAGE_TYPE = 'sapTools.fileLogSettingInit';
 const CF_LINE_PATTERN = /^\s*(?<timestamp>\d{4}-\d{2}-\d{2}T[^\s]+)\s+\[(?<source>[^\]]+)]\s+(?<stream>OUT|ERR)\s?(?<body>.*)$/;
 const CF_CLI_SYSTEM_MESSAGE_PREFIXES = [
   'Retrieving logs for app',
@@ -59,6 +61,8 @@ const DEFAULT_FONT_SIZE_PRESET = 'default';
 const LOG_LIMIT_PRESETS = [300, 500, 1000, 3000];
 const DEFAULT_LOG_LIMIT = 300;
 const DEFAULT_LIMIT_MESSAGE_HEIGHT = false;
+const FILE_LOG_MODES = ['off', 'file'];
+const DEFAULT_FILE_LOG_MODE = 'off';
 
 function isKnownColumnId(value) {
   return typeof value === 'string' && COLUMN_DEFS.some((column) => column.id === value);
@@ -171,10 +175,14 @@ let nextCopyRequestId = 0;
 /** Maps requestId → callback to invoke when copy result arrives from extension. */
 const pendingCopyCallbacks = new Map();
 let copyToastTimer = null;
+// Session-scoped on purpose: streaming never writes files unless explicitly enabled.
+let fileLogMode = DEFAULT_FILE_LOG_MODE;
+let fileLogDirectory = '';
 
 applyFontSizePreset();
 applyLogLimitSetting();
 applyMessageHeightLimitSetting();
+applyFileLogSetting();
 
 // Build header from current column config before first render.
 rebuildTableHeader();
@@ -203,6 +211,7 @@ function getRequiredElements() {
   const filterSearch = document.getElementById('filter-search');
   const filterLevel = document.getElementById('filter-level');
   const filterApp = document.getElementById('filter-app');
+  const fileLogSelect = document.getElementById('file-log-select');
   const settingsToggle = document.getElementById('settings-toggle');
   const settingsPanel = document.getElementById('settings-panel');
   const settingsColumnToggles = document.getElementById('settings-column-toggles');
@@ -239,6 +248,10 @@ function getRequiredElements() {
     throw new Error('Missing #filter-app.');
   }
 
+  if (!(fileLogSelect instanceof HTMLSelectElement)) {
+    throw new Error('Missing #file-log-select.');
+  }
+
   if (!(settingsToggle instanceof HTMLButtonElement)) {
     throw new Error('Missing #settings-toggle.');
   }
@@ -272,6 +285,7 @@ function getRequiredElements() {
     tableBody,
     tableSummary,
     workspaceScope,
+    fileLogSelect,
     settingsToggle,
     settingsPanel,
     settingsColumnToggles,
@@ -1093,6 +1107,10 @@ function bindFilterEvents() {
     }
   });
 
+  elements.fileLogSelect.addEventListener('change', () => {
+    handleFileLogModeChange(elements.fileLogSelect.value);
+  });
+
   elements.settingsToggle.addEventListener('click', () => {
     toggleSettingsPanel();
   });
@@ -1329,6 +1347,16 @@ function bindExtensionMessages() {
       limitMessageHeight = msg.limitMessageHeight;
       applyMessageHeightLimitSetting();
       syncMessageHeightLimitSettingToState();
+    }
+
+    if (
+      msg.type === FILE_LOG_SETTING_INIT_MESSAGE_TYPE &&
+      typeof msg.fileLogMode === 'string' &&
+      isKnownFileLogMode(msg.fileLogMode)
+    ) {
+      fileLogMode = msg.fileLogMode;
+      fileLogDirectory = typeof msg.fileLogDirectory === 'string' ? msg.fileLogDirectory : '';
+      applyFileLogSetting();
     }
   });
 }
@@ -1972,6 +2000,38 @@ function handleMessageHeightLimitChange(nextLimitMessageHeight) {
   saveMessageHeightLimitSetting();
 }
 
+// ── File logging dropdown ────────────────────────────────────────────────────
+
+function isKnownFileLogMode(value) {
+  return FILE_LOG_MODES.includes(value);
+}
+
+function applyFileLogSetting() {
+  elements.fileLogSelect.value = fileLogMode;
+  elements.fileLogSelect.classList.toggle('is-file-log-active', fileLogMode === 'file');
+  const directoryHint = fileLogDirectory.length > 0 ? fileLogDirectory : 'the configured log folder';
+  elements.fileLogSelect.title =
+    fileLogMode === 'file'
+      ? `Streaming and writing logs to ${directoryHint} (one timestamped file per app run).`
+      : `Stream only. Choose "Log to file" to also write logs to ${directoryHint}.`;
+}
+
+function handleFileLogModeChange(nextMode) {
+  if (!isKnownFileLogMode(nextMode) || nextMode === fileLogMode) {
+    applyFileLogSetting();
+    return;
+  }
+
+  fileLogMode = nextMode;
+  applyFileLogSetting();
+  if (vscodeApi !== null) {
+    vscodeApi.postMessage({
+      type: SAVE_FILE_LOG_SETTING_MESSAGE_TYPE,
+      fileLogMode,
+    });
+  }
+}
+
 /**
  * Rebuild the <thead> row to match the current visibleColumns list.
  */
@@ -2136,5 +2196,34 @@ function saveMessageHeightLimitSetting() {
 }
 
 function renderSummary(rows, all) {
-  elements.tableSummary.textContent = `${rows.length} of ${all.length} rows`;
+  const baseSummary = `${rows.length} of ${all.length} rows`;
+  const streamState = streamStateByApp.get(elements.filters.app.value);
+  const stateSuffix = formatStreamStateSuffix(streamState);
+  elements.tableSummary.textContent =
+    stateSuffix.length > 0 ? `${baseSummary} ${stateSuffix}` : baseSummary;
+  elements.tableSummary.classList.toggle(
+    'is-stream-paused',
+    streamState !== undefined && streamState.status === 'paused'
+  );
+}
+
+function formatStreamStateSuffix(streamState) {
+  if (streamState === undefined) {
+    return '';
+  }
+
+  switch (streamState.status) {
+    case 'paused':
+      return '· ⏸ Paused — collected logs stay here; resume from the SAP Tools sidebar';
+    case 'streaming':
+      return '· ● Live';
+    case 'starting':
+      return '· Starting…';
+    case 'reconnecting':
+      return '· ↻ Reconnecting…';
+    case 'error':
+      return '· ⚠ Stream error';
+    default:
+      return '';
+  }
 }

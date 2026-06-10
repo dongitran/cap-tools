@@ -487,6 +487,7 @@ let lastSyncLabel = 'Not synced yet';
 let logsData = cloneSeedLogs();
 let selectedAppLogIds = [];
 let activeAppLogIds = [];
+let pausedAppLogIds = [];
 let pendingSelectionMotion = null;
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
 const DESIGN_THEME_CLASS_PREFIX = 'theme-';

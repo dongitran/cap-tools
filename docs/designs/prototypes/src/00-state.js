@@ -134,6 +134,7 @@ const OPEN_CF_LOGS_PANEL_MESSAGE_TYPE = 'sapTools.openCfLogsPanel';
 const ORG_SELECTED_MESSAGE_TYPE = 'sapTools.orgSelected';
 const SPACE_SELECTED_MESSAGE_TYPE = 'sapTools.spaceSelected';
 const ACTIVE_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.activeAppsChanged';
+const PAUSED_APPS_CHANGED_MESSAGE_TYPE = 'sapTools.pausedAppsChanged';
 const UPDATE_SYNC_INTERVAL_MESSAGE_TYPE = 'sapTools.updateSyncInterval';
 const SYNC_NOW_MESSAGE_TYPE = 'sapTools.syncNow';
 const LOGOUT_MESSAGE_TYPE = 'sapTools.logout';

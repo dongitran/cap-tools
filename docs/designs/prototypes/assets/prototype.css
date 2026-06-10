@@ -1510,6 +1510,37 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   transform: translateY(-1px);
 }
 
+.app-log-pause,
+.app-log-resume {
+  min-height: 22px;
+  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-ink));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface-bg) 86%, var(--mix-base));
+  color: var(--text-color);
+  padding-inline: 10px;
+  font-size: 0.74rem;
+  line-height: 1;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.app-log-pause:hover {
+  border-color: color-mix(in oklab, var(--border-color) 60%, var(--mix-ink));
+  background: color-mix(in oklab, var(--surface-bg) 70%, var(--mix-ink));
+  transform: translateY(-1px);
+}
+
+.app-log-resume {
+  border-color: var(--state-success-border);
+  background: color-mix(in oklab, var(--state-success-bg) 82%, var(--frame-bg));
+  color: var(--state-success-fg);
+}
+
+.app-log-resume:hover {
+  border-color: color-mix(in oklab, var(--state-success-border) 84%, var(--mix-ink));
+  background: color-mix(in oklab, var(--state-success-bg) 64%, var(--state-success-border));
+  transform: translateY(-1px);
+}
+
 .active-apps-log {
   display: grid;
   gap: 7px;
@@ -1550,6 +1581,20 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   padding: 2px 7px;
   font-size: 0.62rem;
   font-weight: 700;
+}
+
+.active-app-pill.is-paused {
+  border-color: color-mix(in oklab, var(--border-color) 84%, var(--mix-ink));
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--mix-base));
+  color: var(--muted-color);
+}
+
+.active-app-row.is-paused {
+  border-style: dashed;
+}
+
+.active-app-row.is-paused .active-app-name {
+  color: var(--muted-color);
 }
 /* --- END 03-logs-panel.css --- */
 

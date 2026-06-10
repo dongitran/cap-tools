@@ -18,6 +18,7 @@ import {
 interface StartedCfLogsSession {
   readonly session: Awaited<ReturnType<typeof launchExtensionHost>>;
   readonly logsFrame: Frame;
+  readonly sidebarFrame: Frame;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -40,7 +41,7 @@ async function openStartedCfLogsSession(): Promise<StartedCfLogsSession> {
     timeout: 10000,
   });
 
-  return { session, logsFrame };
+  return { session, logsFrame, sidebarFrame };
 }
 
 async function setCfLogsColumnVisible(
@@ -1850,6 +1851,79 @@ test.describe('SAP Tools CF logs panel', () => {
           return frame.locator('#workspace-scope').textContent();
         }, { timeout: 15000 })
         .toContain('uat');
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can see the file logging dropdown defaulting to stream-only', async () => {
+    const { session, logsFrame } = await openStartedCfLogsSession();
+
+    try {
+      const fileLogSelect = logsFrame.getByLabel('File logging mode');
+      await expect(fileLogSelect).toBeVisible({ timeout: 10000 });
+      await expect(fileLogSelect).toHaveValue('off');
+
+      const optionTexts = await fileLogSelect.locator('option').allTextContents();
+      expect(optionTexts).toEqual(['No file log', 'Log to file']);
+
+      // The dropdown sits immediately left of the gear button inside the filter bar.
+      const isLeftOfGear = await logsFrame.evaluate(() => {
+        const dropdownItem = document
+          .getElementById('file-log-select')
+          ?.closest('.filter-item');
+        const gearButton = document.getElementById('settings-toggle');
+        if (!(dropdownItem instanceof HTMLElement) || !(gearButton instanceof HTMLElement)) {
+          return false;
+        }
+        return dropdownItem.nextElementSibling === gearButton;
+      });
+      expect(isLeftOfGear).toBe(true);
+
+      await fileLogSelect.selectOption('file');
+      await expect(fileLogSelect).toHaveValue('file', { timeout: 5000 });
+      await expect(fileLogSelect).toHaveClass(/is-file-log-active/, { timeout: 5000 });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can pause and resume app logging while keeping collected logs', async () => {
+    const { session, logsFrame, sidebarFrame } = await openStartedCfLogsSession();
+
+    try {
+      const apiRow = sidebarFrame.locator('.active-app-row', {
+        hasText: 'finance-uat-api',
+      });
+      await expect(apiRow).toBeVisible({ timeout: 10000 });
+      await expect(apiRow.locator('.active-app-pill')).toHaveText('Live');
+
+      await clickWithFallback(apiRow.getByRole('button', { name: 'Pause' }));
+
+      await expect(apiRow.locator('.active-app-pill')).toHaveText('Paused', {
+        timeout: 5000,
+      });
+      await expect(apiRow.getByRole('button', { name: 'Resume' })).toBeVisible({
+        timeout: 5000,
+      });
+      const summary = logsFrame.locator('#table-summary');
+      await expect(summary).toContainText('Paused', { timeout: 10000 });
+      // Collected rows stay visible for review while paused.
+      await expect(logsFrame.locator('#log-table-body td.empty-row')).toHaveCount(0);
+      expect(
+        await logsFrame.locator('#log-table-body tr').count()
+      ).toBeGreaterThan(0);
+
+      await clickWithFallback(apiRow.getByRole('button', { name: 'Resume' }));
+
+      await expect(apiRow.locator('.active-app-pill')).toHaveText('Live', {
+        timeout: 5000,
+      });
+      await expect(apiRow.getByRole('button', { name: 'Pause' })).toBeVisible({
+        timeout: 5000,
+      });
+      await expect(summary).not.toContainText('Paused', { timeout: 10000 });
+      await expect(summary).toContainText('Live', { timeout: 10000 });
     } finally {
       await cleanupExtensionHost(session);
     }

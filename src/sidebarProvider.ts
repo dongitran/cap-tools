@@ -71,6 +71,7 @@ const MSG_QUICK_SCOPE_CONFIRM = 'sapTools.quickScopeConfirm';
 const MSG_REQUEST_CF_TOPOLOGY = 'sapTools.requestCfTopology';
 const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
 const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
+const MSG_PAUSED_APPS_CHANGED = 'sapTools.pausedAppsChanged';
 const MSG_UPDATE_SYNC_INTERVAL = 'sapTools.updateSyncInterval';
 const MSG_SYNC_NOW = 'sapTools.syncNow';
 const MSG_LOGOUT = 'sapTools.logout';
@@ -459,6 +460,12 @@ export class RegionSidebarProvider
     if (type === MSG_ACTIVE_APPS_CHANGED && isActiveAppsChangedMessage(message)) {
       const payload = readActiveAppsChangedPayload(message);
       this.cfLogsPanel.updateActiveApps(payload.appNames);
+      return;
+    }
+
+    if (type === MSG_PAUSED_APPS_CHANGED && isActiveAppsChangedMessage(message)) {
+      const payload = readActiveAppsChangedPayload(message);
+      this.cfLogsPanel.updatePausedApps(payload.appNames);
       return;
     }
 

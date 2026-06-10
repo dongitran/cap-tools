@@ -200,8 +200,8 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 
 .filter-inline {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) 106px auto;
-  grid-template-areas: 'app search level settings';
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr) 106px auto auto;
+  grid-template-areas: 'app search level file-log settings';
   align-items: end;
   gap: 8px;
 }
@@ -337,6 +337,22 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
 .filter-item-level {
   grid-area: level;
   min-width: 0;
+}
+
+.filter-item-file-log {
+  grid-area: file-log;
+  min-width: 0;
+}
+
+.filter-item-file-log select {
+  min-width: 104px;
+  color: var(--panel-muted);
+}
+
+.filter-item-file-log select.is-file-log-active {
+  color: var(--panel-accent);
+  border-color: color-mix(in oklab, var(--panel-accent) 55%, var(--panel-border));
+  background: color-mix(in oklab, var(--panel-accent) 10%, var(--panel-surface));
 }
 
 .gear-button {
@@ -592,12 +608,16 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   color: var(--panel-muted);
 }
 
+.table-summary.is-stream-paused {
+  color: var(--panel-warning);
+}
+
 @media (max-width: 900px) {
   .filter-inline {
-    grid-template-columns: minmax(0, 1fr) 96px auto;
+    grid-template-columns: minmax(0, 1fr) 96px auto auto;
     grid-template-areas:
-      'app level settings'
-      'search search search';
+      'app level file-log settings'
+      'search search search search';
     row-gap: 6px;
   }
 }
@@ -608,7 +628,7 @@ body.vscode-high-contrast-light.cf-logs-panel-page {
   }
 
   .filter-inline {
-    grid-template-columns: minmax(0, 1fr) 84px auto;
+    grid-template-columns: minmax(0, 1fr) 84px auto auto;
   }
 
   .settings-panel-label {

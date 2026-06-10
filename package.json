@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.10.48",
+  "version": "0.10.49",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -81,6 +81,12 @@
                 }
               }
             }
+          },
+          "sapTools.cfLogs.fileLogDirectory": {
+            "type": "string",
+            "scope": "application",
+            "default": "",
+            "markdownDescription": "Folder where the CFLogs panel writes per-app log files when its file-logging dropdown (left of the gear button) is set to **Log to file**. Supports `~` for the home directory; relative paths resolve against the first workspace folder. When empty, `~/.saptools/cflogs` is used. Every app-logging run creates a fresh file named `<app-name>_<YYYY-MM-DD_HH-mm-ss>.log`, so runs never overwrite each other."
           },
           "sapTools.localPackages.namePatterns": {
             "type": "string",

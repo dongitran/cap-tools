@@ -397,11 +397,54 @@ function handleLogsControlAction(action, actionElement) {
 
     const appName =
       resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    const wasPaused = pausedAppLogIds.includes(appId);
     activeAppLogIds = activeAppLogIds.filter((activeAppId) => activeAppId !== appId);
     selectedAppLogIds = selectedAppLogIds.filter((selectedAppId) => selectedAppId !== appId);
+    pausedAppLogIds = pausedAppLogIds.filter((pausedAppId) => pausedAppId !== appId);
     postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
+    if (wasPaused) {
+      postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
+    }
     lastSyncLabel = formatNow();
     statusMessage = `Stopped logging for ${appName}.`;
+    return true;
+  }
+
+  if (action === 'pause-app-logging') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+
+    if (!activeAppLogIds.includes(appId) || pausedAppLogIds.includes(appId)) {
+      return true;
+    }
+
+    const appName =
+      resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    pausedAppLogIds = [...pausedAppLogIds, appId];
+    postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
+    lastSyncLabel = formatNow();
+    statusMessage = `Paused logging for ${appName}. Collected logs stay in the CFLogs panel.`;
+    return true;
+  }
+
+  if (action === 'resume-app-logging') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId.length === 0) {
+      return false;
+    }
+
+    if (!pausedAppLogIds.includes(appId)) {
+      return true;
+    }
+
+    const appName =
+      resolveCurrentSpaceApps().find((app) => app.id === appId)?.name ?? appId;
+    pausedAppLogIds = pausedAppLogIds.filter((pausedAppId) => pausedAppId !== appId);
+    postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
+    lastSyncLabel = formatNow();
+    statusMessage = `Resumed logging for ${appName}.`;
     return true;
   }
 

@@ -257,6 +257,17 @@ function postActiveAppsChanged(appNames) {
   });
 }
 
+function postPausedAppsChanged(appNames) {
+  if (vscodeApi === null) {
+    return;
+  }
+
+  vscodeApi.postMessage({
+    type: PAUSED_APPS_CHANGED_MESSAGE_TYPE,
+    appNames,
+  });
+}
+
 function postSelectServiceFolderMapping(appId, folderPath) {
   if (vscodeApi === null) {
     return;

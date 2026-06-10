@@ -1,4 +1,7 @@
-// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate copylog gorouter routererror
+// cspell:words guid appname logsloaded logsappend logsstreamstate logserror fetchlogs appsupdate copylog gorouter routererror cflogs filelog
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   fetchRecentAppLogsFromTarget,
@@ -27,6 +30,8 @@ const SAVE_LOG_LIMIT_SETTING_MESSAGE_TYPE = 'sapTools.saveLogLimitSetting';
 const LOG_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.logLimitSettingInit';
 const SAVE_MESSAGE_HEIGHT_LIMIT_SETTING_MESSAGE_TYPE = 'sapTools.saveMessageHeightLimitSetting';
 const MESSAGE_HEIGHT_LIMIT_SETTING_INIT_MESSAGE_TYPE = 'sapTools.messageHeightLimitSettingInit';
+const SAVE_FILE_LOG_SETTING_MESSAGE_TYPE = 'sapTools.saveFileLogSetting';
+const FILE_LOG_SETTING_INIT_MESSAGE_TYPE = 'sapTools.fileLogSettingInit';
 
 const COLUMN_SETTINGS_GLOBAL_STATE_KEY = 'cfLogsPanel.visibleColumns';
 const FONT_SIZE_SETTING_GLOBAL_STATE_KEY = 'cfLogsPanel.fontSizePreset';
@@ -58,6 +63,20 @@ const DEFAULT_LIMIT_MESSAGE_HEIGHT = false;
 const STREAM_BATCH_FLUSH_MS = 150;
 const STREAM_RETRY_INITIAL_MS = 1_000;
 const STREAM_RETRY_MAX_MS = 20_000;
+
+const FILE_LOG_MODES = ['off', 'file'] as const;
+type FileLogMode = (typeof FILE_LOG_MODES)[number];
+const DEFAULT_FILE_LOG_MODE: FileLogMode = 'off';
+const FILE_LOG_CONFIG_SECTION = 'sapTools.cfLogs';
+const FILE_LOG_DIRECTORY_CONFIG_KEY = 'fileLogDirectory';
+
+/**
+ * While an app's display is paused, freshly streamed lines wait in a per-app
+ * buffer so the resume flush replays everything that happened meanwhile.
+ * Bounded because the panel itself caps rendering at a few thousand rows; once
+ * exceeded the oldest lines are dropped and the flush prepends a skip marker.
+ */
+const MAX_PAUSED_BUFFER_LINES = 4_000;
 
 /**
  * A freshly spawned `cf logs` stream occasionally emits CF CLI "session not
@@ -132,7 +151,23 @@ interface PendingAppsUpdate {
   readonly sessionParams: LogSessionParams | null;
 }
 
-type StreamStateStatus = 'starting' | 'streaming' | 'reconnecting' | 'stopped' | 'error';
+type StreamStateStatus =
+  | 'starting'
+  | 'streaming'
+  | 'paused'
+  | 'reconnecting'
+  | 'stopped'
+  | 'error';
+
+interface FileLogWriter {
+  readonly filePath: string;
+  readonly stream: fs.WriteStream;
+}
+
+interface PausedLineBuffer {
+  lines: string[];
+  droppedLineCount: number;
+}
 
 interface AppStreamRuntime {
   readonly appName: string;
@@ -163,6 +198,13 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private preparingFetchToken: number | null = null;
   private prepareSessionPromise: Promise<void> | null = null;
   private fetchToken = 0;
+  // Session-scoped on purpose: file logging always starts disabled so a fresh
+  // VS Code session never silently writes log files from a previous choice.
+  private fileLogMode: FileLogMode = DEFAULT_FILE_LOG_MODE;
+  private readonly fileLogWriters = new Map<string, FileLogWriter>();
+  private readonly fileLogFailedApps = new Set<string>();
+  private pausedAppNames = new Set<string>();
+  private readonly pausedLineBuffers = new Map<string, PausedLineBuffer>();
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(private readonly extensionContext: vscode.ExtensionContext) {}
@@ -243,6 +285,8 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       limitMessageHeight: normalizedLimitMessageHeight,
     });
 
+    this.postFileLogSetting();
+
     // Replay scope and apps that arrived before this view was initialized.
     if (this.pendingScope !== null) {
       void webviewView.webview.postMessage({
@@ -290,6 +334,7 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       this.pendingActiveAppNames,
       loggableApps
     );
+    this.prunePausedStateToActiveApps();
     this.stopAllStreams();
     this.doUpdateApps(loggableApps, sessionParams);
     this.doUpdateActiveApps(this.pendingActiveAppNames);
@@ -304,12 +349,43 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     const normalized = this.normalizeAppNames(appNames);
     const availableApps = this.pendingAppsUpdate?.apps ?? null;
     this.pendingActiveAppNames = this.filterActiveAppNames(normalized, availableApps);
+    this.prunePausedStateToActiveApps();
     this.doUpdateActiveApps(this.pendingActiveAppNames);
     void this.syncStreamsToActiveApps();
   }
 
+  /**
+   * Sync paused logging apps coming from the sidebar workspace. A paused app
+   * keeps its `cf logs` session alive and its collected rows visible in the
+   * panel; only the live display is frozen. New lines wait in a bounded buffer
+   * (and keep flowing into the log file when file logging is on) until the app
+   * is resumed or stopped.
+   */
+  updatePausedApps(appNames: string[]): void {
+    const activeNames = new Set(this.pendingActiveAppNames);
+    const requested = new Set(
+      this.normalizeAppNames(appNames).filter((appName) => activeNames.has(appName))
+    );
+    const previous = this.pausedAppNames;
+    this.pausedAppNames = requested;
+
+    for (const appName of requested) {
+      if (!previous.has(appName)) {
+        this.pauseStreamOutput(appName);
+      }
+    }
+    for (const appName of previous) {
+      if (!requested.has(appName)) {
+        this.resumeStreamOutput(appName);
+      }
+    }
+  }
+
   dispose(): void {
     this.stopAllStreams();
+    this.closeAllFileLogWriters();
+    this.pausedAppNames.clear();
+    this.pausedLineBuffers.clear();
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
@@ -402,9 +478,76 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       }
     }
 
+    // File writers follow the logical logging session of an app (start → stop),
+    // not the process lifecycle, so reconnects keep appending to the same file.
+    for (const appName of [...this.fileLogWriters.keys()]) {
+      if (!this.pendingActiveAppNames.includes(appName)) {
+        this.closeFileLogWriter(appName);
+      }
+    }
+
     for (const appName of this.pendingActiveAppNames) {
       await this.startStreamIfNeeded(appName);
     }
+  }
+
+  private prunePausedStateToActiveApps(): void {
+    const activeNames = new Set(this.pendingActiveAppNames);
+    for (const appName of [...this.pausedAppNames]) {
+      if (!activeNames.has(appName)) {
+        this.pausedAppNames.delete(appName);
+      }
+    }
+    for (const appName of [...this.pausedLineBuffers.keys()]) {
+      if (!activeNames.has(appName)) {
+        this.pausedLineBuffers.delete(appName);
+      }
+    }
+  }
+
+  private pauseStreamOutput(appName: string): void {
+    const stream = this.runningStreams.get(appName);
+    if (stream !== undefined) {
+      this.clearStreamTimers(stream);
+      if (stream.lineBuffer.length > 0) {
+        this.appendPausedLines(appName, stream.lineBuffer);
+        stream.lineBuffer = [];
+      }
+    }
+    this.postStreamState(appName, 'paused');
+  }
+
+  private resumeStreamOutput(appName: string): void {
+    const buffered = this.pausedLineBuffers.get(appName);
+    this.pausedLineBuffers.delete(appName);
+    const lines = buffered === undefined ? [] : [...buffered.lines];
+    if (buffered !== undefined && buffered.droppedLineCount > 0) {
+      lines.unshift(
+        `[SAP Tools] Skipped ${String(buffered.droppedLineCount)} older line(s) while paused (display buffer limit).`
+      );
+    }
+    this.postAppendedLines(appName, lines);
+
+    if (this.runningStreams.has(appName) || isTestMode()) {
+      this.postStreamState(appName, 'streaming');
+      return;
+    }
+    // The stream died while paused — restart it; the start flow posts its own states.
+    void this.startStreamIfNeeded(appName);
+  }
+
+  private appendPausedLines(appName: string, lines: string[]): void {
+    const buffer = this.pausedLineBuffers.get(appName) ?? {
+      lines: [],
+      droppedLineCount: 0,
+    };
+    buffer.lines.push(...lines);
+    if (buffer.lines.length > MAX_PAUSED_BUFFER_LINES) {
+      const overflow = buffer.lines.length - MAX_PAUSED_BUFFER_LINES;
+      buffer.lines.splice(0, overflow);
+      buffer.droppedLineCount += overflow;
+    }
+    this.pausedLineBuffers.set(appName, buffer);
   }
 
   private async startStreamIfNeeded(appName: string): Promise<void> {
@@ -518,6 +661,9 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     };
     this.runningStreams.set(appName, stream);
     this.attachStreamListeners(stream);
+    if (this.fileLogMode === 'file') {
+      this.ensureFileLogWriter(appName);
+    }
     this.postStreamState(appName, 'streaming');
   }
 
@@ -552,6 +698,13 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
 
     const sanitizedLines = visibleLines.map((line) => this.sanitizeLineForUi(line));
+    this.writeStreamLinesToFile(stream.appName, sanitizedLines);
+
+    if (this.pausedAppNames.has(stream.appName)) {
+      this.appendPausedLines(stream.appName, sanitizedLines);
+      return;
+    }
+
     stream.lineBuffer.push(...sanitizedLines);
 
     if (stream.flushTimer !== null) {
@@ -779,8 +932,12 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
     }
 
     if (stream.lineRemainder.length > 0) {
-      stream.lineBuffer.push(this.sanitizeLineForUi(stream.lineRemainder));
+      // Complete chunk lines were already written at chunk time; only this
+      // trailing partial line still needs to reach the log file.
+      const remainderLine = this.sanitizeLineForUi(stream.lineRemainder);
       stream.lineRemainder = '';
+      this.writeStreamLinesToFile(stream.appName, [remainderLine]);
+      stream.lineBuffer.push(remainderLine);
     }
 
     if (stream.lineBuffer.length === 0) {
@@ -789,6 +946,10 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
 
     const lines = [...stream.lineBuffer];
     stream.lineBuffer = [];
+    if (this.pausedAppNames.has(stream.appName)) {
+      this.appendPausedLines(stream.appName, lines);
+      return;
+    }
     this.postAppendedLines(stream.appName, lines);
   }
 
@@ -821,12 +982,129 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   private postStreamState(appName: string, status: StreamStateStatus, message?: string): void {
+    // While paused the background session keeps reconnecting/streaming; those
+    // transient states must not overwrite the panel's paused indicator.
+    if (this.pausedAppNames.has(appName) && status !== 'paused') {
+      return;
+    }
     void this.webviewView?.webview.postMessage({
       type: LOGS_STREAM_STATE_MESSAGE_TYPE,
       appName,
       status,
       message,
     });
+  }
+
+  // ── File logging ───────────────────────────────────────────────────────────
+
+  private postFileLogSetting(): void {
+    void this.webviewView?.webview.postMessage({
+      type: FILE_LOG_SETTING_INIT_MESSAGE_TYPE,
+      fileLogMode: this.fileLogMode,
+      fileLogDirectory: this.resolveFileLogDirectory(),
+    });
+  }
+
+  private setFileLogMode(mode: FileLogMode): void {
+    if (mode === this.fileLogMode) {
+      this.postFileLogSetting();
+      return;
+    }
+
+    this.fileLogMode = mode;
+    this.fileLogFailedApps.clear();
+    if (mode === 'file') {
+      // Apply mid-run: every live stream starts its own timestamped file now.
+      for (const appName of this.runningStreams.keys()) {
+        this.ensureFileLogWriter(appName);
+      }
+    } else {
+      this.closeAllFileLogWriters();
+    }
+    this.postFileLogSetting();
+  }
+
+  private resolveFileLogDirectory(): string {
+    const configured = vscode.workspace
+      .getConfiguration(FILE_LOG_CONFIG_SECTION)
+      .get<string>(FILE_LOG_DIRECTORY_CONFIG_KEY);
+    const raw = typeof configured === 'string' ? configured.trim() : '';
+    if (raw.length === 0) {
+      return path.join(os.homedir(), '.saptools', 'cflogs');
+    }
+    return expandFileLogDirectory(raw);
+  }
+
+  private ensureFileLogWriter(appName: string): FileLogWriter | undefined {
+    const existing = this.fileLogWriters.get(appName);
+    if (existing !== undefined) {
+      return existing;
+    }
+    if (this.fileLogFailedApps.has(appName)) {
+      return undefined;
+    }
+
+    try {
+      const directory = this.resolveFileLogDirectory();
+      fs.mkdirSync(directory, { recursive: true });
+      const filePath = buildUniqueLogFilePath(directory, appName);
+      const writeStream = fs.createWriteStream(filePath, { flags: 'a', encoding: 'utf8' });
+      writeStream.on('error', (error: Error): void => {
+        this.handleFileLogWriteError(appName, error);
+      });
+      const writer: FileLogWriter = { filePath, stream: writeStream };
+      this.fileLogWriters.set(appName, writer);
+      writeStream.write(this.buildFileLogHeader(appName));
+      return writer;
+    } catch (error) {
+      this.handleFileLogWriteError(appName, error);
+      return undefined;
+    }
+  }
+
+  private buildFileLogHeader(appName: string): string {
+    const params = this.sessionParams;
+    const scopeSuffix =
+      params === null ? '' : ` — scope: ${params.orgName} / ${params.spaceName}`;
+    return `# SAP Tools CF logs — app: ${appName}${scopeSuffix} — started: ${new Date().toISOString()}\n`;
+  }
+
+  private writeStreamLinesToFile(appName: string, lines: string[]): void {
+    if (this.fileLogMode !== 'file' || lines.length === 0) {
+      return;
+    }
+    const writer = this.ensureFileLogWriter(appName);
+    if (writer === undefined) {
+      return;
+    }
+    writer.stream.write(`${lines.join('\n')}\n`);
+  }
+
+  private closeFileLogWriter(appName: string): void {
+    const writer = this.fileLogWriters.get(appName);
+    if (writer === undefined) {
+      return;
+    }
+    this.fileLogWriters.delete(appName);
+    writer.stream.end();
+  }
+
+  private closeAllFileLogWriters(): void {
+    for (const appName of [...this.fileLogWriters.keys()]) {
+      this.closeFileLogWriter(appName);
+    }
+  }
+
+  private handleFileLogWriteError(appName: string, error: unknown): void {
+    this.closeFileLogWriter(appName);
+    if (this.fileLogFailedApps.has(appName)) {
+      return;
+    }
+    this.fileLogFailedApps.add(appName);
+    const message = error instanceof Error ? error.message : String(error);
+    void vscode.window.showWarningMessage(
+      `SAP Tools: failed to write CF log file for "${appName}": ${message}`
+    );
   }
 
   private async handleWebviewMessage(message: unknown): Promise<void> {
@@ -902,6 +1180,14 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
         MESSAGE_HEIGHT_LIMIT_SETTING_GLOBAL_STATE_KEY,
         message['limitMessageHeight']
       );
+    }
+
+    if (
+      message['type'] === SAVE_FILE_LOG_SETTING_MESSAGE_TYPE &&
+      typeof message['fileLogMode'] === 'string' &&
+      isKnownFileLogMode(message['fileLogMode'])
+    ) {
+      this.setFileLogMode(message['fileLogMode']);
     }
   }
 
@@ -1064,6 +1350,12 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
             <option value="all">All</option>
           </select>
         </div>
+        <div class="filter-item filter-item-file-log">
+          <select id="file-log-select" aria-label="File logging mode">
+            <option value="off" selected>No file log</option>
+            <option value="file">Log to file</option>
+          </select>
+        </div>
         <button
           type="button"
           class="gear-button"
@@ -1213,6 +1505,50 @@ function isKnownColumnId(value: string): value is (typeof ALL_COLUMN_IDS)[number
 
 function isKnownFontSizePreset(value: string): value is (typeof FONT_SIZE_PRESETS)[number] {
   return (FONT_SIZE_PRESETS as readonly string[]).includes(value);
+}
+
+function isKnownFileLogMode(value: string): value is FileLogMode {
+  return (FILE_LOG_MODES as readonly string[]).includes(value);
+}
+
+function expandFileLogDirectory(rawDirectory: string): string {
+  if (rawDirectory === '~') {
+    return os.homedir();
+  }
+  if (rawDirectory.startsWith('~/') || rawDirectory.startsWith('~\\')) {
+    return path.join(os.homedir(), rawDirectory.slice(2));
+  }
+  if (path.isAbsolute(rawDirectory)) {
+    return rawDirectory;
+  }
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  return path.join(workspaceRoot ?? os.homedir(), rawDirectory);
+}
+
+function buildUniqueLogFilePath(directory: string, appName: string): string {
+  const baseName = `${sanitizeFileNameComponent(appName)}_${formatFileLogTimestamp(new Date())}`;
+  let candidate = path.join(directory, `${baseName}.log`);
+  let suffix = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(directory, `${baseName}_${String(suffix)}.log`);
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function sanitizeFileNameComponent(value: string): string {
+  const sanitized = value
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^[-.]+/, '')
+    .replace(/[-.]+$/, '');
+  return sanitized.length > 0 ? sanitized : 'app';
+}
+
+function formatFileLogTimestamp(date: Date): string {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  const datePart = `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const timePart = `${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+  return `${datePart}_${timePart}`;
 }
 
 function isKnownLogLimit(value: number): value is (typeof LOG_LIMIT_PRESETS)[number] {

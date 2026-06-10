@@ -286,9 +286,14 @@ function resetSqlWorkbenchState() {
 
 function resetActiveAppLoggingState() {
   const hadActiveApps = activeAppLogIds.length > 0;
+  const hadPausedApps = pausedAppLogIds.length > 0;
   selectedAppLogIds = [];
   activeAppLogIds = [];
+  pausedAppLogIds = [];
   statusMessage = '';
+  if (hadPausedApps) {
+    postPausedAppsChanged([]);
+  }
   if (hadActiveApps) {
     postActiveAppsChanged([]);
   }
@@ -298,7 +303,9 @@ function pruneSelectedAppIds() {
   const allowedAppIds = new Set(resolveCurrentSpaceApps().map((app) => app.id));
   selectedAppLogIds = selectedAppLogIds.filter((appId) => allowedAppIds.has(appId));
   activeAppLogIds = activeAppLogIds.filter((appId) => allowedAppIds.has(appId));
+  pausedAppLogIds = pausedAppLogIds.filter((appId) => activeAppLogIds.includes(appId));
   postActiveAppsChanged(resolveActiveAppNamesByIds(activeAppLogIds));
+  postPausedAppsChanged(resolveActiveAppNamesByIds(pausedAppLogIds));
 }
 
 function formatNow() {
