@@ -207,7 +207,21 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
   private readonly pausedLineBuffers = new Map<string, PausedLineBuffer>();
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly extensionContext: vscode.ExtensionContext) {}
+  constructor(private readonly extensionContext: vscode.ExtensionContext) {
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration((event): void => {
+        if (
+          event.affectsConfiguration(
+            `${FILE_LOG_CONFIG_SECTION}.${FILE_LOG_DIRECTORY_CONFIG_KEY}`
+          )
+        ) {
+          // Keep the dropdown tooltip in sync; writers already open keep their
+          // current file — the new folder applies to the next run.
+          this.postFileLogSetting();
+        }
+      })
+    );
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.webviewView = webviewView;
@@ -299,6 +313,11 @@ export class CfLogsPanelProvider implements vscode.WebviewViewProvider, vscode.D
       this.doUpdateApps(apps, sessionParams);
     }
     this.doUpdateActiveApps(this.pendingActiveAppNames);
+    // A reopened webview starts with empty stream-state caches; replay the
+    // paused indicator for apps whose display is still frozen extension-side.
+    for (const appName of this.pausedAppNames) {
+      this.postStreamState(appName, 'paused');
+    }
   }
 
   /**
@@ -1536,12 +1555,17 @@ function buildUniqueLogFilePath(directory: string, appName: string): string {
   return candidate;
 }
 
+const WINDOWS_RESERVED_FILE_NAMES = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 function sanitizeFileNameComponent(value: string): string {
   const sanitized = value
     .replace(/[^A-Za-z0-9._-]+/g, '-')
     .replace(/^[-.]+/, '')
     .replace(/[-.]+$/, '');
-  return sanitized.length > 0 ? sanitized : 'app';
+  if (sanitized.length === 0) {
+    return 'app';
+  }
+  return WINDOWS_RESERVED_FILE_NAMES.test(sanitized) ? `app-${sanitized}` : sanitized;
 }
 
 function formatFileLogTimestamp(date: Date): string {

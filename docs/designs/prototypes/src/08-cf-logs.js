@@ -291,11 +291,11 @@ function resetActiveAppLoggingState() {
   activeAppLogIds = [];
   pausedAppLogIds = [];
   statusMessage = '';
-  if (hadPausedApps) {
-    postPausedAppsChanged([]);
-  }
   if (hadActiveApps) {
     postActiveAppsChanged([]);
+  }
+  if (hadPausedApps) {
+    postPausedAppsChanged([]);
   }
 }
 

@@ -28,6 +28,7 @@ vi.mock('vscode', () => ({
         key === 'fileLogDirectory' ? fileLogTestConfig.directory : undefined
       ),
     })),
+    onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
     workspaceFolders: undefined,
   },
 }));
@@ -348,6 +349,39 @@ describe('CfLogsPanelProvider file logging', () => {
     }
   });
 
+  it('prefixes Windows-reserved app names in log file names', async () => {
+    fileLogTestConfig.directory = mkdtempSync(join(tmpdir(), 'saptools-cflogs-con-'));
+    try {
+      const provider = createProviderForSettings();
+      const webview = createMockWebview();
+      provider.resolveWebviewView(
+        { webview } as unknown as Parameters<CfLogsPanelProvider['resolveWebviewView']>[0]
+      );
+      await (provider as unknown as CfLogsPanelMessageAccess).handleWebviewMessage({
+        type: 'sapTools.saveFileLogSetting',
+        fileLogMode: 'file',
+      });
+
+      const access = provider as unknown as CfLogsPanelTestAccess;
+      const mockProcess = createMockProcess();
+      const stream = createStream('con', mockProcess, vi.fn());
+      access.runningStreams.set(stream.appName, stream);
+      access.attachStreamListeners(stream);
+      mockProcess.stdout.emit('data', Buffer.from('reserved-name-line\n'));
+
+      provider.dispose();
+
+      await vi.waitFor(() => {
+        const files = readdirSync(fileLogTestConfig.directory);
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatch(/^app-con_/);
+      });
+    } finally {
+      rmSync(fileLogTestConfig.directory, { recursive: true, force: true });
+      fileLogTestConfig.directory = '';
+    }
+  });
+
   it('keeps streaming without writing files while the dropdown stays off', () => {
     fileLogTestConfig.directory = mkdtempSync(join(tmpdir(), 'saptools-cflogs-off-'));
     try {
@@ -403,6 +437,27 @@ describe('CfLogsPanelProvider pause and resume', () => {
       ['while-paused-line'],
     ]);
     expect(readStreamStates(webview, 'finance-uat-api').at(-1)).toBe('streaming');
+  });
+
+  it('replays the paused indicator when the panel webview is reopened', () => {
+    const provider = createProviderForSettings();
+    const firstWebview = createMockWebview();
+    provider.resolveWebviewView(
+      { webview: firstWebview } as unknown as Parameters<
+        CfLogsPanelProvider['resolveWebviewView']
+      >[0]
+    );
+    provider.updateActiveApps(['finance-uat-api']);
+    provider.updatePausedApps(['finance-uat-api']);
+
+    const reopenedWebview = createMockWebview();
+    provider.resolveWebviewView(
+      { webview: reopenedWebview } as unknown as Parameters<
+        CfLogsPanelProvider['resolveWebviewView']
+      >[0]
+    );
+
+    expect(readStreamStates(reopenedWebview, 'finance-uat-api')).toEqual(['paused']);
   });
 
   it('keeps the paused badge while background reconnect states arrive', () => {

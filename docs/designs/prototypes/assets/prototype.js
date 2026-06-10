@@ -5022,11 +5022,12 @@ function renderActiveAppsLogList(availableApps, activeAppIds, pausedAppIds) {
       const statePill = isPaused
         ? '<span class="active-app-pill is-paused">Paused</span>'
         : '<span class="active-app-pill">Live</span>';
+      const escapedAppId = escapeHtml(app.id);
       const pauseResumeButton = isPaused
-        ? `<button type="button" class="small-action app-log-resume" data-action="resume-app-logging" data-app-id="${app.id}" title="Resume streaming; lines collected while paused are flushed to the CFLogs panel">
+        ? `<button type="button" class="small-action app-log-resume" data-action="resume-app-logging" data-app-id="${escapedAppId}" title="Resume streaming; lines collected while paused are flushed to the CFLogs panel">
               Resume
             </button>`
-        : `<button type="button" class="small-action app-log-pause" data-action="pause-app-logging" data-app-id="${app.id}" title="Pause the live display; the session and collected logs stay in the CFLogs panel">
+        : `<button type="button" class="small-action app-log-pause" data-action="pause-app-logging" data-app-id="${escapedAppId}" title="Pause the live display; the session and collected logs stay in the CFLogs panel">
               Pause
             </button>`;
       return `
@@ -5035,7 +5036,7 @@ function renderActiveAppsLogList(availableApps, activeAppIds, pausedAppIds) {
           <span class="active-app-meta">
             ${statePill}
             ${pauseResumeButton}
-            <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${app.id}">
+            <button type="button" class="small-action app-log-stop" data-action="stop-app-logging" data-app-id="${escapedAppId}">
               Stop
             </button>
           </span>
@@ -6567,11 +6568,11 @@ function resetActiveAppLoggingState() {
   activeAppLogIds = [];
   pausedAppLogIds = [];
   statusMessage = '';
-  if (hadPausedApps) {
-    postPausedAppsChanged([]);
-  }
   if (hadActiveApps) {
     postActiveAppsChanged([]);
+  }
+  if (hadPausedApps) {
+    postPausedAppsChanged([]);
   }
 }
 
