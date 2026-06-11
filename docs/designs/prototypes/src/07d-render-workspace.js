@@ -10,7 +10,7 @@ function renderWorkspaceScreen() {
   return `
     <header class="shell-header workspace-header">
       <div class="shell-header-row">
-        <h1>Monitoring Workspace</h1>
+        <h1>BTP Workspace</h1>
         <div class="workspace-header-actions">
           <button
             type="button"
@@ -18,6 +18,15 @@ function renderWorkspaceScreen() {
             data-action="change-region"
           >
             Change Region
+          </button>
+          <button
+            type="button"
+            class="header-icon-button workspace-tools-button"
+            data-action="open-tools"
+            aria-label="Open Tools"
+            title="Tools"
+          >
+            ${renderToolsIcon()}
           </button>
           <button
             type="button"

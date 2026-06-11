@@ -58,6 +58,11 @@ import {
   replaceServicePackageDependencyTags,
   type ServiceDependencyTagReplacementResult,
 } from './localPackages/serviceDependencyTags';
+import {
+  readMicrosoftGraphToolRunRequest,
+  runMicrosoftGraphTool,
+  type MicrosoftGraphToolRunRequest,
+} from './microsoftGraphTools';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
@@ -97,6 +102,7 @@ const MSG_LOCAL_REGISTRY_START = 'sapTools.localRegistryStart';
 const MSG_LOCAL_REGISTRY_STOP = 'sapTools.localRegistryStop';
 const MSG_LOCAL_REGISTRY_STATUS = 'sapTools.localRegistryStatus';
 const MSG_OPEN_LOCAL_PACKAGES_SETTINGS = 'sapTools.openLocalPackagesSettings';
+const MSG_RUN_MICROSOFT_GRAPH_TOOL = 'sapTools.runMicrosoftGraphTool';
 const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
 const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
 const BUILTIN_EXTENSION_OPEN_COMMAND = 'extension.open';
@@ -132,6 +138,8 @@ const MSG_LOCAL_PACKAGES_LOADING = 'sapTools.localPackagesLoading';
 const MSG_BUILD_PUBLISH_PREVIEW = 'sapTools.buildPublishPreview';
 const MSG_BUILD_PUBLISH_PROGRESS = 'sapTools.buildPublishProgress';
 const MSG_BUILD_PUBLISH_RESULT = 'sapTools.buildPublishResult';
+const MSG_MICROSOFT_GRAPH_TOOL_PROGRESS = 'sapTools.microsoftGraphToolProgress';
+const MSG_MICROSOFT_GRAPH_TOOL_RESULT = 'sapTools.microsoftGraphToolResult';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -582,6 +590,14 @@ export class RegionSidebarProvider
         'workbench.action.openSettings',
         '@ext:dongtran.sap-tools local'
       );
+      return;
+    }
+
+    if (type === MSG_RUN_MICROSOFT_GRAPH_TOOL) {
+      const request = readMicrosoftGraphToolRunRequest(message);
+      if (request !== null) {
+        await this.handleMicrosoftGraphToolRun(request);
+      }
       return;
     }
 
@@ -2239,6 +2255,17 @@ export class RegionSidebarProvider
 
   private postBuildResult(success: boolean, message: string): void {
     this.postMessage({ type: MSG_BUILD_PUBLISH_RESULT, success, message });
+  }
+
+  private async handleMicrosoftGraphToolRun(
+    request: MicrosoftGraphToolRunRequest
+  ): Promise<void> {
+    const result = await runMicrosoftGraphTool(request, {
+      onProgress: (progress) => {
+        this.postMessage({ type: MSG_MICROSOFT_GRAPH_TOOL_PROGRESS, ...progress });
+      },
+    });
+    this.postMessage({ type: MSG_MICROSOFT_GRAPH_TOOL_RESULT, ...result });
   }
 
   private async handleExportSqlToolsConfig(

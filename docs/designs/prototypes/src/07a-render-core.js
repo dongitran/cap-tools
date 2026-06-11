@@ -37,6 +37,10 @@ function resolveShellMarkupByMode() {
     return renderSettingsScreen();
   }
 
+  if (mode === 'tools') {
+    return renderToolsScreen();
+  }
+
   return renderWorkspaceScreen();
 }
 

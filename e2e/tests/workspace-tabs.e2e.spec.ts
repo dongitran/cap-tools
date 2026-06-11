@@ -22,7 +22,7 @@ async function openConfirmedWorkspace(): Promise<{
     webviewFrame.getByRole('button', { name: 'Confirm Scope' })
   );
   await expect(
-    webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+    webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
   ).toBeVisible();
   return { session, webviewFrame };
 }
@@ -390,7 +390,7 @@ test.describe('SAP Tools workspace tabs', () => {
       await selectDefaultScope(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Confirm Scope' }));
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
@@ -407,7 +407,7 @@ test.describe('SAP Tools workspace tabs', () => {
 
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Close Settings' }));
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
       await expect(
         webviewFrame.getByRole('heading', { name: 'Apps Log Control' })
@@ -463,7 +463,7 @@ test.describe('SAP Tools workspace tabs', () => {
         webviewFrame.getByRole('button', { name: 'Confirm Scope' })
       );
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible();
 
       await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));

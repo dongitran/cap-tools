@@ -10,6 +10,7 @@ const destFile = path.join(__dirname, '../docs/designs/prototypes/assets/prototy
 
 const files = [
   '00-state.js',
+  '07g-render-tools.js',
   '01-events.js',
   '02-topology.js',
   '03-handlers.js',
@@ -32,7 +33,8 @@ const cssFiles = [
   '03-logs-panel.css',
   '04-service-export.css',
   '05-packages.css',
-  '06-hana-sql.css'
+  '06-hana-sql.css',
+  '07-tools.css'
 ];
 
 function buildFile(files, srcSubdir, destFileName) {

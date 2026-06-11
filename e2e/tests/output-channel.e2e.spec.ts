@@ -19,7 +19,7 @@ test.describe('SAP Tools output channel', () => {
       await selectDefaultScope(webviewFrame);
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Confirm Scope' }));
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       await clickWithFallback(webviewFrame.getByRole('tab', { name: 'SQL' }));

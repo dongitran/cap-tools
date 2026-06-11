@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.52 (stable)
+- **UI:** Renamed the Apps workspace header from **Monitoring Workspace** to **BTP Workspace** and added a Tools icon between **Change Region** and Settings.
+- **Feature:** Added a Microsoft Graph Tools screen with Outlook OAuth2 mail testing and SharePoint smoke testing, including credential validation, real test actions, and animated verification steps.
+- **Security:** Graph client secrets are used only for the current extension-host request and are not persisted or written to output logs.
+
 ## 0.10.51 (stable)
 - **Fix:** Package builds now clean up the previous local-registry version behind the same dist-tag after a new version publishes successfully, so repeated **Build** and **Build All** runs no longer keep piling up old tag versions.
 - **Enhancement:** Service-row **Replace** now also updates detected local package dependency specs in the mapped service `package.json` to the active dist-tag, so the next install resolves the newest published package for that scope.

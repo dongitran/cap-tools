@@ -352,7 +352,7 @@ export async function findSapToolsWebviewFrame(window: Page): Promise<Frame | un
     // Match the main selector, login gate, or confirmed workspace heading.
     const regionTitle = frame.getByRole('heading', { name: 'Select SAP BTP Region' });
     const loginTitle = frame.getByRole('heading', { name: 'SAP Tools Login' });
-    const workspaceTitle = frame.getByRole('heading', { name: 'Monitoring Workspace' });
+    const workspaceTitle = frame.getByRole('heading', { name: 'BTP Workspace' });
     const isRegionVisible = await regionTitle.isVisible().catch(() => false);
     const isLoginVisible = await loginTitle.isVisible().catch(() => false);
     const isWorkspaceVisible = await workspaceTitle.isVisible().catch(() => false);
@@ -402,7 +402,7 @@ export async function findSapToolsWorkspaceFrame(window: Page): Promise<Frame | 
     .filter((frame) => frame.url().includes('vscode-webview://'));
 
   for (const frame of [...candidateFrames].reverse()) {
-    const workspaceTitle = frame.getByRole('heading', { name: 'Monitoring Workspace' });
+    const workspaceTitle = frame.getByRole('heading', { name: 'BTP Workspace' });
     const isWorkspaceVisible = await workspaceTitle.isVisible().catch(() => false);
     if (isWorkspaceVisible) {
       return frame;

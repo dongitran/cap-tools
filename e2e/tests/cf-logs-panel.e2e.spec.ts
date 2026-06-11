@@ -216,7 +216,7 @@ test.describe('SAP Tools CF logs panel', () => {
       await clickWithFallback(confirmButton);
 
       await expect(
-        sidebarFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        sidebarFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       await clickWithFallback(sidebarFrame.getByLabel('Select finance-uat-api'));

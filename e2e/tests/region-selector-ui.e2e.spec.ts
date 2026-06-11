@@ -281,7 +281,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(confirmButton).toBeEnabled();
       await clickWithFallback(confirmButton);
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
       await expect(webviewFrame.locator('.workspace-context')).toContainText(
         'Region: eu10-004. Org: finance-services-prod. Space: uat'
@@ -291,7 +291,7 @@ test.describe('SAP Tools region selector', () => {
       session = await relaunchExtensionHost(session);
       const reopenedFrame = await openSapToolsSidebar(session.window, 60000);
       await expect(
-        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        reopenedFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 20000 });
       await expect(reopenedFrame.locator('.workspace-context')).toContainText(
         'Region: eu10-004. Org: finance-services-prod. Space: uat'
@@ -721,7 +721,7 @@ test.describe('SAP Tools region selector', () => {
       await clickWithFallback(confirmButton);
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible();
       await expect(webviewFrame.getByText('proof-gateway')).toBeVisible({
         timeout: 10000,
@@ -765,7 +765,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(confirmButton).toBeEnabled();
       await clickWithFallback(confirmButton);
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       const appError = webviewFrame.getByRole('alert').filter({
@@ -902,7 +902,7 @@ test.describe('SAP Tools region selector', () => {
       await confirmButton.click();
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible();
       await expect(
         webviewFrame.getByRole('heading', { name: 'Active Apps Log' })
@@ -986,14 +986,14 @@ test.describe('SAP Tools region selector', () => {
       await clickWithFallback(confirmButton);
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       session = await relaunchExtensionHost(session);
 
       const reopenedFrame = await openSapToolsSidebar(session.window, 60000);
       await expect(
-        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        reopenedFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 20000 });
       await expect(reopenedFrame.locator('.workspace-context')).toContainText(
         'Region: us-10. Org: finance-services-prod. Space: uat'
@@ -1019,7 +1019,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(confirmButton).toBeEnabled();
       await clickWithFallback(confirmButton);
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
       await expect(webviewFrame.locator('.workspace-context')).toContainText(
         'Region: us-10. Org: finance-services-prod. Space: uat'
@@ -1081,7 +1081,7 @@ test.describe('SAP Tools region selector', () => {
       });
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 20000 });
       await expect(webviewFrame.locator('.workspace-context')).toContainText(
         'Region: br-10. Org: billing-reconciliation-prod. Space: etl',
@@ -1112,7 +1112,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(confirmButton).toBeEnabled();
       await clickWithFallback(confirmButton);
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       const logsFrame = await openCfLogsPanel(session.window);
@@ -1161,7 +1161,7 @@ test.describe('SAP Tools region selector', () => {
         await expect(confirmButton).toBeEnabled();
         await clickWithFallback(confirmButton);
         await expect(
-          webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+          webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
         ).toBeVisible({ timeout: 10000 });
 
         session = await relaunchExtensionHost(session, {
@@ -1173,7 +1173,7 @@ test.describe('SAP Tools region selector', () => {
         const reopenedFrame = await openSapToolsSidebar(session.window);
         const restoreStartedAt = Date.now();
         await expect(
-          reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+          reopenedFrame.getByRole('heading', { name: 'BTP Workspace' })
         ).toBeVisible({ timeout: 1500 });
         const restoreDurationMs = Date.now() - restoreStartedAt;
         expect(restoreDurationMs).toBeLessThan(1500);
@@ -1204,7 +1204,7 @@ test.describe('SAP Tools region selector', () => {
       await clickWithFallback(confirmButton);
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
 
       await clickWithFallback(webviewFrame.getByRole('button', { name: 'Open Settings' }));
@@ -1221,7 +1221,7 @@ test.describe('SAP Tools region selector', () => {
 
       const reloadedFrame = await resolveSapToolsWorkspaceFrame(session.window);
       await expect(
-        reloadedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        reloadedFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 20000 });
       await expect(reloadedFrame.locator('.workspace-context')).toContainText(
         'Region: us-10. Org: finance-services-prod. Space: uat'
@@ -1650,7 +1650,7 @@ test.describe('SAP Tools region selector', () => {
       session = await relaunchExtensionHost(session);
       const reopenedFrame = await openSapToolsSidebar(session.window);
       await expect(
-        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        reopenedFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 20000 });
       await reopenedFrame
         .locator('.workspace-tabs .tab-button[data-tab-id="apps"]')
@@ -1699,7 +1699,7 @@ test.describe('SAP Tools region selector', () => {
       session = await relaunchExtensionHost(session);
       const reopenedFrame = await openSapToolsSidebar(session.window, 60000);
       await expect(
-        reopenedFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        reopenedFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 20000 });
       await reopenedFrame
         .locator('.workspace-tabs .tab-button[data-tab-id="apps"]')
@@ -1754,7 +1754,7 @@ test.describe('SAP Tools region selector', () => {
       await clickWithFallback(reConfirmButton);
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
       await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
       await expect(webviewFrame.locator('.service-map-row')).toHaveCount(3, { timeout: 15000 });
@@ -2088,7 +2088,7 @@ test.describe('SAP Tools region selector', () => {
       });
 
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
       await expect(webviewFrame.locator('.workspace-context')).toContainText(
         'Region: us-10. Org: finance-services-prod. Space: uat'
@@ -2365,7 +2365,7 @@ test.describe('SAP Tools region selector', () => {
         .toBe(true);
       await clickWithFallback(confirmButton);
       await expect(
-        webviewFrame.getByRole('heading', { name: 'Monitoring Workspace' })
+        webviewFrame.getByRole('heading', { name: 'BTP Workspace' })
       ).toBeVisible({ timeout: 10000 });
       await expect(webviewFrame.locator('.workspace-context')).toContainText(
         'Region: us-10. Org: finance-services-prod. Space: uat'

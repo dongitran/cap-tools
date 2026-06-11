@@ -153,10 +153,13 @@ const REPLACE_SERVICE_PACKAGE_PLACEHOLDER_MESSAGE_TYPE = 'sapTools.replaceServic
 const EXPORT_SQLTOOLS_CONFIG_MESSAGE_TYPE = 'sapTools.exportSqlToolsConfig';
 const OPEN_HANA_SQL_FILE_MESSAGE_TYPE = 'sapTools.openHanaSqlFile';
 const RUN_HANA_TABLE_SELECT_MESSAGE_TYPE = 'sapTools.runHanaTableSelect';
+const RUN_MICROSOFT_GRAPH_TOOL_MESSAGE_TYPE = 'sapTools.runMicrosoftGraphTool';
 const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE = 'sapTools.hanaSqlFileOpenResult';
 const HANA_TABLES_LOADED_MESSAGE_TYPE = 'sapTools.hanaTablesLoaded';
 const HANA_TABLE_SELECT_RESULT_MESSAGE_TYPE = 'sapTools.hanaTableSelectResult';
+const MICROSOFT_GRAPH_TOOL_PROGRESS_MESSAGE_TYPE = 'sapTools.microsoftGraphToolProgress';
+const MICROSOFT_GRAPH_TOOL_RESULT_MESSAGE_TYPE = 'sapTools.microsoftGraphToolResult';
 const CF_TOPOLOGY_MESSAGE_TYPE = 'sapTools.cfTopology';
 const TOPOLOGY_SCOPE_RESOLVED_MESSAGE_TYPE = 'sapTools.topologyScopeResolved';
 const TOPOLOGY_ORG_SELECTED_MESSAGE_TYPE = 'sapTools.topologyOrgSelected';
@@ -188,6 +191,7 @@ let lastSyncError = '';
 let activeUserEmail = '';
 let settingsStatusMessage = '';
 let previousModeBeforeSettings = 'selection';
+let previousModeBeforeTools = 'workspace';
 let regionAccessById = new Map();
 let localServiceRootFolderPath = '';
 let serviceFolderMappings = [];
@@ -246,4 +250,25 @@ let quickPickOrgSpaces = [];
 let quickPickSpaceName = '';
 let quickConfirmInProgress = false;
 let quickConfirmError = '';
-
+let activeSupportToolId = '';
+let microsoftGraphToolRunInProgress = false;
+let microsoftGraphToolStatusMessage = '';
+let microsoftGraphToolStatusTone = 'info';
+let microsoftGraphToolSteps = [];
+let microsoftGraphToolFormValues = {
+  outlook: {
+    clientId: '',
+    clientSecret: '',
+    tenantId: '',
+    senderEmail: '',
+    recipientEmail: '',
+  },
+  sharepoint: {
+    clientId: '',
+    clientSecret: '',
+    tenantId: '',
+    url: '',
+    site: '',
+    rootDir: '/',
+  },
+};

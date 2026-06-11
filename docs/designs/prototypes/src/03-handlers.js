@@ -1,5 +1,5 @@
 function handleAction(action, actionElement) {
-  const selectionActionHandled = handleSelectionFlowAction(action);
+  const selectionActionHandled = handleSelectionFlowAction(action, actionElement);
   if (selectionActionHandled !== null) {
     return selectionActionHandled;
   }
@@ -88,4 +88,3 @@ function handleSqlTabAction(action, actionElement) {
 
   return null;
 }
-

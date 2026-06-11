@@ -1549,7 +1549,7 @@ function renderWorkspaceScreen() {
   return `
     <header class="shell-header workspace-header">
       <div class="shell-header-row">
-        <h1>Monitoring Workspace</h1>
+        <h1>BTP Workspace</h1>
         <div class="workspace-header-actions">
           <button
             type="button"

@@ -231,6 +231,22 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  if (msg.type === MICROSOFT_GRAPH_TOOL_PROGRESS_MESSAGE_TYPE) {
+    applyMicrosoftGraphToolProgress(msg);
+    if (mode === 'tools') {
+      renderPrototype();
+    }
+    return;
+  }
+
+  if (msg.type === MICROSOFT_GRAPH_TOOL_RESULT_MESSAGE_TYPE) {
+    applyMicrosoftGraphToolResult(msg);
+    if (mode === 'tools') {
+      renderPrototype();
+    }
+    return;
+  }
+
   if (msg.type === CF_TOPOLOGY_MESSAGE_TYPE) {
     applyCfTopologySnapshot(msg.topology);
     return;
@@ -519,7 +535,12 @@ if (typeof window.ResizeObserver === 'function') {
 }
 
 appElement.addEventListener('click', (event) => {
-  const target = event.target;
+  const eventTarget = event.target;
+  if (!(eventTarget instanceof Element)) {
+    return;
+  }
+
+  const target = eventTarget instanceof HTMLElement ? eventTarget : eventTarget.parentElement;
   if (!(target instanceof HTMLElement)) {
     return;
   }
@@ -729,6 +750,15 @@ appElement.addEventListener('input', (event) => {
   }
 
   const role = target.dataset.role ?? '';
+  if (role === 'microsoft-graph-tool-field') {
+    updateMicrosoftGraphToolFormValue(
+      target.dataset.toolId ?? '',
+      target.dataset.field ?? '',
+      target.value
+    );
+    return;
+  }
+
   if (role === 'log-search') {
     searchKeyword = target.value;
     renderPrototype();
@@ -796,4 +826,3 @@ appElement.addEventListener('input', (event) => {
     updateTopologyOrgSearchResults();
   }
 });
-

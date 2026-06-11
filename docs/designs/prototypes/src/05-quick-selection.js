@@ -25,7 +25,7 @@ function triggerOpenHanaSqlFile() {
   return true;
 }
 
-function handleSelectionFlowAction(action) {
+function handleSelectionFlowAction(action, actionElement) {
   if (action === 'open-settings') {
     previousModeBeforeSettings = mode;
     mode = 'settings';
@@ -33,9 +33,46 @@ function handleSelectionFlowAction(action) {
     return true;
   }
 
+  if (action === 'open-tools') {
+    previousModeBeforeTools = mode;
+    mode = 'tools';
+    microsoftGraphToolStatusMessage = '';
+    microsoftGraphToolStatusTone = 'info';
+    return true;
+  }
+
   if (action === 'close-settings') {
     mode = previousModeBeforeSettings === 'workspace' ? 'workspace' : 'selection';
     return true;
+  }
+
+  if (action === 'close-tools') {
+    mode = previousModeBeforeTools === 'workspace' ? 'workspace' : 'selection';
+    return true;
+  }
+
+  if (action === 'select-support-tool') {
+    const toolId = actionElement.dataset.toolId ?? '';
+    if (!isSupportedToolId(toolId)) {
+      return false;
+    }
+    activeSupportToolId = toolId;
+    microsoftGraphToolStatusMessage = '';
+    microsoftGraphToolStatusTone = 'info';
+    microsoftGraphToolSteps = createInitialMicrosoftGraphToolSteps(toolId);
+    return true;
+  }
+
+  if (action === 'back-to-tools-list') {
+    activeSupportToolId = '';
+    microsoftGraphToolStatusMessage = '';
+    microsoftGraphToolStatusTone = 'info';
+    microsoftGraphToolSteps = [];
+    return true;
+  }
+
+  if (action === 'run-support-tool') {
+    return triggerMicrosoftGraphToolRun();
   }
 
   if (action === 'set-sync-interval') {
@@ -686,4 +723,3 @@ function isRegionDisabled(regionId) {
   const state = resolveRegionAccessState(regionId);
   return state === 'inaccessible';
 }
-
