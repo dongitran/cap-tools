@@ -46,11 +46,18 @@ import {
 import { refreshCfSyncSpace } from './cfSpaceRefresh';
 import type { HanaSqlWorkbench } from './hanaSqlWorkbench';
 import { writeScopeIfChanged, type SharedCfScope } from './scopeSync';
-import { readLocalPackagesConfig } from './localPackages/localPackagesConfig';
+import {
+  readLocalPackagesConfig,
+  type LocalPackagesConfig,
+} from './localPackages/localPackagesConfig';
 import { VerdaccioManager } from './localPackages/verdaccioManager';
 import { runBuildPublishAll } from './localPackages/buildPublishOrchestrator';
 import { scanLocalPackages } from './localPackages/localPackageScanner';
 import { buildDependencyOrder } from './localPackages/dependencyGraph';
+import {
+  replaceServicePackageDependencyTags,
+  type ServiceDependencyTagReplacementResult,
+} from './localPackages/serviceDependencyTags';
 
 export const REGION_VIEW_ID = 'sapTools.regionView';
 
@@ -2069,37 +2076,51 @@ export class RegionSidebarProvider
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
 
-    if (placeholders.length === 0) {
-      void vscode.window.showWarningMessage(
-        'SAP Tools: No placeholder configured. Set "sapTools.localPackages.packageJsonTagPlaceholder" first.'
-      );
-      return;
-    }
-
     const tag = config.registry.defaultTag;
     const packageJsonPath = join(mapping.folderPath, 'package.json');
 
     try {
-      const content = await readFile(packageJsonPath, 'utf8');
-      const hasAny = placeholders.some((p) => content.includes(p));
-      if (!hasAny) {
-        void vscode.window.showInformationMessage(
-          `SAP Tools: No placeholder found in package.json for "${mapping.appName}".`
+      const localPackageNames = await this.resolveLocalPackageNamesForReplacement(config);
+      if (placeholders.length === 0 && localPackageNames.length === 0) {
+        void vscode.window.showWarningMessage(
+          'SAP Tools: No placeholder configured. Set "sapTools.localPackages.packageJsonTagPlaceholder" first.'
         );
         return;
       }
-      const patched = placeholders.reduce(
-        (acc, placeholder) => acc.replaceAll(placeholder, tag),
-        content
-      );
-      await writeFile(packageJsonPath, patched, 'utf8');
+
+      const content = await readFile(packageJsonPath, 'utf8');
+      const result = replaceServicePackageDependencyTags(content, {
+        placeholders,
+        localPackageNames,
+        tag,
+      });
+      if (!result.changed) {
+        void vscode.window.showInformationMessage(
+          `SAP Tools: No package.json update needed for "${mapping.appName}".`
+        );
+        return;
+      }
+      await writeFile(packageJsonPath, result.content, 'utf8');
       void vscode.window.showInformationMessage(
-        `SAP Tools: Replaced placeholder with "${tag}" in package.json for "${mapping.appName}".`
+        formatServicePackageReplaceMessage(mapping.appName, tag, result)
       );
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       void vscode.window.showErrorMessage(`SAP Tools: Failed to update package.json: ${msg}`);
     }
+  }
+
+  private async resolveLocalPackageNamesForReplacement(
+    config: LocalPackagesConfig
+  ): Promise<string[]> {
+    const rootFolderPath = this.selectedLocalRootFolderPath.trim();
+    const patterns = config.namePatterns.trim();
+    if (rootFolderPath.length === 0 || patterns.length === 0) {
+      return [];
+    }
+
+    const packages = await scanLocalPackages(rootFolderPath, patterns);
+    return packages.map((pkg) => pkg.name);
   }
 
   async startLocalRegistry(): Promise<void> {
@@ -3976,6 +3997,30 @@ function readRunHanaTableSelectPayload(
     serviceName: String(value['serviceName']).trim(),
     tableName: String(value['tableName']).trim(),
   };
+}
+
+function formatServicePackageReplaceMessage(
+  appName: string,
+  tag: string,
+  result: ServiceDependencyTagReplacementResult
+): string {
+  const actions: string[] = [];
+  if (result.placeholderReplacementCount > 0) {
+    actions.push(
+      `replaced ${formatCount(result.placeholderReplacementCount, 'placeholder')} with "${tag}"`
+    );
+  }
+  if (result.updatedPackageNames.length > 0) {
+    actions.push(
+      `set ${formatCount(result.updatedPackageNames.length, 'local package dependency')} to "${tag}"`
+    );
+  }
+
+  return `SAP Tools: Updated package.json for "${appName}": ${actions.join('; ')}.`;
+}
+
+function formatCount(count: number, singularLabel: string): string {
+  return `${String(count)} ${singularLabel}${count === 1 ? '' : 's'}`;
 }
 
 function sanitizeSqlUiLogValue(value: string): string {

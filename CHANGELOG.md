@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.51 (stable)
+- **Fix:** Package builds now clean up the previous local-registry version behind the same dist-tag after a new version publishes successfully, so repeated **Build** and **Build All** runs no longer keep piling up old tag versions.
+- **Enhancement:** Service-row **Replace** now also updates detected local package dependency specs in the mapped service `package.json` to the active dist-tag, so the next install resolves the newest published package for that scope.
+
 ## 0.10.50 (stable)
 - **UI:** Services & Packages now shows mapped/unmapped service state as compact leading icons: a green link for mapped services and a red unlink for unmapped services. The old trailing text badges were removed.
 - **Fix:** Mapped service row hover actions remain visible and clickable for **Replace** and **Export**.

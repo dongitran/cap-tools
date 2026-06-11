@@ -86,10 +86,12 @@ export async function publishPackage(
     options.versionBumpStrategy !== 'none' && publishVersion !== pkg.version;
 
   try {
+    const authKey = npmRegistryAuthKey(options.registryUrl);
+    const previousTaggedVersion = await readPublishedVersionForTag(pkg, options, authKey);
+
     if (mutatesVersion) {
       await writeVersion(packageJsonPath, originalContent, publishVersion);
     }
-    const authKey = npmRegistryAuthKey(options.registryUrl);
     await runCommand(
       'npm',
       [
@@ -102,6 +104,13 @@ export async function publishPackage(
       ],
       { cwd: pkg.dir, onOutput: options.onOutput, timeoutMs: 600000 }
     );
+    await deletePreviousTaggedVersion(
+      pkg,
+      options,
+      authKey,
+      previousTaggedVersion,
+      publishVersion
+    );
     return { publishedVersion: publishVersion, tag: options.tag };
   } catch (error) {
     throw friendlyPublishError(pkg.name, error);
@@ -112,6 +121,62 @@ export async function publishPackage(
   }
 }
 
+async function readPublishedVersionForTag(
+  pkg: LocalPackage,
+  options: PublishOptions,
+  authKey: string
+): Promise<string | undefined> {
+  try {
+    const result = await runCommand(
+      'npm',
+      [
+        'view',
+        `${pkg.name}@${options.tag}`,
+        'version',
+        '--json',
+        '--registry',
+        options.registryUrl,
+        `--${authKey}:_authToken=${options.authToken}`,
+      ],
+      { cwd: pkg.dir, onOutput: options.onOutput, timeoutMs: 600000 }
+    );
+    return parseNpmViewVersion(result.stdout);
+  } catch (error) {
+    if (isNpmNotFoundError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function deletePreviousTaggedVersion(
+  pkg: LocalPackage,
+  options: PublishOptions,
+  authKey: string,
+  previousTaggedVersion: string | undefined,
+  publishVersion: string
+): Promise<void> {
+  if (
+    previousTaggedVersion === undefined ||
+    previousTaggedVersion === publishVersion
+  ) {
+    return;
+  }
+
+  await runCommand(
+    'npm',
+    [
+      'unpublish',
+      `${pkg.name}@${previousTaggedVersion}`,
+      '--force',
+      '--registry',
+      options.registryUrl,
+      `--${authKey}:_authToken=${options.authToken}`,
+    ],
+    { cwd: pkg.dir, onOutput: options.onOutput, timeoutMs: 600000 }
+  );
+}
+
 async function writeVersion(
   packageJsonPath: string,
   originalContent: string,
@@ -120,6 +185,25 @@ async function writeVersion(
   const parsed: unknown = JSON.parse(originalContent);
   const next = { ...(parsed as Record<string, unknown>), version };
   await writeFile(packageJsonPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+}
+
+function parseNpmViewVersion(stdout: string): string | undefined {
+  const trimmed = stdout.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed === 'string') {
+      const version = parsed.trim();
+      return version.length > 0 ? version : undefined;
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return undefined;
 }
 
 function normalizeVersionSuffix(value: string): string {
@@ -135,6 +219,14 @@ function normalizeVersionSuffix(value: string): string {
 function readSemverCore(version: string): string {
   const match = /^(\d+\.\d+\.\d+)/.exec(version.trim());
   return match?.[1] ?? version.replace(/-[0-9A-Za-z-]+-\d+$/, '');
+}
+
+function isNpmNotFoundError(error: unknown): boolean {
+  if (!(error instanceof CommandFailedError)) {
+    return false;
+  }
+  const output = `${error.stdout}\n${error.stderr}`;
+  return /E404|404 Not Found|not found/i.test(output);
 }
 
 function friendlyPublishError(packageName: string, error: unknown): Error {
