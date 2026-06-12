@@ -1,4 +1,5 @@
 // cspell:words guids hana ondemand sapcloud
+// cspell:ignore clientid clientsecret
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -882,4 +883,67 @@ export async function fetchCfOauthTokenFromTarget(params: {
   } catch {
     return null;
   }
+}
+
+export async function fetchXsuaaTokenFromTarget(params: {
+  appName: string;
+  apiEndpoint: string;
+  email: string;
+  password: string;
+  orgName: string;
+  spaceName: string;
+  cfHomeDir?: string;
+}): Promise<string | null> {
+  await prepareCfCliSession(params);
+  
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const envStdout = await runCfCommand(['env', params.appName], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to fetch env for app ${params.appName}`,
+  });
+
+  try {
+    const vcapMatch = /System-Provided:\n([\s\S]*?)\n\n/.exec(envStdout);
+    if (vcapMatch?.[1] === undefined || vcapMatch[1] === '') return null;
+    
+    const vcapData = JSON.parse(vcapMatch[1]) as Record<string, unknown>;
+    const vcapServices = vcapData['VCAP_SERVICES'] as Record<string, unknown[]> | undefined;
+    if (vcapServices === undefined) return null;
+
+    const xsuaaList = vcapServices['xsuaa'];
+    if (!Array.isArray(xsuaaList) || xsuaaList.length === 0) return null;
+
+    const credentials = (xsuaaList[0] as { credentials?: Record<string, string> }).credentials;
+    if (credentials === undefined) return null;
+
+    const clientid = credentials['clientid'];
+    const clientsecret = credentials['clientsecret'];
+    const url = credentials['url'];
+
+    if (clientid === undefined || clientid === '' || clientsecret === undefined || clientsecret === '' || url === undefined || url === '') {
+      return null;
+    }
+
+    const basicAuth = Buffer.from(`${clientid}:${clientsecret}`).toString('base64');
+    
+    const res = await fetch(`${url}/oauth/token?grant_type=client_credentials`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (res.ok) {
+      const data = await res.json() as { access_token?: string };
+      if (typeof data.access_token === 'string') {
+        return `Bearer ${data.access_token}`;
+      }
+    }
+  } catch {
+    // Ignore parse or network errors
+  }
+  
+  return null;
 }

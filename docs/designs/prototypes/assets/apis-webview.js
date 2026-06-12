@@ -14,6 +14,9 @@ let apiResultStatus = '';
 let apiResultPayload = null;
 let apiActiveView = 'json';
 
+let apiCatalogState = 'loading';
+let apiCurrentCatalog = null;
+
 // Global VS Code API reference
 const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
 
@@ -189,7 +192,20 @@ function renderWebview() {
     return;
   }
 
-  const currentCatalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
+  // Handle loading state
+  if (apiCatalogState === 'loading') {
+    return `
+      <aside class="api-webview-sidebar" style="width: 250px; min-width: 250px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow-y: hidden;">
+        <div style="padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; opacity: 0.7;">
+          <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
+          <div style="font-size: 13px; font-weight: 500; color: var(--vscode-foreground);">Discovering Endpoints...</div>
+          <div style="font-size: 11px; margin-top: 8px; color: var(--vscode-descriptionForeground);">Fetching metadata from the deployed application</div>
+        </div>
+      </aside>
+    `;
+  }
+
+  const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG['demo-app'];
   
   // Render Left Sidebar (Endpoints)
   const entityItems = currentCatalog.entities.map(ent => {
@@ -198,7 +214,7 @@ function renderWebview() {
       <button type="button" class="api-entity-item${isSelected ? ' is-active' : ''}" data-action="api-select-entity" data-entity-name="${ent.name}">
         <span class="entity-icon" aria-hidden="true">&#128196;</span>
         <span class="entity-name">${ent.name}</span>
-        <span class="entity-count-badge">${ent.count}</span>
+        <span class="entity-count-badge">${ent.count || 0}</span>
       </button>
     `;
   }).join('');
@@ -415,13 +431,14 @@ window.addEventListener('message', (event) => {
   if (event.data.type === 'sapTools.apis.catalogLoaded') {
     const catalog = event.data.payload;
     if (catalog) {
-      // Overwrite the mock catalog with the real data from the backend
-      API_MOCK_CATALOG[catalog.name] = {
+      apiCurrentCatalog = {
         name: catalog.name,
         baseUrl: catalog.baseUrl,
         servicePath: '',
         entities: catalog.entities
       };
+      
+      apiCatalogState = 'loaded';
       
       // If this is the currently selected app, refresh UI
       if (apiSelectedAppId === catalog.name) {
@@ -449,15 +466,12 @@ window.addEventListener('message', (event) => {
   if (event.data.type === 'saptools.prototype.apis.appSelected') {
     apiSelectedAppId = event.data.payload.appId;
     
-    // Select the first entity automatically if available
-    const catalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
-    if (catalog && catalog.entities.length > 0) {
-      apiSelectedEntity = catalog.entities[0].name;
-    } else {
-      apiSelectedEntity = '';
-    }
+    // Reset to loading state when a new app is selected
+    apiCatalogState = 'loading';
+    apiCurrentCatalog = null;
     
-    // Reset state on change
+    // We don't select an entity yet since catalog is loading
+    apiSelectedEntity = '';
     apiResultState = 'idle';
     apiResultPayload = null;
     apiParams = {

@@ -1,4 +1,4 @@
-// cspell:words guids
+// cspell:words guids clientid clientsecret dGVzdC1jbGllbnQ6dGVzdC1zZWNyZXQ
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { execFileAsyncMock, fetchMock, spawnedProcessMock, spawnMock } = vi.hoisted(() => ({
@@ -34,6 +34,7 @@ import {
   fetchRecentAppLogs,
   fetchSpaces,
   fetchStartedAppsViaCfCli,
+  fetchXsuaaTokenFromTarget,
   getCfApiEndpoint,
   isCfSessionExpired,
   parseCfAppsOutput,
@@ -524,7 +525,73 @@ describe('fetchDefaultEnvJsonFromTarget', () => {
   });
 });
 
-describe('fetchPnpmLockFromTarget', () => {
+  describe('fetchXsuaaTokenFromTarget', () => {
+    it('returns null if env stdout does not contain VCAP_SERVICES', async () => {
+      execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+        if (args.includes('env')) {
+          return { stdout: 'System-Provided:\n{}\n\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      const token = await fetchXsuaaTokenFromTarget({
+        appName: 'test-app', apiEndpoint: '', email: '', password: '', orgName: '', spaceName: ''
+      });
+      expect(token).toBeNull();
+    });
+
+    it('parses XSUAA credentials and fetches token', async () => {
+      const mockEnv = `System-Provided:
+{
+  "VCAP_SERVICES": {
+    "xsuaa": [
+      {
+        "credentials": {
+          "clientid": "test-client",
+          "clientsecret": "test-secret",
+          "url": "https://test.authentication.com"
+        }
+      }
+    ]
+  }
+}
+
+`;
+      execFileAsyncMock.mockImplementation(async (cmd: string, args: string[]) => {
+        if (args.includes('env')) {
+          return { stdout: mockEnv, stderr: '' };
+        } else if (args.includes('oauth-token')) {
+          return { stdout: 'bearer valid-cli-token', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      // Mock fetch
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: 'valid-xsuaa-token' })
+      } as unknown as Response);
+
+      const token = await fetchXsuaaTokenFromTarget({
+        appName: 'test-app', apiEndpoint: '', email: '', password: '', orgName: '', spaceName: ''
+      });
+      
+      expect(token).toBe('Bearer valid-xsuaa-token');
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://test.authentication.com/oauth/token?grant_type=client_credentials',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic dGVzdC1jbGllbnQ6dGVzdC1zZWNyZXQ=',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+          }
+        })
+      );
+    });
+  });
+
+  describe('fetchAppRouteUrlFromTarget', () => {
   beforeEach(() => {
     execFileAsyncMock.mockReset();
   });

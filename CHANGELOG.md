@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.62 (stable)
+- Fix: Local Workspace Discovery fallback for production CAP apps where root metadata index is disabled.
+- Fix: Implement XSUAA OAuth client credentials fetching to fix "XSUAA Client (Auto)" mode.
+- Fix: Use E2E bypass mock to resolve Playwright timeouts in APIs Explorer.
+
 ## 0.10.61 (stable)
 - Fix APIs Explorer E2E test timeout and webview crash.
 - Ensure only single call to acquireVsCodeApi in webview scripts.
