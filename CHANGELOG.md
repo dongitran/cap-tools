@@ -1,4 +1,9 @@
-# Changelog
+# SAP Tools Extension Changelog
+
+## 0.10.58 (stable)
+- Fix workspace UI alignment (tabs display properly as 3 columns)
+- Ensure APIs Explorer webview navigation is handled via workspace tab switching instead of popup frames.
+- Resolved 404 iframe bugs in standalone design.html mode.
 
 ## 0.10.57 (stable)
 - **UI:** Refined APIs Explorer mock data and UI naming for a more neutral design.

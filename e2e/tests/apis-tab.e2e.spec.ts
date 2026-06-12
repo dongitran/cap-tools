@@ -38,52 +38,45 @@ test.describe('APIs Explorer Workspace Flow', () => {
   });
 
   test('User can open APIs webview from Logs/APIs tab', async ({ page }) => {
-    await page.goto('http://127.0.0.1:4173/index.html');
+    // Navigate directly to design.html (mirroring VS Code webview environment)
+    await page.goto('http://127.0.0.1:4173/variants/design.html');
     
-    const frameElement = await page.waitForSelector('#prototype-frame');
-    const frame = await frameElement.contentFrame();
-    if (frame === null) {
-      throw new Error('No frame');
-    }
-    
-    await frame.fill('#sap-email', 'test@demo.com');
-    await frame.fill('#sap-password', 'testPassword');
-    await frame.click('#submit-login-gate');
-    
-    const orgButton = frame.locator('button[data-topology-org="core-platform-prod"]').first();
+    // In design.html, there is no iframe wrapping it. The content is directly in the page.
+    const orgButton = page.locator('button[data-topology-org="core-platform-prod"]').first();
+    await expect(orgButton).toBeVisible();
     await orgButton.click();
     
-    const spaceButton = frame.locator('button[data-quick-space="prod"]');
+    const spaceButton = page.locator('button[data-quick-space="prod"]');
+    await expect(spaceButton).toBeVisible();
     await spaceButton.click();
     
-    const confirmButton = frame.getByRole('button', { name: 'Confirm Scope' });
+    const confirmButton = page.getByRole('button', { name: 'Confirm Scope' });
+    await expect(confirmButton).toBeVisible();
     await confirmButton.click();
 
-    await expect(frame.locator('.workspace-tabs')).toBeVisible();
+    await expect(page.locator('.workspace-tabs')).toBeVisible();
     
-    const logsTabButton = frame.getByRole('tab', { name: 'Logs/APIs' });
+    const logsTabButton = page.getByRole('tab', { name: 'Logs/APIs' });
     await logsTabButton.click();
     
-    await expect(frame.locator('.app-logs-panel')).toBeVisible();
+    await expect(page.locator('.app-logs-panel')).toBeVisible();
     
-    // 5. Hover over the 'demo-app' row
-    const appItem = frame.locator('.app-log-item').filter({ hasText: 'demo-app' });
+    // Hover over the 'demo-app' row
+    const appItem = page.locator('.app-log-item').filter({ hasText: 'demo-app' });
     await appItem.hover();
     
     const apisButton = appItem.getByRole('button', { name: 'APIs' });
     await expect(apisButton).toBeVisible();
     await apisButton.click();
 
-    // Screenshot here
-    await page.screenshot({ path: 'test-results/debug-0.png' });
-
-    // Verify center Webview
-    const centerIframeElement = await page.waitForSelector('.editor-surface iframe.center-panel-frame');
+    // Verify APIs Workspace is rendered (This will fail because clicking the button does nothing)
+    const apisWorkspace = page.locator('.apis-workspace-container');
+    await expect(apisWorkspace).toBeVisible({ timeout: 2000 });
+    
+    // Verify webview loaded and sidebar exists inside the new APIs tab
+    const centerIframeElement = await page.waitForSelector('.apis-workspace-container iframe');
     const centerIframe = await centerIframeElement.contentFrame();
     if (centerIframe === null) throw new Error('No center iframe');
-
-    // Screenshot here
-    await page.screenshot({ path: 'test-results/debug-1.png' });
 
     // Search for an endpoint
     const searchInput = centerIframe.locator('input[data-action="api-search-entity"]');
@@ -94,9 +87,6 @@ test.describe('APIs Explorer Workspace Flow', () => {
     const productsEntity = centerIframe.locator('.api-entity-item', { hasText: 'Products' });
     await expect(productsEntity).toBeVisible();
     
-    // Screenshot: Search
-    await page.screenshot({ path: 'test-results/debug-apis-search.png', fullPage: true });
-
     // Select Products
     await productsEntity.click();
     
@@ -108,14 +98,11 @@ test.describe('APIs Explorer Workspace Flow', () => {
     const urlInput = centerIframe.locator('.api-url-input[readonly]');
     await expect(urlInput).toHaveValue(/\$top=10/);
     
-    // Screenshot: Config
-    await page.screenshot({ path: 'test-results/debug-apis-config.png', fullPage: true });
-
     // Execute Request
     const executeBtn = centerIframe.getByRole('button', { name: 'Execute GET' });
     await executeBtn.click();
     
-    // Wait for the status badge (mock request takes ~850ms)
+    // Wait for the status badge
     const statusBadge = centerIframe.locator('.api-status-badge');
     await expect(statusBadge).toBeVisible({ timeout: 2000 });
     await expect(statusBadge).toHaveText(/200 OK/);
@@ -124,9 +111,6 @@ test.describe('APIs Explorer Workspace Flow', () => {
     const jsonView = centerIframe.locator('.api-raw-json');
     await expect(jsonView).toBeVisible();
     await expect(jsonView).toContainText('Laptop');
-    
-    // Screenshot: JSON View
-    await page.screenshot({ path: 'test-results/debug-apis-json.png', fullPage: true });
 
     // Switch to Grid Data View
     const gridTabBtn = centerIframe.getByRole('button', { name: 'Grid Data' });
@@ -139,8 +123,5 @@ test.describe('APIs Explorer Workspace Flow', () => {
     await expect(gridTable).toContainText('price');
     await expect(gridTable).toContainText('Laptop');
     await expect(gridTable).toContainText('999');
-    
-    // Screenshot: Grid View
-    await page.screenshot({ path: 'test-results/debug-apis-grid.png', fullPage: true });
   });
 });

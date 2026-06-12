@@ -2856,13 +2856,10 @@ function handleLogsControlAction(action, actionElement) {
   if (action === 'open-app-apis') {
     const appId = actionElement.dataset.appId ?? '';
     if (appId) {
-      if (typeof window !== 'undefined' && window.parent) {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
         sessionStorage.setItem('saptools.apis.selectedAppId', appId);
-        window.parent.postMessage({
-          type: 'saptools.prototype.openCenterPanel',
-          url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
-        }, '*');
       }
+      activeTabId = 'apis';
     }
     return true;
   }
@@ -4952,6 +4949,15 @@ function renderWorkspaceTabContent() {
   }
 
   return renderPlaceholderTab(activeTabId);
+}
+
+function renderApisTab() {
+  const appId = (typeof window !== 'undefined' && window.sessionStorage) ? sessionStorage.getItem('saptools.apis.selectedAppId') || 'demo-app' : 'demo-app';
+  return `
+    <div class="apis-workspace-container" style="width: 100%; height: 100%; overflow: hidden; display: flex;">
+      <iframe src="/variants/apis-webview.html?appId=${encodeURIComponent(appId)}" class="center-panel-frame" style="width: 100%; height: 100%; border: none; flex: 1;"></iframe>
+    </div>
+  `;
 }
 
 function renderLogsTab() {

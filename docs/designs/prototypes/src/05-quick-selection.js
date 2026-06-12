@@ -397,13 +397,10 @@ function handleLogsControlAction(action, actionElement) {
   if (action === 'open-app-apis') {
     const appId = actionElement.dataset.appId ?? '';
     if (appId) {
-      if (typeof window !== 'undefined' && window.parent) {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
         sessionStorage.setItem('saptools.apis.selectedAppId', appId);
-        window.parent.postMessage({
-          type: 'saptools.prototype.openCenterPanel',
-          url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
-        }, '*');
       }
+      activeTabId = 'apis';
     }
     return true;
   }

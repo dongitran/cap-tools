@@ -1209,7 +1209,7 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   border-bottom: 1px solid var(--border-color);
   background: color-mix(in oklab, var(--surface-bg) 90%, var(--mix-base));
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
