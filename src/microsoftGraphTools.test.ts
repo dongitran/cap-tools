@@ -65,7 +65,7 @@ describe('runMicrosoftGraphTool', () => {
     expect(readMicrosoftGraphToolRunRequest({ toolId: 'unknown', input: {} })).toBeNull();
   });
 
-  it('validates Outlook OAuth2 credentials and sends mail without requiring user read permission', async () => {
+  it('validates Microsoft Entra credentials and sends mail without requiring user read permission', async () => {
     const progress: MicrosoftGraphToolStepProgress[] = [];
     const fetchMock = vi.fn<MicrosoftGraphFetch>()
       .mockResolvedValueOnce(jsonResponse({ access_token: 'graph-token' }))
@@ -243,7 +243,7 @@ describe('runMicrosoftGraphTool', () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe('Outlook test failed at "Validate OAuth2 app key".');
+    expect(result.message).toBe('Outlook test failed at "Validate Microsoft Entra credentials".');
     expect(JSON.stringify(progress)).not.toContain('client-secret-value');
     expect(result.message).not.toContain('client-secret-value');
   });

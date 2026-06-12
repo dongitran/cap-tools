@@ -184,9 +184,9 @@ async function acquireToken(
     context.fetch,
     `https://login.microsoftonline.com/${encodeURIComponent(input.tenantId)}/oauth2/v2.0/token`,
     { method: 'POST', headers: formHeaders(), body },
-    'OAuth2 token request'
+    'Microsoft Entra token request'
   );
-  return readRequiredString(payload, 'access_token', 'OAuth2 token response');
+  return readRequiredString(payload, 'access_token', 'Microsoft Entra token response');
 }
 
 async function sendOutlookTestMail(
@@ -357,7 +357,11 @@ interface NormalizedSharePointInput {
 }
 
 function normalizeSharePointInput(input: SharePointToolInput): NormalizedSharePointInput {
-  const url = new URL(requireInput(input.url, 'SharePoint URL'));
+  let rawUrl = requireInput(input.url, 'SharePoint URL');
+  if (!/^https?:\/\//i.test(rawUrl)) {
+    rawUrl = `https://${rawUrl}`;
+  }
+  const url = new URL(rawUrl);
   if (url.protocol !== 'https:') {
     throw new Error('SharePoint URL must use https.');
   }
@@ -420,9 +424,9 @@ function buildFolderPayload(folderName: string): Record<string, unknown> {
 function tokenStep(run: () => Promise<string>): GraphStep<string> {
   return {
     id: 'token',
-    label: 'Validate OAuth2 app key',
+    label: 'Validate Microsoft Entra credentials',
     run,
-    doneMessage: 'OAuth2 token acquired.',
+    doneMessage: 'Microsoft Entra access token acquired.',
   };
 }
 

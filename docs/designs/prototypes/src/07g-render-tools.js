@@ -1,7 +1,7 @@
 const SUPPORT_TOOL_DEFINITIONS = [
   {
     id: 'outlook',
-    title: 'Outlook OAuth2',
+    title: 'Outlook',
     eyebrow: 'Microsoft Graph',
     description: 'Validate app credentials, verify sender mailbox, then send a real test email.',
   },
@@ -15,7 +15,7 @@ const SUPPORT_TOOL_DEFINITIONS = [
 
 const MICROSOFT_GRAPH_TOOL_STEPS = {
   outlook: [
-    { id: 'token', label: 'Validate OAuth2 app key' },
+    { id: 'token', label: 'Validate Microsoft Entra credentials' },
     { id: 'send-mail', label: 'Send test email' },
   ],
   sharepoint: [
@@ -98,7 +98,7 @@ function renderActiveTool() {
 
 function renderOutlookToolForm() {
   return `
-    <section class="tool-panel tool-input-panel" aria-label="Outlook OAuth2 inputs">
+    <section class="tool-panel tool-input-panel" aria-label="Outlook inputs">
       <div class="tool-form-grid">
         ${renderToolInput('outlook', 'clientId', 'Client ID')}
         ${renderToolInput('outlook', 'tenantId', 'Tenant ID')}
