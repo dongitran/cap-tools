@@ -85,11 +85,62 @@ test.describe('APIs Explorer Workspace Flow', () => {
     // Screenshot here
     await page.screenshot({ path: 'test-results/debug-1.png' });
 
-    // Verify webview loaded and sidebar exists
-    await expect(centerIframe.locator('.api-webview-sidebar')).toBeVisible();
-    await expect(centerIframe.locator('.api-workbench-panel')).toBeVisible();
-    await expect(centerIframe.locator('.api-entity-item', { hasText: 'Users' })).toBeVisible();
-    await centerIframe.locator('.api-entity-item', { hasText: 'Users' }).click();
-    await expect(centerIframe.getByRole('button', { name: 'Execute GET' })).toBeVisible();
+    // Search for an endpoint
+    const searchInput = centerIframe.locator('input[data-action="api-search-entity"]');
+    await searchInput.fill('pro');
+    
+    // Users should be hidden, Products should be visible
+    await expect(centerIframe.locator('.api-entity-item', { hasText: 'Users' })).not.toBeVisible();
+    const productsEntity = centerIframe.locator('.api-entity-item', { hasText: 'Products' });
+    await expect(productsEntity).toBeVisible();
+    
+    // Screenshot: Search
+    await page.screenshot({ path: 'test-results/debug-apis-search.png', fullPage: true });
+
+    // Select Products
+    await productsEntity.click();
+    
+    // Modify OData Parameter
+    const topParamInput = centerIframe.locator('input[data-param-name="$top"]');
+    await topParamInput.fill('10');
+    
+    // Verify URL updates
+    const urlInput = centerIframe.locator('.api-url-input[readonly]');
+    await expect(urlInput).toHaveValue(/\$top=10/);
+    
+    // Screenshot: Config
+    await page.screenshot({ path: 'test-results/debug-apis-config.png', fullPage: true });
+
+    // Execute Request
+    const executeBtn = centerIframe.getByRole('button', { name: 'Execute GET' });
+    await executeBtn.click();
+    
+    // Wait for the status badge (mock request takes ~850ms)
+    const statusBadge = centerIframe.locator('.api-status-badge');
+    await expect(statusBadge).toBeVisible({ timeout: 2000 });
+    await expect(statusBadge).toHaveText(/200 OK/);
+    
+    // Verify JSON View contains mock data
+    const jsonView = centerIframe.locator('.api-raw-json');
+    await expect(jsonView).toBeVisible();
+    await expect(jsonView).toContainText('Laptop');
+    
+    // Screenshot: JSON View
+    await page.screenshot({ path: 'test-results/debug-apis-json.png', fullPage: true });
+
+    // Switch to Grid Data View
+    const gridTabBtn = centerIframe.getByRole('button', { name: 'Grid Data' });
+    await gridTabBtn.click();
+    
+    // Verify Grid Table
+    const gridTable = centerIframe.locator('.api-grid-table');
+    await expect(gridTable).toBeVisible();
+    await expect(gridTable).toContainText('title');
+    await expect(gridTable).toContainText('price');
+    await expect(gridTable).toContainText('Laptop');
+    await expect(gridTable).toContainText('999');
+    
+    // Screenshot: Grid View
+    await page.screenshot({ path: 'test-results/debug-apis-grid.png', fullPage: true });
   });
 });
