@@ -131,8 +131,11 @@ function isSameHanaSqlScope(
   );
 }
 
-function buildCacheScopeKeyForContext(context: HanaSqlAppContext): string {
-  const session = context.session;
+function buildCacheScopeKeyForContext(
+  context: HanaSqlAppContext,
+  activeSession: HanaSqlScopeSession | null
+): string {
+  const session = activeSession ?? context.session;
   if (session === null) {
     return '';
   }
@@ -187,6 +190,15 @@ export class HanaSqlWorkbench
   private readonly resultPanelManager: HanaSqlResultPanelManager;
   private readonly forceTableRefreshAppIds = new Set<string>();
   private appContextCacheVersion = 0;
+  private activeSessionProvider: (() => HanaSqlScopeSession | null) | null = null;
+
+  registerActiveSessionProvider(provider: () => HanaSqlScopeSession | null): void {
+    this.activeSessionProvider = provider;
+  }
+
+  private getActiveSession(): HanaSqlScopeSession | null {
+    return this.activeSessionProvider !== null ? this.activeSessionProvider() : null;
+  }
 
   constructor(
     private readonly outputChannel: vscode.OutputChannel,
@@ -238,6 +250,7 @@ export class HanaSqlWorkbench
     context.cacheVersion = this.appContextCacheVersion;
     context.connection = null;
     context.schema = '';
+    context.session = null;
     context.tableNames = [];
     context.tableEntries = [];
     context.tableNamesPromise = null;
@@ -754,7 +767,8 @@ export class HanaSqlWorkbench
     }
 
     const forceRefresh = this.forceTableRefreshAppIds.delete(context.appId);
-    const cacheScopeKey = buildCacheScopeKeyForContext(context);
+    const activeSession = this.getActiveSession() ?? context.session;
+    const cacheScopeKey = buildCacheScopeKeyForContext(context, activeSession);
 
     if (!forceRefresh && cacheScopeKey.length > 0 && this.cacheStore !== null) {
       const cachedEntry = await this.safeReadCachedTableList(cacheScopeKey, context);
@@ -910,23 +924,30 @@ export class HanaSqlWorkbench
     context: HanaSqlAppContext,
     cacheVersion = context.cacheVersion
   ): Promise<void> {
+    const activeSession = this.getActiveSession() ?? context.session;
+
     if (context.connection !== null) {
-      return;
+      if (activeSession !== null && isSameHanaSqlScope(context.session, activeSession)) {
+        return;
+      }
+      context.connection = null;
+      context.schema = '';
     }
 
-    if (context.session === null) {
+    if (activeSession === null) {
       throw new Error('No active CF scope session. Confirm scope and choose app again.');
     }
 
     const resolved = await resolveHanaConnectionFromApp({
       appName: context.appName,
-      session: context.session,
+      session: activeSession,
     });
     if (!this.isAppContextCurrent(context, cacheVersion)) {
       return;
     }
     context.connection = resolved.connection;
     context.schema = resolved.schema;
+    context.session = activeSession;
     this.logSql(
       `resolved HANA connection for app ${sanitizeSqlLogValue(context.appName)} schema ${sanitizeSqlLogValue(context.schema)}`
     );
@@ -988,8 +1009,9 @@ export class HanaSqlWorkbench
     if (context.connection !== null) {
       secrets.push(context.connection.password);
     }
-    if (context.session !== null) {
-      secrets.push(context.session.password);
+    const session = this.getActiveSession() ?? context.session;
+    if (session !== null) {
+      secrets.push(session.password);
     }
 
     if (error instanceof HanaQueryError) {

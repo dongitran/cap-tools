@@ -329,6 +329,8 @@ export class RegionSidebarProvider
     private readonly cacheStore: CacheStore,
     private readonly hanaSqlWorkbench: HanaSqlWorkbench
   ) {
+    this.hanaSqlWorkbench.registerActiveSessionProvider(() => this.currentLogSessionSeed);
+
     const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
       this.postCacheState(snapshot);
       if (!snapshot.syncInProgress) {

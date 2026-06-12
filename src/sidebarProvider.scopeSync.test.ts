@@ -183,6 +183,7 @@ function createProviderFixture(): ProviderFixture {
   } as unknown as CfLogsPanelProvider;
   const hanaSqlWorkbench = {
     invalidateAllAppContexts: vi.fn(),
+    registerActiveSessionProvider: vi.fn(),
   } as unknown as HanaSqlWorkbench;
   const outputChannel = {
     appendLine: vi.fn(),

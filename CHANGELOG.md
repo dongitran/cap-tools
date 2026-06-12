@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.55 (stable)
+- **Fix:** SQL execution and table caching now dynamically use the extension's active Cloud Foundry scope session. Switching space/org/region now correctly invalidates stale database connections and runs queries against the new space's database even if the SQL file was already open.
+
 ## 0.10.54 (stable)
 - **Feature:** Normalize SharePoint URL protocol and rename OAuth2 references to Entra ID.
 

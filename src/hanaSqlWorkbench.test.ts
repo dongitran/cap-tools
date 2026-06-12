@@ -13,13 +13,28 @@ const {
   onDidCloseTextDocumentMock,
   registerCommandMock,
   registerCompletionItemProviderMock,
+  resolveHanaConnectionFromAppMock,
 } = vi.hoisted(() => ({
   executeCommandMock: vi.fn(),
   onDidChangeActiveTextEditorMock: vi.fn(() => ({ dispose: vi.fn() })),
   onDidCloseTextDocumentMock: vi.fn(() => ({ dispose: vi.fn() })),
   registerCommandMock: vi.fn(() => ({ dispose: vi.fn() })),
   registerCompletionItemProviderMock: vi.fn(() => ({ dispose: vi.fn() })),
+  resolveHanaConnectionFromAppMock: vi.fn(async (options) => ({
+    connection: {
+      host: `resolved-${options.session.spaceName}-host`,
+      port: 30015,
+      user: 'resolved-user',
+      password: 'resolved-password',
+    },
+    schema: `resolved-${options.session.spaceName}-schema`,
+  })),
 }));
+
+vi.mock('./hanaSqlConnectionResolver', () => ({
+  resolveHanaConnectionFromApp: resolveHanaConnectionFromAppMock,
+}));
+
 
 vi.mock('vscode', () => ({
   commands: {
@@ -74,6 +89,9 @@ interface HanaSqlWorkbenchTestAccess {
   readonly appContextsByAppId: Map<string, HanaSqlAppContextForTest>;
   readonly appIdByDocumentUri: Map<string, string>;
   invalidateAllAppContexts(): void;
+  registerActiveSessionProvider(provider: () => HanaSqlScopeSession | null): void;
+  ensureConnection(context: HanaSqlAppContextForTest): Promise<void>;
+  ensureAppContext(options: { appId: string; appName: string; session: HanaSqlScopeSession | null }): HanaSqlAppContextForTest;
   prepareStatement(
     context: HanaSqlAppContextForTest,
     rawSql: string,
@@ -530,5 +548,57 @@ describe('HanaSqlWorkbench SQL result table display names', () => {
 
     expect(updates.map((update) => update.tableName)).toEqual(['Demo_App', 'Demo_App', 'Demo_App']);
     expect(updates.at(-1)?.sql).toBe('SELECT * FROM "TEST_SCHEMA"."DEMO_APP" LIMIT 100');
+  });
+
+  test('automatically uses the active session from provider and invalidates stale connection when session changes', async () => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '';
+    
+    try {
+      const workbench = createWorkbench();
+      const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+
+      let activeSession: HanaSqlScopeSession | null = createScopeSession({
+        spaceName: 'spaceA',
+      });
+
+      access.registerActiveSessionProvider(() => activeSession);
+
+      const context = access.ensureAppContext({
+        appId: 'finance-uat-api',
+        appName: 'finance-uat-api',
+        session: activeSession,
+      });
+
+      await access.ensureConnection(context);
+      expect(context.connection).toBeDefined();
+      expect(context.connection?.host).toBe('resolved-spaceA-host');
+      expect(context.session?.spaceName).toBe('spaceA');
+
+      activeSession = createScopeSession({
+        spaceName: 'spaceB',
+      });
+
+      await access.ensureConnection(context);
+      expect(context.connection).toBeDefined();
+      expect(context.connection?.host).toBe('resolved-spaceB-host');
+      expect(context.session?.spaceName).toBe('spaceB');
+    } finally {
+      process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    }
+  });
+
+  test('invalidateAllAppContexts resets the context session to null', async () => {
+    const workbench = createWorkbench();
+    const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+
+    const context = access.ensureAppContext({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: createScopeSession(),
+    });
+    expect(context.session).not.toBeNull();
+
+    access.invalidateAllAppContexts();
+    expect(context.session).toBeNull();
   });
 });
