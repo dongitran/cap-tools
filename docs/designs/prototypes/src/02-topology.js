@@ -249,6 +249,12 @@ function handleAppLogRowClick(target) {
     return false;
   }
 
+  // Do not intercept clicks on other action buttons
+  const isActionBtn = target.closest('[data-action]');
+  if (isActionBtn && isActionBtn !== appLogRow) {
+    return false;
+  }
+
   if (checkbox.disabled) {
     return true;
   }

@@ -33,6 +33,34 @@
   cursor: pointer;
 }
 
+.app-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-log-apis-btn {
+  display: none;
+  background-color: var(--accent-color);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.app-log-apis-btn:hover {
+  opacity: 1;
+}
+
+.app-log-item:hover .app-log-apis-btn {
+  display: inline-block;
+}
+
 .app-log-item:last-child {
   border-bottom: 0;
 }

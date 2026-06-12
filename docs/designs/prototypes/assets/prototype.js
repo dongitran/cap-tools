@@ -2,7 +2,7 @@
 import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260509a';
 
 const TAB_ITEMS = [
-  { id: 'logs', label: 'Logs' },
+  { id: 'logs', label: 'Logs/APIs' },
   { id: 'apps', label: 'Apps' },
   { id: 'settings', label: 'SQL' },
 ];
@@ -52,9 +52,9 @@ const BR10_ORG_OPTIONS = [
 ];
 
 const SPACE_APP_OPTIONS = {
-  prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
-  staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
-  integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
+  prod: ['demo-app', 'api1', 'api2', 'destination-adapter'],
+  staging: ['demo-app-staging', 'api1-staging', 'api2-staging'],
+  integration: ['demo-app-int', 'api1-int', 'events-int-consumer'],
   uat: [
     'finance-uat-api',
     'finance-uat-worker',
@@ -81,7 +81,7 @@ const LOG_SEED = [
     id: 'log-001',
     time: '11:25:18',
     level: 'INFO',
-    app: 'billing-api',
+    app: 'demo-app',
     instance: '0',
     message: 'Request completed with 200 status for invoice summary endpoint.',
   },
@@ -89,7 +89,7 @@ const LOG_SEED = [
     id: 'log-002',
     time: '11:25:22',
     level: 'WARN',
-    app: 'billing-api',
+    app: 'demo-app',
     instance: '1',
     message: 'Retrying connection to dependent destination service after timeout.',
   },
@@ -97,7 +97,7 @@ const LOG_SEED = [
     id: 'log-003',
     time: '11:25:30',
     level: 'ERR',
-    app: 'payments-worker',
+    app: 'api1',
     instance: '0',
     message: 'Failed to bind queue consumer because of temporary authorization error.',
   },
@@ -105,7 +105,7 @@ const LOG_SEED = [
     id: 'log-004',
     time: '11:25:36',
     level: 'INFO',
-    app: 'payments-worker',
+    app: 'api1',
     instance: '0',
     message: 'Queue consumer resumed and processing backlog messages.',
   },
@@ -1739,6 +1739,12 @@ function handleAppLogRowClick(target) {
     return false;
   }
 
+  // Do not intercept clicks on other action buttons
+  const isActionBtn = target.closest('[data-action]');
+  if (isActionBtn && isActionBtn !== appLogRow) {
+    return false;
+  }
+
   if (checkbox.disabled) {
     return true;
   }
@@ -2847,6 +2853,19 @@ function handleLogsSelectionAction(action, actionElement) {
 }
 
 function handleLogsControlAction(action, actionElement) {
+  if (action === 'open-app-apis') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId) {
+      if (typeof window !== 'undefined' && window.parent) {
+        sessionStorage.setItem('saptools.apis.selectedAppId', appId);
+        window.parent.postMessage({
+          type: 'saptools.prototype.openCenterPanel',
+          url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
+        }, '*');
+      }
+    }
+    return true;
+  }
   if (action === 'start-app-logging') {
     if (!isAppsCatalogReady()) {
       statusMessage =
@@ -3312,6 +3331,8 @@ function renderPrototype() {
     updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
     return;
   }
+
+
 }
 
 function resolveShellMarkupByMode() {
@@ -4926,6 +4947,10 @@ function renderWorkspaceTabContent() {
     return renderServiceExportTab();
   }
 
+  if (activeTabId === 'apis') {
+    return renderApisTab();
+  }
+
   return renderPlaceholderTab(activeTabId);
 }
 
@@ -4950,8 +4975,8 @@ function renderLogsTab() {
         <h3>Active Apps Log</h3>
         <div data-role="active-app-log-list">${activeAppsMarkup}</div>
       </section>
-      <h2>Apps Log Control</h2>
-      <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs.</p>
+      <h2>Apps & APIs</h2>
+      <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs, or click APIs.</p>
       <label class="app-log-search-row search-input-with-icon">
         <span class="search-input-icon" aria-hidden="true">&#128269;</span>
         <input
@@ -5478,7 +5503,10 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
             ${isLogging ? 'disabled' : ''}
           />
           <span class="app-log-name">${escapeHtml(app.name)}</span>
-          ${actionMarkup}
+          <div class="app-log-actions">
+            <button type="button" class="app-log-apis-btn" data-action="open-app-apis" data-app-id="${app.id}" aria-label="Open APIs for ${escapeHtml(app.name)}">APIs</button>
+            ${actionMarkup}
+          </div>
         </div>
       `;
     })
@@ -6781,9 +6809,6 @@ function resolveServiceExportRows(availableApps) {
   const runningApps = filterLoggableCatalogApps(availableApps);
   const mappingByAppId = new Map(serviceFolderMappings.map((mapping) => [mapping.appId, mapping]));
   return runningApps.map((app) => {
-// --- END 07f-render-utils.js ---
-
-// --- BEGIN 08-cf-logs.js ---
     const existingMapping = mappingByAppId.get(app.id);
     if (existingMapping !== undefined) {
       return existingMapping;
@@ -6794,12 +6819,13 @@ function resolveServiceExportRows(availableApps) {
       appName: app.name,
       folderPath: '',
       isMapped: false,
-      hasConflict: false,
-      candidateFolderPaths: [],
       matchType: 'none',
     };
   });
 }
+// --- END 07f-render-utils.js ---
+
+// --- BEGIN 08-cf-logs.js ---
 
 function filterServiceExportRows(mappingRows) {
   const keyword = serviceExportSearchKeyword.trim().toLowerCase();

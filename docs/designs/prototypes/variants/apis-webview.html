@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>APIs Explorer Webview</title>
+    <link rel="stylesheet" href="../assets/prototype.css?v=20260612" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--editor-bg);
+        color: var(--text-foreground);
+        font-family: var(--font-family);
+        height: 100vh;
+        overflow: hidden;
+      }
+      #webview-app {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .api-workbench-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 20px;
+        background: var(--editor-bg);
+      }
+    </style>
+  </head>
+  <body class="vscode-dark">
+    <div id="webview-app"></div>
+    <script src="../assets/apis-webview.js?v=20260612"></script>
+  </body>
+</html>

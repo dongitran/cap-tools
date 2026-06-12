@@ -161,3 +161,17 @@ function resolveServiceExportRows(availableApps) {
   const runningApps = filterLoggableCatalogApps(availableApps);
   const mappingByAppId = new Map(serviceFolderMappings.map((mapping) => [mapping.appId, mapping]));
   return runningApps.map((app) => {
+    const existingMapping = mappingByAppId.get(app.id);
+    if (existingMapping !== undefined) {
+      return existingMapping;
+    }
+
+    return {
+      appId: app.id,
+      appName: app.name,
+      folderPath: '',
+      isMapped: false,
+      matchType: 'none',
+    };
+  });
+}

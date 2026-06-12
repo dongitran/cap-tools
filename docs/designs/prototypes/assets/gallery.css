@@ -179,6 +179,8 @@ body.gallery-page.mode-region-menu .workspace-shell {
   grid-template-columns: clamp(300px, 30vw, 430px) minmax(0, 1fr);
 }
 
+
+
 body.gallery-page.mode-region-menu .sidebar-host {
   border-right: 1px solid var(--sidebar-border);
 }

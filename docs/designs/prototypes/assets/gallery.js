@@ -23,7 +23,13 @@ const PROTOTYPE_VARIANTS = [
     id: 'design',
     hash: 'design',
     label: 'Prototype: Region Menu',
-    framePath: './variants/design.html?v=20260522a',
+    framePath: './variants/design.html?v=20260612x',
+  },
+  {
+    id: 'apis',
+    hash: 'apis',
+    label: 'Prototype: APIs Explorer',
+    framePath: './variants/design.html?v=20260612x#apis',
   },
   {
     id: 'cf-logs-panel',
@@ -122,16 +128,55 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  if (event.data['type'] !== 'saptools.prototype.navigate') {
+  if (event.data['type'] === 'saptools.prototype.navigate') {
+    const variantId = event.data['variantId'];
+    if (typeof variantId === 'string') {
+      switchVariantById(variantId);
+    }
     return;
   }
 
-  const variantId = event.data['variantId'];
-  if (typeof variantId !== 'string') {
+  if (event.data['type'] === 'saptools.prototype.openCenterPanel') {
+    const url = event.data['url'];
+    if (typeof url === 'string') {
+      const editorSurface = document.querySelector('.editor-surface');
+      if (editorSurface) {
+        editorSurface.innerHTML = '';
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.className = 'center-panel-frame';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.title = 'Webview Panel';
+        editorSurface.appendChild(iframe);
+        editorSurface.style.display = 'block';
+        editorSurface.setAttribute('aria-hidden', 'false');
+      }
+    }
     return;
   }
 
-  switchVariantById(variantId);
+  if (event.data['type'] === 'saptools.prototype.forwardToCenterPanel') {
+    const editorSurface = document.querySelector('.editor-surface');
+    if (editorSurface) {
+      const iframe = editorSurface.querySelector('iframe.center-panel-frame');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage(event.data['payload'], '*');
+      }
+    }
+    return;
+  }
+
+  if (event.data['type'] === 'saptools.prototype.closeCenterPanel') {
+    const editorSurface = document.querySelector('.editor-surface');
+    if (editorSurface) {
+      editorSurface.innerHTML = '';
+      editorSurface.style.display = 'none';
+      editorSurface.setAttribute('aria-hidden', 'true');
+    }
+    return;
+  }
 });
 
 window.addEventListener('click', (event) => {

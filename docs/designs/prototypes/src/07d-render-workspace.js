@@ -79,6 +79,10 @@ function renderWorkspaceTabContent() {
     return renderServiceExportTab();
   }
 
+  if (activeTabId === 'apis') {
+    return renderApisTab();
+  }
+
   return renderPlaceholderTab(activeTabId);
 }
 
@@ -103,8 +107,8 @@ function renderLogsTab() {
         <h3>Active Apps Log</h3>
         <div data-role="active-app-log-list">${activeAppsMarkup}</div>
       </section>
-      <h2>Apps Log Control</h2>
-      <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs.</p>
+      <h2>Apps & APIs</h2>
+      <p class="logs-intro">Select app(s) in <strong>${escapeHtml(spaceLabel)}</strong> to stream logs, or click APIs.</p>
       <label class="app-log-search-row search-input-with-icon">
         <span class="search-input-icon" aria-hidden="true">&#128269;</span>
         <input
@@ -631,7 +635,10 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
             ${isLogging ? 'disabled' : ''}
           />
           <span class="app-log-name">${escapeHtml(app.name)}</span>
-          ${actionMarkup}
+          <div class="app-log-actions">
+            <button type="button" class="app-log-apis-btn" data-action="open-app-apis" data-app-id="${app.id}" aria-label="Open APIs for ${escapeHtml(app.name)}">APIs</button>
+            ${actionMarkup}
+          </div>
         </div>
       `;
     })

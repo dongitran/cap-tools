@@ -26,6 +26,8 @@ function renderPrototype() {
     updateSelectionStageSlots(SELECTION_STAGE_SLOT_IDS);
     return;
   }
+
+
 }
 
 function resolveShellMarkupByMode() {

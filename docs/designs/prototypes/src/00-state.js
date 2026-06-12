@@ -1,7 +1,7 @@
 import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260509a';
 
 const TAB_ITEMS = [
-  { id: 'logs', label: 'Logs' },
+  { id: 'logs', label: 'Logs/APIs' },
   { id: 'apps', label: 'Apps' },
   { id: 'settings', label: 'SQL' },
 ];
@@ -51,9 +51,9 @@ const BR10_ORG_OPTIONS = [
 ];
 
 const SPACE_APP_OPTIONS = {
-  prod: ['billing-api', 'payments-worker', 'audit-service', 'destination-adapter'],
-  staging: ['billing-api-staging', 'payments-worker-staging', 'audit-service-staging'],
-  integration: ['billing-api-int', 'payments-worker-int', 'events-int-consumer'],
+  prod: ['demo-app', 'api1', 'api2', 'destination-adapter'],
+  staging: ['demo-app-staging', 'api1-staging', 'api2-staging'],
+  integration: ['demo-app-int', 'api1-int', 'events-int-consumer'],
   uat: [
     'finance-uat-api',
     'finance-uat-worker',
@@ -80,7 +80,7 @@ const LOG_SEED = [
     id: 'log-001',
     time: '11:25:18',
     level: 'INFO',
-    app: 'billing-api',
+    app: 'demo-app',
     instance: '0',
     message: 'Request completed with 200 status for invoice summary endpoint.',
   },
@@ -88,7 +88,7 @@ const LOG_SEED = [
     id: 'log-002',
     time: '11:25:22',
     level: 'WARN',
-    app: 'billing-api',
+    app: 'demo-app',
     instance: '1',
     message: 'Retrying connection to dependent destination service after timeout.',
   },
@@ -96,7 +96,7 @@ const LOG_SEED = [
     id: 'log-003',
     time: '11:25:30',
     level: 'ERR',
-    app: 'payments-worker',
+    app: 'api1',
     instance: '0',
     message: 'Failed to bind queue consumer because of temporary authorization error.',
   },
@@ -104,7 +104,7 @@ const LOG_SEED = [
     id: 'log-004',
     time: '11:25:36',
     level: 'INFO',
-    app: 'payments-worker',
+    app: 'api1',
     instance: '0',
     message: 'Queue consumer resumed and processing backlog messages.',
   },

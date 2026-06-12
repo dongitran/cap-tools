@@ -34,7 +34,8 @@ const cssFiles = [
   '04-service-export.css',
   '05-packages.css',
   '06-hana-sql.css',
-  '07-tools.css'
+  '07-tools.css',
+  '08-apis.css'
 ];
 
 function buildFile(files, srcSubdir, destFileName) {

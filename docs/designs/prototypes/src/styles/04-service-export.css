@@ -60,7 +60,8 @@
 .service-export-search-row,
 .app-log-search-row,
 .sql-app-search-row,
-.sql-table-search-row {
+.sql-table-search-row,
+.api-entity-search-row {
   display: block;
 }
 
@@ -82,7 +83,8 @@
 .service-export-search,
 .app-log-search,
 .sql-app-search,
-.sql-table-search {
+.sql-table-search,
+.api-entity-search {
   width: 100%;
   min-height: 30px;
   border: 1px solid color-mix(in oklab, var(--border-color) 86%, var(--mix-base));

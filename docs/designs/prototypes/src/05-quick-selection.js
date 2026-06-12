@@ -394,6 +394,19 @@ function handleLogsSelectionAction(action, actionElement) {
 }
 
 function handleLogsControlAction(action, actionElement) {
+  if (action === 'open-app-apis') {
+    const appId = actionElement.dataset.appId ?? '';
+    if (appId) {
+      if (typeof window !== 'undefined' && window.parent) {
+        sessionStorage.setItem('saptools.apis.selectedAppId', appId);
+        window.parent.postMessage({
+          type: 'saptools.prototype.openCenterPanel',
+          url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
+        }, '*');
+      }
+    }
+    return true;
+  }
   if (action === 'start-app-logging') {
     if (!isAppsCatalogReady()) {
       statusMessage =

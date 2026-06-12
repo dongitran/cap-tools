@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.57 (stable)
+- **UI:** Refined APIs Explorer mock data and UI naming for a more neutral design.
+
 ## 0.10.56 (stable)
 - **Fix:** Prevent reusing stale database connections when the active session provider explicitly returns null (e.g. after logging out), ensuring that query execution throws the correct "No active CF scope session" error instead of falling back to a cached connection.
 

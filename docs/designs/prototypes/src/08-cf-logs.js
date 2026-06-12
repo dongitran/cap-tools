@@ -1,19 +1,3 @@
-    const existingMapping = mappingByAppId.get(app.id);
-    if (existingMapping !== undefined) {
-      return existingMapping;
-    }
-
-    return {
-      appId: app.id,
-      appName: app.name,
-      folderPath: '',
-      isMapped: false,
-      hasConflict: false,
-      candidateFolderPaths: [],
-      matchType: 'none',
-    };
-  });
-}
 
 function filterServiceExportRows(mappingRows) {
   const keyword = serviceExportSearchKeyword.trim().toLowerCase();
