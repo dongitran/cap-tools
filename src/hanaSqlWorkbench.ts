@@ -767,7 +767,9 @@ export class HanaSqlWorkbench
     }
 
     const forceRefresh = this.forceTableRefreshAppIds.delete(context.appId);
-    const activeSession = this.getActiveSession() ?? context.session;
+    const activeSession = this.activeSessionProvider !== null
+      ? this.getActiveSession()
+      : context.session;
     const cacheScopeKey = buildCacheScopeKeyForContext(context, activeSession);
 
     if (!forceRefresh && cacheScopeKey.length > 0 && this.cacheStore !== null) {
@@ -924,7 +926,9 @@ export class HanaSqlWorkbench
     context: HanaSqlAppContext,
     cacheVersion = context.cacheVersion
   ): Promise<void> {
-    const activeSession = this.getActiveSession() ?? context.session;
+    const activeSession = this.activeSessionProvider !== null
+      ? this.getActiveSession()
+      : context.session;
 
     if (context.connection !== null) {
       if (activeSession !== null && isSameHanaSqlScope(context.session, activeSession)) {
@@ -1009,7 +1013,9 @@ export class HanaSqlWorkbench
     if (context.connection !== null) {
       secrets.push(context.connection.password);
     }
-    const session = this.getActiveSession() ?? context.session;
+    const session = this.activeSessionProvider !== null
+      ? this.getActiveSession()
+      : context.session;
     if (session !== null) {
       secrets.push(session.password);
     }

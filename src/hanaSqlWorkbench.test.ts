@@ -587,6 +587,45 @@ describe('HanaSqlWorkbench SQL result table display names', () => {
     }
   });
 
+  test('invalidates connection and throws error when active session provider returns null', async () => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '';
+    
+    try {
+      const workbench = createWorkbench();
+      const access = workbench as unknown as HanaSqlWorkbenchTestAccess;
+
+      let activeSession: HanaSqlScopeSession | null = createScopeSession({
+        spaceName: 'spaceA',
+      });
+
+      access.registerActiveSessionProvider(() => activeSession);
+
+      const context = access.ensureAppContext({
+        appId: 'finance-uat-api',
+        appName: 'finance-uat-api',
+        session: activeSession,
+      });
+
+      await access.ensureConnection(context);
+      expect(context.connection).toBeDefined();
+      expect(context.connection?.host).toBe('resolved-spaceA-host');
+
+      // Now set activeSession to null
+      activeSession = null;
+
+      await expect(access.ensureConnection(context)).rejects.toThrow(
+        'No active CF scope session. Confirm scope and choose app again.'
+      );
+
+      // Verify connection is now null
+      expect(context.connection).toBeNull();
+      expect(context.schema).toBe('');
+    } finally {
+      process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    }
+  });
+
+
   test('invalidateAllAppContexts resets the context session to null', async () => {
     const workbench = createWorkbench();
     const access = workbench as unknown as HanaSqlWorkbenchTestAccess;

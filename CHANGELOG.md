@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.56 (stable)
+- **Fix:** Prevent reusing stale database connections when the active session provider explicitly returns null (e.g. after logging out), ensuring that query execution throws the correct "No active CF scope session" error instead of falling back to a cached connection.
+
 ## 0.10.55 (stable)
 - **Fix:** SQL execution and table caching now dynamically use the extension's active Cloud Foundry scope session. Switching space/org/region now correctly invalidates stale database connections and runs queries against the new space's database even if the SQL file was already open.
 
