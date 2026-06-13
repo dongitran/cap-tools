@@ -1,6 +1,9 @@
 # SAP Tools Extension Changelog
 
-## 0.10.74 (stable)
+## 0.10.75 (stable)
+- UX Fix: Aligned JSON and Grid Data tabs precisely to the baseline of the "Response" header for perfect horizontal symmetry.
+- UX Fix: Removed the grayish background artifact from the raw JSON output block in Dark Mode themes.
+
 - Performance: Refactored API Explorer Auto-Discovery logic to execute HTTP requests in parallel (`Promise.allSettled`), drastically reducing deep endpoint discovery times.
 - UX: Upgraded caching strategy to seamlessly broadcast `syncStarted` events, rendering a subtle spinner during Stale-While-Revalidate without blocking the active UI session.
 
