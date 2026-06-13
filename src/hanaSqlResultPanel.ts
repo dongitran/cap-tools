@@ -78,7 +78,7 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
       SQL_RESULT_VIEW_TYPE,
       `SAP Tools SQL Result ${String(this.resultSequence)} · ${titleTarget}`,
       { preserveFocus: false, viewColumn: target.viewColumn },
-      { enableScripts: true }
+      { enableScripts: true, retainContextWhenHidden: true }
     );
     const nonce = createWebviewNonce();
     let currentOptions = { ...options, nonce };

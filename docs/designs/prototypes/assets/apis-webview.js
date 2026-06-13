@@ -719,8 +719,6 @@ window.addEventListener('message', (event) => {
         entities: catalog.entities
       };
       
-      apiCatalogState = 'loaded';
-      
       // If this is the currently selected app, refresh UI
       if (apiSelectedAppId === catalog.name) {
         if (catalog.entities.length > 0) {
@@ -733,11 +731,17 @@ window.addEventListener('message', (event) => {
           apiSelectedEntity = '';
         }
         
-        if (!isBackgroundUpdate) {
+        // If we previously loaded data, treat ANY subsequent catalog load as a background update 
+        // to prevent wiping the user's unsaved input/state.
+        const shouldSoftUpdate = isBackgroundUpdate || apiCatalogState === 'loaded';
+        apiCatalogState = 'loaded';
+
+        if (!shouldSoftUpdate) {
           loadEndpointSession(apiSelectedEntity);
           renderWebview();
         } else {
           // Just update sidebar softly to remove spinner and show new entities
+
           updateSidebarSection();
         }
       }

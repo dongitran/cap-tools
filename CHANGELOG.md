@@ -1,6 +1,9 @@
 # SAP Tools Extension Changelog
 
-## 0.10.89 (stable)
+## 0.10.90 (stable)
+- Fix: Webviews (APIs Explorer, SQL Results) now retain their UI state and data when switching between tabs by enabling `retainContextWhenHidden`.
+- Fix: APIs Explorer now performs soft UI updates upon background data refreshes, preventing the loss of user-typed URLs or parameters.
+
 - UX Fix: Reduced gap between URL bar and query parameters grid by 50%.
 - UX Fix: Fixed sidebar endpoint text color fallback logic for Light Theme to use proper VS Code foreground color.
 

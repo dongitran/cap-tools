@@ -56,7 +56,8 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       { preserveFocus: false, viewColumn: vscode.ViewColumn.Active },
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'docs', 'designs', 'prototypes')]
+        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'docs', 'designs', 'prototypes')],
+        retainContextWhenHidden: true
       }
     );
 
