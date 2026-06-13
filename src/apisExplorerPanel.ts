@@ -36,6 +36,10 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
+    for (const session of this.sessions.values()) {
+      session.panel.dispose();
+    }
+    this.sessions.clear();
   }
 
   openApisExplorer(appId: string, targetParams?: ApisExplorerTargetParams): ApisExplorerPanelSession {
@@ -66,9 +70,14 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
 
     panel.webview.html = this.buildWebviewHtml(panel.webview, appId);
 
+    const panelDisposables: vscode.Disposable[] = [];
+
     panel.onDidDispose(() => {
       this.sessions.delete(appId);
-    }, null, this.disposables);
+      while (panelDisposables.length > 0) {
+        panelDisposables.pop()?.dispose();
+      }
+    });
 
     panel.webview.onDidReceiveMessage(async (message: unknown) => {
       if (typeof message === 'object' && message !== null) {
@@ -78,7 +87,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
           await this.handleExecuteRequest(appId, payload.url, payload.method, payload.auth, targetParams, panel, payload.body);
         }
       }
-    }, null, this.disposables);
+    }, null, panelDisposables);
 
     if (targetParams !== undefined) {
       void this.loadApiData(appId, targetParams, panel);

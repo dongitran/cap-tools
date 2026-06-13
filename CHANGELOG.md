@@ -1,6 +1,9 @@
 # SAP Tools Extension Changelog
 
-## 0.10.90 (stable)
+## 0.10.91 (stable)
+- Fix (Memory Leak): Resolved a severe issue where `ApisExplorerPanelManager` and `HanaSqlResultPanelManager` leaked VS Code Webview event listeners into a global array, preventing garbage collection on panel close.
+- Fix: Addressed a race condition/bug where catalog load errors were incorrectly processed as API execution errors, causing the APIs Explorer to freeze indefinitely on the loading screen.
+
 - Fix: Webviews (APIs Explorer, SQL Results) now retain their UI state and data when switching between tabs by enabling `retainContextWhenHidden`.
 - Fix: APIs Explorer now performs soft UI updates upon background data refreshes, preventing the loss of user-typed URLs or parameters.
 

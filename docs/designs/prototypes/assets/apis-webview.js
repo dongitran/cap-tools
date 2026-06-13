@@ -766,18 +766,15 @@ window.addEventListener('message', (event) => {
   }
 
   if (event.data.type === 'sapTools.apis.error') {
-    const payload = event.data.payload;
-    apiResultState = 'done';
-    apiResultTime = 0;
-    apiResultStatus = 'Error';
-    apiResultPayload = { error: payload.message };
-    updateResponseSection();
-    
-    const execBtn = document.querySelector('.api-execute-btn');
-    if (execBtn) {
-      execBtn.disabled = false;
-      execBtn.innerHTML = `Execute ${apiHttpMethod}`;
-    }
+    apiCatalogState = 'error'; // Reset state so next load does a full render
+    const errorMsg = event.data.payload?.message || 'An unknown error occurred.';
+    document.getElementById('webview-app').innerHTML = `
+      <div style="padding: 20px; color: var(--vscode-errorForeground);">
+        <h2>Error Loading APIs</h2>
+        <p>${escapeHtml(errorMsg)}</p>
+      </div>
+    `;
+    return;
   }
 
   if (event.data.type === 'saptools.prototype.apis.appSelected') {

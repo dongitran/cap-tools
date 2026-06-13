@@ -95,12 +95,19 @@ export class HanaSqlResultPanelManager implements vscode.Disposable {
         renderedStatuses = null;
       }
     };
-    const messageSubscription = panel.webview.onDidReceiveMessage((message: unknown) => {
+
+    const panelDisposables: vscode.Disposable[] = [];
+
+    panel.webview.onDidReceiveMessage((message: unknown) => {
       void this.handlePanelMessage(currentOptions, message);
-    });
+    }, null, panelDisposables);
+    
     panel.onDidDispose(() => {
-      messageSubscription.dispose();
-    }, null, this.disposables);
+      while (panelDisposables.length > 0) {
+        panelDisposables.pop()?.dispose();
+      }
+    });
+    
     fullRender();
     return {
       panel,
