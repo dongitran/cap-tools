@@ -1,6 +1,8 @@
 # SAP Tools Extension Changelog
 
-## 0.10.83 (stable)
+## 0.10.84 (stable)
+- UX Fix: Enhanced readability of the endpoint list items in Light theme by switching the text color from the muted sidebar foreground to the primary foreground color.
+
 - UX Fix: Pinned the "Endpoints" header and search bar to the top of the sidebar so they remain visible while scrolling through long lists.
 
 - UX Fix: Fixed an issue where the Auth Settings popover menu was clipped and invisible when clicking the gear icon.
