@@ -1,6 +1,9 @@
 # SAP Tools Extension Changelog
 
-## 0.10.77 (stable)
+## 0.10.78 (stable)
+- UX Fix: Aligned JSON and Grid Data tabs precisely to the "Response" header by grouping them to the left.
+- UX Fix: Re-enabled the Copy button when viewing Grid Data.
+
 - Feature: Added memory-caching of endpoint states. The UI now intelligently persists user inputs and responses (method, body, OData parameters, response payload) when switching back-and-forth between endpoints during a session, functioning like Postman tabs.
 
 - UX Fix: Removed the "OData Query Parameters" header text to save vertical space.

@@ -214,17 +214,17 @@ function updateResponseSection() {
 
     headerSection.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c); padding-bottom: 6px;">
-        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+        <div style="display: flex; align-items: center; gap: 16px;">
           <h3 style="margin: 0; line-height: 1;">Response</h3>
           
-          <div class="api-view-tabs" style="border-bottom: none; display: flex; align-items: center; gap: 4px;">
+          <div class="api-view-tabs" style="border-bottom: none; display: flex; align-items: center; gap: 4px; margin-bottom: 0; margin-top: 2px;">
             <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json" style="padding: 2px 8px; font-size: 11px; height: 22px; box-sizing: border-box; display: flex; align-items: center;">JSON</button>
             <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid" style="padding: 2px 8px; font-size: 11px; height: 22px; box-sizing: border-box; display: flex; align-items: center;">Grid Data</button>
           </div>
         </div>
         
         <div style="display: flex; align-items: center; gap: 12px; font-size: 12px;">
-          ${apiActiveView === 'json' && apiResultPayload ? `
+          ${apiResultPayload ? `
             <button type="button" class="api-copy-btn" data-action="api-copy-response" style="background: transparent; border: 1px solid var(--vscode-button-secondaryBackground, #5f5f5f); color: var(--vscode-foreground); border-radius: 2px; cursor: pointer; padding: 2px 8px; height: 22px; box-sizing: border-box; display: flex; align-items: center;">
               &#128203; Copy
             </button>
