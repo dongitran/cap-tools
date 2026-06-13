@@ -50,39 +50,6 @@ const API_MOCK_CATALOG = {
   }
 };
 
-const API_MOCK_RESPONSES = {
-  'demo-app': {
-    'Users': {
-      value: [
-        { id: 'U001', name: 'Alice', role: 'Admin' },
-        { id: 'U002', name: 'Bob', role: 'User' },
-        { id: 'U003', name: 'Charlie', role: 'User' }
-      ]
-    },
-    'Products': {
-      value: [
-        { id: 'P001', title: 'Laptop', price: 999.00 },
-        { id: 'P002', title: 'Mouse', price: 29.99 },
-        { id: 'P003', title: 'Keyboard', price: 59.50 }
-      ]
-    },
-    'Orders': {
-      value: [
-        { orderId: 'O1001', status: 'Shipped', total: 1028.99 },
-        { orderId: 'O1002', status: 'Pending', total: 59.50 }
-      ]
-    }
-  },
-  'api1': {
-    'Records': {
-      value: [
-        { recordID: 'REC001', companyName: 'Demo Company A', code: 'A123', status: 'ACTIVE' },
-        { recordID: 'REC002', companyName: 'Demo Company B', code: 'B456', status: 'INACTIVE' }
-      ]
-    }
-  }
-};
-
 const appElement = document.getElementById('webview-app');
 
 function escapeHtml(str) {
@@ -98,6 +65,28 @@ function buildApiQueryString() {
     }
   }
   return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+function copyGridData() {
+  if (!apiResultPayload || !Array.isArray(apiResultPayload.value)) return;
+  const rows = apiResultPayload.value;
+  if (rows.length === 0) return;
+
+  const columns = Object.keys(rows[0]);
+  const header = columns.join('\t');
+  const body = rows.map(r => columns.map(c => String(r[c])).join('\t')).join('\n');
+  const tsv = `${header}\n${body}`;
+
+  navigator.clipboard.writeText(tsv).then(() => {
+    const btn = document.querySelector('.api-copy-btn');
+    if (btn) {
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '&#10003; Copied!';
+      setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+    }
+  }).catch(err => {
+    console.error('Failed to copy: ', err);
+  });
 }
 
 function renderApiParamRow(paramName, value, placeholder, type = 'text') {
@@ -139,23 +128,43 @@ function renderApiGridResult() {
   `;
 }
 
-function renderApiResponseBody() {
+function updateResponseSection() {
+  const responseBody = document.querySelector('.api-response-body');
+  const headerSection = document.querySelector('.api-response-header');
+  
+  if (!responseBody || !headerSection) return;
+
+  if (apiResultState === 'done') {
+    const statusClass = apiResultStatus.startsWith('2') ? 'success' : 'error';
+    headerSection.innerHTML = `
+      <h3>Response</h3>
+      <div style="display: flex; gap: 8px;">
+        <div class="api-status-badge is-${statusClass}">${escapeHtml(apiResultStatus)}</div>
+        <div class="api-time-badge">${apiResultTime}ms</div>
+      </div>
+    `;
+  } else {
+    headerSection.innerHTML = `<h3>Response</h3>`;
+  }
+
   if (apiResultState === 'idle') {
-    return `
+    responseBody.innerHTML = `
       <div class="api-placeholder-response">
         <span class="api-placeholder-icon" aria-hidden="true">&#9656;</span>
         <p>Press <strong>Execute GET</strong> to fetch data from the endpoint.</p>
       </div>
     `;
+    return;
   }
 
   if (apiResultState === 'loading') {
-    return `
+    responseBody.innerHTML = `
       <div class="api-placeholder-response">
         <div class="api-loading-spinner-large"></div>
-        <p>Resolving XSUAA credentials & fetching metadata...</p>
+        <p>Executing request...</p>
       </div>
     `;
+    return;
   }
 
   const payloadStr = JSON.stringify(apiResultPayload, null, 2);
@@ -167,11 +176,18 @@ function renderApiResponseBody() {
     viewContent = renderApiGridResult();
   }
 
-  return `
+  responseBody.innerHTML = `
     <div class="api-results-wrapper">
-      <div class="api-view-tabs">
-        <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json">JSON</button>
-        <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid">Grid Data</button>
+      <div class="api-view-tabs-container" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);">
+        <div class="api-view-tabs" style="border-bottom: none;">
+          <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json">JSON</button>
+          <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid">Grid Data</button>
+        </div>
+        ${apiActiveView === 'grid' && apiResultPayload && Array.isArray(apiResultPayload.value) && apiResultPayload.value.length > 0 ? `
+          <button type="button" class="api-copy-btn" data-action="api-copy-grid" style="margin-right: 12px; background: transparent; color: var(--vscode-textLink-foreground, #3794ff); border: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+            <span aria-hidden="true">&#128203;</span> Copy
+          </button>
+        ` : ''}
       </div>
       <div class="api-view-content">
         ${viewContent}
@@ -180,34 +196,140 @@ function renderApiResponseBody() {
   `;
 }
 
-function renderWebview() {
-  if (!apiSelectedAppId) {
-    appElement.innerHTML = `
-      <main class="api-workbench-panel">
-        <div class="api-placeholder-response">
-          <p>Please select an App Service to view its APIs.</p>
-        </div>
-      </main>
+function updateWorkbenchSection() {
+  const mainPanel = document.querySelector('.api-workbench-panel');
+  if (!mainPanel) return;
+
+  if (apiCatalogState === 'loading') {
+    mainPanel.innerHTML = `
+      <div class="api-placeholder-response" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
+        <p>Loading application endpoints...</p>
+      </div>
+    `;
+    return;
+  }
+  
+  const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG['demo-app'];
+
+  if (!apiSelectedEntity && currentCatalog.entities.length > 0) {
+    mainPanel.innerHTML = `
+      <div class="api-placeholder-response" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <span class="api-placeholder-icon" aria-hidden="true" style="font-size: 48px; opacity: 0.2;">&#128196;</span>
+        <p style="margin-top: 16px;">Please select an Endpoint from the sidebar.</p>
+      </div>
     `;
     return;
   }
 
-  // Handle loading state
-  if (apiCatalogState === 'loading') {
-    return `
-      <aside class="api-webview-sidebar" style="width: 250px; min-width: 250px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow-y: hidden;">
-        <div style="padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; opacity: 0.7;">
-          <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
-          <div style="font-size: 13px; font-weight: 500; color: var(--vscode-foreground);">Discovering Endpoints...</div>
-          <div style="font-size: 11px; margin-top: 8px; color: var(--vscode-descriptionForeground);">Fetching metadata from the deployed application</div>
-        </div>
-      </aside>
+  // Check if we need to build full UI
+  let requestSection = mainPanel.querySelector('.api-request-section');
+  if (!requestSection) {
+    mainPanel.innerHTML = `
+        <!-- Request Section -->
+        <section class="api-request-section" aria-label="API Request Builder">
+          <div class="api-url-bar">
+            <span class="api-method-badge">GET</span>
+            <input type="text" class="api-url-input" value="" aria-label="API Target URL" />
+          </div>
+
+          <div class="api-config-row" style="margin-top: 12px;">
+            <label class="api-url-bar" style="width: 300px; cursor: pointer; display: flex; border: 1px solid var(--vscode-input-border, transparent); background: var(--vscode-input-background, #3c3c3c); border-radius: 2px;" for="api-auth-select">
+              <span class="api-method-badge" style="background-color: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); font-weight: bold; padding: 4px 8px;">Auth</span>
+              <select id="api-auth-select" class="api-url-input api-auth-select" data-action="api-select-auth" style="flex: 1; border: none; background: transparent; color: var(--vscode-input-foreground, #cccccc); padding: 4px 8px; outline: none; cursor: pointer;">
+                <option value="xsuaa-auto">XSUAA Client (Auto)</option>
+                <option value="local">Local Debug (None)</option>
+                <option value="custom">Custom Token</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="api-params-title">OData Query Parameters</div>
+          <div class="api-params-grid"></div>
+
+          <div class="api-execute-row">
+            <button type="button" class="primary-action api-execute-btn" data-action="api-execute-request">
+              Execute GET
+            </button>
+          </div>
+        </section>
+
+        <!-- Response Section -->
+        <section class="api-response-section" aria-label="API Response" style="flex: 1; display: flex; flex-direction: column;">
+          <div class="api-response-header" style="display: flex; align-items: center; justify-content: space-between;">
+            <h3>Response</h3>
+          </div>
+          <div class="api-response-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;"></div>
+        </section>
     `;
+    requestSection = mainPanel.querySelector('.api-request-section');
+  }
+
+  const routeBase = currentCatalog.baseUrl || `https://demo-env-${apiSelectedAppId}.cfapps.region.hana.ondemand.com`;
+  let fullUrl = '';
+  
+  if (apiSelectedEntity) {
+    const selectedEnt = currentCatalog.entities.find(e => e.name === apiSelectedEntity);
+    const entPath = selectedEnt && selectedEnt.path ? selectedEnt.path : `${currentCatalog.servicePath || ''}/${apiSelectedEntity}`;
+    fullUrl = `${routeBase}${entPath}${buildApiQueryString()}`;
+  } else {
+    fullUrl = `${routeBase}/`;
+  }
+
+  const urlInput = mainPanel.querySelector('.api-url-input');
+  if (urlInput) urlInput.value = fullUrl;
+
+  const authSelect = mainPanel.querySelector('.api-auth-select');
+  if (authSelect) authSelect.value = apiAuthMethod;
+
+  const paramsGrid = mainPanel.querySelector('.api-params-grid');
+  if (paramsGrid) {
+    // Only update if not focused to prevent stealing focus while typing
+    const activeEl = document.activeElement;
+    if (!activeEl || !activeEl.matches('.api-params-grid input')) {
+      paramsGrid.innerHTML = `
+        ${renderApiParamRow('$select', apiParams.$select, 'Fields to retrieve')}
+        ${renderApiParamRow('$filter', apiParams.$filter, 'Filter conditions')}
+        ${renderApiParamRow('$expand', apiParams.$expand, 'Expand associations')}
+        <div class="api-params-row-flex">
+          ${renderApiParamRow('$top', apiParams.$top, 'Max items', 'number')}
+          ${renderApiParamRow('$skip', apiParams.$skip, 'Skip offset', 'number')}
+        </div>
+      `;
+    }
+  }
+
+  const execBtn = mainPanel.querySelector('.api-execute-btn');
+  if (execBtn) {
+    if (apiResultState === 'loading') {
+      execBtn.disabled = true;
+      execBtn.innerHTML = '<span class="api-spinner"></span> Executing...';
+    } else {
+      execBtn.disabled = false;
+      execBtn.innerHTML = 'Execute GET';
+    }
+  }
+
+  updateResponseSection();
+}
+
+function updateSidebarSection() {
+  const sidebar = document.querySelector('.api-webview-sidebar');
+  if (!sidebar) return;
+
+  if (apiCatalogState === 'loading') {
+    sidebar.innerHTML = `
+      <div style="padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; opacity: 0.7;">
+        <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
+        <div style="font-size: 13px; font-weight: 500; color: var(--vscode-foreground);">Discovering Endpoints...</div>
+        <div style="font-size: 11px; margin-top: 8px; color: var(--vscode-descriptionForeground);">Fetching metadata from the deployed application</div>
+      </div>
+    `;
+    return;
   }
 
   const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG['demo-app'];
   
-  // Render Left Sidebar (Endpoints)
   const entityItems = currentCatalog.entities.map(ent => {
     const isSelected = ent.name === apiSelectedEntity;
     return `
@@ -219,119 +341,65 @@ function renderWebview() {
     `;
   }).join('');
 
-  const sidebarHtml = `
-    <aside class="api-webview-sidebar" style="width: 250px; min-width: 250px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow-y: auto;">
-      <div style="padding: 12px 0 0 0;">
-        <div class="api-entities-list-title" style="margin-bottom: 8px; padding: 0 12px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8;">Endpoints (${currentCatalog.entities.length})</div>
-        <div class="api-search-container" style="padding: 0 12px 12px 12px;">
-          <div style="position: relative; display: flex; align-items: center; background: var(--vscode-input-background, #3c3c3c); border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px;">
-            <span aria-hidden="true" style="position: absolute; left: 6px; font-size: 14px; color: var(--vscode-input-foreground, #cccccc);">&#128269;</span>
-            <input type="search" data-action="api-search-entity" placeholder="Search endpoints" style="width: 100%; padding: 4px 6px 4px 24px; background: transparent; border: none; color: var(--vscode-input-foreground, #cccccc); outline: none; font-family: inherit; font-size: 13px;" />
-          </div>
+  // Keep search value if already exists
+  const searchInput = sidebar.querySelector('input[type="search"]');
+  const searchTerm = searchInput ? searchInput.value : '';
+
+  sidebar.innerHTML = `
+    <div style="padding: 12px 0 0 0;">
+      <div class="api-entities-list-title" style="margin-bottom: 8px; padding: 0 12px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8;">Endpoints (${currentCatalog.entities.length})</div>
+      <div class="api-search-container" style="padding: 0 12px 12px 12px;">
+        <div style="position: relative; display: flex; align-items: center; background: var(--vscode-input-background, #3c3c3c); border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px;">
+          <span aria-hidden="true" style="position: absolute; left: 6px; font-size: 14px; color: var(--vscode-input-foreground, #cccccc);">&#128269;</span>
+          <input type="search" data-action="api-search-entity" value="${escapeHtml(searchTerm)}" placeholder="Search endpoints" style="width: 100%; padding: 4px 6px 4px 24px; background: transparent; border: none; color: var(--vscode-input-foreground, #cccccc); outline: none; font-family: inherit; font-size: 13px;" />
         </div>
       </div>
-      <div class="api-entities-list-container" style="padding: 0; display: flex; flex-direction: column;">
-        ${entityItems}
-      </div>
-    </aside>
-  `;
-
-  // Render Right Content
-  let workbenchHtml = '';
-  if (apiCatalogState === 'loading') {
-    workbenchHtml = `
-      <main class="api-workbench-panel" style="flex: 1;">
-        <div class="api-placeholder-response">
-          <p>Loading application endpoints...</p>
-        </div>
-      </main>
-    `;
-  } else if (!apiSelectedEntity && currentCatalog.entities.length > 0) {
-    workbenchHtml = `
-      <main class="api-workbench-panel" style="flex: 1;">
-        <div class="api-placeholder-response">
-          <p>Please select an Endpoint from the sidebar.</p>
-        </div>
-      </main>
-    `;
-  } else {
-    // Determine route base and endpoint path
-    const routeBase = currentCatalog.baseUrl || `https://demo-env-${apiSelectedAppId}.cfapps.region.hana.ondemand.com`;
-    let fullUrl = '';
-    
-    if (apiSelectedEntity) {
-      const selectedEnt = currentCatalog.entities.find(e => e.name === apiSelectedEntity);
-      const entPath = selectedEnt && selectedEnt.path ? selectedEnt.path : `${currentCatalog.servicePath || ''}/${apiSelectedEntity}`;
-      fullUrl = `${routeBase}${entPath}${buildApiQueryString()}`;
-    } else {
-      // Empty catalog mode: allow manual entry
-      fullUrl = `${routeBase}/`;
-    }
-
-    workbenchHtml = `
-      <main class="api-workbench-panel" style="flex: 1; border-left: none;">
-        <!-- Request Section -->
-        <section class="api-request-section" aria-label="API Request Builder">
-          <div class="api-url-bar">
-            <span class="api-method-badge">GET</span>
-            <input type="text" class="api-url-input" value="${fullUrl}" aria-label="API Target URL" />
-          </div>
-
-          <div class="api-config-row" style="margin-top: 12px;">
-            <label class="api-url-bar" style="width: 300px; cursor: pointer; display: flex; border: 1px solid var(--vscode-input-border, transparent); background: var(--vscode-input-background, #3c3c3c); border-radius: 2px;" for="api-auth-select">
-              <span class="api-method-badge" style="background-color: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); font-weight: bold; padding: 4px 8px;">Auth</span>
-              <select id="api-auth-select" class="api-url-input api-auth-select" data-action="api-select-auth" style="flex: 1; border: none; background: transparent; color: var(--vscode-input-foreground, #cccccc); padding: 4px 8px; outline: none; cursor: pointer;">
-                <option value="xsuaa-auto" ${apiAuthMethod === 'xsuaa-auto' ? 'selected' : ''}>XSUAA Client (Auto)</option>
-                <option value="local" ${apiAuthMethod === 'local' ? 'selected' : ''}>Local Debug (None)</option>
-                <option value="custom" ${apiAuthMethod === 'custom' ? 'selected' : ''}>Custom Token</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="api-params-title">OData Query Parameters</div>
-          <div class="api-params-grid">
-            ${renderApiParamRow('$select', apiParams.$select, 'Fields to retrieve')}
-            ${renderApiParamRow('$filter', apiParams.$filter, 'Filter conditions')}
-            ${renderApiParamRow('$expand', apiParams.$expand, 'Expand associations')}
-            <div class="api-params-row-flex">
-              ${renderApiParamRow('$top', apiParams.$top, 'Max items', 'number')}
-              ${renderApiParamRow('$skip', apiParams.$skip, 'Skip offset', 'number')}
-            </div>
-          </div>
-
-          <div class="api-execute-row">
-            <button type="button" class="primary-action api-execute-btn" data-action="api-execute-request" ${apiResultState === 'loading' ? 'disabled' : ''}>
-              ${apiResultState === 'loading' ? '<span class="api-spinner"></span> Executing...' : 'Execute GET'}
-            </button>
-          </div>
-        </section>
-
-        <!-- Response Section -->
-        <section class="api-response-section" aria-label="API Response">
-          <div class="api-response-header">
-            <h3>Response</h3>
-            ${apiResultState === 'done' ? `
-              <div class="api-status-badge is-${apiResultStatus.startsWith('2') ? 'success' : 'error'}">
-                ${apiResultStatus}
-              </div>
-              <div class="api-time-badge">${apiResultTime}ms</div>
-            ` : ''}
-          </div>
-
-          <div class="api-response-body">
-            ${renderApiResponseBody()}
-          </div>
-        </section>
-      </main>
-    `;
-  }
-
-  appElement.innerHTML = `
-    <div class="api-split-layout" style="display: flex; flex-direction: row; height: 100vh; overflow: hidden; margin: 0; padding: 0;">
-      ${sidebarHtml}
-      ${workbenchHtml}
+    </div>
+    <div class="api-entities-list-container" style="padding: 0; display: flex; flex-direction: column;">
+      ${entityItems}
     </div>
   `;
+
+  // Apply search filter immediately
+  if (searchTerm) {
+    const term = searchTerm.trim().toLowerCase();
+    const items = sidebar.querySelectorAll('.api-entity-item');
+    items.forEach((btn) => {
+      const text = btn.textContent || '';
+      btn.style.display = text.toLowerCase().includes(term) ? 'flex' : 'none';
+    });
+  }
+}
+
+function initLayout() {
+  if (!apiSelectedAppId) {
+    appElement.innerHTML = `
+      <main class="api-workbench-panel">
+        <div class="api-placeholder-response">
+          <p>Please select an App Service to view its APIs.</p>
+        </div>
+      </main>
+    `;
+    return;
+  }
+
+  // Ensure DOM skeleton exists
+  if (!document.querySelector('.api-split-layout')) {
+    appElement.innerHTML = `
+      <div class="api-split-layout" style="display: flex; flex-direction: row; height: 100vh; overflow: hidden; margin: 0; padding: 0;">
+        <aside class="api-webview-sidebar" style="width: 250px; min-width: 250px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow-y: auto;"></aside>
+        <main class="api-workbench-panel" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto;"></main>
+      </div>
+    `;
+  }
+}
+
+function renderWebview() {
+  initLayout();
+  if (apiSelectedAppId) {
+    updateSidebarSection();
+    updateWorkbenchSection();
+  }
 }
 
 // Action Handler
@@ -346,39 +414,45 @@ appElement.addEventListener('click', (event) => {
     apiSelectedEntity = actionElement.dataset.entityName ?? '';
     apiResultState = 'idle';
     apiResultPayload = null;
-    renderWebview();
+    updateSidebarSection();
+    updateWorkbenchSection();
     return;
   }
 
   if (action === 'api-switch-view') {
     apiActiveView = actionElement.dataset.viewId ?? 'json';
-    renderWebview();
+    updateResponseSection();
+    return;
+  }
+
+  if (action === 'api-copy-grid') {
+    copyGridData();
     return;
   }
 
   if (action === 'api-execute-request') {
     apiResultState = 'loading';
-    renderWebview();
+    updateWorkbenchSection();
 
-    const entityName = apiSelectedEntity;
     const methodBadge = document.querySelector('.api-method-badge');
     const method = methodBadge ? methodBadge.textContent.trim() : 'GET';
-    const urlInput = document.querySelector('.api-url-display input') || document.querySelector('.api-url-input');
+    const urlInput = document.querySelector('.api-url-input');
     const url = urlInput ? urlInput.value : '';
 
-
     if (vscodeApi) {
-      document.body.insertAdjacentHTML('beforeend', '<div id="debug-flag">POST MESSAGE CALLED: ' + method + ' ' + url + '</div>');
       vscodeApi.postMessage({
         type: 'sapTools.apis.executeRequest',
         payload: { url, method, auth: apiAuthMethod }
       });
     } else {
       // Fallback for prototype testing without VS Code extension host
-      apiResultState = 'done';
-      apiResultStatus = 'Error';
-      apiResultPayload = { error: "VS Code API is not available in prototype mode." };
-      renderWebview();
+      setTimeout(() => {
+        apiResultState = 'done';
+        apiResultStatus = '200 OK';
+        apiResultTime = 345;
+        apiResultPayload = API_MOCK_RESPONSES['demo-app']['Users'];
+        updateWorkbenchSection();
+      }, 1000);
     }
   }
 });
@@ -390,7 +464,6 @@ appElement.addEventListener('change', (event) => {
   const action = target.dataset.action;
   if (action === 'api-select-auth') {
     apiAuthMethod = target.value;
-    renderWebview();
   }
 });
 
@@ -403,7 +476,6 @@ appElement.addEventListener('input', (event) => {
     const term = target.value.trim().toLowerCase();
     const items = appElement.querySelectorAll('.api-entity-item');
     items.forEach((btn) => {
-      if (!(btn instanceof HTMLElement)) return;
       const text = btn.textContent || '';
       btn.style.display = text.toLowerCase().includes(term) ? 'flex' : 'none';
     });
@@ -415,13 +487,12 @@ appElement.addEventListener('input', (event) => {
     if (paramName in apiParams) {
       apiParams[paramName] = target.value;
       const urlInput = appElement.querySelector('.api-url-input');
-      if (urlInput instanceof HTMLInputElement) {
+      if (urlInput) {
         const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
         const routeBase = currentCatalog.baseUrl || `https://demo-env-${apiSelectedAppId}.cfapps.region.hana.ondemand.com`;
         const selectedEnt = currentCatalog.entities.find(e => e.name === apiSelectedEntity);
         const entPath = selectedEnt && selectedEnt.path ? selectedEnt.path : `${currentCatalog.servicePath || ''}/${apiSelectedEntity}`;
-        const fullUrl = `${routeBase}${entPath}${buildApiQueryString()}`;
-        urlInput.value = fullUrl;
+        urlInput.value = `${routeBase}${entPath}${buildApiQueryString()}`;
       }
     }
   }
@@ -444,7 +515,7 @@ function initWebview() {
   renderWebview();
 }
 
-// Listen to messages from gallery.js for subsequent updates
+// Listen to messages from extension
 window.addEventListener('message', (event) => {
   if (!event.data) return;
 
@@ -462,10 +533,8 @@ window.addEventListener('message', (event) => {
       
       // If this is the currently selected app, refresh UI
       if (apiSelectedAppId === catalog.name) {
-        if (catalog.entities.length > 0) {
+        if (catalog.entities.length > 0 && !apiSelectedEntity) {
           apiSelectedEntity = catalog.entities[0].name;
-        } else {
-          apiSelectedEntity = '';
         }
         apiResultState = 'idle';
         apiResultPayload = null;
@@ -480,17 +549,37 @@ window.addEventListener('message', (event) => {
     apiResultTime = payload.time;
     apiResultStatus = payload.status;
     apiResultPayload = payload.data;
-    renderWebview();
+    updateResponseSection();
+    
+    // Also update Execute button back to normal
+    const execBtn = document.querySelector('.api-execute-btn');
+    if (execBtn) {
+      execBtn.disabled = false;
+      execBtn.innerHTML = 'Execute GET';
+    }
+  }
+
+  if (event.data.type === 'sapTools.apis.error') {
+    const payload = event.data.payload;
+    apiResultState = 'done';
+    apiResultTime = 0;
+    apiResultStatus = 'Error';
+    apiResultPayload = { error: payload.message };
+    updateResponseSection();
+    
+    const execBtn = document.querySelector('.api-execute-btn');
+    if (execBtn) {
+      execBtn.disabled = false;
+      execBtn.innerHTML = 'Execute GET';
+    }
   }
 
   if (event.data.type === 'saptools.prototype.apis.appSelected') {
     apiSelectedAppId = event.data.payload.appId;
     
-    // Reset to loading state when a new app is selected
     apiCatalogState = 'loading';
     apiCurrentCatalog = null;
     
-    // We don't select an entity yet since catalog is loading
     apiSelectedEntity = '';
     apiResultState = 'idle';
     apiResultPayload = null;

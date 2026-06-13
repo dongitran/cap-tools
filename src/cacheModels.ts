@@ -83,6 +83,20 @@ export interface LocalPackagesCacheEntry {
   readonly updatedAt: string;
 }
 
+export interface ApiCatalogEntity {
+  readonly name: string;
+  readonly count?: number;
+  readonly path?: string;
+}
+
+export interface ApiCatalogCacheEntry {
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly servicePath?: string;
+  readonly entities: readonly ApiCatalogEntity[];
+  readonly updatedAt: string;
+}
+
 export interface CacheState {
   readonly version: 1;
   readonly settings: CacheSettings;
@@ -90,6 +104,7 @@ export interface CacheState {
   readonly exportRootFolders: Record<string, ExportRootFolderCacheEntry>;
   readonly hanaTableLists: Record<string, HanaTableListCacheEntry>;
   readonly localPackages?: LocalPackagesCacheEntry;
+  readonly apiCatalogs: Record<string, ApiCatalogCacheEntry>;
 }
 
 export function isSyncIntervalHours(

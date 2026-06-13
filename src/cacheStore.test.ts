@@ -84,6 +84,7 @@ describe('CacheStore', () => {
       users: {},
       exportRootFolders: {},
       hanaTableLists: {},
+      apiCatalogs: {},
     });
   });
 

@@ -19,6 +19,8 @@ import type {
   LocalPackagesCacheEntry,
   RegionAccessState,
   SyncIntervalHours,
+  ApiCatalogCacheEntry,
+  ApiCatalogEntity,
 } from './cacheModels';
 
 const CACHE_STATE_KEY = 'sapTools.cache.state.v1';
@@ -28,6 +30,7 @@ const EMPTY_EXPORT_ROOT_FOLDERS: Record<string, ExportRootFolderCacheEntry> =
   Object.freeze({});
 const EMPTY_HANA_TABLE_LISTS: Record<string, HanaTableListCacheEntry> =
   Object.freeze({});
+const EMPTY_API_CATALOGS: Record<string, ApiCatalogCacheEntry> = Object.freeze({});
 
 export class CacheStore {
   private writeQueue: Promise<void> = Promise.resolve();
@@ -229,6 +232,31 @@ export class CacheStore {
     return removed;
   }
 
+  async getApiCatalog(appId: string): Promise<ApiCatalogCacheEntry | null> {
+    const trimmedId = appId.trim();
+    if (trimmedId.length === 0) {
+      return null;
+    }
+    const state = await this.readState();
+    return state.apiCatalogs[trimmedId] ?? null;
+  }
+
+  async setApiCatalog(appId: string, entry: ApiCatalogCacheEntry): Promise<void> {
+    const trimmedId = appId.trim();
+    if (trimmedId.length === 0) {
+      throw new Error('Cannot cache ApiCatalog with an empty appId.');
+    }
+    await this.updateState((state) => {
+      return {
+        ...state,
+        apiCatalogs: {
+          ...state.apiCatalogs,
+          [trimmedId]: entry,
+        },
+      };
+    });
+  }
+
   async upsertUser(
     email: string,
     updater: (current: CachedUserEntry | null) => CachedUserEntry
@@ -402,6 +430,7 @@ function normalizeCacheState(rawState: unknown): CacheState {
   const rawExportRootFolders = normalizeExportRootFolders(rawState['exportRootFolders']);
   const rawHanaTableLists = normalizeHanaTableLists(rawState['hanaTableLists']);
   const rawLocalPackages = normalizeLocalPackagesCacheEntry(rawState['localPackages']);
+  const rawApiCatalogs = normalizeApiCatalogs(rawState['apiCatalogs']);
 
   const state: CacheState = {
     version: 1,
@@ -409,6 +438,7 @@ function normalizeCacheState(rawState: unknown): CacheState {
     users: rawUsers,
     exportRootFolders: rawExportRootFolders,
     hanaTableLists: rawHanaTableLists,
+    apiCatalogs: rawApiCatalogs,
   };
 
   if (rawLocalPackages !== null) {
@@ -829,6 +859,7 @@ function createDefaultCacheState(): CacheState {
     users: EMPTY_USERS,
     exportRootFolders: EMPTY_EXPORT_ROOT_FOLDERS,
     hanaTableLists: EMPTY_HANA_TABLE_LISTS,
+    apiCatalogs: EMPTY_API_CATALOGS,
   };
 }
 
@@ -877,4 +908,89 @@ function normalizeCachedLocalPackage(rawPkg: unknown): CachedLocalPackage | null
   const roundRaw = rawPkg['round'];
   const round = typeof roundRaw === 'number' ? roundRaw : null;
   return { name, version, hasBuildScript, round };
+}
+
+function normalizeApiCatalogs(rawApiCatalogs: unknown): Record<string, ApiCatalogCacheEntry> {
+  if (!isRecord(rawApiCatalogs)) {
+    return EMPTY_API_CATALOGS;
+  }
+
+  const entries: Record<string, ApiCatalogCacheEntry> = {};
+  for (const [appId, rawEntry] of Object.entries(rawApiCatalogs)) {
+    const trimmedAppId = appId.trim();
+    if (trimmedAppId.length === 0) {
+      continue;
+    }
+    const normalized = normalizeApiCatalogCacheEntry(rawEntry);
+    if (normalized === null) {
+      continue;
+    }
+    entries[trimmedAppId] = normalized;
+  }
+  return entries;
+}
+
+function normalizeApiCatalogCacheEntry(rawEntry: unknown): ApiCatalogCacheEntry | null {
+  if (!isRecord(rawEntry)) {
+    return null;
+  }
+
+  const name = readString(rawEntry['name']);
+  if (name.length === 0) {
+    return null;
+  }
+
+  const baseUrl = readString(rawEntry['baseUrl']);
+  if (baseUrl.length === 0) {
+    return null;
+  }
+
+  const servicePathRaw = rawEntry['servicePath'];
+  const servicePath = typeof servicePathRaw === 'string' ? servicePathRaw : undefined;
+
+  const updatedAt = readString(rawEntry['updatedAt']);
+  if (updatedAt.length === 0) {
+    return null;
+  }
+
+  let entities: readonly ApiCatalogEntity[] = [];
+  const rawEntities = rawEntry['entities'];
+  if (Array.isArray(rawEntities)) {
+    entities = rawEntities
+      .map(normalizeApiCatalogEntity)
+      .filter((ent): ent is ApiCatalogEntity => ent !== null);
+  }
+
+  const entry: ApiCatalogCacheEntry = servicePath !== undefined 
+    ? { name, baseUrl, entities, updatedAt, servicePath }
+    : { name, baseUrl, entities, updatedAt };
+
+  return entry;
+}
+
+function normalizeApiCatalogEntity(rawEnt: unknown): ApiCatalogEntity | null {
+  if (!isRecord(rawEnt)) {
+    return null;
+  }
+
+  const name = readString(rawEnt['name']);
+  if (name.length === 0) {
+    return null;
+  }
+
+  const countRaw = rawEnt['count'];
+  const count = typeof countRaw === 'number' ? countRaw : undefined;
+
+  const pathRaw = rawEnt['path'];
+  const pathValue = typeof pathRaw === 'string' ? pathRaw : undefined;
+
+  let entity: ApiCatalogEntity = { name };
+  if (count !== undefined) {
+    entity = { ...entity, count };
+  }
+  if (pathValue !== undefined) {
+    entity = { ...entity, path: pathValue };
+  }
+
+  return entity;
 }

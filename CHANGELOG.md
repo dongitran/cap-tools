@@ -1,5 +1,11 @@
 # SAP Tools Extension Changelog
 
+## 0.10.68 (stable)
+- Feature: Implemented local caching for `ApiCatalog` to speed up API discovery.
+- Feature: Auto-drills down into root endpoints to find sub-entities.
+- Feature: Webview UI refactored to support partial updates without flickering.
+- Feature: Added "Copy" button in the Grid Data view to easily copy results to the clipboard.
+
 ## 0.10.67 (stable)
 - Fixed: Resolved JSON parsing failure when reading VCAP_SERVICES from container environment variables. This resolves the silent 401 Unauthorized errors when fetching endpoints.
 

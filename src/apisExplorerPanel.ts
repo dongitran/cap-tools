@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { fetchAppRouteUrlFromTarget, fetchCfOauthTokenFromTarget, fetchXsuaaTokenFromTarget, fetchRemoteCdsServicesFromTarget } from './cfClient.js';
+import type { CacheStore } from './cacheStore.js';
 
 const APIS_EXPLORER_VIEW_TYPE = 'sapTools.apisExplorer';
 
@@ -23,7 +24,8 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly outputChannel: vscode.OutputChannel
+    private readonly outputChannel: vscode.OutputChannel,
+    private readonly cacheStore: CacheStore
   ) {}
 
   private log(msg: string): void {
@@ -113,6 +115,17 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
           payload: { message: `No route found for app ${appId}` }
         });
         return;
+      }
+
+      // Check Cache
+      const cachedCatalog = await this.cacheStore.getApiCatalog(appId);
+      if (cachedCatalog !== null) {
+        this.log(`Cache hit for ${appId} API catalog.`);
+        void panel.webview.postMessage({
+          type: 'sapTools.apis.catalogLoaded',
+          payload: cachedCatalog
+        });
+        return; // we have it cached, so we don't need to re-fetch
       }
 
       const baseUrl = `https://${routeUrl}`;
@@ -211,11 +224,73 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
         }
       }
 
+        // --- Deep Auto-Discovery (Drill-down into OData Services) ---
+        if (entities.length > 0) {
+          this.log(`Attempting deep discovery on ${String(entities.length)} root endpoints...`);
+          const expandedEntities: { name: string; methods: string[]; schema: unknown; path: string }[] = [];
+          
+          // Re-use the token we fetched earlier
+          const token = await fetchXsuaaTokenFromTarget({ ...targetParams, appName: appId });
+          const headers: Record<string, string> = { 'Accept': 'application/json' };
+          if (token !== null && token !== '') {
+            headers['Authorization'] = token.startsWith('bearer') || token.startsWith('Bearer') ? token : `Bearer ${token}`;
+          }
+
+          for (const ep of entities) {
+            try {
+              if (ep.path === '' || ep.path === '/') {
+                expandedEntities.push(ep);
+                continue;
+              }
+              const epUrl = `${baseUrl}${ep.path.startsWith('/') ? ep.path : '/' + ep.path}`;
+              const res = await fetch(epUrl, { headers, signal: AbortSignal.timeout(5000) });
+              if (res.ok) {
+                const data = await res.json();
+                if (typeof data === 'object' && data !== null && Array.isArray((data as Record<string, unknown>)['value'])) {
+                  const subEntities = (data as Record<string, unknown>)['value'] as { name?: string; url?: string }[];
+                  let foundSub = false;
+                  for (const sub of subEntities) {
+                    if (typeof sub.name === 'string' && sub.name !== '') {
+                      const subPath = typeof sub.url === 'string' && sub.url !== '' ? sub.url : sub.name;
+                      expandedEntities.push({
+                        name: `${ep.name} / ${sub.name}`,
+                        methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+                        schema: { type: 'object', properties: {} },
+                        path: `${ep.path}/${subPath}`
+                      });
+                      foundSub = true;
+                    }
+                  }
+                  if (!foundSub) {
+                    expandedEntities.push(ep);
+                  }
+                } else {
+                  expandedEntities.push(ep);
+                }
+              } else {
+                expandedEntities.push(ep);
+              }
+            } catch {
+              expandedEntities.push(ep);
+            }
+          }
+          if (expandedEntities.length > 0) {
+            entities = expandedEntities;
+            this.log(`Deep discovery complete. Found ${String(entities.length)} total endpoints.`);
+          }
+        }
+
       const catalog = {
         name: appId,
         baseUrl: baseUrl,
-        entities: entities
+        entities: entities,
+        updatedAt: new Date().toISOString()
       };
+
+      // Save to cache
+      await this.cacheStore.setApiCatalog(appId, catalog).catch((e: unknown) => {
+        this.log(`Failed to cache API catalog: ${e instanceof Error ? e.message : String(e)}`);
+      });
 
       this.log(`Sending catalog to Webview with ${String(entities.length)} entities`);
       void panel.webview.postMessage({
