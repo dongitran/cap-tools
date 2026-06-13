@@ -445,6 +445,32 @@ export async function fetchRemoteTextFileFromTarget(params: {
 }
 
 /**
+ * Fetch all remote .cds file contents from the app container via CF SSH.
+ * Requires CF CLI to be already targeted to the intended org/space.
+ */
+export async function fetchRemoteCdsServicesFromTarget(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<string | null> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const command = `find / -maxdepth 7 \\( -path '*/node_modules' -o -path /proc -o -path /sys -o -path /dev \\) -prune -o -type f -name '*.cds' -print 2>/dev/null | xargs cat`;
+
+  try {
+    const stdout = await runCfCommand(['ssh', params.appName, '-c', command], {
+      ...cfHomeOptions,
+      failureMessage: `Failed to fetch remote .cds files for app "${params.appName}".`,
+    });
+    if (stdout.trim().length > 0) {
+      return stdout;
+    }
+  } catch {
+    // Ignore if not found or SSH fails
+  }
+
+  return null;
+}
+
+/**
  * Spawn long-running `cf logs <app>` stream process.
  * Requires CF target to be prepared beforehand.
  */

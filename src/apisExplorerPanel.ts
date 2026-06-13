@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
-import { fetchAppRouteUrlFromTarget, fetchCfOauthTokenFromTarget, fetchXsuaaTokenFromTarget } from './cfClient';
+import { fetchAppRouteUrlFromTarget, fetchCfOauthTokenFromTarget, fetchXsuaaTokenFromTarget, fetchRemoteCdsServicesFromTarget } from './cfClient.js';
 
 const APIS_EXPLORER_VIEW_TYPE = 'sapTools.apisExplorer';
 
@@ -164,7 +164,51 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       }
 
       if (!success || entities.length === 0) {
-        this.log(`Warning: No API entities discovered remotely for ${appId}.`);
+        this.log(`Warning: No API entities discovered remotely from root endpoint for ${appId}. Attempting fallback via CF SSH remote .cds scan...`);
+        try {
+           const remoteCdsContent = await fetchRemoteCdsServicesFromTarget({ ...targetParams, appName: appId });
+           if (remoteCdsContent !== null && remoteCdsContent !== '') {
+             const regex = /service\s+([A-Za-z0-9_]+)[^{]*?@\(\s*path\s*:\s*['"]([^'"]+)['"]\s*\)/g;
+             let match;
+             const discovered = new Set<string>();
+             while ((match = regex.exec(remoteCdsContent)) !== null) {
+               const name = match[1] ?? '';
+               const path = match[2] ?? '';
+               if (name !== '' && !discovered.has(name)) {
+                 discovered.add(name);
+                 entities.push({
+                   name: name,
+                   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+                   schema: { type: 'object', properties: {} },
+                   path: path
+                 });
+               }
+             }
+
+             if (entities.length === 0) {
+               // Fallback to just name if no explicit @path is defined
+               const regexFallback = /service\s+([A-Za-z0-9_]+)/g;
+               while ((match = regexFallback.exec(remoteCdsContent)) !== null) {
+                 const name = match[1] ?? '';
+                 if (name !== '' && !discovered.has(name)) {
+                   discovered.add(name);
+                   entities.push({
+                     name: name,
+                     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+                     schema: { type: 'object', properties: {} },
+                     path: `/odata/v4/${name.replace(/Service$/, '').toLowerCase()}`
+                   });
+                 }
+               }
+             }
+             if (entities.length > 0) {
+               success = true;
+               this.log(`Discovered ${String(entities.length)} entities via remote CF SSH scan.`);
+             }
+           }
+        } catch (sshErr) {
+           this.log(`CF SSH fallback failed: ${sshErr instanceof Error ? sshErr.message : String(sshErr)}`);
+        }
       }
 
       const catalog = {

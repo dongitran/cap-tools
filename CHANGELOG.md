@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.65 (stable)
+- Feature: APIs Explorer now discovers actual endpoints directly from the CF app container (parsing remote `.cds` files via SSH) when the standard OData index page is disabled in production environments.
+
 ## 0.10.64 (stable)
 - Changed: Removed hardcoded `AdminService` fallback when failing to retrieve the APIs catalog.
 - Fixed: Improved UI to provide a proper loading spinner and manual URL entry when remote endpoints fail to load.
