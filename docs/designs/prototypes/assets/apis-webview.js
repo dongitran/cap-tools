@@ -238,7 +238,15 @@ function renderWebview() {
 
   // Render Right Content
   let workbenchHtml = '';
-  if (!apiSelectedEntity) {
+  if (apiCatalogState === 'loading') {
+    workbenchHtml = `
+      <main class="api-workbench-panel" style="flex: 1;">
+        <div class="api-placeholder-response">
+          <p>Loading application endpoints...</p>
+        </div>
+      </main>
+    `;
+  } else if (!apiSelectedEntity && currentCatalog.entities.length > 0) {
     workbenchHtml = `
       <main class="api-workbench-panel" style="flex: 1;">
         <div class="api-placeholder-response">
@@ -247,10 +255,18 @@ function renderWebview() {
       </main>
     `;
   } else {
+    // Determine route base and endpoint path
     const routeBase = currentCatalog.baseUrl || `https://demo-env-${apiSelectedAppId}.cfapps.region.hana.ondemand.com`;
-    const selectedEnt = currentCatalog.entities.find(e => e.name === apiSelectedEntity);
-    const entPath = selectedEnt && selectedEnt.path ? selectedEnt.path : `${currentCatalog.servicePath || ''}/${apiSelectedEntity}`;
-    const fullUrl = `${routeBase}${entPath}${buildApiQueryString()}`;
+    let fullUrl = '';
+    
+    if (apiSelectedEntity) {
+      const selectedEnt = currentCatalog.entities.find(e => e.name === apiSelectedEntity);
+      const entPath = selectedEnt && selectedEnt.path ? selectedEnt.path : `${currentCatalog.servicePath || ''}/${apiSelectedEntity}`;
+      fullUrl = `${routeBase}${entPath}${buildApiQueryString()}`;
+    } else {
+      // Empty catalog mode: allow manual entry
+      fullUrl = `${routeBase}/`;
+    }
 
     workbenchHtml = `
       <main class="api-workbench-panel" style="flex: 1; border-left: none;">
@@ -258,7 +274,7 @@ function renderWebview() {
         <section class="api-request-section" aria-label="API Request Builder">
           <div class="api-url-bar">
             <span class="api-method-badge">GET</span>
-            <input type="text" class="api-url-input" value="${fullUrl}" readonly aria-label="API Target URL" />
+            <input type="text" class="api-url-input" value="${fullUrl}" aria-label="API Target URL" />
           </div>
 
           <div class="api-config-row" style="margin-top: 12px;">

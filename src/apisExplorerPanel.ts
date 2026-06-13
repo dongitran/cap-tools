@@ -164,40 +164,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       }
 
       if (!success || entities.length === 0) {
-        this.log(`Warning: No API entities discovered remotely for ${appId}. Falling back to local workspace discovery.`);
-        const files = await vscode.workspace.findFiles('**/*.cds');
-        const services = new Set<string>();
-        
-        for (const file of files) {
-          try {
-            const contentBytes = await vscode.workspace.fs.readFile(file);
-            const content = Buffer.from(contentBytes).toString('utf-8');
-            const matches = content.matchAll(/service\s+([A-Za-z0-9_]+)/g);
-            for (const match of matches) {
-              if (match[1] !== undefined && match[1] !== '') {
-                services.add(match[1]);
-              }
-            }
-          } catch {
-            // Ignore file read errors
-          }
-        }
-
-        if (services.size > 0) {
-          for (const srv of services) {
-            // Skip common internal services or base types if needed, but here we just add all
-            const pathName = srv.replace(/Service$/, '').toLowerCase();
-            entities.push({
-              name: srv,
-              methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-              schema: {},
-              path: `/odata/v4/${pathName}`
-            });
-          }
-          this.log(`Discovered ${String(services.size)} services from local .cds files.`);
-        } else {
-          this.log(`No local .cds services found. Catalog will be empty.`);
-        }
+        this.log(`Warning: No API entities discovered remotely for ${appId}.`);
       }
 
       const catalog = {

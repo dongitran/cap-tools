@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.64 (stable)
+- Changed: Removed hardcoded `AdminService` fallback when failing to retrieve the APIs catalog.
+- Fixed: Improved UI to provide a proper loading spinner and manual URL entry when remote endpoints fail to load.
+
 ## 0.10.63 (stable)
 - Fix: APIs Explorer now correctly renders endpoints without zero-count badges when no entity count is returned.
 - Fix: APIs Explorer now correctly mounts execution requests by using the explicit root-resolved entity path instead of appending the entity name to a potentially undefined base path, resolving "Cannot GET /" execution errors.
