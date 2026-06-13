@@ -1,6 +1,10 @@
 # SAP Tools Extension Changelog
 
-## 0.10.71 (stable)
+## 0.10.72 (stable)
+- UX Fix: Refined `box-sizing` for Response tabs and Execute button for pixel-perfect alignment.
+- UX Fix: Auth Popover now correctly auto-closes when a new authentication method is selected from the dropdown.
+- UX Fix: Fixed an edge case where the Sidebar Resizer would get stuck if the mouse cursor left the VS Code window while dragging.
+
 - Feature: Added a draggable Resizer between the endpoints sidebar and main panel.
 - Feature: Reorganized OData Query Parameters layout for a more compact 50/50 split of `$filter` and `$expand`.
 - Feature: Cleaned up Auth Settings by moving it to a Popover toggled via a new Gear icon.

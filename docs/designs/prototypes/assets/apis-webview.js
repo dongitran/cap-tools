@@ -167,8 +167,8 @@ function updateResponseSection() {
           <h3 style="margin: 0;">Response</h3>
           
           <div class="api-view-tabs" style="border-bottom: none; display: flex; align-items: center; gap: 4px;">
-            <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json" style="padding: 2px 8px; line-height: 20px; height: 24px;">JSON</button>
-            <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid" style="padding: 2px 8px; line-height: 20px; height: 24px;">Grid Data</button>
+            <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json" style="padding: 2px 8px; line-height: 20px; height: 24px; box-sizing: border-box;">JSON</button>
+            <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid" style="padding: 2px 8px; line-height: 20px; height: 24px; box-sizing: border-box;">Grid Data</button>
           </div>
         </div>
 
@@ -347,7 +347,7 @@ function updateWorkbenchSection() {
           ${renderApiParamRow('$top', apiParams.$top, 'Max items', 'number')}
           ${renderApiParamRow('$skip', apiParams.$skip, 'Skip offset', 'number')}
           <div style="flex: 1; margin-left: 8px;">
-            <button type="button" class="primary-action api-execute-btn" data-action="api-execute-request" style="width: 100%; height: 26px; margin: 0; padding: 0 12px; font-size: 12px; line-height: 26px;">
+            <button type="button" class="primary-action api-execute-btn" data-action="api-execute-request" style="width: 100%; height: 26px; margin: 0; padding: 0 12px; font-size: 12px; line-height: 24px; box-sizing: border-box;">
               Execute
             </button>
           </div>
@@ -485,11 +485,6 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
-  if (action === 'api-select-auth') {
-    apiAuthMethod = actionElement.value;
-    return;
-  }
-
   if (action === 'api-switch-view') {
     apiActiveView = actionElement.dataset.viewId ?? 'json';
     updateResponseSection();
@@ -533,6 +528,8 @@ appElement.addEventListener('change', (event) => {
   const action = target.dataset.action;
   if (action === 'api-select-auth') {
     apiAuthMethod = target.value;
+    const popover = document.querySelector('.api-auth-popover');
+    if (popover) popover.style.display = 'none';
   }
   if (action === 'api-select-method') {
     apiHttpMethod = target.value;
@@ -631,6 +628,14 @@ document.addEventListener('mousemove', (e) => {
 });
 
 document.addEventListener('mouseup', () => {
+  if (isResizing) {
+    isResizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+document.addEventListener('mouseleave', () => {
   if (isResizing) {
     isResizing = false;
     document.body.style.cursor = '';
