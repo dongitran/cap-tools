@@ -1,6 +1,8 @@
 # SAP Tools Extension Changelog
 
-## 0.10.87 (stable)
+## 0.10.88 (stable)
+- UX Fix: Resolved duplicate border and excess margin on the JSON response header.
+
 - UX Fix: JSON payload background transparency override for all themes.
 - UX Fix: Reduced JSON response padding to header line by 60%.
 - UX Fix: Fixed sidebar container background color mismatch.

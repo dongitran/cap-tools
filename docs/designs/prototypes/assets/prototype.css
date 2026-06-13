@@ -3923,10 +3923,11 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .api-response-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+  padding-bottom: 6px;
 }
 
 .api-response-header h3 {
