@@ -1,6 +1,8 @@
 # SAP Tools Extension Changelog
 
-## 0.10.82 (stable)
+## 0.10.83 (stable)
+- UX Fix: Pinned the "Endpoints" header and search bar to the top of the sidebar so they remain visible while scrolling through long lists.
+
 - UX Fix: Fixed an issue where the Auth Settings popover menu was clipped and invisible when clicking the gear icon.
 - UX Fix: Completely separated the Auth Settings gear icon from the URL input container, ensuring it is no longer visually contained inside the URL bar's borders.
 

@@ -457,7 +457,7 @@ function updateSidebarSection() {
   const searchTerm = searchInput ? searchInput.value : '';
 
   sidebar.innerHTML = `
-    <div style="padding: 12px 0 0 0;">
+    <div style="padding: 12px 0 0 0; position: sticky; top: 0; background: var(--vscode-sideBar-background, #252526); z-index: 10;">
       <div class="api-entities-list-title" style="margin-bottom: 8px; padding: 0 12px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8;">Endpoints (${currentCatalog.entities.length}) ${apiCatalogState === 'syncing' ? '<span class="api-sync-spinner" style="display:inline-block; animation: api-spin 1s linear infinite; margin-left: 4px; font-size: 10px;">&#8635;</span>' : ''}</div>
       <div class="api-search-container" style="padding: 0 12px 12px 12px;">
         <div style="position: relative; display: flex; align-items: center; background: var(--vscode-input-background, #3c3c3c); border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px;">
