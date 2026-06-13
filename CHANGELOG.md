@@ -1,6 +1,9 @@
 # SAP Tools Extension Changelog
 
-## 0.10.78 (stable)
+## 0.10.79 (stable)
+- UX Fix: Made the JSON view background transparent so it perfectly matches the underlying VS Code theme editor background.
+- UX Fix: Separated the Auth Settings gear icon from the URL input group to visually present it as an independent action button.
+
 - UX Fix: Aligned JSON and Grid Data tabs precisely to the "Response" header by grouping them to the left.
 - UX Fix: Re-enabled the Copy button when viewing Grid Data.
 
