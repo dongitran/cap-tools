@@ -242,7 +242,7 @@ function updateResponseSection() {
     responseBody.innerHTML = `
       <div class="api-placeholder-response">
         <span class="api-placeholder-icon" aria-hidden="true">&#9656;</span>
-        <p>Press <strong>Execute GET</strong> to fetch data from the endpoint.</p>
+        <p>Press <strong>Execute</strong> to fetch data from the endpoint.</p>
       </div>
     `;
     return;
@@ -262,14 +262,14 @@ function updateResponseSection() {
 
   let viewContent = '';
   if (apiActiveView === 'json') {
-    viewContent = `<pre class="api-raw-json" style="background: transparent; margin: 0; padding: 0;"><code style="background: transparent; color: inherit; padding: 0;">${escapeHtml(payloadStr)}</code></pre>`;
+    viewContent = `<pre class="api-raw-json" style="background: transparent !important; margin: 0; padding: 0;"><code style="background: transparent !important; color: inherit; padding: 0;">${escapeHtml(payloadStr)}</code></pre>`;
   } else {
     viewContent = renderApiGridResult();
   }
 
   responseBody.innerHTML = `
-    <div class="api-results-wrapper" style="margin-top: 2px; flex: 1; display: flex; flex-direction: column;">
-      <div class="api-view-content" style="flex: 1; overflow: auto; background-color: transparent; padding-top: 4px;">
+    <div class="api-results-wrapper" style="margin-top: 0; flex: 1; display: flex; flex-direction: column;">
+      <div class="api-view-content" style="flex: 1; overflow: auto; background-color: transparent; padding-top: 2px;">
         ${viewContent}
       </div>
     </div>
@@ -499,7 +499,7 @@ function initLayout() {
     appElement.innerHTML = `
       <div id="api-explorer-root" style="display: flex; height: 100vh; overflow: hidden; font-family: var(--vscode-font-family); color: var(--vscode-foreground);">
         <!-- Sidebar -->
-        <aside class="api-webview-sidebar" style="width: 250px; min-width: 150px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow: hidden;"></aside>
+        <aside class="api-webview-sidebar" style="width: 250px; min-width: 150px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBar-background, #252526); display: flex; flex-direction: column; overflow: hidden;"></aside>
         <div class="api-resizer" style="width: 4px; cursor: col-resize; background: transparent; transition: background 0.2s; z-index: 5;"></div>
         <main class="api-workbench-panel" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto;"></main>
       </div>

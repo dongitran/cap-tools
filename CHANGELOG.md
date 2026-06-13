@@ -1,6 +1,10 @@
 # SAP Tools Extension Changelog
 
-## 0.10.86 (stable)
+## 0.10.87 (stable)
+- UX Fix: JSON payload background transparency override for all themes.
+- UX Fix: Reduced JSON response padding to header line by 60%.
+- UX Fix: Fixed sidebar container background color mismatch.
+
 - Test Fix: Fixed the E2E test locator for the "Execute" button which was broken after the UI label update.
 
 - UX Fix: Fixed the sticky behavior of the Endpoints header in the sidebar by moving the scroll container to the list itself.
