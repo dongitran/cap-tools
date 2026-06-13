@@ -1,6 +1,10 @@
 # SAP Tools Extension Changelog
 
-## 0.10.72 (stable)
+## 0.10.73 (stable)
+- UX Fix: Enhanced Execute button flex-alignment to stretch and perfectly match adjacent query input heights.
+- UX Fix: Refined `word-break: break-word` for endpoint names in the sidebar to prevent awkward mid-character splitting.
+- UX Fix: Forced `sidebar.style.flex` logic for Resizer to ensure exact pixel sizing over flex-shrink behaviors.
+
 - UX Fix: Refined `box-sizing` for Response tabs and Execute button for pixel-perfect alignment.
 - UX Fix: Auth Popover now correctly auto-closes when a new authentication method is selected from the dropdown.
 - UX Fix: Fixed an edge case where the Sidebar Resizer would get stuck if the mouse cursor left the VS Code window while dragging.

@@ -343,11 +343,11 @@ function updateWorkbenchSection() {
           ${renderApiParamRow('$filter', apiParams.$filter, 'Filter conditions')}
           ${renderApiParamRow('$expand', apiParams.$expand, 'Expand associations')}
         </div>
-        <div class="api-params-row-flex" style="align-items: flex-end;">
+        <div class="api-params-row-flex" style="align-items: stretch;">
           ${renderApiParamRow('$top', apiParams.$top, 'Max items', 'number')}
           ${renderApiParamRow('$skip', apiParams.$skip, 'Skip offset', 'number')}
-          <div style="flex: 1; margin-left: 8px;">
-            <button type="button" class="primary-action api-execute-btn" data-action="api-execute-request" style="width: 100%; height: 26px; margin: 0; padding: 0 12px; font-size: 12px; line-height: 24px; box-sizing: border-box;">
+          <div style="flex: 1; display: flex;">
+            <button type="button" class="primary-action api-execute-btn" data-action="api-execute-request" style="width: 100%; margin: 0; padding: 0 12px; font-size: 13px; box-sizing: border-box; flex: 1;">
               Execute
             </button>
           </div>
@@ -392,7 +392,7 @@ function updateSidebarSection() {
     return `
       <button type="button" class="api-entity-item${isSelected ? ' is-active' : ''}" data-action="api-select-entity" data-entity-name="${ent.name}">
         <span class="entity-icon" aria-hidden="true">&#128196;</span>
-        <span class="entity-name" title="${escapeHtml(ent.name)}" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; white-space: normal; line-height: 1.2;">${escapeHtml(ent.name)}</span>
+        <span class="entity-name" title="${escapeHtml(ent.name)}" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; white-space: normal; line-height: 1.2;">${escapeHtml(ent.name)}</span>
         ${ent.count !== undefined ? `<span class="entity-count-badge">${ent.count}</span>` : ''}
       </button>
     `;
@@ -624,6 +624,7 @@ document.addEventListener('mousemove', (e) => {
     const newWidth = Math.max(150, Math.min(e.clientX, 800)); // Min 150px, Max 800px
     sidebar.style.width = `${newWidth}px`;
     sidebar.style.minWidth = `${newWidth}px`;
+    sidebar.style.flex = `0 0 ${newWidth}px`;
   }
 });
 
