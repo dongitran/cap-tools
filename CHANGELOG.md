@@ -1,6 +1,9 @@
 # SAP Tools Extension Changelog
 
-## 0.10.81 (stable)
+## 0.10.82 (stable)
+- UX Fix: Fixed an issue where the Auth Settings popover menu was clipped and invisible when clicking the gear icon.
+- UX Fix: Completely separated the Auth Settings gear icon from the URL input container, ensuring it is no longer visually contained inside the URL bar's borders.
+
 - UX Fix: Reduced the vertical gap between the Response header and the JSON body data by ~60% for a tighter, cleaner layout.
 
 - UX Fix: Fixed an issue where the JSON code blocks retained VS Code's default grey background across all themes. It is now truly transparent and blends seamlessly with the active theme's background.

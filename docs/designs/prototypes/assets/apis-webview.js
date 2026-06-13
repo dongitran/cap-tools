@@ -308,16 +308,16 @@ function updateWorkbenchSection() {
     mainPanel.innerHTML = `
         <!-- Request Section -->
         <section class="api-request-section" aria-label="API Request Builder">
-          <div class="api-url-bar" style="display: flex; margin-bottom: 12px; gap: 8px; align-items: center;">
-            <div style="display: flex; flex: 1;">
-              <select class="api-method-select" data-action="api-select-method" style="background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); font-weight: bold; border: none; padding: 4px 8px; border-radius: 2px 0 0 2px; outline: none; cursor: pointer; -webkit-appearance: none; text-align: center; font-size: 11px;">
+          <div style="display: flex; margin-bottom: 8px; gap: 8px; align-items: center;">
+            <div class="api-url-bar" style="flex: 1; margin: 0;">
+              <select class="api-method-select" data-action="api-select-method" style="background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); font-weight: bold; border: none; padding: 4px 8px; outline: none; cursor: pointer; -webkit-appearance: none; text-align: center; font-size: 11px;">
                 <option value="GET">GET</option>
                 <option value="POST">POST</option>
                 <option value="PATCH">PATCH</option>
                 <option value="PUT">PUT</option>
                 <option value="DELETE">DELETE</option>
               </select>
-              <input type="text" class="api-url-input" value="" aria-label="API Target URL" style="flex: 1; border-radius: 0 2px 2px 0;" />
+              <input type="text" class="api-url-input" value="" aria-label="API Target URL" style="flex: 1; border: none; background: transparent; outline: none; padding: 4px 8px; color: inherit;" />
             </div>
             
             <div class="api-settings-container" style="position: relative; display: flex; align-items: center; justify-content: center;">
