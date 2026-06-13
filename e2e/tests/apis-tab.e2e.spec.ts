@@ -82,7 +82,7 @@ test.describe('APIs Explorer Workspace Flow', () => {
       await expect(urlBar).toHaveValue(/products/i);
 
       // Execute GET request
-      const executeBtn = frame.getByRole('button', { name: 'Execute GET' });
+      const executeBtn = frame.getByRole('button', { name: 'Execute' });
       await expect(executeBtn).toBeVisible();
       await clickWithFallback(executeBtn);
 
