@@ -268,8 +268,8 @@ function updateResponseSection() {
   }
 
   responseBody.innerHTML = `
-    <div class="api-results-wrapper" style="margin-top: 8px; flex: 1; display: flex; flex-direction: column;">
-      <div class="api-view-content" style="flex: 1; overflow: auto; background-color: transparent;">
+    <div class="api-results-wrapper" style="margin-top: 2px; flex: 1; display: flex; flex-direction: column;">
+      <div class="api-view-content" style="flex: 1; overflow: auto; background-color: transparent; padding-top: 4px;">
         ${viewContent}
       </div>
     </div>
