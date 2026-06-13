@@ -307,8 +307,8 @@ function updateWorkbenchSection() {
   if (!requestSection) {
     mainPanel.innerHTML = `
         <!-- Request Section -->
-        <section class="api-request-section" aria-label="API Request Builder">
-          <div style="display: flex; margin-bottom: 8px; gap: 8px; align-items: center;">
+        <section class="api-request-section" aria-label="API Request Builder" style="gap: 8px; padding-top: 12px; padding-bottom: 12px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
             <div class="api-url-bar" style="flex: 1; margin: 0;">
               <select class="api-method-select" data-action="api-select-method" style="background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); font-weight: bold; border: none; padding: 4px 8px; outline: none; cursor: pointer; -webkit-appearance: none; text-align: center; font-size: 11px;">
                 <option value="GET">GET</option>
@@ -457,16 +457,16 @@ function updateSidebarSection() {
   const searchTerm = searchInput ? searchInput.value : '';
 
   sidebar.innerHTML = `
-    <div style="padding: 12px 0 0 0; position: sticky; top: 0; background: var(--vscode-sideBar-background, #252526); z-index: 10;">
-      <div class="api-entities-list-title" style="margin-bottom: 8px; padding: 0 12px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8;">Endpoints (${currentCatalog.entities.length}) ${apiCatalogState === 'syncing' ? '<span class="api-sync-spinner" style="display:inline-block; animation: api-spin 1s linear infinite; margin-left: 4px; font-size: 10px;">&#8635;</span>' : ''}</div>
-      <div class="api-search-container" style="padding: 0 12px 12px 12px;">
+    <div style="padding: 12px 0 0 0; background: var(--vscode-sideBar-background, #252526); z-index: 10;">
+      <div class="api-entities-list-title" style="margin-bottom: 8px; padding: 0 12px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; color: var(--text-color, inherit);">Endpoints (${currentCatalog.entities.length}) ${apiCatalogState === 'syncing' ? '<span class="api-sync-spinner" style="display:inline-block; animation: api-spin 1s linear infinite; margin-left: 4px; font-size: 10px;">&#8635;</span>' : ''}</div>
+      <div class="api-search-container" style="padding: 0 12px 12px 12px; border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);">
         <div style="position: relative; display: flex; align-items: center; background: var(--vscode-input-background, #3c3c3c); border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px;">
           <span aria-hidden="true" style="position: absolute; left: 6px; font-size: 14px; color: var(--vscode-input-foreground, #cccccc);">&#128269;</span>
           <input type="search" data-action="api-search-entity" value="${escapeHtml(searchTerm)}" placeholder="Search endpoints" style="width: 100%; padding: 4px 6px 4px 28px; background: transparent; border: none; color: var(--vscode-input-foreground, #cccccc); outline: none; font-family: inherit; font-size: 13px;" />
         </div>
       </div>
     </div>
-    <div class="api-entities-list-container" style="padding: 0; display: flex; flex-direction: column;">
+    <div class="api-entities-list-container" style="padding: 0; display: flex; flex-direction: column; flex: 1; overflow-y: auto;">
       ${entityItems}
     </div>
   `;
@@ -497,8 +497,9 @@ function initLayout() {
   // Ensure DOM skeleton exists
   if (!document.querySelector('.api-split-layout')) {
     appElement.innerHTML = `
-      <div class="api-split-layout" style="display: flex; flex-direction: row; height: 100vh; overflow: hidden; margin: 0; padding: 0;">
-        <aside class="api-webview-sidebar" style="width: 250px; min-width: 150px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow-y: auto;"></aside>
+      <div id="api-explorer-root" style="display: flex; height: 100vh; overflow: hidden; font-family: var(--vscode-font-family); color: var(--vscode-foreground);">
+        <!-- Sidebar -->
+        <aside class="api-webview-sidebar" style="width: 250px; min-width: 150px; border-right: 1px solid var(--vscode-panel-border, #3c3c3c); background-color: var(--vscode-sideBarSectionHeader-background, #1e1e1e); display: flex; flex-direction: column; overflow: hidden;"></aside>
         <div class="api-resizer" style="width: 4px; cursor: col-resize; background: transparent; transition: background 0.2s; z-index: 5;"></div>
         <main class="api-workbench-panel" style="flex: 1; display: flex; flex-direction: column; overflow-y: auto;"></main>
       </div>

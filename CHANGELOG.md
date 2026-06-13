@@ -1,6 +1,10 @@
 # SAP Tools Extension Changelog
 
-## 0.10.84 (stable)
+## 0.10.85 (stable)
+- UX Fix: Fixed the sticky behavior of the Endpoints header in the sidebar by moving the scroll container to the list itself.
+- UX Fix: Reduced the gap between the URL input bar and the parameters grid by exactly 50%.
+- UX Fix: Forced the endpoint text color to use the primary text color, fixing low contrast issues in Light theme.
+
 - UX Fix: Enhanced readability of the endpoint list items in Light theme by switching the text color from the muted sidebar foreground to the primary foreground color.
 
 - UX Fix: Pinned the "Endpoints" header and search bar to the top of the sidebar so they remain visible while scrolling through long lists.
