@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.70 (stable)
+- Feature: Refactored API Explorer Response layout to be more compact (merged tabs, status, and copy button into a single row).
+- Fixed: Ensure "Copy" button works reliably for both JSON view and Grid Data view.
+
 ## 0.10.69 (stable)
 - Feature: Added support for modifying HTTP methods (POST, PATCH, PUT, DELETE) and submitting a JSON Request Body in the APIs Explorer.
 - Feature: Implement Stale-while-revalidate for API catalog caching. This allows instant UI loading while still silently discovering new endpoints in the background.
