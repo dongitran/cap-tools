@@ -76,16 +76,23 @@ function extractArrayFromPayload(payload) {
   return null;
 }
 
-function copyGridData() {
-  const rows = extractArrayFromPayload(apiResultPayload);
-  if (!rows || rows.length === 0) return;
+function copyResponseData() {
+  let contentToCopy = '';
+  if (apiActiveView === 'json') {
+    contentToCopy = JSON.stringify(apiResultPayload, null, 2);
+  } else {
+    const rows = extractArrayFromPayload(apiResultPayload);
+    if (!rows || rows.length === 0) return;
 
-  const columns = Object.keys(rows[0]);
-  const header = columns.join('\t');
-  const body = rows.map(r => columns.map(c => String(r[c] ?? '')).join('\t')).join('\n');
-  const tsv = `${header}\n${body}`;
+    const columns = Object.keys(rows[0]);
+    const header = columns.join('\t');
+    const body = rows.map(r => columns.map(c => String(r[c] ?? '')).join('\t')).join('\n');
+    contentToCopy = `${header}\n${body}`;
+  }
 
-  navigator.clipboard.writeText(tsv).then(() => {
+  if (!contentToCopy) return;
+
+  navigator.clipboard.writeText(contentToCopy).then(() => {
     const btn = document.querySelector('.api-copy-btn');
     if (btn) {
       const originalText = btn.innerHTML;
@@ -144,15 +151,36 @@ function updateResponseSection() {
 
   if (apiResultState === 'done') {
     const statusClass = apiResultStatus.startsWith('2') ? 'success' : 'error';
+    
+    let copyBtnHtml = '';
+    if (apiResultPayload) {
+      copyBtnHtml = `
+        <button type="button" class="api-copy-btn" data-action="api-copy-data" style="background: transparent; color: var(--vscode-textLink-foreground, #3794ff); border: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+          <span aria-hidden="true">&#128203;</span> Copy
+        </button>
+      `;
+    }
+
     headerSection.innerHTML = `
-      <h3>Response</h3>
-      <div style="display: flex; gap: 8px;">
-        <div class="api-status-badge is-${statusClass}">${escapeHtml(apiResultStatus)}</div>
-        <div class="api-time-badge">${apiResultTime}ms</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c); padding-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 16px; flex: 1;">
+          <h3 style="margin: 0;">Response</h3>
+          
+          <div class="api-view-tabs" style="border-bottom: none; display: flex; align-items: center;">
+            <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json">JSON</button>
+            <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid">Grid Data</button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="api-status-badge is-${statusClass}">${escapeHtml(apiResultStatus)}</div>
+          <div class="api-time-badge">${apiResultTime}ms</div>
+          ${copyBtnHtml}
+        </div>
       </div>
     `;
   } else {
-    headerSection.innerHTML = `<h3>Response</h3>`;
+    headerSection.innerHTML = `<h3 style="margin: 0; border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c); padding-bottom: 6px;">Response</h3>`;
   }
 
   if (apiResultState === 'idle') {
@@ -185,19 +213,8 @@ function updateResponseSection() {
   }
 
   responseBody.innerHTML = `
-    <div class="api-results-wrapper">
-      <div class="api-view-tabs-container" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);">
-        <div class="api-view-tabs" style="border-bottom: none;">
-          <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json">JSON</button>
-          <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid">Grid Data</button>
-        </div>
-        ${apiActiveView === 'grid' && extractArrayFromPayload(apiResultPayload) ? `
-          <button type="button" class="api-copy-btn" data-action="api-copy-grid" style="margin-right: 12px; background: transparent; color: var(--vscode-textLink-foreground, #3794ff); border: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;">
-            <span aria-hidden="true">&#128203;</span> Copy
-          </button>
-        ` : ''}
-      </div>
-      <div class="api-view-content">
+    <div class="api-results-wrapper" style="margin-top: 8px; flex: 1; display: flex; flex-direction: column;">
+      <div class="api-view-content" style="flex: 1; overflow: auto;">
         ${viewContent}
       </div>
     </div>
@@ -458,8 +475,8 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
-  if (action === 'api-copy-grid') {
-    copyGridData();
+  if (action === 'api-copy-data') {
+    copyResponseData();
     return;
   }
 
