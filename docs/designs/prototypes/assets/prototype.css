@@ -3915,7 +3915,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px 16px 0 16px;
   min-height: 250px;
   overflow: hidden;
 }
