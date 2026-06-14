@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.97 (stable)
+- UI/UX: Fully fixed the sidebar text color fallback mechanism to strictly inherit `--vscode-foreground` if `--vscode-sideBar-foreground` is undefined, preventing invisible/pale text in extreme light themes. Removed the fixed opacity on the 'Endpoints' title for better readability.
+
 ## 0.10.96 (stable)
 - UI/UX: Fixed an issue where the Endpoints sidebar text, count badges, and hover states appeared overly pale or unreadable in Light Themes. All hardcoded white-based alpha fallbacks have been replaced with proper adaptive VS Code theme variables.
 

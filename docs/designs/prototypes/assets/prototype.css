@@ -3719,7 +3719,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   padding: 8px 10px;
   background: none;
   border: none;
-  color: var(--vscode-sideBar-foreground, inherit);
+  color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
   font-family: inherit;
   font-size: 13px;
   text-align: left;
@@ -3730,7 +3730,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .api-entity-item:hover {
-  background-color: var(--vscode-list-hoverBackground, #2a2d2e);
+  background-color: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
   color: var(--vscode-list-hoverForeground, inherit);
 }
 
@@ -3741,7 +3741,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .api-entity-item .entity-icon {
   font-size: 14px;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .api-entity-item .entity-name {
@@ -3754,8 +3754,8 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .api-entity-item .entity-count-badge {
   font-size: 10px;
   padding: 2px 6px;
-  background-color: var(--vscode-badge-background, #4d4d4d);
-  color: var(--vscode-badge-foreground, #ffffff);
+  background-color: var(--vscode-badge-background, rgba(128, 128, 128, 0.2));
+  color: var(--vscode-badge-foreground, var(--vscode-foreground));
   border-radius: 10px;
   font-weight: 600;
 }
