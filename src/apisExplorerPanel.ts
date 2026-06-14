@@ -425,7 +425,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     // cspell:ignore wght
     const fontUri = webview.asWebviewUri(vscode.Uri.joinPath(prototypesUri, 'assets', 'Outfit-VariableFont_wght.ttf'));
     const fontUriStr = fontUri.toString();
-    const prototypeCssUriStr = prototypeCssUri.toString();
+    const prototypeCssUriStr = prototypeCssUri.with({ query: `t=${Date.now().toString()}` }).toString();
     const apisWebviewJsUriStr = apisWebviewJsUri.with({ query: `t=${Date.now().toString()}` }).toString();
 
     const nonce = randomBytes(16).toString('base64url');

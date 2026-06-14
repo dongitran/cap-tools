@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.99 (stable)
+- Fix: Added cache-busting to `prototype.css` in the APIs webview. Previously, CSS updates (such as light theme text color fixes) were completely ignored by VS Code because the webview aggressively cached the old stylesheet.
+
 ## 0.10.98 (stable)
 - UI/UX: Fixed the text color of the ACTIVE endpoint item in light themes. The active selection foreground now correctly inherits the default text color instead of falling back to hardcoded white, preventing invisible text on light selection backgrounds.
 
