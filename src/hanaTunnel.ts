@@ -102,6 +102,12 @@ function waitForLocalPort(port: number, timeoutMs: number): Promise<boolean> {
 export class HanaTunnelManager {
   private readonly tunnels = new Map<string, TunnelRecord>();
   private readonly pending = new Map<string, Promise<ActiveHanaTunnel | null>>();
+  // The app that last opened a working forward for a given HANA host. SSH access
+  // is per-app, so once one app reaches an instance we reuse it as the jump-host
+  // for every app that shares that instance (the others may have no SSH access of
+  // their own). A hint only: it survives invalidate() and is cleared on dispose().
+  private readonly hostJumpApps = new Map<string, string>();
+  private disposed = false;
 
   constructor(
     private readonly log: (message: string) => void,
@@ -110,6 +116,15 @@ export class HanaTunnelManager {
 
   isActive(mainHost: string): boolean {
     return this.tunnels.has(mainHost);
+  }
+
+  /**
+   * The app that last opened a working `cf ssh` forward for this HANA host, if
+   * known. Callers should try it first when (re)opening a tunnel for the host,
+   * since other apps on the same instance may not have SSH access.
+   */
+  preferredJumpApp(mainHost: string): string | undefined {
+    return this.hostJumpApps.get(mainHost);
   }
 
   /**
@@ -126,12 +141,16 @@ export class HanaTunnelManager {
       port: tunnel.localPort,
       user: direct.user,
       password: direct.password,
-      ...(direct.database !== undefined ? { database: direct.database } : {}),
       servername: direct.host,
       forceTls: true,
       validateCertificate: false,
       // Stay on the gateway endpoint instead of being redirected to an internal
       // tenant host the tunnel cannot reach — so this one forward is sufficient.
+      // `database` is deliberately dropped: a databaseName makes hdb run its MDC
+      // redirect (fetchDbConnectInfo → reconnect to a tenant host) which
+      // disableCloudRedirect does NOT suppress and the tunnel cannot reach. The
+      // workbench connects to the instance's tenant DB directly and never sets
+      // it, so this only forecloses a latent footgun.
       disableCloudRedirect: true,
     };
   }
@@ -141,6 +160,9 @@ export class HanaTunnelManager {
     mainHost: string,
     appCandidates: readonly string[]
   ): Promise<ActiveHanaTunnel | null> {
+    if (this.disposed) {
+      return null;
+    }
     const existing = this.tunnels.get(mainHost);
     if (existing !== undefined) {
       return { mainHost, localPort: existing.localPort };
@@ -170,11 +192,13 @@ export class HanaTunnelManager {
   }
 
   dispose(): void {
+    this.disposed = true;
     // Clear the map first so the forwards' 'exit' handlers (which call
     // invalidate) become no-ops and we don't mutate while iterating.
     const records = [...this.tunnels.values()];
     this.tunnels.clear();
     this.pending.clear();
+    this.hostJumpApps.clear();
     for (const tunnel of records) {
       tunnel.handle.stop();
     }
@@ -184,7 +208,6 @@ export class HanaTunnelManager {
   private persistForward(
     session: HanaTunnelCfSession,
     mainHost: string,
-    remoteHost: string,
     handle: CfPortForwardHandle
   ): void {
     const pid = handle.process.pid;
@@ -195,7 +218,10 @@ export class HanaTunnelManager {
       ownerPid: process.pid,
       pid,
       mainHost,
-      remoteHost,
+      // The single forward targets the gateway host itself, so the forward
+      // target equals mainHost; kept as its own field for the reap command-line
+      // check (and to stay compatible with the on-disk registry shape).
+      remoteHost: mainHost,
       localPort: handle.localPort,
       scope: `${session.orgName}/${session.spaceName}`,
       startedAt: new Date().toISOString(),
@@ -224,6 +250,13 @@ export class HanaTunnelManager {
       if (handle === null) {
         continue;
       }
+      if (this.disposed) {
+        // dispose() ran (scope change / window close) while the forward was
+        // opening — tear it down instead of registering an orphan tunnel that
+        // dispose already iterated past.
+        handle.stop();
+        return null;
+      }
       const tunnel: TunnelRecord = {
         mainHost,
         localPort: handle.localPort,
@@ -231,7 +264,8 @@ export class HanaTunnelManager {
         handle,
       };
       this.tunnels.set(mainHost, tunnel);
-      this.persistForward(session, mainHost, mainHost, handle);
+      this.hostJumpApps.set(mainHost, app);
+      this.persistForward(session, mainHost, handle);
       // When the keep-alive ends or the SSH session drops, drop the tunnel so
       // the next operation re-establishes it through the normal fallback.
       handle.process.once('exit', () => {

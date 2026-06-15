@@ -31,9 +31,9 @@ export interface TunnelRegistryEntry {
   readonly ownerPid: number;
   /** The `cf ssh` process pid. */
   readonly pid: number;
-  /** HANA instance host the tunnel serves (key shared by main + redirect forwards). */
+  /** HANA instance host the tunnel serves. */
   readonly mainHost: string;
-  /** The actual forward target (main host or the tenant-redirect host). */
+  /** The forward target host (equals mainHost; used for the reap command-line check). */
   readonly remoteHost: string;
   readonly localPort: number;
   readonly scope: string;

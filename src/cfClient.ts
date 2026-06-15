@@ -266,9 +266,9 @@ export function resetCfCliSessionReuse(): void {
  *
  * Successful preparations are also remembered briefly (see `preparedCfSessions`)
  * so a follow-up preparation for the same landscape only re-runs `cf target`
- * instead of the full api/auth/target triplet — e.g. opening a HANA tunnel and
- * then its tenant-redirect forward, or loading several services' tables in a
- * row, no longer authenticates against UAA each time.
+ * instead of the full api/auth/target triplet — e.g. opening a HANA tunnel then
+ * probing it, or loading several services' tables in a row, no longer
+ * authenticates against UAA each time.
  */
 export async function prepareCfCliSession(params: CfCliTargetParams): Promise<void> {
   const queueKey = params.cfHomeDir ?? '';

@@ -781,12 +781,19 @@ export class HanaSqlWorkbench
     originalError: unknown
   ): Promise<T> {
     const manager = this.getTunnelManager();
-    // The clicked/in-use app is the natural SSH jump-host for its OWN HANA
-    // binding (its container egress reaches that instance), so try it ALONE
-    // first. This avoids walking — and spawning a `cf ssh` for — every app in a
-    // space that may hold ~100 apps. Only if it lacks SSH do we try a small,
-    // bounded set of other running apps as fallback.
-    let tunnel = await manager.ensureTunnel(session, direct.host, [context.appName]);
+    // SSH access is per-app, and apps sharing a HANA instance can differ: some
+    // allow `cf ssh`, some don't. Try, in order: the app that already opened a
+    // working forward for this host (if any — others on the instance may have no
+    // SSH of their own), then the clicked/in-use app (its container is the
+    // natural jump-host for its OWN binding), then a small bounded set of other
+    // running apps. This avoids spawning a `cf ssh` for every app in a large
+    // space while still finding the one app that can reach the instance.
+    const preferredApp = manager.preferredJumpApp(direct.host);
+    const primaryCandidates =
+      preferredApp !== undefined && preferredApp !== context.appName
+        ? [preferredApp, context.appName]
+        : [context.appName];
+    let tunnel = await manager.ensureTunnel(session, direct.host, primaryCandidates);
     if (tunnel === null) {
       const fallbacks = await this.listSshFallbackApps(session, context.appName);
       if (fallbacks.length > 0) {
@@ -901,6 +908,27 @@ export class HanaSqlWorkbench
       const message = error instanceof Error ? error.message : String(error);
       this.logSql(`tunnel fallback app discovery failed: ${sanitizeSqlLogValue(message)}`);
       return [];
+    }
+  }
+
+  /**
+   * Probe the DIRECT connection (bypassing any tunnel) to decide whether a
+   * tunnel is still needed. A connectivity failure means "still unreachable
+   * directly" (keep tunneling); anything else means the host answered, so it is
+   * reachable again. One short attempt — this runs on an explicit refresh.
+   */
+  private async isHostDirectlyReachable(connection: HanaConnection): Promise<boolean> {
+    if (this.isTestMode) {
+      return true;
+    }
+    try {
+      await executeHanaQuery(connection, TUNNEL_PROBE_SQL, {
+        timeoutMs: 8000,
+        connectMaxAttempts: 1,
+      });
+      return true;
+    } catch (error) {
+      return !isHanaConnectivityError(error);
     }
   }
 
@@ -1049,11 +1077,20 @@ export class HanaSqlWorkbench
 
     await this.ensureConnection(context, cacheVersion);
     if (forceRefresh && context.connection !== null) {
-      // A manual refresh re-probes the direct connection: drop any tunnel for
-      // this host and reset the flag so discovery learns the current state
-      // afresh (and clears the badge if the host is reachable directly again).
-      this.tunnelManager?.invalidate(context.connection.host);
-      this.clearTunnelState(context);
+      const host = context.connection.host;
+      if (this.tunnelManager?.isActive(host) === true) {
+        // A manual refresh re-probes the direct connection — but must NOT tear
+        // down a tunnel that other apps sharing this HANA instance depend on
+        // (SSH access is per-app; they may have no way to reopen it). Only drop
+        // the tunnel if the host is reachable directly again; otherwise keep it
+        // so the discovery below reuses it.
+        if (await this.isHostDirectlyReachable(context.connection)) {
+          this.tunnelManager.invalidate(host);
+          this.clearTunnelState(context);
+        }
+      } else {
+        this.clearTunnelState(context);
+      }
     }
     if (!this.isAppContextCurrent(context, cacheVersion) || context.connection === null) {
       return;
