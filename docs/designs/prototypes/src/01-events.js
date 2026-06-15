@@ -213,6 +213,7 @@ window.addEventListener('message', (event) => {
       );
     }
     refreshUiAfterSqlStateChange();
+    refreshSqlTunnelIndicators();
     return;
   }
 
@@ -223,7 +224,7 @@ window.addEventListener('message', (event) => {
     }
     hanaTunnelByServiceId = new Map(hanaTunnelByServiceId);
     hanaTunnelByServiceId.set(serviceId, msg.active === true);
-    refreshUiAfterSqlStateChange();
+    refreshSqlTunnelIndicators();
     return;
   }
 

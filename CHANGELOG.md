@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.103 (stable)
+- UI: The HANA tunnel indicator moved from the tables panel to the app list — a **🔗 Tunnel** badge now appears on each app row whose connection is currently tunneled, so it is easy to see at a glance which apps are tunneled. The "S/4HANA SQL Workbench" header also shows a right-aligned count of how many apps are currently tunneled.
+
 ## 0.10.102 (stable)
 - Fix: Opening a HANA tunnel for one service no longer spawns a `cf ssh` for every app in the space. Previously, when the clicked service needed a tunnel, the manager walked the entire started-apps list (≈100 in large spaces) trying each as an SSH jump-host — slow and noisy. The in-use service is now tried first (its own container is the natural jump-host for its own HANA binding), with at most a few other apps as bounded fallback only if it lacks SSH access.
 - Feature: HANA tunnel lifecycle hardening. Open tunnels are recorded in `~/.saptools/sap-tools-vscode-tunnels.json` (same folder on Windows via the user profile), tagged with the owning window. On startup the extension reaps tunnels left behind by a previous session that crashed before cleaning up (verifying the process before killing, and never touching tunnels still owned by other open windows). All tunnels are closed when the scope/space changes — including when the change is driven externally by the CDS Debug extension — and on a clean window close. Selecting a second service keeps the first service's tunnel open (and reuses it instantly when both share the same HANA instance).
