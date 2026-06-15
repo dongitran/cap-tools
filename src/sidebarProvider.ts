@@ -3026,6 +3026,18 @@ export class RegionSidebarProvider
 
     const apiEndpoint = getCfApiEndpoint(regionCode);
 
+    // Switching to a different space must close any HANA tunnels opened for the
+    // previous scope — they belong to the old space's apps. Skip when re-selecting
+    // the same space so an in-use tunnel is not needlessly torn down and rebuilt.
+    const previousSeed = this.currentLogSessionSeed;
+    const spaceChanged =
+      previousSeed?.apiEndpoint !== apiEndpoint ||
+      previousSeed.orgName !== payload.orgName ||
+      previousSeed.spaceName !== payload.spaceName;
+    if (spaceChanged) {
+      this.hanaSqlWorkbench.invalidateAllAppContexts();
+    }
+
     // Primary source: the shared ~/.saptools/cf-structure.json (synced by the cf-sync
     // engine, shared with the CDS Debug extension). It lists every app — running,
     // scaled-to-zero, and stopped — so the dashboard matches CDS Debug instantly, even

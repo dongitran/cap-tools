@@ -740,11 +740,18 @@ export class HanaSqlWorkbench
       } catch (error) {
         // A non-connectivity error (e.g. SQL syntax) is the real result — surface
         // it. A connectivity error means the tunnel went stale (keep-alive ended
-        // or SSH dropped): tear it down and rebuild via the normal path below.
+        // or SSH dropped).
         if (!isHanaConnectivityError(error)) {
           throw error;
         }
         activeManager.invalidate(direct.host);
+        // The host is unreachable directly (that's why a tunnel existed), so skip
+        // the slow direct attempt and rebuild the tunnel straight away.
+        const session = context.session;
+        if (!this.isAutoTunnelEnabled() || session === null) {
+          throw error;
+        }
+        return this.runViaTunnel(context, direct, session, run, error);
       }
     }
 

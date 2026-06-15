@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.105 (stable)
+- Fix: Switching to a different space now closes the HANA tunnels opened for the previous space (previously only region/org changes and scope confirm did). Re-selecting the same space leaves an in-use tunnel untouched.
+- Fix: Tunnel recovery is faster and steadier. When an in-use tunnel goes stale (SSH idle-drop / keep-alive elapsed), the next query rebuilds the tunnel immediately instead of first attempting a slow direct connect that is bound to fail — removing a multi-second stall on the first query after a drop.
+
 ## 0.10.104 (stable)
 - UI: The S/4HANA SQL Workbench app list now shows only started apps with at least one running instance, matching the Logs and APIs catalogs. Stopped and scaled-to-zero apps (which cannot serve a HANA SQL session) are hidden.
 
