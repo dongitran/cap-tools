@@ -43,6 +43,24 @@ export interface HanaConnection {
   readonly user: string;
   readonly password: string;
   readonly database?: string;
+  /**
+   * SNI server name to present during the TLS handshake. Defaults to `host`.
+   * When connecting through a local port-forward (host = 127.0.0.1) this must
+   * be the real HANA Cloud host so the gateway still routes/redirects correctly.
+   */
+  readonly servername?: string;
+  /**
+   * Force TLS regardless of port. hdb only auto-enables TLS for port 443; a
+   * tunnel uses an ephemeral localhost port, so TLS must be forced explicitly.
+   */
+  readonly forceTls?: boolean;
+  /**
+   * Whether to validate the server certificate (default true). Tunneled
+   * connections terminate TLS at the real HANA host via the SSH forward, but
+   * the presented certificate's host differs from 127.0.0.1, so validation is
+   * disabled for the tunnel path only.
+   */
+  readonly validateCertificate?: boolean;
 }
 
 export interface HanaQueryResultSet {
@@ -131,6 +149,9 @@ export interface HdbCreateClientArgs {
   readonly sslValidateCertificate?: boolean;
   readonly initializationTimeout?: number;
   readonly dataFormatSupport?: number;
+  readonly useTLS?: boolean;
+  readonly servername?: string;
+  readonly rejectUnauthorized?: boolean;
 }
 
 export interface HdbModule {
@@ -144,6 +165,7 @@ export interface ExecuteHanaQueryOptions {
   readonly clientFactory?: HdbClientFactory;
   readonly statementKind?: HanaSqlStatementKind;
   readonly connectRetryDelayMs?: number;
+  readonly connectMaxAttempts?: number;
 }
 
 export type HanaStatementOutcomeStatus = 'success' | 'error' | 'skipped';
@@ -177,6 +199,7 @@ export interface ExecuteHanaQueryBatchOptions {
   readonly timeoutMs?: number;
   readonly clientFactory?: HdbClientFactory;
   readonly connectRetryDelayMs?: number;
+  readonly connectMaxAttempts?: number;
   readonly onStatementComplete?: (
     index: number,
     outcome: HanaStatementOutcome
@@ -202,7 +225,8 @@ export async function executeHanaQuery(
     factory,
     connection,
     timeoutMs,
-    options.connectRetryDelayMs ?? HANA_CONNECT_RETRY_DELAY_MS
+    options.connectRetryDelayMs ?? HANA_CONNECT_RETRY_DELAY_MS,
+    options.connectMaxAttempts ?? HANA_CONNECT_MAX_ATTEMPTS
   );
 
   let result: HanaQueryResult;
@@ -238,7 +262,8 @@ export async function executeHanaQueryBatch(
     factory,
     connection,
     timeoutMs,
-    options.connectRetryDelayMs ?? HANA_CONNECT_RETRY_DELAY_MS
+    options.connectRetryDelayMs ?? HANA_CONNECT_RETRY_DELAY_MS,
+    options.connectMaxAttempts ?? HANA_CONNECT_MAX_ATTEMPTS
   );
 
   let usedTransaction = false;
@@ -564,10 +589,12 @@ async function connectWithRetry(
   factory: HdbClientFactory,
   connection: HanaConnection,
   timeoutMs: number,
-  retryDelayMs: number
+  retryDelayMs: number,
+  maxAttempts: number = HANA_CONNECT_MAX_ATTEMPTS
 ): Promise<HdbClient> {
+  const attempts = Math.max(1, maxAttempts);
   let lastError: HanaQueryError | undefined;
-  for (let attempt = 1; attempt <= HANA_CONNECT_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     let client: HdbClient;
     try {
       client = factory(connection);
@@ -586,7 +613,7 @@ async function connectWithRetry(
       safeClose(client);
       const mapped = toHanaQueryError(error, 'connect');
       lastError = mapped;
-      if (attempt < HANA_CONNECT_MAX_ATTEMPTS && isRetryableHanaConnectError(mapped)) {
+      if (attempt < attempts && isRetryableHanaConnectError(mapped)) {
         await delayMs(retryDelayMs * attempt);
         continue;
       }
@@ -989,20 +1016,44 @@ export function loadHdbModule(distDir: string = __dirname): HdbModule {
 }
 
 export function buildHdbCreateClientArgs(connection: HanaConnection): HdbCreateClientArgs {
-  const args: HdbCreateClientArgs = {
+  const validateCertificate = connection.validateCertificate ?? true;
+  return {
     host: connection.host,
     port: connection.port,
     user: connection.user,
     password: connection.password,
     encrypt: true,
-    sslValidateCertificate: true,
+    sslValidateCertificate: validateCertificate,
     initializationTimeout: HANA_CONNECT_INIT_TIMEOUT_MS,
     dataFormatSupport: HANA_DATA_FORMAT_SUPPORT_LEVEL,
+    ...(connection.database !== undefined && connection.database.length > 0
+      ? { databaseName: connection.database }
+      : {}),
+    ...(connection.forceTls === true ? { useTLS: true } : {}),
+    ...(connection.servername !== undefined && connection.servername.length > 0
+      ? { servername: connection.servername }
+      : {}),
+    ...(validateCertificate ? {} : { rejectUnauthorized: false }),
   };
-  if (connection.database !== undefined && connection.database.length > 0) {
-    return { ...args, databaseName: connection.database };
-  }
-  return args;
+}
+
+/**
+ * True when an error looks like the HANA host being unreachable from this
+ * machine (stopped instance, IP allowlist, network/TLS reset) — the signal the
+ * SQL workbench uses to decide whether to fall back to a cf-ssh tunnel. A slow
+ * cold-start handshake ("no initialization reply") is deliberately excluded:
+ * the connect-retry already handles that and a tunnel would not help.
+ */
+export function isHanaConnectivityError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return (
+    message.includes('could not connect to any host') ||
+    message.includes('socket disconnected before secure tls') ||
+    message.includes('socket hang up') ||
+    message.includes('econnreset') ||
+    message.includes('econnrefused') ||
+    message.includes('connection closed by remote peer')
+  );
 }
 
 function createDefaultHdbClient(connection: HanaConnection): HdbClient {

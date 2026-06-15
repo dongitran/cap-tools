@@ -200,6 +200,8 @@ window.addEventListener('message', (event) => {
     hanaTablesByServiceId = new Map(hanaTablesByServiceId);
     hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
     hanaTablesErrorByServiceId = new Map(hanaTablesErrorByServiceId);
+    hanaTunnelByServiceId = new Map(hanaTunnelByServiceId);
+    hanaTunnelByServiceId.set(serviceId, msg.tunnelActive === true);
     hanaTablesByServiceId.set(serviceId, tables);
     hanaTablesLoadingByServiceId.set(serviceId, success ? 'loaded' : 'error');
     if (success) {
@@ -210,6 +212,17 @@ window.addEventListener('message', (event) => {
         typeof msg.message === 'string' ? msg.message : 'Failed to load tables.'
       );
     }
+    refreshUiAfterSqlStateChange();
+    return;
+  }
+
+  if (msg.type === HANA_TUNNEL_STATE_MESSAGE_TYPE) {
+    const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
+    if (serviceId.length === 0) {
+      return;
+    }
+    hanaTunnelByServiceId = new Map(hanaTunnelByServiceId);
+    hanaTunnelByServiceId.set(serviceId, msg.active === true);
     refreshUiAfterSqlStateChange();
     return;
   }

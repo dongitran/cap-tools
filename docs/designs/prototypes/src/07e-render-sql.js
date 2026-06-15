@@ -420,6 +420,11 @@ function renderSqlTablesPanel() {
   const state = resolveSqlTablesPanelState();
   const selectedService = state.selectedService;
   const searchDisabled = selectedService === undefined ? 'disabled' : '';
+  const tunnelActive =
+    selectedService !== undefined && hanaTunnelByServiceId.get(selectedService.id) === true;
+  const tunnelBadge = tunnelActive
+    ? `<span class="sql-tunnel-badge" data-role="hana-tunnel-badge" title="HANA connection is routed through a cf ssh tunnel">&#128279; Tunnel</span>`
+    : '';
 
   return `
     <section
@@ -430,6 +435,7 @@ function renderSqlTablesPanel() {
     >
       <header class="sql-tables-head">
         <h3>${selectedService === undefined ? 'Tables' : `Tables · ${escapeHtml(selectedService.name)}`}</h3>
+        ${tunnelBadge}
         <span class="sql-tables-count" data-role="hana-tables-count">${escapeHtml(state.countLabel)}</span>
         <button
           type="button"

@@ -158,6 +158,7 @@ const RUN_MICROSOFT_GRAPH_TOOL_MESSAGE_TYPE = 'sapTools.runMicrosoftGraphTool';
 const RESTORE_CONFIRMED_SCOPE_MESSAGE_TYPE = 'sapTools.restoreConfirmedScope';
 const HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE = 'sapTools.hanaSqlFileOpenResult';
 const HANA_TABLES_LOADED_MESSAGE_TYPE = 'sapTools.hanaTablesLoaded';
+const HANA_TUNNEL_STATE_MESSAGE_TYPE = 'sapTools.hanaTunnelState';
 const HANA_TABLE_SELECT_RESULT_MESSAGE_TYPE = 'sapTools.hanaTableSelectResult';
 const MICROSOFT_GRAPH_TOOL_PROGRESS_MESSAGE_TYPE = 'sapTools.microsoftGraphToolProgress';
 const MICROSOFT_GRAPH_TOOL_RESULT_MESSAGE_TYPE = 'sapTools.microsoftGraphToolResult';
@@ -229,6 +230,7 @@ let hanaQueryStatusTone = 'info';
 let hanaTablesByServiceId = new Map();
 let hanaTablesLoadingByServiceId = new Map();
 let hanaTablesErrorByServiceId = new Map();
+let hanaTunnelByServiceId = new Map();
 let sqlTableSearchKeyword = '';
 let hanaTableSelectLoadingKeys = new Set();
 const hanaTableDisplayNameCache = new Map();
@@ -935,6 +937,8 @@ window.addEventListener('message', (event) => {
     hanaTablesByServiceId = new Map(hanaTablesByServiceId);
     hanaTablesLoadingByServiceId = new Map(hanaTablesLoadingByServiceId);
     hanaTablesErrorByServiceId = new Map(hanaTablesErrorByServiceId);
+    hanaTunnelByServiceId = new Map(hanaTunnelByServiceId);
+    hanaTunnelByServiceId.set(serviceId, msg.tunnelActive === true);
     hanaTablesByServiceId.set(serviceId, tables);
     hanaTablesLoadingByServiceId.set(serviceId, success ? 'loaded' : 'error');
     if (success) {
@@ -945,6 +949,17 @@ window.addEventListener('message', (event) => {
         typeof msg.message === 'string' ? msg.message : 'Failed to load tables.'
       );
     }
+    refreshUiAfterSqlStateChange();
+    return;
+  }
+
+  if (msg.type === HANA_TUNNEL_STATE_MESSAGE_TYPE) {
+    const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
+    if (serviceId.length === 0) {
+      return;
+    }
+    hanaTunnelByServiceId = new Map(hanaTunnelByServiceId);
+    hanaTunnelByServiceId.set(serviceId, msg.active === true);
     refreshUiAfterSqlStateChange();
     return;
   }
@@ -6369,6 +6384,11 @@ function renderSqlTablesPanel() {
   const state = resolveSqlTablesPanelState();
   const selectedService = state.selectedService;
   const searchDisabled = selectedService === undefined ? 'disabled' : '';
+  const tunnelActive =
+    selectedService !== undefined && hanaTunnelByServiceId.get(selectedService.id) === true;
+  const tunnelBadge = tunnelActive
+    ? `<span class="sql-tunnel-badge" data-role="hana-tunnel-badge" title="HANA connection is routed through a cf ssh tunnel">&#128279; Tunnel</span>`
+    : '';
 
   return `
     <section
@@ -6379,6 +6399,7 @@ function renderSqlTablesPanel() {
     >
       <header class="sql-tables-head">
         <h3>${selectedService === undefined ? 'Tables' : `Tables · ${escapeHtml(selectedService.name)}`}</h3>
+        ${tunnelBadge}
         <span class="sql-tables-count" data-role="hana-tables-count">${escapeHtml(state.countLabel)}</span>
         <button
           type="button"
@@ -7254,6 +7275,7 @@ function resetSqlWorkbenchState() {
   hanaTablesByServiceId = new Map();
   hanaTablesLoadingByServiceId = new Map();
   hanaTablesErrorByServiceId = new Map();
+  hanaTunnelByServiceId = new Map();
   hanaSqlResultPreviewState = null;
   hanaSqlResultExportMenuOpen = false;
 }

@@ -6,6 +6,7 @@ import {
   classifyHanaSqlStatement,
   executeHanaQuery,
   executeHanaQueryBatch,
+  isHanaConnectivityError,
   sanitizeHanaErrorMessage,
   type HanaBatchExecutionSummary,
   type HanaConnection,
@@ -14,6 +15,15 @@ import {
   type HanaStatementInput,
   type HanaStatementOutcome,
 } from './hanaSqlService';
+import { fetchStartedAppsViaCfCli } from './cfClient';
+import { HanaTunnelManager } from './hanaTunnel';
+
+interface TunnelConnectOverrides {
+  readonly connectMaxAttempts?: number;
+}
+// Bound the connect-retry budget for tunneled attempts so a stalled tunnel
+// connect fails fast (~2 attempts) instead of compounding the default 5×.
+const TUNNEL_CONNECT_OVERRIDES: TunnelConnectOverrides = { connectMaxAttempts: 2 };
 import { splitHanaSqlStatements } from './hanaSqlStatementSplitter';
 import { HANA_SQL_DEFAULT_SELECT_LIMIT, applyDefaultHanaSelectLimit } from './hanaSqlLimitGuard';
 import { resolveHanaConnectionFromApp, type HanaSqlScopeSession } from './hanaSqlConnectionResolver';
@@ -83,6 +93,7 @@ interface HanaSqlAppContext {
   tableEntries: readonly HanaTableDisplayEntry[];
   tableNamesPromise: Promise<void> | null;
   cacheVersion: number;
+  tunnelActive: boolean;
 }
 export interface OpenHanaSqlFileRequest {
   readonly appId: string;
@@ -191,9 +202,21 @@ export class HanaSqlWorkbench
   private readonly forceTableRefreshAppIds = new Set<string>();
   private appContextCacheVersion = 0;
   private activeSessionProvider: (() => HanaSqlScopeSession | null) | null = null;
+  private tunnelManager: HanaTunnelManager | null = null;
+  private tunnelStateListener: ((appId: string, active: boolean) => void) | null = null;
 
   registerActiveSessionProvider(provider: () => HanaSqlScopeSession | null): void {
     this.activeSessionProvider = provider;
+  }
+
+  /** Notified when an app's HANA connection starts (or stops) using a tunnel. */
+  registerTunnelStateListener(listener: (appId: string, active: boolean) => void): void {
+    this.tunnelStateListener = listener;
+  }
+
+  /** Whether the given app's HANA connection is currently routed via a tunnel. */
+  isAppTunneled(appId: string): boolean {
+    return this.appContextsByAppId.get(appId)?.tunnelActive === true;
   }
 
   private getActiveSession(): HanaSqlScopeSession | null {
@@ -232,6 +255,8 @@ export class HanaSqlWorkbench
 
   dispose(): void {
     this.resultPanelManager.dispose();
+    this.tunnelManager?.dispose();
+    this.tunnelManager = null;
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
@@ -434,6 +459,7 @@ export class HanaSqlWorkbench
       tableEntries: [],
       tableNamesPromise: null,
       cacheVersion: this.appContextCacheVersion,
+      tunnelActive: false,
     };
     this.appContextsByAppId.set(options.appId, created);
     return created;
@@ -674,6 +700,166 @@ export class HanaSqlWorkbench
     };
   }
 
+  /**
+   * Run a HANA operation, transparently falling back to a cf-ssh tunnel when the
+   * direct connection is unreachable (stopped instance / IP allowlist / network
+   * reset). The direct attempt — the normal, non-tunnel path — is run first and
+   * unchanged; tunneling only ever engages after it fails with a connectivity
+   * error and only when enabled. Once a tunnel is open for the host, later calls
+   * use it straight away.
+   */
+  private async withTunnelFallback<T>(
+    context: HanaSqlAppContext,
+    run: (connection: HanaConnection, overrides?: TunnelConnectOverrides) => Promise<T>
+  ): Promise<T> {
+    const direct = context.connection;
+    if (direct === null) {
+      throw new Error('Unable to resolve HANA connection.');
+    }
+
+    const activeManager = this.tunnelManager;
+    if (activeManager?.isActive(direct.host) === true) {
+      try {
+        const result = await run(
+          activeManager.buildTunneledConnection(direct),
+          TUNNEL_CONNECT_OVERRIDES
+        );
+        this.markTunnelActive(context);
+        return result;
+      } catch (error) {
+        // A non-connectivity error (e.g. SQL syntax) is the real result — surface
+        // it. A connectivity error means the tunnel went stale (keep-alive ended
+        // or SSH dropped): tear it down and rebuild via the normal path below.
+        if (!isHanaConnectivityError(error)) {
+          throw error;
+        }
+        activeManager.invalidate(direct.host);
+      }
+    }
+
+    try {
+      return await run(direct);
+    } catch (error) {
+      const session = context.session;
+      if (!this.isAutoTunnelEnabled() || session === null || !isHanaConnectivityError(error)) {
+        throw error;
+      }
+      return this.runViaTunnel(context, direct, session, run, error);
+    }
+  }
+
+  private async runViaTunnel<T>(
+    context: HanaSqlAppContext,
+    direct: HanaConnection,
+    session: HanaSqlScopeSession,
+    run: (connection: HanaConnection, overrides?: TunnelConnectOverrides) => Promise<T>,
+    originalError: unknown
+  ): Promise<T> {
+    const manager = this.getTunnelManager();
+    const appCandidates = await this.listSshAppCandidates(session);
+    if (appCandidates.length === 0) {
+      throw originalError;
+    }
+    const tunnel = await manager.ensureTunnel(session, direct.host, appCandidates);
+    if (tunnel === null) {
+      throw originalError;
+    }
+
+    // Arm redirect-host capture only for this discovery window so the global
+    // socket interceptor never records hosts from unrelated connections.
+    manager.beginRedirectCapture();
+    try {
+      try {
+        const result = await run(manager.buildTunneledConnection(direct), TUNNEL_CONNECT_OVERRIDES);
+        this.markTunnelActive(context);
+        return result;
+      } catch (tunnelError) {
+        // The first tunneled attempt may fail because HANA Cloud redirected the
+        // connection to a tenant host we have not forwarded yet. The interceptor
+        // captured it — forward it and retry once.
+        const redirectHost = manager.takeCapturedRedirectHost(direct.host);
+        if (redirectHost === undefined || !isHanaConnectivityError(tunnelError)) {
+          throw tunnelError;
+        }
+        const forwarded = await manager.ensureRedirectForward(
+          session,
+          direct.host,
+          redirectHost,
+          appCandidates
+        );
+        if (!forwarded) {
+          throw tunnelError;
+        }
+        const result = await run(manager.buildTunneledConnection(direct), TUNNEL_CONNECT_OVERRIDES);
+        this.markTunnelActive(context);
+        return result;
+      }
+    } finally {
+      manager.endRedirectCapture();
+    }
+  }
+
+  private getTunnelManager(): HanaTunnelManager {
+    this.tunnelManager ??= new HanaTunnelManager(
+      (message) => {
+        this.outputChannel.appendLine(message);
+      },
+      (mainHost) => {
+        this.handleTunnelClosed(mainHost);
+      }
+    );
+    return this.tunnelManager;
+  }
+
+  private handleTunnelClosed(mainHost: string): void {
+    for (const context of this.appContextsByAppId.values()) {
+      if (context.tunnelActive && context.connection?.host === mainHost) {
+        this.clearTunnelState(context);
+      }
+    }
+  }
+
+  private isAutoTunnelEnabled(): boolean {
+    return vscode.workspace
+      .getConfiguration('sapTools')
+      .get<boolean>('hanaSqlAutoTunnel', true);
+  }
+
+  private async listSshAppCandidates(session: HanaSqlScopeSession): Promise<string[]> {
+    try {
+      const apps = await fetchStartedAppsViaCfCli({
+        apiEndpoint: session.apiEndpoint,
+        email: session.email,
+        password: session.password,
+        orgName: session.orgName,
+        spaceName: session.spaceName,
+        cfHomeDir: session.cfHomeDir,
+      });
+      return apps.map((app) => app.name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(`tunnel app discovery failed: ${sanitizeSqlLogValue(message)}`);
+      return [];
+    }
+  }
+
+  private markTunnelActive(context: HanaSqlAppContext): void {
+    if (context.tunnelActive) {
+      return;
+    }
+    context.tunnelActive = true;
+    this.logSql(`HANA tunnel active for app ${sanitizeSqlLogValue(context.appName)}`);
+    this.tunnelStateListener?.(context.appId, true);
+  }
+
+  private clearTunnelState(context: HanaSqlAppContext): void {
+    if (!context.tunnelActive) {
+      return;
+    }
+    context.tunnelActive = false;
+    this.tunnelStateListener?.(context.appId, false);
+  }
+
   private async executeSqlForContext(
     context: HanaSqlAppContext,
     sql: string,
@@ -688,7 +874,9 @@ export class HanaSqlWorkbench
       throw new Error('Unable to resolve HANA connection.');
     }
 
-    return executeHanaQuery(context.connection, sql, { statementKind });
+    return this.withTunnelFallback(context, (connection, overrides) =>
+      executeHanaQuery(connection, sql, { statementKind, ...overrides })
+    );
   }
 
   private async executeBatchForContext(
@@ -710,9 +898,12 @@ export class HanaSqlWorkbench
       statementKind: statement.statementKind,
     }));
 
-    return executeHanaQueryBatch(context.connection, inputs, {
-      onStatementComplete,
-    });
+    return this.withTunnelFallback(context, (connection, overrides) =>
+      executeHanaQueryBatch(connection, inputs, {
+        onStatementComplete,
+        ...overrides,
+      })
+    );
   }
 
   private async prefetchTableNames(appId: string): Promise<void> {
@@ -793,7 +984,6 @@ export class HanaSqlWorkbench
       return;
     }
 
-    const connection = context.connection;
     const discoverySchema = context.schema;
     const queries = buildTableDiscoveryQueries(discoverySchema);
     let hadSuccessfulDiscoveryQuery = false;
@@ -803,9 +993,12 @@ export class HanaSqlWorkbench
         `run table discovery query ${String(index + 1)} for app ${sanitizeSqlLogValue(context.appName)}: ${sanitizeSqlLogValue(query)}`
       );
       try {
-        const result = await executeHanaQuery(connection, query, {
-          timeoutMs: 15_000,
-        });
+        const result = await this.withTunnelFallback(context, (connection, overrides) =>
+          executeHanaQuery(connection, query, {
+            timeoutMs: 15_000,
+            ...overrides,
+          })
+        );
         if (result.kind !== 'resultset') {
           continue;
         }
@@ -936,6 +1129,7 @@ export class HanaSqlWorkbench
       }
       context.connection = null;
       context.schema = '';
+      this.clearTunnelState(context);
     }
 
     if (activeSession === null) {

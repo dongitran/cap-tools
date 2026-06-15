@@ -2,7 +2,7 @@
   "name": "sap-tools",
   "displayName": "SAP Tools",
   "description": "All-in-one toolbox for SAP BTP development workflows",
-  "version": "0.10.100",
+  "version": "0.10.101",
   "publisher": "dongtran",
   "icon": "resources/icon.png",
   "license": "MIT",
@@ -87,6 +87,12 @@
             "scope": "application",
             "default": "",
             "markdownDescription": "Folder where the CFLogs panel writes per-app log files when its file-logging dropdown (left of the gear button) is set to **Log to file**. Supports `~` for the home directory; relative paths resolve against the first workspace folder. When empty, `~/.saptools/cflogs` is used. Every app-logging run creates a fresh file named `<app-name>_<YYYY-MM-DD_HH-mm-ss>.log`, so runs never overwrite each other."
+          },
+          "sapTools.hanaSqlAutoTunnel": {
+            "type": "boolean",
+            "scope": "application",
+            "default": true,
+            "markdownDescription": "When a HANA SQL query or table discovery fails because the HANA Cloud host is unreachable directly (stopped instance, IP allowlist, or restricted network), automatically open a `cf ssh` port-forward through a running app in the same space and retry through it. The direct (non-tunnel) path is always tried first and is unaffected; the tunnel only engages on a connectivity failure. A **🔗 Tunnel** badge appears on the tables panel of any app whose connection is currently routed through a tunnel. Set to `false` to disable and always connect directly."
           },
           "sapTools.localPackages.namePatterns": {
             "type": "string",

@@ -184,6 +184,8 @@ function createProviderFixture(): ProviderFixture {
   const hanaSqlWorkbench = {
     invalidateAllAppContexts: vi.fn(),
     registerActiveSessionProvider: vi.fn(),
+    registerTunnelStateListener: vi.fn(),
+    isAppTunneled: vi.fn().mockReturnValue(false),
   } as unknown as HanaSqlWorkbench;
   const outputChannel = {
     appendLine: vi.fn(),

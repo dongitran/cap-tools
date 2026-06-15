@@ -497,6 +497,51 @@ export function spawnAppLogStreamFromTarget(params: {
   };
 }
 
+export interface CfPortForwardHandle {
+  readonly process: ChildProcessWithoutNullStreams;
+  readonly localPort: number;
+  stop(): void;
+}
+
+/**
+ * Spawn a long-running `cf ssh` local port-forward (the HANA-tunnel building
+ * block). Like the log stream this MUST use `spawn` (not `runCfCommand`, whose
+ * 30s timeout would kill the tunnel). The remote `sleep` keeps the SSH session
+ * — and therefore the forward — alive; the caller respawns/stops as needed.
+ * The CF session must already be prepared (api/auth/target) for the cfHomeDir.
+ */
+export function spawnCfSshPortForward(params: {
+  readonly appName: string;
+  readonly localPort: number;
+  readonly remoteHost: string;
+  readonly remotePort: number;
+  readonly keepAliveSeconds: number;
+  readonly cfHomeDir?: string;
+}): CfPortForwardHandle {
+  const env = buildCfCliEnv(params.cfHomeDir, undefined);
+  const forwardSpec = `${String(params.localPort)}:${params.remoteHost}:${String(params.remotePort)}`;
+  // Log without the remote sleep command (keeps the log clean and stable).
+  logCfCommand(['ssh', params.appName, '-L', forwardSpec]);
+  const process = spawn(
+    'cf',
+    ['ssh', params.appName, '-L', forwardSpec, '-c', `sleep ${String(params.keepAliveSeconds)}`],
+    {
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }
+  );
+
+  return {
+    process,
+    localPort: params.localPort,
+    stop(): void {
+      if (!process.killed) {
+        process.kill();
+      }
+    },
+  };
+}
+
 async function runCfCommand(
   args: string[],
   options: CfCliExecutionOptions

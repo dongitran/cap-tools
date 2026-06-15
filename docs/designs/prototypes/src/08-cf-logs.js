@@ -264,6 +264,7 @@ function resetSqlWorkbenchState() {
   hanaTablesByServiceId = new Map();
   hanaTablesLoadingByServiceId = new Map();
   hanaTablesErrorByServiceId = new Map();
+  hanaTunnelByServiceId = new Map();
   hanaSqlResultPreviewState = null;
   hanaSqlResultExportMenuOpen = false;
 }

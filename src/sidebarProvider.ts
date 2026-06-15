@@ -132,6 +132,7 @@ const MSG_EXPORT_SQLTOOLS_RESULT = 'sapTools.exportSqlToolsResult';
 const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
 const MSG_HANA_SQL_FILE_OPEN_RESULT = 'sapTools.hanaSqlFileOpenResult';
 const MSG_HANA_TABLES_LOADED = 'sapTools.hanaTablesLoaded';
+const MSG_HANA_TUNNEL_STATE = 'sapTools.hanaTunnelState';
 const MSG_HANA_TABLE_SELECT_RESULT = 'sapTools.hanaTableSelectResult';
 const MSG_REFRESH_HANA_TABLES = 'sapTools.refreshHanaTables';
 const MSG_CF_TOPOLOGY = 'sapTools.cfTopology';
@@ -333,6 +334,13 @@ export class RegionSidebarProvider
     private readonly apisExplorerPanelManager: ApisExplorerPanelManager
   ) {
     this.hanaSqlWorkbench.registerActiveSessionProvider(() => this.currentLogSessionSeed);
+    this.hanaSqlWorkbench.registerTunnelStateListener((appId, active) => {
+      this.postMessage({
+        type: MSG_HANA_TUNNEL_STATE,
+        serviceId: appId,
+        active,
+      });
+    });
 
     const cacheSubscription = this.cacheSyncService.subscribe((snapshot) => {
       this.postCacheState(snapshot);
@@ -2568,6 +2576,7 @@ export class RegionSidebarProvider
         type: MSG_HANA_TABLES_LOADED,
         serviceId: appId,
         success: true,
+        tunnelActive: this.hanaSqlWorkbench.isAppTunneled(appId),
         tables: tables.map((table) => ({
           displayName: table.displayName,
           name: table.name,
