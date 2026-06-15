@@ -35,23 +35,6 @@
   text-overflow: ellipsis;
 }
 
-.sql-tunnel-count {
-  flex: 0 0 auto;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--vscode-charts-blue, #3794ff);
-  border: 1px solid color-mix(in oklab, var(--vscode-charts-blue, #3794ff) 55%, transparent);
-  border-radius: 999px;
-  padding: 1px 8px;
-  background: color-mix(in oklab, var(--vscode-charts-blue, #3794ff) 14%, transparent);
-  white-space: nowrap;
-}
-
-.sql-tunnel-count[hidden] {
-  display: none;
-}
-
 .sql-app-search-row {
   min-width: 0;
 }
@@ -115,13 +98,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.sql-service-row-trailing {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
 }
 
 .sql-service-name {
@@ -193,6 +169,10 @@
   padding: 1px 7px;
   background: color-mix(in oklab, var(--vscode-charts-blue, #3794ff) 14%, transparent);
   white-space: nowrap;
+}
+
+.sql-tunnel-badge[hidden] {
+  display: none;
 }
 
 .sql-tables-refresh-button {

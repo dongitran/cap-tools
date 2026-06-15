@@ -797,38 +797,12 @@ export class HanaSqlWorkbench
       throw originalError;
     }
 
-    // Arm redirect-host capture only for this discovery window so the global
-    // socket interceptor never records hosts from unrelated connections.
-    manager.beginRedirectCapture();
-    try {
-      try {
-        const result = await run(manager.buildTunneledConnection(direct), TUNNEL_CONNECT_OVERRIDES);
-        this.markTunnelActive(context);
-        return result;
-      } catch (tunnelError) {
-        // The first tunneled attempt may fail because HANA Cloud redirected the
-        // connection to a tenant host we have not forwarded yet. The interceptor
-        // captured it — forward it and retry once.
-        const redirectHost = manager.takeCapturedRedirectHost(direct.host);
-        if (redirectHost === undefined || !isHanaConnectivityError(tunnelError)) {
-          throw tunnelError;
-        }
-        const forwarded = await manager.ensureRedirectForward(
-          session,
-          direct.host,
-          redirectHost,
-          [context.appName]
-        );
-        if (!forwarded) {
-          throw tunnelError;
-        }
-        const result = await run(manager.buildTunneledConnection(direct), TUNNEL_CONNECT_OVERRIDES);
-        this.markTunnelActive(context);
-        return result;
-      }
-    } finally {
-      manager.endRedirectCapture();
-    }
+    // The tunneled connection disables HANA Cloud's redirect (see
+    // buildTunneledConnection), so it stays on the gateway endpoint reachable
+    // through this single forward — no second forward / redirect discovery.
+    const result = await run(manager.buildTunneledConnection(direct), TUNNEL_CONNECT_OVERRIDES);
+    this.markTunnelActive(context);
+    return result;
   }
 
   /**

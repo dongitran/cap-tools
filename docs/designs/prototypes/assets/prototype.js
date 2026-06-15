@@ -6152,7 +6152,7 @@ function renderSqlWorkbenchTab() {
   });
   const tablesPanelMarkup = renderSqlTablesPanel();
 
-  const tunnelCount = countActiveHanaTunnels();
+  const tunnelActive = anyHanaTunnelActive();
 
   return `
     <section class="group-card sql-workbench" aria-label="S/4HANA SQL Workbench">
@@ -6160,11 +6160,11 @@ function renderSqlWorkbenchTab() {
         <div class="sql-workbench-title-row">
           <h2>S/4HANA SQL Workbench</h2>
           <span
-            class="sql-tunnel-count"
-            data-role="hana-tunnel-count"
-            title="Apps whose HANA connection is currently routed through a cf ssh tunnel"
-            ${tunnelCount > 0 ? '' : 'hidden'}
-          >${tunnelCount > 0 ? formatHanaTunnelCountLabel(tunnelCount) : ''}</span>
+            class="sql-tunnel-badge"
+            data-role="hana-tunnel-indicator"
+            title="HANA connections in this workbench are routed through a cf ssh tunnel"
+            ${tunnelActive ? '' : 'hidden'}
+          >&#128279; Tunnel</span>
         </div>
         <label class="sql-app-search-row search-input-with-icon">
           <span class="search-input-icon" aria-hidden="true">&#128269;</span>
@@ -6372,10 +6372,6 @@ function renderHanaServiceRows(services, options = { hasSearchKeyword: false, to
   return services
     .map((service) => {
       const isSelected = service.id === selectedHanaServiceId;
-      const tunneled = hanaTunnelByServiceId.get(service.id) === true;
-      const tunnelBadge = tunneled
-        ? `<span class="sql-tunnel-badge" data-role="hana-service-tunnel-badge" title="HANA connection is routed through a cf ssh tunnel">&#128279; Tunnel</span>`
-        : '';
       return `
         <button
           type="button"
@@ -6385,46 +6381,36 @@ function renderHanaServiceRows(services, options = { hasSearchKeyword: false, to
           aria-pressed="${isSelected}"
         >
           <span class="sql-service-name">${escapeHtml(service.name)}</span>
-          <span class="sql-service-row-trailing">
-            ${tunnelBadge}
-            <span class="sql-service-open-indicator" aria-hidden="true">&gt;</span>
-          </span>
+          <span class="sql-service-open-indicator" aria-hidden="true">&gt;</span>
         </button>
       `;
     })
     .join('');
 }
 
-/** Number of apps (in the current scope) whose HANA connection is tunneled. */
-function countActiveHanaTunnels() {
-  let count = 0;
-  for (const service of resolveHanaServices()) {
-    if (hanaTunnelByServiceId.get(service.id) === true) {
-      count += 1;
+/** Whether any app in the current scope has its HANA connection tunneled. */
+function anyHanaTunnelActive() {
+  for (const active of hanaTunnelByServiceId.values()) {
+    if (active === true) {
+      return true;
     }
   }
-  return count;
-}
-
-function formatHanaTunnelCountLabel(count) {
-  return `\u{1F517} ${String(count)} tunnel${count === 1 ? '' : 's'}`;
+  return false;
 }
 
 /**
- * Reflect tunnel state without a full re-render: re-render the service rows (for
- * the per-row badge) and update the count beside the workbench title.
+ * Reflect tunnel state without a full re-render: toggle the single tunnel badge
+ * shown beside the "S/4HANA SQL Workbench" title. Tunnel state no longer affects
+ * individual service rows, so the list is not re-rendered here.
  */
 function refreshSqlTunnelIndicators() {
-  refreshSqlServiceSearchResults();
   const workbench = appElement.querySelector('.sql-workbench');
   if (!(workbench instanceof HTMLElement)) {
     return;
   }
-  const countElement = workbench.querySelector('[data-role="hana-tunnel-count"]');
-  if (countElement instanceof HTMLElement) {
-    const count = countActiveHanaTunnels();
-    countElement.hidden = count === 0;
-    countElement.textContent = count > 0 ? formatHanaTunnelCountLabel(count) : '';
+  const indicator = workbench.querySelector('[data-role="hana-tunnel-indicator"]');
+  if (indicator instanceof HTMLElement) {
+    indicator.hidden = !anyHanaTunnelActive();
   }
 }
 

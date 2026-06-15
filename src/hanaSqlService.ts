@@ -61,6 +61,14 @@ export interface HanaConnection {
    * disabled for the tunnel path only.
    */
   readonly validateCertificate?: boolean;
+  /**
+   * Disable HANA Cloud's connection redirect. By default the SNI gateway
+   * (`<guid>.hna0…`) redirects the client to an internal tenant host
+   * (`<guid>-0.<shard>.hna0…`) that a tunnel cannot reach. With this set, hdb
+   * stays on the gateway endpoint (which serves SQL directly), so a single
+   * `cf ssh -L` forward suffices. Set only on the tunnel path.
+   */
+  readonly disableCloudRedirect?: boolean;
 }
 
 export interface HanaQueryResultSet {
@@ -152,6 +160,7 @@ export interface HdbCreateClientArgs {
   readonly useTLS?: boolean;
   readonly servername?: string;
   readonly rejectUnauthorized?: boolean;
+  readonly disableCloudRedirect?: boolean;
 }
 
 export interface HdbModule {
@@ -1034,6 +1043,7 @@ export function buildHdbCreateClientArgs(connection: HanaConnection): HdbCreateC
       ? { servername: connection.servername }
       : {}),
     ...(validateCertificate ? {} : { rejectUnauthorized: false }),
+    ...(connection.disableCloudRedirect === true ? { disableCloudRedirect: true } : {}),
   };
 }
 

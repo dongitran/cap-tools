@@ -575,6 +575,34 @@ describe('buildHdbCreateClientArgs', () => {
     });
     expect(withoutDatabase).not.toHaveProperty('databaseName');
   });
+
+  test('emits tunnel TLS flags and disableCloudRedirect for a tunneled connection', () => {
+    const args = buildHdbCreateClientArgs({
+      host: '127.0.0.1',
+      port: 50_000,
+      user: 'u',
+      password: 'p',
+      servername: 'guid.hna0.example.hanacloud.ondemand.com',
+      forceTls: true,
+      validateCertificate: false,
+      disableCloudRedirect: true,
+    });
+
+    expect(args).toMatchObject({
+      host: '127.0.0.1',
+      port: 50_000,
+      useTLS: true,
+      servername: 'guid.hna0.example.hanacloud.ondemand.com',
+      sslValidateCertificate: false,
+      rejectUnauthorized: false,
+      disableCloudRedirect: true,
+    });
+  });
+
+  test('omits disableCloudRedirect on the direct (non-tunnel) path', () => {
+    const args = buildHdbCreateClientArgs({ host: 'h', port: 443, user: 'u', password: 'p' });
+    expect(args).not.toHaveProperty('disableCloudRedirect');
+  });
 });
 
 describe('classifyHanaSqlStatement', () => {

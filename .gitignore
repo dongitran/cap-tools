@@ -25,3 +25,6 @@ implementation_plan.md
 
 # Temporary design explorations
 designs-tmp/
+
+# Local-only tunnel experiments (may contain customer env/credentials — never commit)
+scripts-privates/

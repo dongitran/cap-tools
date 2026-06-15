@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.108 (stable)
+- Performance: A HANA tunnel now opens a single `cf ssh` forward instead of two. HANA Cloud normally redirects a connection from its gateway to an internal tenant host that a tunnel cannot reach, which previously forced a second forward (discovered at runtime by a process-wide socket interceptor). The tunneled connection now sets hdb's `disableCloudRedirect`, so it stays on the gateway endpoint — verified to serve SQL directly — and one forward suffices. This halves tunnel setup time, removes the second CF authentication, and drops the global `net.Socket` patch entirely.
+- UI: The S/4HANA SQL Workbench shows a single **🔗 Tunnel** badge beside its title when any HANA connection is tunneled, instead of a per-app badge on each service row plus a tunnel count. With one tunnel per instance the per-row detail and count added little, so the indicator is now a simple presence badge.
+
 ## 0.10.107 (stable)
 - Performance: Opening a HANA tunnel no longer authenticates against Cloud Foundry twice. Establishing the tunnel and then its tenant-redirect forward (which HANA Cloud requires) previously each ran a full `cf api` + `cf auth` + `cf target`, so a single tunneled service click logged two UAA logins. CF CLI session preparation now remembers a recently-established api+auth per CF_HOME and only re-asserts the org/space (`cf target`) for follow-up operations on the same landscape, falling back to a full re-authentication if the cached session has gone stale. This also speeds up loading several services' tables in a row.
 

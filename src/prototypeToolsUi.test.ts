@@ -16,6 +16,13 @@ async function readEventsSource(): Promise<string> {
   );
 }
 
+async function readSqlRenderSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/07e-render-sql.js', import.meta.url),
+    'utf8'
+  );
+}
+
 describe('prototype Microsoft Graph tools UI', () => {
   it('renders an explicit show/hide toggle for client secret fields', async () => {
     const source = await readToolsSource();
@@ -37,5 +44,20 @@ describe('prototype Microsoft Graph tools UI', () => {
     const source = await readEventsSource();
 
     expect(source).toContain("eventTarget.closest('[data-action]')");
+  });
+});
+
+describe('prototype S/4HANA SQL Workbench tunnel indicator', () => {
+  it('shows a single tunnel badge beside the workbench title, not a per-row badge or count', async () => {
+    const source = await readSqlRenderSource();
+
+    // One presence badge in the header.
+    expect(source).toContain('data-role="hana-tunnel-indicator"');
+    expect(source).toContain('anyHanaTunnelActive');
+    // No per-row badge, no count label.
+    expect(source).not.toContain('hana-service-tunnel-badge');
+    expect(source).not.toContain('hana-tunnel-count');
+    expect(source).not.toContain('countActiveHanaTunnels');
+    expect(source).not.toContain('formatHanaTunnelCountLabel');
   });
 });
