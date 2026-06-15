@@ -1,4 +1,4 @@
-import { access, cp, mkdir, readFile, rm } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -61,6 +61,42 @@ async function collectDependencyTree(rootPkgDir) {
   return visited;
 }
 
+/**
+ * @saptools/cf-sync hard-codes its data directory to ~/.saptools/ via
+ * `saptoolsDir()`. That directory — and its exclusive lock files — are shared
+ * with the sibling CDS Debug extension, and the state lock has no stale
+ * recovery, so an orphaned lock breaks every later sync. To let the extension
+ * fall back to a private working directory when the shared lock is busy, we
+ * teach the vendored copy to honour the SAPTOOLS_DIR_OVERRIDE env var. Every
+ * path helper funnels through saptoolsDir(), so this single-point patch
+ * relocates the entire data directory (structure, runtime state, every lock).
+ *
+ * The patch runs against the freshly copied dist on every build, so it stays
+ * applied across `npm install` without touching node_modules. It fails loudly
+ * if the upstream internals change, surfacing the need to update the patch.
+ */
+async function patchSaptoolsDirOverride() {
+  const entryPath = join(cfSyncTargetDir, 'dist', 'index.js');
+  const source = await readFile(entryPath, 'utf8');
+  if (source.includes('SAPTOOLS_DIR_OVERRIDE')) {
+    return;
+  }
+  const original =
+    'function saptoolsDir() {\n  return join(homedir(), SAPTOOLS_DIR_NAME);\n}';
+  if (!source.includes(original)) {
+    throw new Error(
+      'vendor-cf-sync: could not locate saptoolsDir() to inject SAPTOOLS_DIR_OVERRIDE. ' +
+        'The @saptools/cf-sync internals changed — update scripts/vendor-cf-sync.mjs.'
+    );
+  }
+  const patched =
+    'function saptoolsDir() {\n' +
+    '  const override = process.env["SAPTOOLS_DIR_OVERRIDE"];\n' +
+    '  return override && override.length > 0 ? override : join(homedir(), SAPTOOLS_DIR_NAME);\n' +
+    '}';
+  await writeFile(entryPath, source.replace(original, patched), 'utf8');
+}
+
 async function smokeTestVendoredCfSync() {
   const entryPath = join(cfSyncTargetDir, 'dist', 'index.js');
   const entryUrl = pathToFileURL(entryPath).href;
@@ -98,6 +134,7 @@ async function main() {
     await cp(sourceDir, targetDir, { recursive: true, force: true });
   }
 
+  await patchSaptoolsDirOverride();
   await smokeTestVendoredCfSync();
 }
 

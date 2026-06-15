@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.100 (stable)
+- Fix: Cloud Foundry topology/app refresh no longer fails permanently with `Timed out acquiring file lock at ~/.saptools/cf-sync-state.lock`. The shared cf-sync state lock has no owner metadata or stale-recovery, so a crashed/killed process (this extension or the sibling CDS Debug) could orphan it and break every later refresh. Refresh now sweeps the shared lock when it is older than 2h (conservative, since the directory is shared with other extensions) and, while the lock is held but younger than 2h, transparently runs the sync against an extension-private fallback directory inside `~/.saptools/` so apps keep loading.
+- Fix: HANA table discovery (autocomplete preload) is more resilient to a suspended/restarting HANA Cloud instance that drops the socket mid-TLS-handshake (`Client network socket disconnected before secure TLS connection was established`). Connection retries increased from 3 to 5 with wider spacing, and the socket-reset signatures are now explicitly treated as retryable, so a brief cold start no longer surfaces as an empty table list.
+
 ## 0.10.99 (stable)
 - Fix: Added cache-busting to `prototype.css` in the APIs webview. Previously, CSS updates (such as light theme text color fixes) were completely ignored by VS Code because the webview aggressively cached the old stylesheet.
 

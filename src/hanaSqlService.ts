@@ -25,8 +25,17 @@ const HANA_DATA_FORMAT_SUPPORT_LEVEL = 7;
  * larger budget so a cold instance has time to respond.
  */
 const HANA_CONNECT_INIT_TIMEOUT_MS = 60_000;
-const HANA_CONNECT_MAX_ATTEMPTS = 3;
-const HANA_CONNECT_RETRY_DELAY_MS = 600;
+/**
+ * A suspended/restarting HANA Cloud instance does not merely answer slowly — it
+ * actively drops the socket mid-TLS-handshake ("Client network socket
+ * disconnected before secure TLS connection was established"). That fails fast,
+ * so the retry budget is governed by attempt count and spacing, not by the
+ * connect timeout. Three attempts ~2s apart burned out before a waking instance
+ * began accepting connections, surfacing as an empty table list. Spread more
+ * attempts over a wider window so transient resets and short cold starts heal.
+ */
+const HANA_CONNECT_MAX_ATTEMPTS = 5;
+const HANA_CONNECT_RETRY_DELAY_MS = 800;
 
 export interface HanaConnection {
   readonly host: string;
@@ -600,7 +609,12 @@ function isRetryableHanaConnectError(error: HanaQueryError): boolean {
   return (
     message.includes('no initialization reply') ||
     message.includes('could not connect to any host') ||
-    message.includes('initialization timeout')
+    message.includes('initialization timeout') ||
+    // A waking/restarting HANA Cloud instance resets the socket mid-handshake.
+    message.includes('socket disconnected before secure tls') ||
+    message.includes('socket hang up') ||
+    message.includes('econnreset') ||
+    message.includes('etimedout')
   );
 }
 

@@ -878,10 +878,13 @@ export class RegionSidebarProvider
       spaceName: payload.spaceName,
       email: credentials.email,
       password: credentials.password,
+      log: (message) => {
+        this.outputChannel.appendLine(message);
+      },
     });
     if (result.status === 'refreshed') {
       this.outputChannel.appendLine(
-        `[topology] Refreshed ${result.regionKey}/${sanitizeForLog(payload.orgName)}/${sanitizeForLog(payload.spaceName)} (${String(result.appCount)} apps)`
+        `[topology] Refreshed ${result.regionKey}/${sanitizeForLog(payload.orgName)}/${sanitizeForLog(payload.spaceName)} via ${result.source} (${String(result.appCount)} apps)`
       );
       void this.pushCfTopology();
     } else if (result.status === 'failed') {
@@ -3071,14 +3074,27 @@ export class RegionSidebarProvider
         spaceName: payload.spaceName,
         email: credentials.email,
         password: credentials.password,
+        log: (message) => {
+        this.outputChannel.appendLine(message);
+      },
       });
       if (!this.isCurrentSpaceRequest(requestId)) {
         return;
       }
 
       if (refresh.status === 'refreshed') {
-        const freshApps =
-          getAppsFromTopologySync(apiEndpoint, payload.orgName, payload.spaceName) ?? [];
+        // Use the apps returned by the refresh directly: when the shared lock is
+        // busy the sync runs against a private fallback directory that
+        // getAppsFromTopologySync (which only reads the shared structure) cannot
+        // see, so re-reading the shared file would yield nothing.
+        const freshApps: SidebarAppEntry[] = refresh.apps.map((app) => ({
+          id: app.id,
+          name: app.name,
+          runningInstances: app.runningInstances,
+        }));
+        this.outputChannel.appendLine(
+          `[apps] Refreshed ${sanitizeForLog(payload.spaceName)} via ${refresh.source} (${String(refresh.appCount)} apps)`
+        );
         await this.postAppsLoaded(freshApps, payload, credentials, cfHomeDir, regionCode);
         return;
       }
