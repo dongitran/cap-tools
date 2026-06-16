@@ -53,9 +53,9 @@ function parseOAuth(value: unknown): EventMeshOAuth | null {
     return null;
   }
   const clientid = readNonEmptyString(value, 'clientid');
-  const clientsecret = value['clientsecret'];
+  const clientsecret = readNonEmptyString(value, 'clientsecret');
   const tokenendpoint = readNonEmptyString(value, 'tokenendpoint');
-  if (clientid === null || typeof clientsecret !== 'string' || tokenendpoint === null) {
+  if (clientid === null || clientsecret === null || tokenendpoint === null) {
     return null;
   }
   const granttype = readNonEmptyString(value, 'granttype');

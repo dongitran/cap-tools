@@ -31,6 +31,7 @@ interface MockPanel {
     };
     readonly onDidReceiveMessage: ReturnType<typeof vi.fn>;
     readonly postMessage: ReturnType<typeof vi.fn>;
+    readonly cspSource: string;
   };
   readonly reveal: ReturnType<typeof vi.fn>;
   readonly dispose: ReturnType<typeof vi.fn>;
@@ -48,6 +49,7 @@ function createMockPanel(): MockPanel {
       }),
       onDidReceiveMessage: vi.fn(),
       postMessage: vi.fn(),
+      cspSource: 'vscode-resource:',
     },
     reveal: vi.fn(),
     dispose: vi.fn(() => {
@@ -128,5 +130,22 @@ describe('EventMeshPanelManager panel reuse', () => {
     expect(createWebviewPanelMock).toHaveBeenCalledTimes(2);
     expect(firstPanel.dispose).toHaveBeenCalledTimes(1);
     expect(firstPanel.reveal).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventMeshPanelManager webview security', () => {
+  it('adds a restrictive content security policy to the Event viewer HTML', () => {
+    const panel = createMockPanel();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = new EventMeshPanelManager({} as never, { appendLine: vi.fn() } as never);
+
+    manager.openEventMeshViewer('demo-app', makeTargetParams('space-a'));
+
+    expect(panel.webview.html).toContain('Content-Security-Policy');
+    expect(panel.webview.html).toContain("default-src 'none'");
+    expect(panel.webview.html).toContain('script-src');
+    expect(panel.webview.html).toContain('style-src');
+    expect(panel.webview.html).toContain('font-src');
+    expect(panel.webview.html).toContain('nonce-');
   });
 });

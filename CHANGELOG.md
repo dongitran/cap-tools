@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.113 (stable)
+- Hardening: Added a restrictive Content Security Policy to the Event viewer webview while preserving nonce-backed scripts and extension-owned local assets.
+- Hardening: Event Mesh binding parsing now rejects empty OAuth client secrets instead of treating malformed bindings as usable.
+
 ## 0.10.112 (stable)
 - UI: Renamed the workspace tab from `Logs/APIs` to `Log-API-Event`, removed the idle `Ready` badge from app rows, and added an `Event` hover action beside `APIs`.
 - Feature: Added an Event Mesh viewer webview that discovers candidate topics from existing queue subscriptions, defaults to a namespace wildcard when needed, creates an isolated temporary debug queue, listens over AMQP, batches incoming messages for the UI, and cleans up the debug queue on stop, scope change, panel close, or shutdown.

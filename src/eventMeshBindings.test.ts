@@ -83,6 +83,23 @@ describe('extractEventMeshBindings', () => {
     expect(extractEventMeshBindings(envWith([service]))).toHaveLength(0);
   });
 
+  it('skips a binding with an empty OAuth client secret', () => {
+    const service = validBinding('demo/service/app');
+    const credentials = service['credentials'] as Record<string, unknown>;
+    credentials['management'] = [
+      {
+        uri: 'https://mgmt.example.com',
+        oa2: {
+          clientid: 'client-id',
+          clientsecret: '',
+          tokenendpoint: 'https://uaa.example.com/oauth/token',
+        },
+      },
+    ];
+
+    expect(extractEventMeshBindings(envWith([service]))).toHaveLength(0);
+  });
+
   it('keeps valid bindings and drops malformed ones, preserving the original index', () => {
     const bindings = extractEventMeshBindings(
       envWith([{ credentials: {} }, validBinding('demo/service/alt')])
