@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.111 (stable)
+- Fix: Switching to a different org/space now shows that space's apps even when the space had never been app-synced before. The shared CF topology file lists every region/org/space but fills a space's app list only once that space has actually been synced, so selecting a not-yet-synced space showed an empty list (with no apps in the dashboard, Logs, APIs, or SQL Workbench). The background topology refresh that runs when a scope is confirmed already discovered the apps, but it only re-pushed the region/org/space tree — not the app list. It now also re-posts the freshly synced apps, so the lists fill in as soon as the refresh completes. The re-post is skipped when the app list is unchanged or the active scope has since changed.
+
 ## 0.10.110 (stable)
 - Fix: Clicking the table-list reload button no longer reloads the app list above it and scrolls back to the top. The refresh now updates the tables panel in place instead of re-rendering the whole S/4HANA SQL Workbench.
 - Improvement: The SSH-capable "jump-host" app for a HANA instance is now remembered across reloads (persisted), not just for the current session. So refreshing an app that shares a HANA instance with — but lacks the `cf ssh` access of — another app reuses the known working tunnel even on the first refresh after restarting VS Code. Remembered jump-hosts are cleared on logout.

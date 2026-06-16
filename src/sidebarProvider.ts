@@ -895,6 +895,12 @@ export class RegionSidebarProvider
         `[topology] Refreshed ${result.regionKey}/${sanitizeForLog(payload.orgName)}/${sanitizeForLog(payload.spaceName)} via ${result.source} (${String(result.appCount)} apps)`
       );
       void this.pushCfTopology();
+      const refreshedApps: SidebarAppEntry[] = result.apps.map((app) => ({
+        id: app.id,
+        name: app.name,
+        runningInstances: app.runningInstances,
+      }));
+      await this.applyRefreshedAppsForConfirmedScope(payload, refreshedApps, credentials);
     } else if (result.status === 'failed') {
       const errorMessage =
         result.error instanceof Error ? result.error.message : String(result.error);
@@ -906,6 +912,58 @@ export class RegionSidebarProvider
         `[topology] Refresh skipped (${result.reason}) for region=${sanitizeForLog(payload.regionCode)}`
       );
     }
+  }
+
+  /**
+   * Surface the apps discovered by the confirmed-scope topology refresh.
+   *
+   * The shared cf-structure.json is a broad tree: it lists every region/org/space
+   * but only carries the apps for spaces that have actually been app-synced.
+   * Switching to a space that is in the tree yet was never app-synced makes
+   * getAppsFromTopologySync return an empty list, so handleSpaceSelected renders
+   * zero apps (and, since the list is empty rather than absent, never falls back to
+   * a live refresh). refreshTopologyForConfirmedScope then syncs that space and
+   * finds its real apps — re-post them so the dashboard reflects the freshly synced
+   * list instead of the stale (empty) snapshot it first rendered. This mirrors the
+   * sibling CDS Debug extension, which reloads and re-renders apps on scope change.
+   *
+   * Guarded against a refresh that resolves after the user has moved on: re-post
+   * only while the just-refreshed scope is still the confirmed scope, and skip
+   * entirely when the freshly synced list already matches what is shown (the common
+   * case where the space was already populated, so no redundant re-render/remap).
+   */
+  private async applyRefreshedAppsForConfirmedScope(
+    payload: ConfirmScopePayload,
+    refreshedApps: readonly SidebarAppEntry[],
+    credentials: { readonly email: string; readonly password: string }
+  ): Promise<void> {
+    const scope = buildSharedScopeFromConfirmPayload(payload);
+    if (!areSharedScopesEqual(scope, this.currentConfirmedScope)) {
+      return;
+    }
+    if (appListsEqual(refreshedApps, this.currentApps)) {
+      return;
+    }
+    const cfHomeDir = await ensureCfHomeDir(this.context);
+    // Resolving cfHomeDir awaits; a newer scope confirm may have landed meanwhile.
+    // Re-check so we never stomp the app list of whatever scope is now active.
+    if (!areSharedScopesEqual(scope, this.currentConfirmedScope)) {
+      return;
+    }
+    this.outputChannel.appendLine(
+      `[topology] Updated app list for ${sanitizeForLog(payload.orgName)}/${sanitizeForLog(payload.spaceName)} after refresh (${String(refreshedApps.length)} apps)`
+    );
+    await this.postAppsLoaded(
+      [...refreshedApps],
+      {
+        spaceName: payload.spaceName,
+        orgGuid: payload.orgGuid,
+        orgName: payload.orgName,
+      },
+      credentials,
+      cfHomeDir,
+      payload.regionCode
+    );
   }
 
   private async handleTopologyOrgSelected(
@@ -3583,6 +3641,25 @@ function areSharedScopesEqual(
     left.orgName === right.orgName &&
     left.spaceName === right.spaceName
   );
+}
+
+/**
+ * Order-independent equality for two app lists. App names are unique within a
+ * space, so a length check plus matching id/name/runningInstances keys is exact.
+ * Used to skip a redundant re-post when a topology refresh returns the same apps
+ * the dashboard already shows.
+ */
+function appListsEqual(
+  left: readonly SidebarAppEntry[],
+  right: readonly SidebarAppEntry[]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const toKey = (app: SidebarAppEntry): string =>
+    `${app.id} ${app.name} ${String(app.runningInstances)}`;
+  const leftKeys = new Set(left.map(toKey));
+  return right.every((app) => leftKeys.has(toKey(app)));
 }
 
 function resolveE2eTestModeAppsDelayMs(): number {

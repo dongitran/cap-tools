@@ -48,6 +48,10 @@ vi.mock('./credentialStore', () => ({
   storeCredentials: vi.fn(),
 }));
 
+vi.mock('./cfHome', () => ({
+  ensureCfHomeDir: vi.fn(async () => '/tmp/cf-home'),
+}));
+
 import { RegionSidebarProvider } from './sidebarProvider';
 
 interface ConfirmScopePayloadForTest {
@@ -72,15 +76,34 @@ interface SpaceSelectionPayloadForTest {
   readonly orgName: string;
 }
 
+interface AppEntryForTest {
+  readonly id: string;
+  readonly name: string;
+  readonly runningInstances: number;
+}
+
 interface ConfirmScopeOptionsForTest {
   readonly invalidateHanaAppContexts?: boolean;
   readonly writeSharedScope?: boolean;
 }
 
 interface SidebarProviderTestAccess {
+  applyRefreshedAppsForConfirmedScope(
+    payload: ConfirmScopePayloadForTest,
+    refreshedApps: readonly AppEntryForTest[],
+    credentials: { readonly email: string; readonly password: string }
+  ): Promise<void>;
   cfSession: CfSession | null;
   cfSessionRegionCode: string;
+  currentApps: AppEntryForTest[];
   currentConfirmedScope: SharedCfScope | undefined;
+  postAppsLoaded(
+    apps: AppEntryForTest[],
+    payload: SpaceSelectionPayloadForTest,
+    credentials: { readonly email: string; readonly password: string },
+    cfHomeDir: string,
+    regionCode: string
+  ): Promise<void>;
   selectedOrgGuid: string;
   selectedRegionCode: string;
   selectedRegionId: string;
@@ -680,5 +703,108 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     expect(access.selectedRegionId).toBe('us10');
     expect(access.selectedRegionCode).toBe('us-10');
     expect(access.selectedOrgGuid).toBe('org-finance-prod');
+  });
+
+  describe('re-posts apps discovered by a confirmed-scope topology refresh', () => {
+    const PAYLOAD = {
+      regionId: 'us10',
+      regionCode: 'us-10',
+      regionName: 'US East (VA)',
+      regionArea: 'Americas',
+      orgGuid: 'org-demo-services',
+      orgName: 'demo-services',
+      spaceName: 'test',
+    } satisfies ConfirmScopePayloadForTest;
+    const CONFIRMED_SCOPE: SharedCfScope = {
+      regionCode: 'us10',
+      orgName: 'demo-services',
+      spaceName: 'test',
+    };
+    const CREDENTIALS = { email: 'test@example.com', password: 'test-password' };
+
+    it('re-posts when the refresh finds apps the empty dashboard is missing', async () => {
+      const { access } = createProviderFixture();
+      access.currentConfirmedScope = CONFIRMED_SCOPE;
+      access.currentApps = [];
+      const postAppsLoadedSpy = vi
+        .spyOn(access, 'postAppsLoaded')
+        .mockResolvedValue();
+
+      await access.applyRefreshedAppsForConfirmedScope(
+        PAYLOAD,
+        [{ id: 'app-a', name: 'app-a', runningInstances: 1 }],
+        CREDENTIALS
+      );
+
+      expect(postAppsLoadedSpy).toHaveBeenCalledWith(
+        [{ id: 'app-a', name: 'app-a', runningInstances: 1 }],
+        { spaceName: 'test', orgGuid: 'org-demo-services', orgName: 'demo-services' },
+        CREDENTIALS,
+        '/tmp/cf-home',
+        'us-10'
+      );
+    });
+
+    it('skips the re-post when the refreshed apps match what is already shown', async () => {
+      const { access } = createProviderFixture();
+      access.currentConfirmedScope = CONFIRMED_SCOPE;
+      access.currentApps = [
+        { id: 'app-a', name: 'app-a', runningInstances: 1 },
+        { id: 'app-b', name: 'app-b', runningInstances: 2 },
+      ];
+      const postAppsLoadedSpy = vi
+        .spyOn(access, 'postAppsLoaded')
+        .mockResolvedValue();
+
+      // Same set, different order — equality is order-independent.
+      await access.applyRefreshedAppsForConfirmedScope(
+        PAYLOAD,
+        [
+          { id: 'app-b', name: 'app-b', runningInstances: 2 },
+          { id: 'app-a', name: 'app-a', runningInstances: 1 },
+        ],
+        CREDENTIALS
+      );
+
+      expect(postAppsLoadedSpy).not.toHaveBeenCalled();
+    });
+
+    it('re-posts when an app instance count changed even if the names match', async () => {
+      const { access } = createProviderFixture();
+      access.currentConfirmedScope = CONFIRMED_SCOPE;
+      access.currentApps = [{ id: 'app-a', name: 'app-a', runningInstances: 0 }];
+      const postAppsLoadedSpy = vi
+        .spyOn(access, 'postAppsLoaded')
+        .mockResolvedValue();
+
+      await access.applyRefreshedAppsForConfirmedScope(
+        PAYLOAD,
+        [{ id: 'app-a', name: 'app-a', runningInstances: 1 }],
+        CREDENTIALS
+      );
+
+      expect(postAppsLoadedSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not stomp the app list once the user has confirmed a different scope', async () => {
+      const { access } = createProviderFixture();
+      access.currentConfirmedScope = {
+        regionCode: 'br10',
+        orgName: 'demo-ops',
+        spaceName: 'other',
+      };
+      access.currentApps = [];
+      const postAppsLoadedSpy = vi
+        .spyOn(access, 'postAppsLoaded')
+        .mockResolvedValue();
+
+      await access.applyRefreshedAppsForConfirmedScope(
+        PAYLOAD,
+        [{ id: 'app-a', name: 'app-a', runningInstances: 1 }],
+        CREDENTIALS
+      );
+
+      expect(postAppsLoadedSpy).not.toHaveBeenCalled();
+    });
   });
 });
