@@ -97,6 +97,12 @@
     "npmjs",
     "uplink",
     "uplinks",
-    "prerelease"
+    "prerelease",
+    "clientid",
+    "sasl",
+    "qname",
+    "mgmt",
+    "acking",
+    "Seqs"
   ]
 }

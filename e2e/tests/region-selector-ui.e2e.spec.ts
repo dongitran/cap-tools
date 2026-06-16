@@ -916,7 +916,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(webviewFrame.getByText('finance-uat-api')).toBeVisible({
         timeout: 10000,
       });
-      await expect(webviewFrame.getByRole('tab', { name: 'Logs' })).toBeVisible();
+      await expect(webviewFrame.getByRole('tab', { name: 'Log-API-Event' })).toBeVisible();
       await expect(webviewFrame.getByRole('tab', { name: 'Apps' })).toBeVisible();
       await expect(
         webviewFrame.getByRole('tab', { name: 'SQL' })

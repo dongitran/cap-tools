@@ -22,12 +22,12 @@ async function openConfirmedWorkspace(): Promise<{ session: ExtensionHostSession
 }
 
 test.describe('APIs Explorer Workspace Flow', () => {
-  test('User can open APIs webview from Logs/APIs tab', async () => {
+  test('User can open APIs webview from Log-API-Event tab', async () => {
     const { session, webviewFrame } = await openConfirmedWorkspace();
 
     try {
-      // Click the Logs/APIs tab button
-      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Logs/APIs' }));
+      // Click the Log-API-Event tab button
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Log-API-Event' }));
       
       // Assert that the app logs panel is visible
       await expect(webviewFrame.locator('.app-logs-panel')).toBeVisible();
@@ -101,6 +101,50 @@ test.describe('APIs Explorer Workspace Flow', () => {
       await expect(jsonView).toBeVisible();
 
       await frame.locator('body').screenshot({ path: 'test-results/debug-apis-panel.png' });
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
+  test('User can open Event viewer from Log-API-Event tab', async () => {
+    const { session, webviewFrame } = await openConfirmedWorkspace();
+
+    try {
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Log-API-Event' }));
+      await expect(webviewFrame.locator('.app-logs-panel')).toBeVisible();
+
+      const appItem = webviewFrame.locator('.app-log-item').first();
+      await expect(appItem).toBeVisible();
+      await appItem.hover();
+
+      await expect(appItem.getByText('Ready', { exact: true })).toHaveCount(0);
+      await expect(appItem.getByRole('button', { name: 'APIs' })).toBeVisible();
+      const eventButton = appItem.getByRole('button', { name: 'Event' });
+      await expect(eventButton).toBeVisible();
+      await clickWithFallback(eventButton);
+
+      let eventFrame: Frame | null = null;
+      await expect.poll(async () => {
+        const candidateFrames = session.window.frames().filter((f) => f.url().includes('vscode-webview://'));
+        for (const f of [...candidateFrames].reverse()) {
+          if (await f.getByText('Event Mesh', { exact: true }).isVisible().catch(() => false)) {
+            eventFrame = f;
+            return true;
+          }
+        }
+        return false;
+      }, { timeout: 20000 }).toBe(true);
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (eventFrame === null) {
+        throw new Error('Could not find Event viewer frame');
+      }
+      const frame = eventFrame as Frame;
+
+      await expect(frame.getByText('Topics to listen')).toBeVisible();
+      await clickWithFallback(frame.getByRole('button', { name: 'Start listening' }));
+      await expect(frame.getByText('Listening', { exact: true })).toBeVisible();
+      await expect(frame.getByText('demo/service/app/items/created')).toBeVisible();
     } finally {
       await cleanupExtensionHost(session);
     }

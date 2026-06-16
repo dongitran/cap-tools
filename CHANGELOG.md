@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.112 (stable)
+- UI: Renamed the workspace tab from `Logs/APIs` to `Log-API-Event`, removed the idle `Ready` badge from app rows, and added an `Event` hover action beside `APIs`.
+- Feature: Added an Event Mesh viewer webview that discovers candidate topics from existing queue subscriptions, defaults to a namespace wildcard when needed, creates an isolated temporary debug queue, listens over AMQP, batches incoming messages for the UI, and cleans up the debug queue on stop, scope change, panel close, or shutdown.
+- Hardening: Event debug queue reaping now only removes timestamped queues older than the stale threshold, so another active SAP Tools window is not interrupted. Reopening an Event viewer for the same app after a scope change now recreates the panel against the new target.
+
 ## 0.10.111 (stable)
 - Fix: Switching to a different org/space now shows that space's apps even when the space had never been app-synced before. The shared CF topology file lists every region/org/space but fills a space's app list only once that space has actually been synced, so selecting a not-yet-synced space showed an empty list (with no apps in the dashboard, Logs, APIs, or SQL Workbench). The background topology refresh that runs when a scope is confirmed already discovered the apps, but it only re-pushed the region/org/space tree — not the app list. It now also re-posts the freshly synced apps, so the lists fill in as soon as the refresh completes. The re-post is skipped when the app list is unchanged or the active scope has since changed.
 

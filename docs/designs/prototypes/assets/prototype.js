@@ -2,7 +2,7 @@
 import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260509a';
 
 const TAB_ITEMS = [
-  { id: 'logs', label: 'Logs/APIs' },
+  { id: 'logs', label: 'Log-API-Event' },
   { id: 'apps', label: 'Apps' },
   { id: 'settings', label: 'SQL' },
 ];
@@ -3057,13 +3057,27 @@ function handleLogsControlAction(action, actionElement) {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         sessionStorage.setItem('saptools.apis.selectedAppId', appId);
       }
-      
+
       if (vscodeApi !== null) {
         vscodeApi.postMessage({ type: 'saptools.openApisExplorer', appId });
       } else if (typeof window !== 'undefined' && window.parent) {
         window.parent.postMessage({
           type: 'saptools.prototype.openCenterPanel',
           url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
+        }, '*');
+      }
+    }
+    return true;
+  }
+  if (action === 'open-app-events') {
+    const appId = actionElement.dataset.appId || 'demo-app';
+    if (appId) {
+      if (vscodeApi !== null) {
+        vscodeApi.postMessage({ type: 'saptools.openEventMesh', appId });
+      } else if (typeof window !== 'undefined' && window.parent) {
+        window.parent.postMessage({
+          type: 'saptools.prototype.openCenterPanel',
+          url: `./variants/events-webview.html?appId=${encodeURIComponent(appId)}`
         }, '*');
       }
     }
@@ -5687,9 +5701,6 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
     .map((app) => {
       const isLogging = activeApps.has(app.id);
       const isChecked = isLogging || selectedApps.has(app.id);
-      const actionMarkup = isLogging
-        ? ''
-        : '<span class="app-log-state is-idle">Ready</span>';
 
       return `
         <div class="app-log-item${isLogging ? ' is-logging is-locked' : ''}">
@@ -5704,7 +5715,7 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
           <span class="app-log-name">${escapeHtml(app.name)}</span>
           <div class="app-log-actions">
             <button type="button" class="app-log-apis-btn" data-action="open-app-apis" data-app-id="${app.id}" aria-label="Open APIs for ${escapeHtml(app.name)}">APIs</button>
-            ${actionMarkup}
+            <button type="button" class="app-log-apis-btn app-log-events-btn" data-action="open-app-events" data-app-id="${app.id}" aria-label="Open Events for ${escapeHtml(app.name)}">Event</button>
           </div>
         </div>
       `;

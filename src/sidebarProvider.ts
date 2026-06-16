@@ -30,6 +30,7 @@ import {
 import { readSharedAppFolderMappings, readSharedRemoteRoot } from './sharedDebugConfig';
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
 import type { ApisExplorerPanelManager } from './apisExplorerPanel';
+import type { EventMeshPanelManager } from './eventMeshPanel';
 import {
   resolveMockApps,
   resolveMockCfTopology,
@@ -98,6 +99,7 @@ const MSG_REPLACE_SERVICE_PACKAGE_PLACEHOLDER = 'sapTools.replaceServicePackageP
 const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
 const MSG_OPEN_HANA_SQL_FILE = 'sapTools.openHanaSqlFile';
 const MSG_OPEN_APIS_EXPLORER = 'saptools.openApisExplorer';
+const MSG_OPEN_EVENT_MESH = 'saptools.openEventMesh';
 const MSG_RUN_HANA_TABLE_SELECT = 'sapTools.runHanaTableSelect';
 const MSG_OPEN_SQLTOOLS_EXTENSION = 'sapTools.openSqlToolsExtension';
 const MSG_BUILD_PUBLISH_ALL = 'sapTools.buildPublishAll';
@@ -331,7 +333,8 @@ export class RegionSidebarProvider
     private readonly cacheSyncService: CacheSyncService,
     private readonly cacheStore: CacheStore,
     private readonly hanaSqlWorkbench: HanaSqlWorkbench,
-    private readonly apisExplorerPanelManager: ApisExplorerPanelManager
+    private readonly apisExplorerPanelManager: ApisExplorerPanelManager,
+    private readonly eventMeshPanelManager: EventMeshPanelManager
   ) {
     this.hanaSqlWorkbench.registerActiveSessionProvider(() => this.currentLogSessionSeed);
     this.hanaSqlWorkbench.registerTunnelStateListener((appId, active) => {
@@ -511,6 +514,30 @@ export class RegionSidebarProvider
       } else if (appId !== '') {
         this.apisExplorerPanelManager.openApisExplorer(appId);
       }
+      return;
+    }
+
+    if (type === MSG_OPEN_EVENT_MESH) {
+      const appId = message['appId'] as string;
+      if (appId === '') {
+        return;
+      }
+      if (this.currentConfirmedScope !== undefined) {
+        const credentials = await getEffectiveCredentials(this.context);
+        if (credentials !== null) {
+          const cfHomeDir = await ensureCfHomeDir(this.context);
+          this.eventMeshPanelManager.openEventMeshViewer(appId, {
+            apiEndpoint: getCfApiEndpoint(this.currentConfirmedScope.regionCode),
+            email: credentials.email,
+            password: credentials.password,
+            orgName: this.currentConfirmedScope.orgName,
+            spaceName: this.currentConfirmedScope.spaceName,
+            cfHomeDir,
+          });
+          return;
+        }
+      }
+      this.eventMeshPanelManager.openEventMeshViewer(appId);
       return;
     }
 
@@ -750,6 +777,11 @@ export class RegionSidebarProvider
     const shouldInvalidateHanaAppContexts = options.invalidateHanaAppContexts ?? true;
     if (isChangedScope && shouldInvalidateHanaAppContexts) {
       this.hanaSqlWorkbench.invalidateAllAppContexts();
+    }
+    if (isChangedScope) {
+      // An open event viewer is bound to the previous scope's app/queue; stop its
+      // AMQP listener and delete its debug queue so we never leak a tap across scopes.
+      this.eventMeshPanelManager.stopAllListeners('scope-changed');
     }
     const shouldWriteSharedScope = options.writeSharedScope ?? true;
     if (shouldWriteSharedScope) {

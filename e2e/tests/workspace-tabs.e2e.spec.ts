@@ -248,7 +248,7 @@ test.describe('SAP Tools workspace tabs', () => {
     try {
       const tabs = webviewFrame.getByRole('tab');
       await expect(tabs).toHaveCount(3);
-      await expect(tabs.nth(0)).toHaveText('Logs/APIs');
+      await expect(tabs.nth(0)).toHaveText('Log-API-Event');
       await expect(tabs.nth(1)).toHaveText('Apps');
       await expect(tabs.nth(2)).toHaveText('SQL');
       await expect(
@@ -353,7 +353,7 @@ test.describe('SAP Tools workspace tabs', () => {
         webviewFrame.getByRole('tab', { name: 'Debug' })
       ).toHaveCount(0);
 
-      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Logs' }));
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Log-API-Event' }));
       await expect(
         webviewFrame.getByRole('heading', { name: 'Apps & APIs' })
       ).toBeVisible();

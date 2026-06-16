@@ -8,6 +8,8 @@ import type { CacheSyncService } from './cacheSyncService';
 import type { CfSession } from './cfClient';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
 import type { HanaSqlWorkbench } from './hanaSqlWorkbench';
+import type { ApisExplorerPanelManager } from './apisExplorerPanel';
+import type { EventMeshPanelManager } from './eventMeshPanel';
 import type { SharedCfScope } from './scopeSync';
 
 const { getConfigurationMock, getEffectiveCredentialsMock, updateMock, state } =
@@ -213,6 +215,15 @@ function createProviderFixture(): ProviderFixture {
   const outputChannel = {
     appendLine: vi.fn(),
   } as unknown as vscode.OutputChannel;
+  const apisExplorerPanelManager = {
+    openApisExplorer: vi.fn(),
+    dispose: vi.fn(),
+  } as unknown as ApisExplorerPanelManager;
+  const eventMeshPanelManager = {
+    openEventMeshViewer: vi.fn(),
+    stopAllListeners: vi.fn(),
+    dispose: vi.fn(),
+  } as unknown as EventMeshPanelManager;
 
   const provider = new RegionSidebarProvider(
     {} as vscode.Uri,
@@ -221,7 +232,9 @@ function createProviderFixture(): ProviderFixture {
     cfLogsPanel,
     cacheSyncService,
     cacheStore,
-    hanaSqlWorkbench
+    hanaSqlWorkbench,
+    apisExplorerPanelManager,
+    eventMeshPanelManager
   );
 
   return {

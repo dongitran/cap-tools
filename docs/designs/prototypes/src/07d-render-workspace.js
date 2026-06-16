@@ -616,9 +616,6 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
     .map((app) => {
       const isLogging = activeApps.has(app.id);
       const isChecked = isLogging || selectedApps.has(app.id);
-      const actionMarkup = isLogging
-        ? ''
-        : '<span class="app-log-state is-idle">Ready</span>';
 
       return `
         <div class="app-log-item${isLogging ? ' is-logging is-locked' : ''}">
@@ -633,7 +630,7 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
           <span class="app-log-name">${escapeHtml(app.name)}</span>
           <div class="app-log-actions">
             <button type="button" class="app-log-apis-btn" data-action="open-app-apis" data-app-id="${app.id}" aria-label="Open APIs for ${escapeHtml(app.name)}">APIs</button>
-            ${actionMarkup}
+            <button type="button" class="app-log-apis-btn app-log-events-btn" data-action="open-app-events" data-app-id="${app.id}" aria-label="Open Events for ${escapeHtml(app.name)}">Event</button>
           </div>
         </div>
       `;

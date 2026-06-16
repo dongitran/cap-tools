@@ -1,7 +1,7 @@
 import { DESIGN_CATALOG, REGION_GROUPS } from './design-catalog.js?v=20260509a';
 
 const TAB_ITEMS = [
-  { id: 'logs', label: 'Logs/APIs' },
+  { id: 'logs', label: 'Log-API-Event' },
   { id: 'apps', label: 'Apps' },
   { id: 'settings', label: 'SQL' },
 ];

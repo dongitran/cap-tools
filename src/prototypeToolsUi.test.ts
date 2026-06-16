@@ -23,6 +23,41 @@ async function readSqlRenderSource(): Promise<string> {
   );
 }
 
+async function readStateSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/00-state.js', import.meta.url),
+    'utf8'
+  );
+}
+
+async function readQuickSelectionSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/05-quick-selection.js', import.meta.url),
+    'utf8'
+  );
+}
+
+async function readWorkspaceRenderSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/07d-render-workspace.js', import.meta.url),
+    'utf8'
+  );
+}
+
+async function readEventStylesSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/styles/09-events.css', import.meta.url),
+    'utf8'
+  );
+}
+
+async function readEventVariantSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/variants/events-webview.html', import.meta.url),
+    'utf8'
+  );
+}
+
 describe('prototype Microsoft Graph tools UI', () => {
   it('renders an explicit show/hide toggle for client secret fields', async () => {
     const source = await readToolsSource();
@@ -44,6 +79,48 @@ describe('prototype Microsoft Graph tools UI', () => {
     const source = await readEventsSource();
 
     expect(source).toContain("eventTarget.closest('[data-action]')");
+  });
+});
+
+describe('prototype Log-API-Event workspace', () => {
+  it('renames the first workspace tab without keeping the old label', async () => {
+    const source = await readStateSource();
+
+    expect(source).toContain("label: 'Log-API-Event'");
+    expect(source).not.toContain("label: 'Logs/APIs'");
+  });
+
+  it('shows APIs and Event actions without the idle Ready badge', async () => {
+    const source = await readWorkspaceRenderSource();
+
+    expect(source).toContain('data-action="open-app-apis"');
+    expect(source).toContain('data-action="open-app-events"');
+    expect(source).not.toContain('app-log-state is-idle');
+    expect(source).not.toContain('>Ready<');
+  });
+
+  it('routes the Event action to the Event viewer prototype', async () => {
+    const source = await readQuickSelectionSource();
+
+    expect(source).toContain('saptools.openEventMesh');
+    expect(source).toContain('./variants/events-webview.html');
+  });
+
+  it('has a standalone Event viewer variant for Playwright prototype checks', async () => {
+    const source = await readEventVariantSource();
+
+    expect(source).toContain('id="event-mesh-app"');
+    expect(source).toContain('../assets/prototype.css');
+    expect(source).toContain('../assets/events-webview.js');
+  });
+
+  it('does not add non-zero letter spacing to the Event viewer styles', async () => {
+    const source = await readEventStylesSource();
+    const values = Array.from(source.matchAll(/letter-spacing:\s*([^;]+);/g)).map((match) =>
+      match[1]?.trim()
+    );
+
+    expect(values).toEqual(values.map(() => '0'));
   });
 });
 

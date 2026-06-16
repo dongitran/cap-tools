@@ -34,8 +34,8 @@ const { chromium } = require('@playwright/test');
   console.log('Waiting for workspace tabs...');
   await frame.waitForSelector('.workspace-tabs');
   
-  console.log('Clicking Logs/APIs tab...');
-  const logsTabButton = await frame.locator('button[role="tab"]:has-text("Logs/APIs")');
+  console.log('Clicking Log-API-Event tab...');
+  const logsTabButton = await frame.locator('button[role="tab"]:has-text("Log-API-Event")');
   await logsTabButton.click();
   
   console.log('Hovering over app and clicking APIs...');
