@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.114 (stable)
+- Release: Bumped extension version for the sanitized Event Mesh viewer release.
+
 ## 0.10.113 (stable)
 - Hardening: Added a restrictive Content Security Policy to the Event viewer webview while preserving nonce-backed scripts and extension-owned local assets.
 - Hardening: Event Mesh binding parsing now rejects empty OAuth client secrets instead of treating malformed bindings as usable.
