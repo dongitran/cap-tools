@@ -13,7 +13,12 @@ export { getCfApiEndpoint } from './cfEndpoint';
 const execFileAsync = promisify(execFile);
 
 const CF_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
-const CF_COMMAND_TIMEOUT_MS = 30_000;
+// Every `cf` CLI command (api/auth/target/apps, cf ssh, cf logs --recent, …) runs
+// against the network. On a slow connection a first-time `cf apps` for a large
+// space can legitimately take minutes, so allow up to 10 minutes before giving up
+// instead of killing the command — and the app list it feeds — at 30 seconds.
+// Kept in sync with the vendored @saptools/cf-sync default (scripts/vendor-cf-sync.mjs).
+const CF_COMMAND_TIMEOUT_MS = 600_000;
 const REMOTE_FILE_CONTENT_SENTINEL = '__SAP_TOOLS_REMOTE_FILE_CONTENT__';
 
 /**
@@ -567,7 +572,7 @@ export interface CfPortForwardHandle {
 /**
  * Spawn a long-running `cf ssh` local port-forward (the HANA-tunnel building
  * block). Like the log stream this MUST use `spawn` (not `runCfCommand`, whose
- * 30s timeout would kill the tunnel). The remote `sleep` keeps the SSH session
+ * fixed command timeout would kill the tunnel). The remote `sleep` keeps the SSH session
  * — and therefore the forward — alive; the caller respawns/stops as needed.
  * The CF session must already be prepared (api/auth/target) for the cfHomeDir.
  */

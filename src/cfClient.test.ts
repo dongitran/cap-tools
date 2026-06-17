@@ -335,7 +335,7 @@ describe('fetchStartedAppsViaCfCli', () => {
       ['api', 'https://api.cf.us10.hana.ondemand.com'],
       expect.objectContaining({
         maxBuffer: 8 * 1024 * 1024,
-        timeout: 30_000,
+        timeout: 600_000,
         env: expect.objectContaining({
           CF_HOME: '/tmp/sap-tools-cf-home',
         }),

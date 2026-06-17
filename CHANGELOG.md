@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.115 (stable)
+- Fix: Selecting a new org/space on a slow network no longer loses the app list to a 30-second timeout. Loading a not-yet-synced space runs `cf api`/`cf auth`/`cf target`/`cf apps` live, and every CF CLI command was capped at 30s — so on a slow connection (where a first-time `cf apps` for a large space can take minutes) the sync was killed before the apps came back and the list silently emptied. The Cloud Foundry CLI command timeout is raised from 30 seconds to 10 minutes, both in the extension's own CF client (`CF_COMMAND_TIMEOUT_MS`) and in the vendored `@saptools/cf-sync` sync path that the confirmed-scope topology refresh uses (`DEFAULT_CF_COMMAND_TIMEOUT_MS`, patched at vendor time), so a slow `cf apps` now has time to complete.
+
 ## 0.10.114 (stable)
 - Release: Bumped extension version for the sanitized Event Mesh viewer release.
 

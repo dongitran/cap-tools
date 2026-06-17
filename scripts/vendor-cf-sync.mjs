@@ -97,6 +97,36 @@ async function patchSaptoolsDirOverride() {
   await writeFile(entryPath, source.replace(original, patched), 'utf8');
 }
 
+/**
+ * @saptools/cf-sync runs every `cf` CLI command (api/auth/target/apps, …) with a
+ * fixed 30s timeout (DEFAULT_CF_COMMAND_TIMEOUT_MS), and syncSpace() never passes a
+ * per-call override — withCfSession() builds a context with only CF_HOME. On a slow
+ * network the first-time org/space sync, whose `cf apps` can legitimately take
+ * minutes, was being killed at 30s, so the app list silently failed to load. Raise
+ * the vendored default to 10 minutes to match the extension's own CF CLI timeout
+ * (CF_COMMAND_TIMEOUT_MS in src/cfClient.ts).
+ *
+ * Like the SAPTOOLS_DIR_OVERRIDE patch, this runs against the freshly copied dist on
+ * every build, so it survives `npm install` without touching node_modules, and fails
+ * loudly if the upstream constant changes.
+ */
+async function patchCfCommandTimeout() {
+  const entryPath = join(cfSyncTargetDir, 'dist', 'index.js');
+  const source = await readFile(entryPath, 'utf8');
+  const patched = 'var DEFAULT_CF_COMMAND_TIMEOUT_MS = 6e5;';
+  if (source.includes(patched)) {
+    return;
+  }
+  const original = 'var DEFAULT_CF_COMMAND_TIMEOUT_MS = 3e4;';
+  if (!source.includes(original)) {
+    throw new Error(
+      'vendor-cf-sync: could not locate DEFAULT_CF_COMMAND_TIMEOUT_MS to raise the CF CLI timeout. ' +
+        'The @saptools/cf-sync internals changed — update scripts/vendor-cf-sync.mjs.'
+    );
+  }
+  await writeFile(entryPath, source.replace(original, patched), 'utf8');
+}
+
 async function smokeTestVendoredCfSync() {
   const entryPath = join(cfSyncTargetDir, 'dist', 'index.js');
   const entryUrl = pathToFileURL(entryPath).href;
@@ -135,6 +165,7 @@ async function main() {
   }
 
   await patchSaptoolsDirOverride();
+  await patchCfCommandTimeout();
   await smokeTestVendoredCfSync();
 }
 
