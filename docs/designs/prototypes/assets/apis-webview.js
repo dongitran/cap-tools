@@ -137,6 +137,16 @@ const API_MOCK_RESPONSES = {
 
 const appElement = document.getElementById('webview-app');
 
+function resolveMockApiCatalog() {
+  return API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
+}
+
+function resolveApiCatalog() {
+  if (apiCurrentCatalog !== null) return apiCurrentCatalog;
+  if (!vscodeApi) return resolveMockApiCatalog();
+  return null;
+}
+
 function escapeHtml(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
@@ -350,21 +360,29 @@ function updateResponseSection() {
   `;
 }
 
+function renderApiWorkbenchLoading(mainPanel) {
+  mainPanel.innerHTML = `
+    <div class="api-placeholder-response" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+      <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
+      <p>Loading application endpoints...</p>
+    </div>
+  `;
+}
+
 function updateWorkbenchSection() {
   const mainPanel = document.querySelector('.api-workbench-panel');
   if (!mainPanel) return;
 
   if (apiCatalogState === 'loading') {
-    mainPanel.innerHTML = `
-      <div class="api-placeholder-response" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-        <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
-        <p>Loading application endpoints...</p>
-      </div>
-    `;
+    renderApiWorkbenchLoading(mainPanel);
     return;
   }
-  
-  const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG['demo-app'];
+
+  const currentCatalog = resolveApiCatalog();
+  if (currentCatalog === null) {
+    renderApiWorkbenchLoading(mainPanel);
+    return;
+  }
 
   if (!apiSelectedEntity && currentCatalog.entities.length > 0) {
     mainPanel.innerHTML = `
@@ -501,8 +519,10 @@ function updateWorkbenchSection() {
 function updateSidebarSection() {
   const sidebar = document.querySelector('.api-webview-sidebar');
   if (!sidebar) return;
+  const listContainer = sidebar.querySelector('.api-entities-list-container');
+  const previousScrollTop = listContainer ? listContainer.scrollTop : 0;
 
-  if (apiCatalogState === 'loading') {
+  const renderLoading = () => {
     sidebar.innerHTML = `
       <div style="padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; opacity: 0.7;">
         <div class="api-loading-spinner-large" style="margin-bottom: 16px;"></div>
@@ -510,15 +530,23 @@ function updateSidebarSection() {
         <div style="font-size: 11px; margin-top: 8px; color: var(--vscode-descriptionForeground);">Fetching metadata from the deployed application</div>
       </div>
     `;
+  };
+
+  if (apiCatalogState === 'loading') {
+    renderLoading();
     return;
   }
 
-  const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG['demo-app'];
+  const currentCatalog = resolveApiCatalog();
+  if (currentCatalog === null) {
+    renderLoading();
+    return;
+  }
   
   const entityItems = currentCatalog.entities.map(ent => {
     const isSelected = ent.name === apiSelectedEntity;
     return `
-      <button type="button" class="api-entity-item${isSelected ? ' is-active' : ''}" data-action="api-select-entity" data-entity-name="${ent.name}">
+      <button type="button" class="api-entity-item${isSelected ? ' is-active' : ''}" data-action="api-select-entity" data-entity-name="${ent.name}" aria-pressed="${isSelected ? 'true' : 'false'}">
         <span class="entity-icon" aria-hidden="true">&#128196;</span>
         <span class="entity-name" title="${escapeHtml(ent.name)}" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; white-space: normal; line-height: 1.2;">${escapeHtml(ent.name)}</span>
         ${ent.count !== undefined ? `<span class="entity-count-badge">${ent.count}</span>` : ''}
@@ -553,6 +581,11 @@ function updateSidebarSection() {
       const text = btn.textContent || '';
       btn.style.display = text.toLowerCase().includes(term) ? 'flex' : 'none';
     });
+  }
+
+  const nextListContainer = sidebar.querySelector('.api-entities-list-container');
+  if (nextListContainer) {
+    nextListContainer.scrollTop = previousScrollTop;
   }
 }
 
@@ -589,6 +622,15 @@ function renderWebview() {
   }
 }
 
+function updateApiEntitySelection() {
+  const buttons = document.querySelectorAll('.api-entity-item');
+  buttons.forEach((btn) => {
+    const isSelected = btn.dataset.entityName === apiSelectedEntity;
+    btn.classList.toggle('is-active', isSelected);
+    btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  });
+}
+
 // Action Handler
 appElement.addEventListener('click', (event) => {
   const target = event.target;
@@ -601,7 +643,7 @@ appElement.addEventListener('click', (event) => {
     saveEndpointSession();
     apiSelectedEntity = actionElement.dataset.entityName ?? '';
     loadEndpointSession(apiSelectedEntity);
-    updateSidebarSection();
+    updateApiEntitySelection();
     updateWorkbenchSection();
     return;
   }
@@ -693,7 +735,8 @@ appElement.addEventListener('input', (event) => {
       apiParams[paramName] = target.value;
       const urlInput = appElement.querySelector('.api-url-input');
       if (urlInput) {
-        const currentCatalog = apiCurrentCatalog || API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
+        const currentCatalog = resolveApiCatalog();
+        if (currentCatalog === null) return;
         const routeBase = currentCatalog.baseUrl || `https://demo-env-${apiSelectedAppId}.cfapps.region.hana.ondemand.com`;
         const selectedEnt = currentCatalog.entities.find(e => e.name === apiSelectedEntity);
         const entPath = selectedEnt && selectedEnt.path ? selectedEnt.path : `${currentCatalog.servicePath || ''}/${apiSelectedEntity}`;
@@ -716,13 +759,15 @@ function initWebview() {
     if (!vscodeApi) {
       apiCatalogState = 'loaded';
       apiCurrentCatalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
-    }
-    
-    // Select the first entity automatically if available
-    const catalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
-    if (catalog && catalog.entities.length > 0) {
-      apiSelectedEntity = catalog.entities[0].name;
+      const catalog = resolveApiCatalog();
+      if (catalog && catalog.entities.length > 0) {
+        apiSelectedEntity = catalog.entities[0].name;
+      } else {
+        apiSelectedEntity = '';
+      }
     } else {
+      apiCatalogState = 'loading';
+      apiCurrentCatalog = null;
       apiSelectedEntity = '';
     }
   }
@@ -865,6 +910,12 @@ window.addEventListener('message', (event) => {
     apiCurrentCatalog = vscodeApi ? null : API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
     
     apiSelectedEntity = '';
+    if (!vscodeApi) {
+      const catalog = resolveApiCatalog();
+      if (catalog && catalog.entities.length > 0) {
+        apiSelectedEntity = catalog.entities[0].name;
+      }
+    }
     apiHttpMethod = 'GET';
     apiHttpBody = '';
     apiResultState = 'idle';

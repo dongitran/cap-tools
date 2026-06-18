@@ -136,6 +136,99 @@ test.describe('APIs Explorer Workspace Flow', () => {
     }
   });
 
+  test('User can wait for API discovery without demo endpoints and keep scroll after selecting an endpoint', async () => {
+    const { session, webviewFrame } = await openConfirmedWorkspace();
+
+    try {
+      await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Log-API-Event' }));
+      await expect(webviewFrame.locator('.app-logs-panel')).toBeVisible();
+
+      const appItem = webviewFrame.locator('.app-log-item').first();
+      await expect(appItem).toBeVisible();
+      await appItem.hover();
+
+      const apisButton = appItem.getByRole('button', { name: 'APIs' });
+      await expect(apisButton).toBeVisible();
+      await clickWithFallback(apisButton);
+
+      let apisFrame: Frame | null = null;
+      await expect.poll(async () => {
+        const candidateFrames = session.window.frames().filter((f) => f.url().includes('vscode-webview://'));
+        for (const f of [...candidateFrames].reverse()) {
+          if (await f.getByText('Endpoints', { exact: false }).isVisible().catch(() => false)) {
+            apisFrame = f;
+            return true;
+          }
+        }
+        return false;
+      }, { timeout: 20000 }).toBe(true);
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (apisFrame === null) {
+        throw new Error('Could not find APIs Explorer frame');
+      }
+      const frame = apisFrame as Frame;
+
+      await frame.evaluate(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'saptools.prototype.apis.appSelected', payload: { appId: 'fresh-api-app' } },
+        }));
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'sapTools.apis.syncStarted' },
+        }));
+      });
+
+      await expect(frame.getByText('Discovering Endpoints...')).toBeVisible();
+      await expect(frame.getByText('Loading application endpoints...')).toBeVisible();
+      await expect(frame.locator('button[data-entity-name="Users"]')).toHaveCount(0);
+      await expect(frame.locator('button[data-entity-name="Products"]')).toHaveCount(0);
+      await expect(frame.locator('button[data-entity-name="Orders"]')).toHaveCount(0);
+
+      const endpointNames = Array.from({ length: 40 }, (_, index) =>
+        `Endpoint ${String(index + 1).padStart(2, '0')}`
+      );
+      await frame.evaluate((names) => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: {
+            type: 'sapTools.apis.catalogLoaded',
+            payload: {
+              name: 'fresh-api-app',
+              baseUrl: 'https://mock.example.com',
+              entities: names.map((name, index) => ({
+                name,
+                count: index + 1,
+                methods: ['GET'],
+                path: `/odata/v4/endpoint-${String(index + 1).padStart(2, '0')}`,
+              })),
+            },
+          },
+        }));
+      }, endpointNames);
+
+      const list = frame.locator('.api-entities-list-container');
+      await expect(list).toBeVisible();
+      await expect(frame.locator('button[data-entity-name="Endpoint 01"]')).toBeVisible();
+      await list.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+
+      const lastEndpoint = frame.locator('button[data-entity-name="Endpoint 40"]');
+      await expect(lastEndpoint).toBeVisible();
+      const scrollBefore = await list.evaluate((element) => element.scrollTop);
+      expect(scrollBefore).toBeGreaterThan(0);
+
+      await clickWithFallback(lastEndpoint);
+      await expect(lastEndpoint).toHaveClass(/is-active/);
+      await expect(lastEndpoint).toHaveAttribute('aria-pressed', 'true');
+      await expect(frame.locator('input.api-url-input')).toHaveValue(/endpoint-40/);
+
+      const scrollAfter = await list.evaluate((element) => element.scrollTop);
+      expect(scrollAfter).toBeGreaterThan(0);
+    } finally {
+      await cleanupExtensionHost(session);
+    }
+  });
+
   test('User can open Event viewer from Log-API-Event tab', async () => {
     const { session, webviewFrame } = await openConfirmedWorkspace();
 

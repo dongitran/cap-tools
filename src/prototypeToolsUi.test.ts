@@ -540,6 +540,22 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain("apiCurrentCatalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];");
   });
 
+  it('keeps APIs discovery loading from falling back to demo endpoints inside VS Code', async () => {
+    const source = await readApiWebviewSource();
+    const selectEntityBlock = /if \(action === 'api-select-entity'\) \{([\s\S]*?)\n  \}/.exec(source)?.[1] ?? '';
+
+    expect(source).toContain('function resolveApiCatalog()');
+    expect(source).toContain('if (!vscodeApi) return resolveMockApiCatalog();');
+    expect(source).toContain('if (currentCatalog === null) {');
+    expect(source).toContain("apiSelectedEntity = '';");
+    expect(source).toContain('function updateApiEntitySelection()');
+    expect(source).toContain("btn.classList.toggle('is-active', isSelected);");
+    expect(source).toContain("btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');");
+    expect(source).toContain('const previousScrollTop = listContainer ? listContainer.scrollTop : 0;');
+    expect(selectEntityBlock).toContain('updateApiEntitySelection();');
+    expect(selectEntityBlock).not.toContain('updateSidebarSection();');
+  });
+
   it('sends sapTools.events.publishEvent message and handles publishResult response', async () => {
     const source = await readEventWebviewSource();
 

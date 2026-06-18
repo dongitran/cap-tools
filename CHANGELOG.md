@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.137 (stable)
+- Fix: APIs Explorer no longer shows demo `Users`, `Products`, and `Orders` endpoints while a real app catalog is still discovering, and selecting an endpoint from a long list no longer resets the endpoint sidebar scroll position.
+
 ## 0.10.136 (stable)
 - Fix: APIs Explorer JSON responses now use the same transparent-background token text highlighting as Event Mesh received messages, with VS Code webview e2e coverage and screenshot verification.
 
