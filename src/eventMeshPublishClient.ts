@@ -1,8 +1,5 @@
 import type { EventMeshBinding, EventMeshOAuth } from './eventMeshBindings';
 
-/** Base path of the SAP Event Mesh REST Messaging API (publish endpoint). */
-const MESSAGING_PUBLISH_PATH = '/messagingrest/api/v1/events/publish';
-
 type FetchFn = typeof fetch;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,7 +46,7 @@ class EventMeshPublishClient {
 
   async publishEvent(topic: string, payload: string, contentType: string): Promise<number> {
     const token = await this.getToken();
-    const url = `${this.binding.messaging.uri}${MESSAGING_PUBLISH_PATH}/${encodeURIComponent(topic)}`;
+    const url = `${this.binding.messaging.uri}/messagingrest/v1/topics/${encodeURIComponent(topic)}/messages`;
     const res = await this.fetchImpl(url, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': contentType, 'x-qos': '0' },

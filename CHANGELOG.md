@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.120 (stable)
+- Fix: The "Add Messaging Binding" picker no longer truncates the results list at 12 items and hides the rest behind a "X more bindings match" hint. All matching bindings are now shown in a scrollable container, sorted alphabetically by name.
+- Fix: The "Publish Event" button now enables as soon as a topic name is typed, without requiring "Format JSON" to be clicked first. Previously, the button's disabled state was only re-evaluated on a full `render()` call; typing in the topic input now calls a targeted `updatePublishSendButton()` that updates only the button in place without rebuilding the form.
+- Fix: Publishing events no longer returns HTTP 404. The REST Messaging endpoint path was wrong (`/messagingrest/api/v1/events/publish/{topic}`); the correct SAP Event Mesh REST Messaging API path is `/messagingrest/v1/topics/{topic}/messages`.
+
 ## 0.10.119 (stable)
 - Fix: The "Add Messaging Binding" search field no longer loses focus after every keystroke. Previously, each input event triggered a full DOM rebuild via `render()` which destroyed and recreated the input element. The fix replaces `render()` with a targeted `updateBindingPickerResults()` that updates only the results list and overflow hint in place, leaving the input element intact.
 - UI: Restructured the "Add Messaging Binding" picker header so the title, search input, and Close button all sit on the same horizontal row. Removed the `<label class="event-field">` column wrapper around the search input.

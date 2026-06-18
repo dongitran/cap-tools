@@ -255,7 +255,7 @@
 }
 
 .event-binding-results {
-  max-height: 114px;
+  max-height: 280px;
   overflow-y: auto;
 }
 

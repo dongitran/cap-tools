@@ -8,7 +8,6 @@ const appId = (typeof window !== 'undefined' && window.eventMeshAppId) || 'demo-
 
 const MAX_MESSAGES = 1000; // ring-buffer cap held in memory
 const MAX_DOM_ROWS = 300; // rows actually painted (newest first)
-const MAX_BINDING_RESULTS = 12;
 
 let phase = 'loading'; // loading | ready | error
 let errorMessage = '';
@@ -303,8 +302,6 @@ function renderSelectedBindingsSection() {
 function renderBindingPicker() {
   if (!addBindingOpen) return '';
   const matches = filterAvailableBindings();
-  const rendered = matches.slice(0, MAX_BINDING_RESULTS);
-  const hasOverflow = matches.length > rendered.length;
   return `
     <section class="event-binding-picker" aria-label="Add Messaging Binding">
       <div class="event-picker-head">
@@ -321,9 +318,8 @@ function renderBindingPicker() {
         <button type="button" class="event-btn event-btn-compact" data-action="em-close-add-binding">Close</button>
       </div>
       <div class="event-binding-results">
-        ${rendered.length === 0 ? '<p class="event-empty-small">No matching bindings.</p>' : rendered.map(renderBindingOption).join('')}
+        ${matches.length === 0 ? '<p class="event-empty-small">No matching bindings.</p>' : matches.map(renderBindingOption).join('')}
       </div>
-      <p class="event-hint event-picker-overflow"${hasOverflow ? '' : ' style="display:none"'}>${hasOverflow ? `${matches.length - rendered.length} more bindings match. Refine the search.` : ''}</p>
     </section>`;
 }
 
@@ -331,26 +327,29 @@ function updateBindingPickerResults() {
   const resultsEl = document.querySelector('.event-binding-results');
   if (!resultsEl) return;
   const matches = filterAvailableBindings();
-  const rendered = matches.slice(0, MAX_BINDING_RESULTS);
-  resultsEl.innerHTML = rendered.length === 0
+  resultsEl.innerHTML = matches.length === 0
     ? '<p class="event-empty-small">No matching bindings.</p>'
-    : rendered.map(renderBindingOption).join('');
-  const overflowEl = document.querySelector('.event-picker-overflow');
-  if (overflowEl) {
-    const hasOverflow = matches.length > rendered.length;
-    overflowEl.style.display = hasOverflow ? '' : 'none';
-    overflowEl.textContent = hasOverflow ? `${matches.length - rendered.length} more bindings match. Refine the search.` : '';
-  }
+    : matches.map(renderBindingOption).join('');
+}
+
+function updatePublishSendButton() {
+  const sendBtn = document.querySelector('[data-action="ep-send"]');
+  if (!sendBtn) return;
+  const hasBindings = bindings.length > 0;
+  sendBtn.disabled = publishSending || !hasBindings || publishTopic.trim().length === 0;
+  sendBtn.textContent = publishSending ? 'Sending…' : 'Publish Event';
 }
 
 function filterAvailableBindings() {
   const query = bindingSearch.trim().toLowerCase();
-  return bindings.filter((binding) => {
-    if (selectedBindingIndexes.has(binding.index)) return false;
-    if (query.length === 0) return true;
-    const haystack = `${binding.name} ${binding.instanceName} ${binding.namespace}`.toLowerCase();
-    return haystack.includes(query);
-  });
+  return bindings
+    .filter((binding) => {
+      if (selectedBindingIndexes.has(binding.index)) return false;
+      if (query.length === 0) return true;
+      const haystack = `${binding.name} ${binding.instanceName} ${binding.namespace}`.toLowerCase();
+      return haystack.includes(query);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function renderBindingOption(binding) {
@@ -934,6 +933,7 @@ document.addEventListener('input', (event) => {
     updateBindingPickerResults();
   } else if (el.matches('[data-role="ep-topic-input"]')) {
     publishTopic = el.value || '';
+    updatePublishSendButton();
   } else if (el.matches('[data-role="ep-payload-input"]')) {
     publishPayload = el.value || '';
   }
