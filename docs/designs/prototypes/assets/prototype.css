@@ -4159,8 +4159,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   letter-spacing: 0;
 }
 
-.event-app,
-.event-header-meta {
+.event-app {
   color: var(--vscode-descriptionForeground);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4169,11 +4168,6 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .event-app {
   font-size: 12px;
-}
-
-.event-header-meta {
-  font-size: 11px;
-  max-width: 50%;
 }
 
 /* --- states --- */
@@ -4489,6 +4483,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .event-simple-group-row {
   grid-template-columns: 26px minmax(140px, 1fr) max-content;
+  cursor: pointer;
 }
 
 .event-simple-expander {

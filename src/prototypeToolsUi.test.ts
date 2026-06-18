@@ -205,6 +205,12 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('data-tab="subscribe-advance"');
   });
 
+  it('does not duplicate the binding count below the Event viewer tabs', async () => {
+    const source = await readEventWebviewSource();
+
+    expect(source).not.toContain('event-header-meta');
+  });
+
   it('renders a grouped Simple subscribe tree with one-click group and child selection', async () => {
     const source = await readEventWebviewSource();
 
@@ -215,6 +221,25 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('em-toggle-simple-group');
     expect(source).toContain('em-toggle-simple-binding');
     expect(source).toContain('Client Binding Groups');
+  });
+
+  it('expands Simple groups from the group row while keeping checkbox selection separate', async () => {
+    const source = await readEventWebviewSource();
+
+    expect(source).toContain('class="event-simple-group-row" data-action="em-expand-simple-group"');
+    expect(source).toContain('class="event-simple-check" data-action="em-toggle-simple-group"');
+  });
+
+  it('keeps Simple subscribe interactive while streaming and adds bindings without resetting results', async () => {
+    const source = await readEventWebviewSource();
+
+    expect(source).toContain("state.status === 'listening' || state.status === 'starting'");
+    expect(source).toContain('const selectableBindings = simpleSelectableBindings(group);');
+    expect(source).not.toContain("return streaming || topicStateFor(binding.index).status === 'listening';");
+    expect(source).not.toContain('if (group === null || streaming) return;');
+    expect(source).toContain("type: 'sapTools.events.startBinding'");
+    expect(source).toContain("type: 'sapTools.events.startListening', bindings: requests");
+    expect(source).toContain("const labelSuffix = streaming ? ' More' : '';");
   });
 
   it('prototype fixture includes repeated client binding groups for Simple subscribe', async () => {

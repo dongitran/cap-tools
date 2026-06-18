@@ -137,7 +137,12 @@ function buildSimpleBindingTree() {
 }
 
 function isSimpleBindingLocked(binding) {
-  return streaming || topicStateFor(binding.index).status === 'listening';
+  const state = topicStateFor(binding.index);
+  return state.status === 'listening' || state.status === 'starting';
+}
+
+function simpleSelectableBindings(group) {
+  return group.bindings.filter((binding) => !isSimpleBindingLocked(binding));
 }
 
 function selectedSimpleGroupCount() {
@@ -252,10 +257,6 @@ function btnSpinner() {
 }
 
 function renderHeader() {
-  const selectedCount = selectedBindingIndexes.size;
-  const meta = selectedCount === 0
-    ? `${bindings.length} available bindings`
-    : `${plural(selectedCount, 'selected binding', 'selected bindings')}`;
   return `
     <header class="event-header">
       <div class="event-header-main">
@@ -268,7 +269,6 @@ function renderHeader() {
           <button type="button" class="event-tab${activeTab === 'subscribe-advance' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="subscribe-advance" aria-selected="${activeTab === 'subscribe-advance'}">Subscribe Advance</button>
           <button type="button" class="event-tab${activeTab === 'publish' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="publish" aria-selected="${activeTab === 'publish'}">Publish</button>
         </div>
-        <div class="event-header-meta">${escapeHtml(meta)}</div>
       </div>
     </header>`;
 }
@@ -334,16 +334,17 @@ function renderSimpleGroup(group) {
   if (group.bindings.length === 1) {
     return renderSimpleBindingRow(group.bindings[0], 1);
   }
+  const selectableBindings = simpleSelectableBindings(group);
   const selectedCount = group.bindings.filter((binding) => selectedBindingIndexes.has(binding.index)).length;
   const expanded = simpleExpandedGroupKeys.has(group.key);
   const checked = selectedCount === group.bindings.length;
   const indeterminate = selectedCount > 0 && selectedCount < group.bindings.length;
   return `
     <div class="event-simple-group" role="treeitem" aria-expanded="${expanded}">
-      <div class="event-simple-group-row">
+      <div class="event-simple-group-row" data-action="em-expand-simple-group" data-group-key="${escapeHtml(group.key)}">
         <button type="button" class="event-simple-expander" data-action="em-expand-simple-group" data-group-key="${escapeHtml(group.key)}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${escapeHtml(group.label)}">${expanded ? '▾' : '▸'}</button>
         <label class="event-simple-check" data-action="em-toggle-simple-group" data-group-key="${escapeHtml(group.key)}">
-          <input type="checkbox" data-role="em-simple-group-checkbox" ${checked ? 'checked' : ''} ${indeterminate ? 'data-indeterminate="true"' : ''} ${streaming ? 'disabled' : ''} />
+          <input type="checkbox" data-role="em-simple-group-checkbox" ${checked ? 'checked' : ''} ${indeterminate ? 'data-indeterminate="true"' : ''} ${selectableBindings.length === 0 ? 'disabled' : ''} />
           <span class="event-binding-name">${escapeHtml(group.label)}</span>
         </label>
         <span class="event-binding-count">${selectedCount}/${group.bindings.length} selected</span>
@@ -367,16 +368,21 @@ function renderSimpleBindingRow(binding, level) {
 }
 
 function renderSimpleActions() {
-  if (streaming) {
-    return renderSimpleStreamingActions();
-  }
   const requests = collectSimpleStartRequests();
   const anyStarting = selectedBindings().some((binding) => topicStateFor(binding.index).status === 'starting');
+  const labelSuffix = streaming ? ' More' : '';
   const label = requests.length === 1 ? 'Binding' : 'Bindings';
+  const hint = streaming
+    ? 'Select another group or client binding to add it without clearing received messages.'
+    : 'Simple mode subscribes each selected binding to all topics in its namespace.';
+  const stopButton = streaming
+    ? `<button type="button" class="event-btn" data-action="em-stop" ${stoppingAll ? 'disabled' : ''}>${stoppingAll ? `${btnSpinner()} Stopping…` : 'Stop All'}</button>`
+    : '';
   return `
     <div class="event-config-actions">
-      <button type="button" class="event-btn event-btn-primary" data-action="em-start-simple" ${requests.length === 0 || anyStarting ? 'disabled' : ''}>${anyStarting ? `${btnSpinner()} Starting…` : `Start Listening To ${requests.length} ${label}`}</button>
-      <span class="event-hint">Simple mode subscribes each selected binding to all topics in its namespace.</span>
+      <button type="button" class="event-btn event-btn-primary" data-action="em-start-simple" ${requests.length === 0 || anyStarting || stoppingAll ? 'disabled' : ''}>${anyStarting ? `${btnSpinner()} Starting…` : `Start Listening To ${requests.length}${labelSuffix} ${label}`}</button>
+      ${stopButton}
+      <span class="event-hint">${escapeHtml(hint)}</span>
     </div>`;
 }
 
@@ -700,7 +706,7 @@ function collectStartRequests() {
 
 function collectSimpleStartRequests() {
   return selectedBindings()
-    .filter((binding) => topicStateFor(binding.index).status !== 'listening')
+    .filter((binding) => !isSimpleBindingLocked(binding))
     .map((binding) => ({ bindingIndex: binding.index, topics: [simpleWildcardFor(binding)] }));
 }
 
@@ -994,6 +1000,16 @@ function postStartSimple() {
     state.selectedTopics = new Set(request.topics);
   }
   render();
+  if (streaming) {
+    for (const request of requests) {
+      vscodeApi.postMessage({
+        type: 'sapTools.events.startBinding',
+        bindingIndex: request.bindingIndex,
+        topics: request.topics,
+      });
+    }
+    return;
+  }
   vscodeApi.postMessage({ type: 'sapTools.events.startListening', bindings: requests });
 }
 
@@ -1015,9 +1031,11 @@ function toggleSimpleBinding(index) {
 
 function toggleSimpleGroup(groupKey) {
   const group = findSimpleGroup(groupKey);
-  if (group === null || streaming) return;
-  const allSelected = group.bindings.every((binding) => selectedBindingIndexes.has(binding.index));
-  for (const binding of group.bindings) {
+  if (group === null) return;
+  const selectableBindings = simpleSelectableBindings(group);
+  if (selectableBindings.length === 0) return;
+  const allSelected = selectableBindings.every((binding) => selectedBindingIndexes.has(binding.index));
+  for (const binding of selectableBindings) {
     if (allSelected) removeSelectedBinding(binding.index);
     else selectSimpleBinding(binding.index);
   }

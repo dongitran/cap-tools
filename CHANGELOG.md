@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.126 (stable)
+- Fix: `Subscribe Simple` no longer locks all client binding selection after the first group starts listening. Live bindings remain checked and disabled, while non-live groups or individual bindings can still be selected and started.
+- Fix: Starting additional Simple bindings while a listener is already active now uses the existing per-binding live-add path instead of the initial batch-start path, so previously received messages and counts are preserved.
+- UI: Simple group rows now expand/collapse when clicking the row outside the checkbox/name area, making the tree easier to operate. The duplicate binding-count text under the Event viewer tabs was removed because the `Client Binding Groups` header already shows that state.
+
 ## 0.10.125 (stable)
 - Feature: Event Mesh viewer now opens on a new `Subscribe Simple` tab for fast all-topic listening across many client bindings. Bindings with the same base name and only a trailing numeric suffix are grouped into a compact tree, so a whole client group can be selected in one click while individual bindings remain selectable. Simple mode starts each selected binding with its namespace wildcard topic (`<namespace>/*`) and reuses the existing multi-binding listener backend.
 - UI: The previous subscribe workflow is preserved as `Subscribe Advance` for manual topic discovery, custom topics, add-topic while live, and per-binding controls. The Event viewer tabs now read `Subscribe Simple`, `Subscribe Advance`, and `Publish`.
