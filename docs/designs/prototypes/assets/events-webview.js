@@ -34,6 +34,7 @@ let publishContentType = 'application/json';
 let publishPayload = '';
 let publishResult = null; // { ok, status, topic, message }
 let publishSending = false;
+let stoppingAll = false;
 
 let messages = [];
 let totalReceived = 0;
@@ -193,6 +194,10 @@ function spinner() {
   return '<span class="event-spinner" aria-hidden="true"></span>';
 }
 
+function btnSpinner() {
+  return '<span class="event-btn-spinner" aria-hidden="true"></span>';
+}
+
 function renderHeader() {
   const selectedCount = selectedBindingIndexes.size;
   const meta = selectedCount === 0
@@ -273,7 +278,7 @@ function renderPublishForm() {
       </div>
       ${renderPublishResult()}
       <div class="event-config-actions">
-        <button type="button" class="event-btn event-btn-primary" data-action="ep-send" ${publishSending || !hasBindings || publishTopic.trim().length === 0 ? 'disabled' : ''}>${publishSending ? 'Sending…' : 'Publish Event'}</button>
+        <button type="button" class="event-btn event-btn-primary" data-action="ep-send" ${publishSending || !hasBindings || publishTopic.trim().length === 0 ? 'disabled' : ''}>${publishSending ? `${btnSpinner()} Sending…` : 'Publish Event'}</button>
         <span class="event-hint">Event is published directly to the topic via the REST Messaging API.</span>
       </div>
     </div>`;
@@ -337,7 +342,7 @@ function updatePublishSendButton() {
   if (!sendBtn) return;
   const hasBindings = bindings.length > 0;
   sendBtn.disabled = publishSending || !hasBindings || publishTopic.trim().length === 0;
-  sendBtn.textContent = publishSending ? 'Sending…' : 'Publish Event';
+  sendBtn.innerHTML = publishSending ? `${btnSpinner()} Sending…` : 'Publish Event';
 }
 
 function filterAvailableBindings() {
@@ -479,6 +484,12 @@ function topicRow(bindingIndex, state, topic, kind) {
 }
 
 function renderBindingTopicAction(binding, state) {
+  if (state.status === 'starting') {
+    return `<button type="button" class="event-btn event-btn-primary" disabled>${btnSpinner()} Starting…</button>`;
+  }
+  if (state.status === 'adding') {
+    return `<button type="button" class="event-btn event-btn-primary" disabled>${btnSpinner()} Adding…</button>`;
+  }
   if (state.status === 'listening') {
     const count = pendingTopics(state).length;
     return `<button type="button" class="event-btn event-btn-primary" data-action="em-add-topics" data-binding-index="${binding.index}" ${count === 0 ? 'disabled' : ''}>Listen To ${count} New ${count === 1 ? 'Topic' : 'Topics'}</button>`;
@@ -496,10 +507,24 @@ function pendingTopics(state) {
 function renderSetupActions() {
   if (selectedBindingIndexes.size === 0) return '';
   if (streaming) {
+    if (stoppingAll) {
+      return `
+        <div class="event-config-actions">
+          <button type="button" class="event-btn" disabled>${btnSpinner()} Stopping…</button>
+        </div>`;
+    }
     return `
       <div class="event-config-actions">
         <button type="button" class="event-btn" data-action="em-stop">Stop All</button>
-        <span class="event-hint">Topic lists are collapsed while results stream. Expand a binding to add topics.</span>
+        <span class="event-hint">Expand a binding to add more topics while listening.</span>
+      </div>`;
+  }
+  const anyStarting = selectedBindings().some((b) => topicStateFor(b.index).status === 'starting');
+  if (anyStarting) {
+    return `
+      <div class="event-config-actions">
+        <button type="button" class="event-btn event-btn-primary" disabled>${btnSpinner()} Starting…</button>
+        <span class="event-hint">Creating queues and subscribing to topics…</span>
       </div>`;
   }
   const requests = collectStartRequests();
@@ -664,6 +689,7 @@ function handleReady(data) {
   publishBindingIndex = null;
   publishResult = null;
   publishSending = false;
+  stoppingAll = false;
   phase = 'ready';
   if (bindings.length === 1) addSelectedBinding(bindings[0].index);
   render();
@@ -763,6 +789,7 @@ function handleStatus(data) {
 function handleStopped(data) {
   streaming = false;
   paused = false;
+  stoppingAll = false;
   stoppedReason = data.reason || 'user';
   for (const binding of selectedBindings()) {
     const state = topicStateFor(binding.index);
@@ -900,6 +927,8 @@ document.addEventListener('click', (event) => {
   } else if (action === 'em-add-topics') {
     postAddTopics(index);
   } else if (action === 'em-stop') {
+    stoppingAll = true;
+    render();
     if (vscodeApi) vscodeApi.postMessage({ type: 'sapTools.events.stopListening' });
   } else if (action === 'em-pause') {
     paused = !paused;

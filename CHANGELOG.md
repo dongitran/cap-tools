@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.124 (stable)
+- Fix: Binding cards no longer compress to near-zero height when a second binding is added while the first is already streaming. Root cause: `.event-setup` (`flex: 0 1 auto`) shrank under pressure from `.event-results` (`flex: 1 1 auto`), which propagated height constraints into the flex children and squashed each `.event-binding-card`. Fixed by setting `flex: 0 0 auto` on `.event-setup` (never shrinks) with `max-height: calc(100% - 180px)` for bounded scrolling, and `flex-shrink: 0` on `.event-binding-card` to prevent individual cards from being compressed by the flex algorithm.
+- UI: Buttons that trigger async operations now show an inline spinner while working: "Start Listening" spins as "Starting…" while queues are being created, "Stop All" spins as "Stopping…" while the session is shutting down, "Start This Binding" spins as "Starting…" for its individual binding, "Listen To N New Topics" spins as "Adding…" while new subscriptions are registered, and "Publish Event" spins as "Sending…" while the HTTP request is in flight.
+
 ## 0.10.123 (stable)
 - Fix: Topic panel no longer overflows the bottom of the panel when a binding card is expanded. Root cause: `.event-binding-list` had `max-height: 160px; overflow-y: auto;` which clipped the expanded card (header + topic table ≈ 316px) to 160px, making the topic table appear to fall off the bottom. Removed the max-height cap; the `.event-setup` section (`flex: 0 1 auto; overflow-y: auto`) handles section-level scrolling when the viewport is too small.
 

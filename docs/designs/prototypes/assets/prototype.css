@@ -4212,9 +4212,22 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .event-spinner {
+  .event-spinner,
+  .event-btn-spinner {
     animation: none;
   }
+}
+
+.event-btn-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  animation: event-spin 0.8s linear infinite;
 }
 
 /* --- single-screen layout --- */
@@ -4228,9 +4241,9 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .event-setup {
-  flex: 0 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
   overflow-y: auto;
+  max-height: calc(100% - 180px);
   border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   padding: 12px 16px;
 }
@@ -4444,6 +4457,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 /* --- selected binding rows --- */
 
 .event-binding-card {
+  flex-shrink: 0;
   border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.28));
   border-radius: 6px;
   overflow: hidden;
