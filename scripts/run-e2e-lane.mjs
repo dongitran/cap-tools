@@ -67,6 +67,7 @@ function validateRows(rows) {
 
   const lanes = new Set(rows.map((row) => row.lane));
   const keys = new Set();
+  const titles = rows.map((row) => row.title);
 
   for (const row of rows) {
     if (!Number.isFinite(row.seconds) || row.seconds <= 0) {
@@ -83,6 +84,16 @@ function validateRows(rows) {
     }
 
     keys.add(key);
+  }
+
+  for (const title of titles) {
+    const titleLower = title.toLowerCase();
+    const overlapping = titles.find(
+      (candidate) => candidate !== title && candidate.toLowerCase().includes(titleLower)
+    );
+    if (overlapping !== undefined) {
+      throw new Error(`Ambiguous E2E title substring: "${title}" also matches "${overlapping}"`);
+    }
   }
 
   for (let lane = 1; lane <= 12; lane += 1) {
@@ -128,7 +139,7 @@ async function main() {
   const laneRows = rows.filter((row) => row.lane === lane);
   const totalSeconds = laneRows.reduce((sum, row) => sum + row.seconds, 0);
   const specFiles = [...new Set(laneRows.map((row) => specPathFromSelector(row.selector)))];
-  const grepPattern = `^(?:${laneRows.map((row) => escapeRegExp(row.title)).join('|')})$`;
+  const grepPattern = `(?:${laneRows.map((row) => escapeRegExp(row.title)).join('|')})`;
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const args = ['exec', '--', 'playwright', 'test', '--grep', grepPattern, ...extraArgs, ...specFiles];
 

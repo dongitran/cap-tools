@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.140 (stable)
+- CI: Fixed the 12-lane E2E runner to grep test titles as substrings of Playwright's full titles while validating that the timing map has no ambiguous title overlaps.
+
 ## 0.10.139 (stable)
 - CI: Replaced the imbalanced 4-way Playwright native shard with 12 explicit E2E lanes based on measured GitHub Actions test timings, keeping each lane close to the same expected runtime.
 - CI: Added `e2e/shard-timings.md` as the durable timing and lane-assignment source, plus a lane-map validator used by GitHub Actions before E2E execution.
