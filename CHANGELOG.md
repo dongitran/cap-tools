@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.145 (stable)
+- Fix: Live Trace now starts Node Inspector more reliably by finding Node processes through `/proc` executable metadata instead of relying on the process thread name being `node`, then confirming Inspector readiness before treating startup as successful.
+- UI: Live Trace now uses one Start/Stop toggle, moves capture settings behind a gear menu, removes the secondary status line, and tightens the stream pause/resume control.
+
 ## 0.10.144 (stable)
 - UI: Request Runner now centers endpoint discovery loading in the left panel, restores the full-width endpoint search box with an inline search icon, keeps the auth gear beside the URL bar, and removes the endpoint count title.
 - UI: Live Trace now shows the current state as a compact badge beside the title and no longer renders idle status copy.

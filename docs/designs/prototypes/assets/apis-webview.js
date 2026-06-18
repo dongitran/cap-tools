@@ -36,6 +36,7 @@ let apiTracePaused = false;
 let apiTraceCaptureHeaders = false;
 let apiTraceCaptureRequestBody = false;
 let apiTraceCaptureResponseBody = false;
+let apiTraceSettingsOpen = false;
 
 const API_TRACE_EVENT_LIMIT = 1000;
 
@@ -646,12 +647,13 @@ function renderTraceDetailContent(event) {
 }
 
 function renderTraceDetail(event) {
+  const detailSubtitle = event === null ? '' : `<p>${escapeHtml(event.method)} ${escapeHtml(event.normalizedUrl)}</p>`;
   return `
     <aside class="api-trace-detail" aria-label="Request/Response detail">
       <div class="api-trace-detail-head">
         <div>
           <h3>Request/Response detail</h3>
-          <p>${event === null ? 'No request selected' : `${escapeHtml(event.method)} ${escapeHtml(event.normalizedUrl)}`}</p>
+          ${detailSubtitle}
         </div>
       </div>
       <div class="api-trace-detail-body">
@@ -670,7 +672,9 @@ function renderLiveTracePanel() {
   const isActive = isTraceActiveState(apiTraceState);
   const canStop = isTraceStoppableState(apiTraceState);
   const statusClass = apiTraceState === 'error' ? 'is-error' : isActive ? 'is-streaming' : 'is-idle';
-  const shouldShowStatusLine = apiTraceState !== 'idle' && apiTraceStatusMessage.trim().length > 0;
+  const traceToggleAction = canStop ? 'api-trace-stop' : 'api-trace-start';
+  const traceToggleLabel = canStop ? 'Stop Listening' : 'Start Listening';
+  const traceToggleClass = canStop ? 'secondary-action' : 'primary-action';
   panel.innerHTML = `
     <section class="api-trace-shell" aria-label="Live Trace HTTP inspector">
       <div class="api-trace-toolbar">
@@ -681,37 +685,33 @@ function renderLiveTracePanel() {
           </div>
         </div>
         <div class="api-trace-actions">
-          <button type="button" class="primary-action api-trace-action-btn" data-action="api-trace-start" ${isActive ? 'disabled' : ''}>Start Listening</button>
-          <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-stop" ${canStop ? '' : 'disabled'}>Stop Listening</button>
+          <button type="button" class="${traceToggleClass} api-trace-action-btn" data-action="${traceToggleAction}">${traceToggleLabel}</button>
           <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-clear">Clear</button>
+          <div class="api-trace-settings-container">
+            <button type="button" class="secondary-action api-trace-action-btn api-trace-settings-btn" data-action="api-trace-toggle-settings" aria-label="Trace settings" aria-expanded="${apiTraceSettingsOpen ? 'true' : 'false'}" title="Trace settings">&#9881;&#65039;</button>
+            <div class="api-trace-settings-popover${apiTraceSettingsOpen ? ' is-open' : ''}" aria-label="Trace settings">
+              <label class="api-trace-check"><input type="checkbox" checked disabled /> Method/path/status/time</label>
+              <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-headers" ${apiTraceCaptureHeaders ? 'checked' : ''} /> Headers</label>
+              <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-request-body" ${apiTraceCaptureRequestBody ? 'checked' : ''} /> Request body preview</label>
+              <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-response-body" ${apiTraceCaptureResponseBody ? 'checked' : ''} /> Response preview</label>
+            </div>
+          </div>
         </div>
       </div>
 
-      ${shouldShowStatusLine ? `<div class="api-trace-status-line ${statusClass}" role="status">${escapeHtml(apiTraceStatusMessage)}</div>` : ''}
-
-      <div class="api-trace-controls">
-        <fieldset class="api-trace-control-group">
-          <legend>Trace target</legend>
-          <label>
-            <span>Instance</span>
-            <select data-action="api-trace-instance" aria-label="Trace instance">
-              <option value="0">Instance 0</option>
-            </select>
-          </label>
-          <label>
-            <span>Mode</span>
-            <select aria-label="Trace mode" disabled>
-              <option>Runtime HTTP Trace</option>
-            </select>
-          </label>
-        </fieldset>
-        <fieldset class="api-trace-control-group">
-          <legend>Capture</legend>
-          <label class="api-trace-check"><input type="checkbox" checked disabled /> Method/path/status/time</label>
-          <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-headers" ${apiTraceCaptureHeaders ? 'checked' : ''} /> Headers</label>
-          <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-request-body" ${apiTraceCaptureRequestBody ? 'checked' : ''} /> Request body preview</label>
-          <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-response-body" ${apiTraceCaptureResponseBody ? 'checked' : ''} /> Response preview</label>
-        </fieldset>
+      <div class="api-trace-controls" aria-label="Trace target controls">
+        <label>
+          <span>Instance</span>
+          <select data-action="api-trace-instance" aria-label="Trace instance">
+            <option value="0">Instance 0</option>
+          </select>
+        </label>
+        <label>
+          <span>Mode</span>
+          <select aria-label="Trace mode" disabled>
+            <option>Runtime HTTP Trace</option>
+          </select>
+        </label>
       </div>
 
       <div class="api-trace-filters" aria-label="Live Trace filters">
@@ -749,7 +749,7 @@ function renderLiveTracePanel() {
         <section class="api-trace-stream" aria-label="Trace request stream">
           <div class="api-trace-stream-head">
             <h3>Trace request stream</h3>
-            <button type="button" class="secondary-action" data-action="api-trace-toggle-pause">${apiTracePaused ? 'Resume' : 'Pause'}</button>
+            <button type="button" class="api-trace-stream-toggle secondary-action" data-action="api-trace-toggle-pause">${apiTracePaused ? 'Resume' : 'Pause'}</button>
           </div>
           <div class="api-trace-list" role="list">
             ${renderTraceEventRows(events)}
@@ -1216,7 +1216,14 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  if (action === 'api-trace-toggle-settings') {
+    apiTraceSettingsOpen = !apiTraceSettingsOpen;
+    renderLiveTracePanel();
+    return;
+  }
+
   if (action === 'api-trace-start') {
+    apiTraceSettingsOpen = false;
     apiTraceState = 'preparingCli';
     apiTraceStatusMessage = 'Starting runtime HTTP trace session.';
     apiTraceRuntimeHookInstalled = false;
@@ -1250,6 +1257,7 @@ appElement.addEventListener('click', (event) => {
   }
 
   if (action === 'api-trace-stop') {
+    apiTraceSettingsOpen = false;
     apiTraceState = vscodeApi ? 'stopping' : 'stopped';
     apiTraceStatusMessage = vscodeApi
       ? 'Stopping local Inspector polling and tunnel.'
@@ -1269,6 +1277,7 @@ appElement.addEventListener('click', (event) => {
   }
 
   if (action === 'api-trace-clear') {
+    apiTraceSettingsOpen = false;
     apiTraceEvents = [];
     apiTraceSelectedEventId = '';
     if (vscodeApi) {
@@ -1596,6 +1605,7 @@ window.addEventListener('message', (event) => {
     apiTraceCaptureHeaders = false;
     apiTraceCaptureRequestBody = false;
     apiTraceCaptureResponseBody = false;
+    apiTraceSettingsOpen = false;
     apiParams = {
       $select: '',
       $filter: '',

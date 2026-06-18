@@ -590,6 +590,11 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('sapTools.apis.trace.clear');
     expect(source).toContain('apiTraceCaptureHeaders');
     expect(source).toContain('captureHeaders: apiTraceCaptureHeaders');
+    expect(source).toContain("traceToggleLabel = canStop ? 'Stop Listening' : 'Start Listening'");
+    expect(source).toContain('data-action="${traceToggleAction}"');
+    expect(source).toContain('data-action="api-trace-toggle-settings"');
+    expect(source).toContain('class="api-trace-settings-popover${apiTraceSettingsOpen');
+    expect(source).toContain('class="api-trace-stream-toggle secondary-action"');
     expect(source).toContain('if (apiTracePaused) return;');
     expect(source).toContain("apiTraceState = 'preparingCli'");
     expect(source).toContain('class="api-trace-title-row"');
@@ -597,6 +602,12 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('formatTraceStateLabel(apiTraceState)');
     expect(source).not.toContain('Ready to listen for runtime HTTP traffic.');
     expect(source).not.toContain('State: ${escapeHtml(apiTraceState)}');
+    expect(source).not.toContain('No request selected');
+    expect(source).not.toContain('api-trace-status-line');
+    expect(source).not.toContain('<legend>Trace target</legend>');
+    expect(source).not.toContain('<legend>Capture</legend>');
+    expect(source).not.toContain('data-action="api-trace-start" ${isActive ?');
+    expect(source).not.toContain('data-action="api-trace-stop" ${canStop ?');
     expect(source).not.toContain('Trace detail views');
     expect(source).not.toContain('api-trace-switch-detail');
     expect(source).not.toContain('Runtime HTTP Trace · Hook');
@@ -610,6 +621,9 @@ describe('prototype Log-API-Event workspace', () => {
     expect(styles).toContain('.api-trace-url-select');
     expect(styles).toContain('.api-trace-title-row');
     expect(styles).toContain('.api-trace-state-badge');
+    expect(styles).toContain('.api-trace-settings-container');
+    expect(styles).toContain('.api-trace-settings-popover');
+    expect(styles).toContain('.api-trace-stream-toggle');
   });
 
   it('keeps Live Trace UI free of inline event handlers and new inline trace styles', async () => {
