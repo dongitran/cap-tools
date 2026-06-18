@@ -25,6 +25,17 @@ function makeBinding(): EventMeshBinding {
   };
 }
 
+function makeBindingWithIndex(index: number): EventMeshBinding {
+  const binding = makeBinding();
+  return {
+    ...binding,
+    index,
+    name: `orders-messaging-${String(index)}`,
+    instanceName: `orders-messaging-${String(index)}`,
+    namespace: `demo/orders/api/${String(index)}`,
+  };
+}
+
 function createClient(queueNames: string[]): {
   readonly listQueueNames: ReturnType<typeof vi.fn>;
   readonly deleteQueue: ReturnType<typeof vi.fn>;
@@ -102,6 +113,30 @@ describe('EventMeshQueueCleaner', () => {
 
       expect(client.deleteQueue).not.toHaveBeenCalled();
       expect((await registry.listQueues()).map((entry) => entry.queueName)).toEqual([queueName]);
+    });
+  });
+
+  it('reaps stale debug queues across multiple bindings', async () => {
+    await withCleaner(async (cleaner) => {
+      const bindings = [makeBindingWithIndex(0), makeBindingWithIndex(1)];
+      const oldTimestamp = Date.UTC(2026, 5, 18, 1, 0, 0).toString(36);
+      const clients = new Map(
+        bindings.map((binding) => {
+          const queueName = `${binding.namespace}/saptools-debug/${oldTimestamp}-stale`;
+          return [binding.index, createClient([queueName])] as const;
+        })
+      );
+
+      await cleaner.reapForBindings(bindings, (binding) => {
+        const client = clients.get(binding.index);
+        if (client === undefined) {
+          throw new Error('missing client');
+        }
+        return client;
+      });
+
+      expect(clients.get(0)?.deleteQueue).toHaveBeenCalledTimes(1);
+      expect(clients.get(1)?.deleteQueue).toHaveBeenCalledTimes(1);
     });
   });
 });

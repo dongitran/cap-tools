@@ -54,6 +54,15 @@ export class EventMeshQueueCleaner {
     }
   }
 
+  async reapForBindings(
+    bindings: readonly EventMeshBinding[],
+    getClient: (binding: EventMeshBinding) => EventMeshQueueManagementClient
+  ): Promise<void> {
+    for (const binding of bindings) {
+      await this.reapForBinding(binding, getClient(binding));
+    }
+  }
+
   async reapForBinding(
     binding: EventMeshBinding,
     client: EventMeshQueueManagementClient

@@ -30,8 +30,6 @@ const EVENT_MESH_VIEW_TYPE = 'sapTools.eventMeshViewer';
 
 /** Coalesce incoming AMQP messages and post them to the webview at most this often. */
 const FLUSH_INTERVAL_MS = 250;
-/** Flush immediately once the buffer reaches this many messages (burst handling). */
-const FLUSH_THRESHOLD = 40;
 /** Max pending received events kept before they are flushed to the webview. */
 export const DEFAULT_EVENT_MESSAGE_BUFFER_LIMIT = 1000;
 /** Max payload bytes forwarded to the webview per message. */
@@ -326,7 +324,7 @@ export class EventMeshPanelManager implements vscode.Disposable {
       }
       session.bindings = bindings;
       this.log(`Found ${String(bindings.length)} Event Mesh binding(s) for ${session.appId}`);
-      await this.queueCleaner.reapRegisteredForBindings(bindings, (binding) =>
+      await this.queueCleaner.reapForBindings(bindings, (binding) =>
         this.getClient(session, binding)
       );
       this.post(session, 'sapTools.events.ready', {
@@ -573,11 +571,9 @@ export class EventMeshPanelManager implements vscode.Disposable {
       size: payload.size,
       headers: toSerializableEventMeshHeaders(normalized.headers),
     });
-    session.buffer = trimOutgoingEventBuffer(session.buffer);
-
-    if (session.buffer.length >= FLUSH_THRESHOLD) {
-      this.flush(session);
-      return;
+    const overflow = session.buffer.length - DEFAULT_EVENT_MESSAGE_BUFFER_LIMIT;
+    if (overflow > 0) {
+      session.buffer.splice(0, overflow);
     }
     session.flushTimer ??= setTimeout(() => {
       this.flush(session);

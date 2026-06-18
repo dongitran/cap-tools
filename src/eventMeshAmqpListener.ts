@@ -58,6 +58,8 @@ interface AmqpIncomingMessage {
 
 export type AmqpModuleLoader = () => AmqpModule;
 
+const DEFAULT_AMQP_STARTUP_TIMEOUT_MS = 30000;
+
 let cachedModule: AmqpModule | null = null;
 
 export function loadXbMsgAmqpModule(distDir: string = __dirname): AmqpModule {
@@ -199,75 +201,118 @@ export class EventMeshAmqpListener {
   private client: AmqpClient | null = null;
   private stream: AmqpStream | null = null;
   private closed = false;
+  private startupResolve: (() => void) | null = null;
+  private startupReject: ((error: Error) => void) | null = null;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly binding: EventMeshBinding,
     private readonly queueName: string,
     private readonly callbacks: EventMeshAmqpCallbacks,
-    private readonly moduleLoader: AmqpModuleLoader = loadXbMsgAmqpModule
+    private readonly moduleLoader: AmqpModuleLoader = loadXbMsgAmqpModule,
+    private readonly startupTimeoutMs: number = DEFAULT_AMQP_STARTUP_TIMEOUT_MS
   ) {}
 
   start(): Promise<void> {
+    if (this.startupReject !== null) {
+      return Promise.reject(new Error('Event Mesh AMQP listener is already starting.'));
+    }
     return new Promise<void>((resolve, reject) => {
-      const { Client } = this.moduleLoader();
-      const client = new Client(buildAmqpOptions(this.binding, this.queueName));
-      const receiver = client.receiver(`sap-tools-debug-${String(this.binding.index)}`);
-      const stream = receiver.attach(`queue:${this.queueName}`);
-      this.client = client;
-      this.stream = stream;
-
-      let settled = false;
-      const finishStartup = (): void => {
-        if (!settled) {
-          settled = true;
-          resolve();
-        }
-      };
-      const failStartup = (error: unknown): void => {
-        if (!settled) {
-          settled = true;
-          reject(toError(error));
-        }
-      };
-
-      stream.once('subscribed', () => {
-        finishStartup();
-      });
-      stream.once('error', (error: unknown) => {
-        failStartup(error);
-      });
-      stream.on('data', (message: unknown) => {
-        this.handleMessage(message);
-      });
-      stream.on('error', (error: unknown) => {
-        if (!this.closed) {
-          this.callbacks.onError(`stream error: ${describeError(error)}`);
-        }
-      });
-      stream.on('close', () => {
-        this.closed = true;
-      });
-
-      client.once('error', (error: unknown) => {
-        failStartup(error);
-      });
-      client.on('error', (error: unknown) => {
-        if (!this.closed) {
-          this.callbacks.onError(`client error: ${describeError(error)}`);
-        }
-      });
-      client.on('connected', (...args: unknown[]) => {
-        const peerInfo = args[1];
-        const peerDescription = isRecord(peerInfo) ? peerInfo['description'] : undefined;
-        const description = typeof peerDescription === 'string' ? peerDescription : '';
-        this.callbacks.onConnected?.(description);
-      });
-      client.on('disconnected', () => {
-        this.closed = true;
-      });
-
-      client.connect();
+      try {
+        const { Client } = this.moduleLoader();
+        const client = new Client(buildAmqpOptions(this.binding, this.queueName));
+        const stream = client
+          .receiver(`sap-tools-debug-${String(this.binding.index)}`)
+          .attach(`queue:${this.queueName}`);
+        this.client = client;
+        this.stream = stream;
+        this.closed = false;
+        this.startupResolve = resolve;
+        this.startupReject = reject;
+        this.scheduleStartupTimeout();
+        this.attachHandlers(client, stream);
+        client.connect();
+      } catch (error) {
+        this.rejectStartup(error, reject);
+      }
     });
+  }
+
+  private attachHandlers(client: AmqpClient, stream: AmqpStream): void {
+    stream.once('subscribed', () => { this.settleStartup(); });
+    stream.once('error', (error: unknown) => { this.rejectStartup(error); });
+    stream.on('data', (message: unknown) => { this.handleMessage(message); });
+    stream.on('error', (error: unknown) => {
+      if (!this.closed) this.callbacks.onError(`stream error: ${describeError(error)}`);
+    });
+    stream.on('close', () => {
+      const wasStarting = this.startupReject !== null;
+      this.closed = true;
+      if (wasStarting) {
+        this.settleStartup(
+          new Error(`Event Mesh AMQP stream closed before subscription became active for queue ${this.queueName}.`)
+        );
+      }
+    });
+    client.once('error', (error: unknown) => { this.rejectStartup(error); });
+    client.on('error', (error: unknown) => {
+      if (!this.closed) this.callbacks.onError(`client error: ${describeError(error)}`);
+    });
+    client.on('connected', (...args: unknown[]) => { this.notifyConnected(args); });
+    client.on('disconnected', () => {
+      const wasStarting = this.startupReject !== null;
+      this.closed = true;
+      if (wasStarting) {
+        this.settleStartup(
+          new Error(`Event Mesh AMQP client disconnected before subscription became active for queue ${this.queueName}.`)
+        );
+      }
+    });
+  }
+
+  private notifyConnected(args: readonly unknown[]): void {
+    const peerInfo = args[1];
+    const peerDescription = isRecord(peerInfo) ? peerInfo['description'] : undefined;
+    const description = typeof peerDescription === 'string' ? peerDescription : '';
+    this.callbacks.onConnected?.(description);
+  }
+
+  private scheduleStartupTimeout(): void {
+    if (this.startupTimeoutMs <= 0) return;
+    this.startupTimer = setTimeout(() => {
+      this.settleStartup(
+        new Error(
+          `Event Mesh AMQP subscription timed out after ${String(this.startupTimeoutMs)} ms for queue ${this.queueName}.`
+        )
+      );
+      this.closeTransport();
+    }, this.startupTimeoutMs);
+  }
+
+  private rejectStartup(error: unknown, fallbackReject?: (error: Error) => void): void {
+    const normalized = toError(error);
+    if (this.startupReject !== null) {
+      this.settleStartup(normalized);
+      return;
+    }
+    fallbackReject?.(normalized);
+  }
+
+  private settleStartup(error?: Error): void {
+    const resolve = this.startupResolve;
+    const reject = this.startupReject;
+    if (resolve === null || reject === null) return;
+    this.clearStartupTimer();
+    this.startupResolve = null;
+    this.startupReject = null;
+    if (error === undefined) resolve();
+    else reject(error);
+  }
+
+  private clearStartupTimer(): void {
+    if (this.startupTimer === null) return;
+    clearTimeout(this.startupTimer);
+    this.startupTimer = null;
   }
 
   private handleMessage(raw: unknown): void {
@@ -288,6 +333,15 @@ export class EventMeshAmqpListener {
 
   stop(): void {
     this.closed = true;
+    if (this.startupReject !== null) {
+      this.settleStartup(
+        new Error(`Event Mesh AMQP listener stopped before subscription became active for queue ${this.queueName}.`)
+      );
+    }
+    this.closeTransport();
+  }
+
+  private closeTransport(): void {
     try {
       this.stream?.receiver?.().detach();
     } catch {

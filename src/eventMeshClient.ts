@@ -10,6 +10,7 @@ import type { EventMeshBinding, EventMeshOAuth } from './eventMeshBindings';
  */
 
 const MANAGEMENT_PREFIX = '/hub/rest/api/v1/management/messaging';
+const DEFAULT_MANAGEMENT_TIMEOUT_MS = 15000;
 
 export type FetchFn = typeof fetch;
 
@@ -56,6 +57,13 @@ interface ManagementResponse {
   readonly body: string;
 }
 
+class EventMeshRequestTimeoutError extends Error {
+  constructor(label: string, timeoutMs: number) {
+    super(`${label} timed out after ${String(timeoutMs)} ms.`);
+    this.name = 'EventMeshRequestTimeoutError';
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -68,6 +76,44 @@ function sanitizeUrl(url: URL): string {
   const clone = new URL(url.toString());
   clone.search = '';
   return clone.toString();
+}
+
+async function withTimeout<T>(
+  label: string,
+  timeoutMs: number,
+  parentSignal: AbortSignal | undefined,
+  work: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  if (parentSignal?.aborted === true) {
+    throw new Error(`${label} was aborted.`);
+  }
+  if (timeoutMs <= 0) {
+    return work(parentSignal ?? new AbortController().signal);
+  }
+
+  const controller = new AbortController();
+  let rejectAbort: (error: Error) => void = () => undefined;
+  const abortPromise = new Promise<never>((_resolve, reject) => {
+    rejectAbort = reject;
+  });
+  const abortFromParent = (): void => {
+    rejectAbort(new Error(`${label} was aborted.`));
+    controller.abort(parentSignal?.reason);
+  };
+  parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+
+  const timeout = setTimeout(() => {
+    const error = new EventMeshRequestTimeoutError(label, timeoutMs);
+    rejectAbort(error);
+    controller.abort(error);
+  }, timeoutMs);
+
+  try {
+    return await Promise.race([work(controller.signal), abortPromise]);
+  } finally {
+    clearTimeout(timeout);
+    parentSignal?.removeEventListener('abort', abortFromParent);
+  }
 }
 
 /**
@@ -156,7 +202,8 @@ export class EventMeshManagementClient {
   constructor(
     private readonly binding: EventMeshBinding,
     private readonly fetchImpl: FetchFn = fetch,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly requestTimeoutMs: number = DEFAULT_MANAGEMENT_TIMEOUT_MS
   ) {}
 
   async createQueue(
@@ -247,23 +294,30 @@ export class EventMeshManagementClient {
     path: string,
     options: ManagementRequestOptions
   ): Promise<ManagementResponse> {
-    const url = `${this.binding.management.uri}${MANAGEMENT_PREFIX}${path}`;
-    const token = await this.getToken(options.signal);
-    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
-    if (options.body !== undefined) {
-      headers['content-type'] = 'application/json';
-    }
-    const response = await this.fetchImpl(url, {
-      method: options.method,
-      headers,
-      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
-      ...(options.signal !== undefined ? { signal: options.signal } : {}),
-    });
-    const body = await response.text();
-    if (!options.expected.includes(response.status)) {
-      throw new EventMeshManagementError(options.method, url, response.status, body);
-    }
-    return { status: response.status, body };
+    return withTimeout(
+      `${options.method} Event Mesh management request`,
+      this.requestTimeoutMs,
+      options.signal,
+      async (signal) => {
+        const url = `${this.binding.management.uri}${MANAGEMENT_PREFIX}${path}`;
+        const token = await this.getToken(signal);
+        const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+        if (options.body !== undefined) {
+          headers['content-type'] = 'application/json';
+        }
+        const response = await this.fetchImpl(url, {
+          method: options.method,
+          headers,
+          ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+          signal,
+        });
+        const body = await response.text();
+        if (!options.expected.includes(response.status)) {
+          throw new EventMeshManagementError(options.method, url, response.status, body);
+        }
+        return { status: response.status, body };
+      }
+    );
   }
 
   private async getToken(signal?: AbortSignal): Promise<string> {

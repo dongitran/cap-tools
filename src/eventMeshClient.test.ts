@@ -171,4 +171,37 @@ describe('EventMeshManagementClient', () => {
 
     await expect(client.listQueueNames()).rejects.toThrow(/HTTP 500/);
   });
+
+  it('times out management requests that do not settle', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchFn = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
+        if (url.includes('/oauth/token')) {
+          return Promise.resolve(jsonResponse(200, TOKEN_BODY));
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal instanceof AbortSignal) {
+            signal.addEventListener('abort', () => {
+              reject(new Error('fetch aborted'));
+            }, { once: true });
+          }
+        });
+      });
+      const client = new EventMeshManagementClient(
+        makeBinding(),
+        fetchFn as unknown as FetchFn,
+        () => 1000,
+        25
+      );
+
+      const request = client.listQueueNames();
+      const assertion = expect(request).rejects.toThrow(/timed out/i);
+      await vi.advanceTimersByTimeAsync(25);
+
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

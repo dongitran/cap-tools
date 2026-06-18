@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.141 (stable)
+- Hardening: Event Mesh management API calls now have bounded timeouts, and AMQP listener startup now fails fast on timeout, early close/disconnect, or Stop before subscription activation instead of hanging.
+- Hardening: Event Mesh viewer initialization now stale-scans debug queues for each binding, while received-message batches are coalesced on a timer and capped to reduce webview IPC pressure during high-volume streams.
+
 ## 0.10.140 (stable)
 - CI: Fixed the 12-lane E2E runner to grep test titles as substrings of Playwright's full titles while validating that the timing map has no ambiguous title overlaps.
 
