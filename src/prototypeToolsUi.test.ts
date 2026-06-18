@@ -192,6 +192,15 @@ describe('prototype Log-API-Event workspace', () => {
     expect(values).toEqual(values.map(() => '0'));
   });
 
+  it('uses a visibly larger Simple group expander than the compact default icon size', async () => {
+    const source = await readEventStylesSource();
+
+    expect(source).toMatch(/\.event-simple-group-row\s*\{[\s\S]*?grid-template-columns:\s*38px minmax\(140px, 1fr\) max-content;/);
+    expect(source).toMatch(/\.event-simple-expander\s*\{[\s\S]*?width:\s*32px;/);
+    expect(source).toMatch(/\.event-simple-expander\s*\{[\s\S]*?height:\s*32px;/);
+    expect(source).toMatch(/\.event-simple-expander\s*\{[\s\S]*?font-size:\s*18px;/);
+  });
+
   it('includes Simple, Advance, and Publish tabs with Simple as the default', async () => {
     const source = await readEventWebviewSource();
 
@@ -230,6 +239,62 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('class="event-simple-check" data-action="em-toggle-simple-group"');
   });
 
+  it('guards Simple group expand/collapse against rapid double toggles', async () => {
+    const source = await readEventWebviewSource();
+    const toggleMatch = /function toggleSimpleGroupExpansion\(groupKey\) \{([\s\S]*?)\n\}/.exec(source);
+    const readyMatch = /function handleReady\(data\) \{([\s\S]*?)\n\}/.exec(source);
+
+    expect(source).toContain('const SIMPLE_GROUP_EXPAND_COOLDOWN_MS = 300;');
+    expect(source).toContain('const simpleGroupExpansionTimestamps = new Map();');
+    expect(source).toContain('function canToggleSimpleGroupExpansion(groupKey)');
+    expect(toggleMatch).not.toBeNull();
+    expect(toggleMatch?.[1] ?? '').toContain('canToggleSimpleGroupExpansion(groupKey)');
+    expect(readyMatch).not.toBeNull();
+    expect(readyMatch?.[1] ?? '').toContain('simpleGroupExpansionTimestamps.clear()');
+  });
+
+  it('keeps Client Binding Groups from becoming a nested scroll region at low panel heights', async () => {
+    const styles = await readEventStylesSource();
+    const shellMatch = /\.event-shell\s*\{([\s\S]*?)\n\}/.exec(styles);
+    const setupMatch = /\.event-setup\s*\{([\s\S]*?)\n\}/.exec(styles);
+    const treeMatch = /\.event-simple-tree\s*\{([\s\S]*?)\n\}/.exec(styles);
+
+    expect(shellMatch).not.toBeNull();
+    expect(shellMatch?.[1] ?? '').toContain('overflow-y: auto');
+    expect(shellMatch?.[1] ?? '').not.toContain('overflow: hidden');
+
+    expect(setupMatch).not.toBeNull();
+    expect(setupMatch?.[1] ?? '').not.toContain('overflow-y');
+    expect(setupMatch?.[1] ?? '').not.toContain('max-height');
+
+    expect(treeMatch).not.toBeNull();
+    expect(treeMatch?.[1] ?? '').not.toContain('overflow-y');
+    expect(treeMatch?.[1] ?? '').not.toContain('max-height');
+  });
+
+  it('keeps the received message list usable when the whole panel scrolls at low heights', async () => {
+    const styles = await readEventStylesSource();
+    const resultsMatch = /\.event-results\s*\{([\s\S]*?)\n\}/.exec(styles);
+    const listMatch = /\.event-list\s*\{([\s\S]*?)\n\}/.exec(styles);
+
+    expect(resultsMatch).not.toBeNull();
+    expect(resultsMatch?.[1] ?? '').toContain('flex: 1 0 auto');
+
+    expect(listMatch).not.toBeNull();
+    expect(listMatch?.[1] ?? '').toContain('min-height: 180px');
+    expect(listMatch?.[1] ?? '').toContain('overflow: auto');
+  });
+
+  it('keeps blank group-row space available for expand/collapse instead of selection', async () => {
+    const styles = await readEventStylesSource();
+    const checkMatch = /\.event-simple-check\s*\{([\s\S]*?)\n\}/.exec(styles);
+
+    expect(checkMatch).not.toBeNull();
+    const body = checkMatch?.[1] ?? '';
+    expect(body).toContain('justify-self: start');
+    expect(body).toContain('max-width: 100%');
+  });
+
   it('keeps Simple subscribe interactive while streaming and adds bindings without resetting results', async () => {
     const source = await readEventWebviewSource();
 
@@ -240,6 +305,54 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain("type: 'sapTools.events.startBinding'");
     expect(source).toContain("type: 'sapTools.events.startListening', bindings: requests");
     expect(source).toContain("const labelSuffix = streaming ? ' More' : '';");
+  });
+
+  it('uses a compact result binding dropdown instead of one filter tab per live binding', async () => {
+    const source = await readEventWebviewSource();
+    const styles = await readEventStylesSource();
+
+    expect(source).toContain('renderBindingFilterSelect(liveBindings)');
+    expect(source).toContain('data-role="em-binding-filter-select"');
+    expect(source).toContain('All bindings');
+    expect(source).not.toContain('renderBindingFilters()');
+    expect(source).not.toContain('data-action="em-filter-binding"');
+    expect(source).not.toContain('class="event-filter-row" role="group"');
+    const spacerIndex = source.indexOf('<span class="event-toolbar-spacer"></span>');
+    const filterIndex = source.indexOf('${renderBindingFilterSelect(liveBindings)}');
+    const pauseIndex = source.indexOf('data-action="em-pause"');
+    expect(spacerIndex).toBeGreaterThan(-1);
+    expect(filterIndex).toBeGreaterThan(spacerIndex);
+    expect(pauseIndex).toBeGreaterThan(filterIndex);
+    expect(styles).toMatch(/\.event-result-filter\s*\{[\s\S]*?max-width:\s*280px;/);
+    expect(styles).toMatch(/\.event-result-filter\s*\{[\s\S]*?margin-right:\s*2px;/);
+    expect(styles).toMatch(/\.event-filter-select\s*\{[\s\S]*?width:\s*100%;/);
+    expect(styles).not.toContain('.event-filter-row');
+  });
+
+  it('preserves received messages when a new startListening batch succeeds', async () => {
+    const source = await readEventWebviewSource();
+    const match = /function handleListening\(data\) \{([\s\S]*?)\n\}/.exec(source);
+
+    expect(match).not.toBeNull();
+    const body = match?.[1] ?? '';
+    expect(body).not.toContain('messages = []');
+    expect(body).not.toContain('totalReceived = 0');
+    expect(body).not.toContain('expandedSeqs.clear()');
+    expect(source).toContain("} else if (action === 'em-clear') {");
+    expect(source).toContain('messages = []');
+    expect(source).toContain('totalReceived = 0');
+  });
+
+  it('does not cap or truncate binding badges in received message rows', async () => {
+    const styles = await readEventStylesSource();
+    const match = /\.event-binding-badge\s*\{([\s\S]*?)\n\}/.exec(styles);
+
+    expect(match).not.toBeNull();
+    const body = match?.[1] ?? '';
+    expect(body).not.toContain('max-width');
+    expect(body).not.toContain('overflow: hidden');
+    expect(body).not.toContain('text-overflow');
+    expect(body).toContain('white-space: nowrap');
   });
 
   it('prototype fixture includes repeated client binding groups for Simple subscribe', async () => {

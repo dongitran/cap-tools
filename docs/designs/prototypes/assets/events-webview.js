@@ -8,6 +8,7 @@ const appId = (typeof window !== 'undefined' && window.eventMeshAppId) || 'demo-
 
 const MAX_MESSAGES = 1000; // ring-buffer cap held in memory
 const MAX_DOM_ROWS = 300; // rows actually painted (newest first)
+const SIMPLE_GROUP_EXPAND_COOLDOWN_MS = 300;
 
 let phase = 'loading'; // loading | ready | error
 let errorMessage = '';
@@ -22,6 +23,7 @@ const topicsByBinding = new Map();
 let activeBindingIndex = null;
 let expandedBindingIndex = null;
 const simpleExpandedGroupKeys = new Set();
+const simpleGroupExpansionTimestamps = new Map();
 let addBindingOpen = false;
 let bindingSearch = '';
 let streaming = false;
@@ -713,6 +715,8 @@ function collectSimpleStartRequests() {
 function renderResults() {
   const stateClass = streaming ? 'is-live' : 'is-stopped';
   const stateLabel = streaming ? 'Listening' : 'Stopped';
+  const liveBindings = listeningBindings();
+  normalizeBindingFilterIndex(liveBindings);
   const banner = !streaming && stoppedReason
     ? `<div class="event-banner">${escapeHtml(REASON_TEXT[stoppedReason] || 'Listening stopped.')}</div>`
     : '';
@@ -721,10 +725,10 @@ function renderResults() {
       <span class="event-status-pill ${stateClass}">${stateLabel}</span>
       <span class="event-result-summary">${escapeHtml(resultSummary())}</span>
       <span class="event-toolbar-spacer"></span>
+      ${renderBindingFilterSelect(liveBindings)}
       <button type="button" class="event-btn event-btn-compact" data-action="em-pause" ${streaming ? '' : 'disabled'}>${paused ? 'Resume' : 'Pause'}</button>
       <button type="button" class="event-btn event-btn-compact" data-action="em-clear">Clear</button>
     </div>
-    ${renderBindingFilters()}
     ${banner}
     ${statusLine ? `<div class="event-statusline">${escapeHtml(statusLine)}</div>` : ''}
     <div class="event-list" id="event-list"></div>`;
@@ -734,14 +738,29 @@ function resultSummary() {
   return `${plural(liveBindingCount(), 'binding', 'bindings')} - ${plural(liveTopicCount(), 'topic', 'topics')} - ${totalReceived} received`;
 }
 
-function renderBindingFilters() {
-  const live = selectedBindings().filter((binding) => topicStateFor(binding.index).status === 'listening');
-  if (live.length === 0) return '';
+function listeningBindings() {
+  return selectedBindings().filter((binding) => topicStateFor(binding.index).status === 'listening');
+}
+
+function normalizeBindingFilterIndex(liveBindings) {
+  if (bindingFilterIndex === null) return;
+  if (!liveBindings.some((binding) => binding.index === bindingFilterIndex)) {
+    bindingFilterIndex = null;
+  }
+}
+
+function renderBindingFilterSelect(liveBindings) {
+  if (liveBindings.length === 0) return '';
+  const options = liveBindings
+    .map((binding) => `<option value="${binding.index}" ${bindingFilterIndex === binding.index ? 'selected' : ''}>${escapeHtml(binding.name)}</option>`)
+    .join('');
   return `
-    <div class="event-filter-row" role="group" aria-label="Filter events by binding">
-      <button type="button" class="event-filter${bindingFilterIndex === null ? ' is-active' : ''}" data-action="em-filter-binding" data-binding-index="">All</button>
-      ${live.map((binding) => `<button type="button" class="event-filter${bindingFilterIndex === binding.index ? ' is-active' : ''}" data-action="em-filter-binding" data-binding-index="${binding.index}">${escapeHtml(binding.name)}</button>`).join('')}
-    </div>`;
+    <label class="event-result-filter">
+      <select class="event-input event-select event-filter-select" data-role="em-binding-filter-select" aria-label="Filter messages by binding">
+        <option value="" ${bindingFilterIndex === null ? 'selected' : ''}>All bindings</option>
+        ${options}
+      </select>
+    </label>`;
 }
 
 function scheduleMessageRender() {
@@ -852,6 +871,7 @@ function handleReady(data) {
   activeBindingIndex = null;
   expandedBindingIndex = null;
   simpleExpandedGroupKeys.clear();
+  simpleGroupExpansionTimestamps.clear();
   addBindingOpen = bindings.length > 1;
   bindingSearch = '';
   startError = '';
@@ -894,9 +914,6 @@ function handleListening(data) {
   paused = false;
   stoppedReason = '';
   statusLine = '';
-  messages = [];
-  totalReceived = 0;
-  expandedSeqs.clear();
   expandedBindingIndex = null;
   const summaries = Array.isArray(data.bindings) ? data.bindings : [data];
   for (const summary of summaries) applyListeningSummary(summary);
@@ -1043,7 +1060,17 @@ function toggleSimpleGroup(groupKey) {
   render();
 }
 
+function canToggleSimpleGroupExpansion(groupKey) {
+  const now = Date.now();
+  const previous = simpleGroupExpansionTimestamps.get(groupKey) || 0;
+  if (now - previous < SIMPLE_GROUP_EXPAND_COOLDOWN_MS) return false;
+  simpleGroupExpansionTimestamps.set(groupKey, now);
+  return true;
+}
+
 function toggleSimpleGroupExpansion(groupKey) {
+  const group = findSimpleGroup(groupKey);
+  if (group === null || !canToggleSimpleGroupExpansion(groupKey)) return;
   if (simpleExpandedGroupKeys.has(groupKey)) {
     simpleExpandedGroupKeys.delete(groupKey);
   } else {
@@ -1179,9 +1206,6 @@ document.addEventListener('click', (event) => {
     totalReceived = 0;
     expandedSeqs.clear();
     renderMessages();
-  } else if (action === 'em-filter-binding') {
-    bindingFilterIndex = actionEl.dataset.bindingIndex === '' ? null : index;
-    renderMessages();
   } else if (action === 'em-toggle-expand') {
     const seq = Number(actionEl.dataset.seq);
     if (expandedSeqs.has(seq)) expandedSeqs.delete(seq);
@@ -1211,6 +1235,9 @@ document.addEventListener('change', (event) => {
     publishBindingIndex = bindingId(el.value);
   } else if (el.matches('[data-role="ep-content-type-select"]')) {
     publishContentType = el.value || 'application/json';
+  } else if (el.matches('[data-role="em-binding-filter-select"]')) {
+    bindingFilterIndex = el.value === '' ? null : bindingId(el.value);
+    renderMessages();
   } else if (el.matches('[data-role="em-topic-checkbox"]')) {
     const index = bindingId(el.dataset.bindingIndex);
     const topic = el.dataset.topic;

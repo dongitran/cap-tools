@@ -98,20 +98,19 @@
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .event-setup {
   flex: 0 0 auto;
-  overflow-y: auto;
-  max-height: calc(100% - 180px);
   border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   padding: 12px 16px;
 }
 
 .event-results {
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
 }
@@ -120,7 +119,7 @@
 .event-results-head,
 .event-picker-head,
 .event-config-actions,
-.event-filter-row {
+.event-result-filter {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -175,7 +174,6 @@
 .event-icon-btn,
 .event-binding-main,
 .event-binding-option,
-.event-filter,
 .event-item-head {
   font: inherit;
   cursor: pointer;
@@ -197,7 +195,6 @@
 .event-icon-btn:hover,
 .event-binding-main:hover,
 .event-binding-option:hover,
-.event-filter:hover,
 .event-item-head:hover {
   background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.16));
 }
@@ -215,14 +212,12 @@
 .event-icon-btn:focus-visible,
 .event-binding-main:focus-visible,
 .event-binding-option:focus-visible,
-.event-filter:focus-visible,
 .event-item-head:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
 }
 
-.event-btn:disabled,
-.event-filter:disabled {
+.event-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -327,8 +322,6 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 320px;
-  overflow-y: auto;
 }
 
 .event-simple-group,
@@ -349,23 +342,43 @@
 }
 
 .event-simple-group-row {
-  grid-template-columns: 26px minmax(140px, 1fr) max-content;
+  grid-template-columns: 38px minmax(140px, 1fr) max-content;
   cursor: pointer;
 }
 
 .event-simple-expander {
-  border: 0;
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.28));
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.14));
+  color: var(--vscode-foreground);
   cursor: pointer;
   font: inherit;
-  padding: 2px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+}
+
+.event-simple-expander:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.16));
+}
+
+.event-simple-expander:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
 }
 
 .event-simple-check {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-self: start;
+  max-width: 100%;
   min-width: 0;
   cursor: pointer;
 }
@@ -598,26 +611,19 @@
   color: var(--vscode-descriptionForeground);
 }
 
-.event-filter-row {
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.18));
-  overflow-x: auto;
+.event-result-filter {
+  flex: 0 1 220px;
+  min-width: 150px;
+  max-width: 280px;
+  margin-right: 2px;
 }
 
-.event-filter {
-  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.3));
-  border-radius: 999px;
-  background: transparent;
-  color: var(--vscode-foreground);
-  padding: 2px 8px;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
-.event-filter.is-active {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border-color: var(--vscode-button-background);
+.event-filter-select {
+  width: 100%;
+  min-height: 24px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  font-size: 12px;
 }
 
 .event-banner {
@@ -636,6 +642,7 @@
 
 .event-list {
   flex: 1 1 auto;
+  min-height: 180px;
   overflow: auto;
   padding: 4px 0;
 }
@@ -679,9 +686,6 @@
 
 .event-binding-badge {
   flex: 0 0 auto;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   border-radius: 999px;
   padding: 1px 7px;

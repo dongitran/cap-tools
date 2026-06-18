@@ -1,5 +1,12 @@
 # SAP Tools Extension Changelog
 
+## 0.10.127 (stable)
+- UI: Event Mesh `Subscribe Simple` group expand/collapse controls now have a larger visible button and ignore rapid repeat clicks for 300ms, preventing accidental double toggles.
+- UI: Clicking blank space in a Simple group row now expands/collapses the group reliably; only the checkbox/name label toggles group selection.
+- UI: Event Mesh result filtering now uses a compact binding dropdown beside the `Pause` control instead of rendering one filter tab per live binding.
+- Fix: Starting another Simple listen batch no longer clears previously received messages; only the explicit `Clear` action resets message history.
+- UI: Message rows no longer cap the binding badge width, and low-height panels keep a minimum message-list area while scrolling the whole panel instead of the `Client Binding Groups` section.
+
 ## 0.10.126 (stable)
 - Fix: `Subscribe Simple` no longer locks all client binding selection after the first group starts listening. Live bindings remain checked and disabled, while non-live groups or individual bindings can still be selected and started.
 - Fix: Starting additional Simple bindings while a listener is already active now uses the existing per-binding live-add path instead of the initial batch-start path, so previously received messages and counts are preserved.
