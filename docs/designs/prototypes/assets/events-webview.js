@@ -415,10 +415,6 @@ function renderTopicPanel(binding, state) {
   }
   return `
     <div class="event-topic-panel" data-binding-index="${binding.index}">
-      <div class="event-topic-panel-head">
-        <span>Topics For ${escapeHtml(binding.name)}</span>
-        ${state.queueName ? `<code title="${escapeHtml(state.queueName)}">${escapeHtml(state.queueName)}</code>` : ''}
-      </div>
       ${renderTopicChooser(binding, state)}
       ${renderBindingTopicAction(binding, state)}
     </div>`;

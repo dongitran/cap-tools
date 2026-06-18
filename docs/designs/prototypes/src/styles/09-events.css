@@ -95,7 +95,9 @@
 }
 
 .event-setup {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   padding: 12px 16px;
 }
@@ -111,7 +113,6 @@
 .event-results-head,
 .event-picker-head,
 .event-config-actions,
-.event-topic-panel-head,
 .event-filter-row {
   display: flex;
   align-items: center;
@@ -405,22 +406,6 @@
   border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.18));
 }
 
-.event-topic-panel-head {
-  justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.event-topic-panel-head code {
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 11px;
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 52%;
-}
 
 .event-topics {
   display: flex;

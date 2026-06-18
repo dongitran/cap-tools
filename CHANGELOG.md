@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.122 (stable)
+- Fix: The expanded topic panel no longer overflows below the bottom of the panel. Changed `.event-setup` from `flex: 0 0 auto` (never shrinks) to `flex: 0 1 auto` with `min-height: 0` and `overflow-y: auto`, so the section scrolls internally when viewport height is insufficient rather than extending past the panel boundary. No hard-coded max-height percentage is used.
+- UI: Removed the "Topics For [binding name]" title row from the expanded topic panel.
+
 ## 0.10.121 (stable)
 - UI: The "Selected Bindings" setup section no longer has a `max-height: 48%` cap, so it grows naturally with its content and does not scroll as a whole when the binding picker is open. The inner binding results list and selected bindings list retain their own individual max-heights for contained scrolling.
 
