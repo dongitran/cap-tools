@@ -21,6 +21,9 @@ const cfClientMocks = vi.hoisted(() => ({
   fetchCfOauthTokenFromTarget: vi.fn(),
   fetchRemoteCdsServicesFromTarget: vi.fn(),
   fetchXsuaaTokenFromTarget: vi.fn(),
+  prepareCfCliSession: vi.fn(),
+  runCfSshCommandFromTarget: vi.fn(),
+  spawnCfSshPortForward: vi.fn(),
 }));
 
 vi.mock('./cfClient.js', () => cfClientMocks);
@@ -218,7 +221,7 @@ describe('ApisExplorerPanelManager', () => {
         },
       },
     });
-    manager.stopAllTraces('scope-changed');
+    await manager.stopAllTraces('scope-changed');
 
     expect(panel.dispose).not.toHaveBeenCalled();
     expect(panel.webview.postMessage).toHaveBeenCalledWith(

@@ -66,18 +66,20 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       this.disposables.pop()?.dispose();
     }
     for (const session of this.sessions.values()) {
-      this.stopTraceSession(session, 'shutdown', true);
+      void this.stopTraceSession(session, 'shutdown', true);
       session.panel.dispose();
     }
     this.sessions.clear();
   }
 
-  stopAllTraces(reason: ApiTraceStopReason): void {
-    for (const session of this.sessions.values()) {
-      if (session.traceSession?.canStop() ?? false) {
-        this.stopTraceSession(session, reason, true);
-      }
-    }
+  async stopAllTraces(reason: ApiTraceStopReason): Promise<void> {
+    await Promise.all(
+      [...this.sessions.values()].map(async (session) => {
+        if (session.traceSession?.canStop() ?? false) {
+          await this.stopTraceSession(session, reason, true);
+        }
+      })
+    );
   }
 
   openApisExplorer(appId: string, targetParams?: ApisExplorerTargetParams): ApisExplorerPanelSession {
@@ -85,7 +87,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     if (existingSession !== undefined) {
       const targetChanged = !areTargetParamsEqual(existingSession.targetParams, targetParams);
       if (targetChanged && (existingSession.traceSession?.isRunning() ?? false)) {
-        this.stopTraceSession(existingSession, 'target-changed', true);
+        void this.stopTraceSession(existingSession, 'target-changed', true);
       }
       if (targetParams === undefined) {
         delete existingSession.targetParams;
@@ -130,15 +132,17 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     panel.onDidDispose(() => {
       session.disposed = true;
       this.sessions.delete(appId);
-      this.stopTraceSession(session, 'panel-closed', true);
+      void this.stopTraceSession(session, 'panel-closed', true);
       while (panelDisposables.length > 0) {
         panelDisposables.pop()?.dispose();
       }
     });
 
-    panel.webview.onDidReceiveMessage((message: unknown) => {
-      void this.handleWebviewMessage(session, message);
-    }, null, panelDisposables);
+    panel.webview.onDidReceiveMessage(
+      (message: unknown) => this.handleWebviewMessage(session, message),
+      null,
+      panelDisposables
+    );
 
     return session;
   }
@@ -171,7 +175,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       return;
     }
     if (type === 'sapTools.apis.trace.stop') {
-      this.stopTraceSession(session, 'user', readUninstallRuntimeHook(msg['payload']));
+      await this.stopTraceSession(session, 'user', readUninstallRuntimeHook(msg['payload']));
       return;
     }
     if (type === 'sapTools.apis.trace.clear') {
@@ -186,7 +190,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       return;
     }
     const traceSession = this.getTraceSession(session);
-    traceSession.start(options);
+    void traceSession.start(options);
   }
 
   private getTraceSession(session: ApisExplorerPanelSession): ApiTraceSession {
@@ -213,16 +217,16 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     return session.traceSession;
   }
 
-  private stopTraceSession(
+  private async stopTraceSession(
     session: ApisExplorerPanelSession,
     reason: ApiTraceStopReason,
     uninstallRuntimeHook: boolean
-  ): void {
+  ): Promise<void> {
     const traceSession = session.traceSession;
     if (traceSession === undefined) {
       return;
     }
-    traceSession.stop(reason, uninstallRuntimeHook);
+    await traceSession.stop(reason, uninstallRuntimeHook);
   }
 
   private postTraceState(

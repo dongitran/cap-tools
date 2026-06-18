@@ -559,9 +559,11 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('Path or URL contains');
     expect(source).toContain('Trace request stream');
     expect(source).toContain('Request/Response detail');
-    expect(source).toContain('Overview');
-    expect(source).toContain('Request');
-    expect(source).toContain('Response');
+    expect(source).toContain('Request Headers');
+    expect(source).toContain('Response Headers');
+    expect(source).toContain('Request Body Preview');
+    expect(source).toContain('Response Body Preview');
+    expect(source).toContain('api-trace-detail-grid');
     expect(source).toContain('authorization');
     expect(source).toContain('sapTools.apis.trace.start');
     expect(source).toContain('sapTools.apis.trace.stop');
@@ -570,10 +572,16 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('captureHeaders: apiTraceCaptureHeaders');
     expect(source).toContain('if (apiTracePaused) return;');
     expect(source).toContain("apiTraceState = 'preparingCli'");
+    expect(source).not.toContain('Trace detail views');
+    expect(source).not.toContain('api-trace-switch-detail');
+    expect(source).not.toContain('Runtime HTTP Trace · Hook');
 
     expect(styles).toContain('.api-trace-shell');
     expect(styles).toContain('.api-trace-stream');
     expect(styles).toContain('.api-trace-detail');
+    expect(styles).toContain('.api-trace-action-btn');
+    expect(styles).toContain('.api-trace-detail-grid');
+    expect(styles).toContain('.api-trace-detail-columns');
     expect(styles).toContain('.api-trace-url-select');
   });
 

@@ -583,14 +583,16 @@ export function spawnCfSshPortForward(params: {
   readonly remotePort: number;
   readonly keepAliveSeconds: number;
   readonly cfHomeDir?: string;
+  readonly instanceIndex?: number;
 }): CfPortForwardHandle {
   const env = buildCfCliEnv(params.cfHomeDir, undefined);
   const forwardSpec = `${String(params.localPort)}:${params.remoteHost}:${String(params.remotePort)}`;
   // Log without the remote sleep command (keeps the log clean and stable).
-  logCfCommand(['ssh', params.appName, '-L', forwardSpec]);
+  const sshArgs = buildCfSshArgs(params.appName, params.instanceIndex, ['-L', forwardSpec]);
+  logCfCommand(sshArgs);
   const process = spawn(
     'cf',
-    ['ssh', params.appName, '-L', forwardSpec, '-c', `sleep ${String(params.keepAliveSeconds)}`],
+    [...sshArgs, '-c', `sleep ${String(params.keepAliveSeconds)}`],
     {
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -606,6 +608,31 @@ export function spawnCfSshPortForward(params: {
       }
     },
   };
+}
+
+export async function runCfSshCommandFromTarget(params: {
+  readonly appName: string;
+  readonly command: string;
+  readonly cfHomeDir?: string;
+  readonly instanceIndex?: number;
+  readonly timeoutMs?: number;
+  readonly failureMessage: string;
+}): Promise<string> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const commandOptions = params.timeoutMs === undefined
+    ? {
+        ...cfHomeOptions,
+        failureMessage: params.failureMessage,
+      }
+    : {
+        ...cfHomeOptions,
+        timeoutMs: params.timeoutMs,
+        failureMessage: params.failureMessage,
+      };
+  return runCfCommand(
+    buildCfSshArgs(params.appName, params.instanceIndex, ['-c', params.command]),
+    commandOptions
+  );
 }
 
 async function runCfCommand(
@@ -653,6 +680,18 @@ function buildCfCliEnv(
     }
   }
   return env;
+}
+
+function buildCfSshArgs(
+  appName: string,
+  instanceIndex: number | undefined,
+  tail: readonly string[]
+): string[] {
+  const args = ['ssh', appName];
+  if (instanceIndex !== undefined) {
+    args.push('-i', String(instanceIndex));
+  }
+  return [...args, ...tail];
 }
 
 function extractSafeCliDetail(error: unknown): string {

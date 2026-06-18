@@ -1,5 +1,11 @@
 import { truncatePreview } from './apiTracePreview';
 import { buildTraceUrlSummaries } from './apiTraceSummary';
+import { prepareCfCliSession } from './cfClient';
+import { buildApiTraceDrainExpression, buildApiTraceInstallExpression, buildApiTraceStopExpression } from './apiTraceInjectionSource';
+import { createApiTraceInspectorClient, type ApiTraceInspectorClient } from './apiTraceInspectorClient';
+import { parseApiTraceDrainResult } from './apiTracePayload';
+import { tryStartNodeInspector } from './apiTraceInspectorSignal';
+import { openApiTraceInspectorTunnel, type ApiTraceTunnelOpenResult } from './apiTraceTunnel';
 import type {
   ApiTraceBatchPayload,
   ApiTraceEvent,
@@ -30,29 +36,67 @@ export interface ApiTraceSessionOptions {
   readonly targetParams: ApiTraceTargetParams | undefined;
   readonly isTestMode: boolean;
   readonly callbacks: ApiTraceSessionCallbacks;
+  readonly dependencies?: Partial<ApiTraceSessionDependencies>;
 }
+
+export interface ApiTraceSessionDependencies {
+  prepareCfCliSession(targetParams: ApiTraceTargetParams): Promise<void>;
+  tryStartNodeInspector(params: {
+    readonly appName: string;
+    readonly cfHomeDir?: string;
+    readonly instanceIndex: number;
+  }): Promise<boolean>;
+  openInspectorTunnel(params: {
+    readonly appName: string;
+    readonly cfHomeDir?: string;
+    readonly instanceIndex: number;
+  }): Promise<ApiTraceTunnelOpenResult>;
+  createInspectorClient(localPort: number): Promise<ApiTraceInspectorClient | null>;
+  setInterval(callback: () => void, ms: number): NodeJS.Timeout;
+  clearInterval(handle: NodeJS.Timeout): void;
+}
+
+const TRACE_DRAIN_INTERVAL_MS = 250;
+const TRACE_DRAIN_BATCH_SIZE = 50;
+const TRACE_RUNTIME_QUEUE_SIZE = 1000;
+const TRACE_EVALUATE_TIMEOUT_MS = 5000;
+
+const defaultApiTraceSessionDependencies: ApiTraceSessionDependencies = {
+  prepareCfCliSession,
+  tryStartNodeInspector,
+  openInspectorTunnel: openApiTraceInspectorTunnel,
+  createInspectorClient: createApiTraceInspectorClient,
+  setInterval,
+  clearInterval,
+};
 
 export class ApiTraceSession {
   private readonly appId: string;
   private readonly callbacks: ApiTraceSessionCallbacks;
+  private readonly dependencies: ApiTraceSessionDependencies;
   private readonly isTestMode: boolean;
   private events: ApiTraceEvent[] = [];
   private disposed = false;
+  private drainInFlight = false;
+  private inspectorClient: ApiTraceInspectorClient | undefined;
+  private pollTimer: NodeJS.Timeout | undefined;
   private state: ApiTraceStatePayload['state'] = 'idle';
   private targetParams: ApiTraceTargetParams | undefined;
+  private tunnelHandle: { readonly stop: () => void } | undefined;
 
   constructor(options: ApiTraceSessionOptions) {
     this.appId = options.appId;
     this.targetParams = options.targetParams;
     this.isTestMode = options.isTestMode;
     this.callbacks = options.callbacks;
+    this.dependencies = { ...defaultApiTraceSessionDependencies, ...options.dependencies };
   }
 
   updateTargetParams(targetParams: ApiTraceTargetParams | undefined): void {
     this.targetParams = targetParams;
   }
 
-  start(options: ApiTraceStartOptions): void {
+  async start(options: ApiTraceStartOptions): Promise<void> {
     if (this.disposed) return;
     if (this.isRunning()) return;
     this.postState('preparingCli', 'Preparing runtime HTTP trace session.', false, false);
@@ -64,23 +108,19 @@ export class ApiTraceSession {
       this.postState('error', 'Sign in and confirm a region/org/space before tracing APIs.', false, false);
       return;
     }
-    this.postState(
-      'needsInspector',
-      'Runtime HTTP Trace needs a reachable Node Inspector tunnel for this app.',
-      false,
-      false
-    );
+    await this.startRuntimeTrace(options, this.targetParams);
   }
 
-  stop(reason: ApiTraceStopReason, uninstallRuntimeHook: boolean): void {
+  async stop(reason: ApiTraceStopReason, uninstallRuntimeHook: boolean): Promise<void> {
     if (this.disposed && reason !== 'shutdown') return;
     if (!this.isRunning() && this.state !== 'needsInspector') {
       this.postState('stopped', `Trace stopped (${reason}).`, false, false);
       return;
     }
-    const hookMayRemain = !uninstallRuntimeHook && this.state === 'streaming';
-    this.postState('stopping', `Stopping trace (${reason}).`, this.state === 'streaming', hookMayRemain);
-    this.postState('stopped', `Trace stopped (${reason}).`, false, hookMayRemain);
+    const hadRuntimeHook = this.inspectorClient !== undefined;
+    this.postState('stopping', `Stopping trace (${reason}).`, hadRuntimeHook, hadRuntimeHook);
+    const uninstalled = await this.stopRuntimeTrace(uninstallRuntimeHook);
+    this.postState('stopped', `Trace stopped (${reason}).`, false, hadRuntimeHook && !uninstalled);
   }
 
   clear(): void {
@@ -107,7 +147,126 @@ export class ApiTraceSession {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.stop('shutdown', true);
+    void this.stop('shutdown', true);
+  }
+
+  private async startRuntimeTrace(
+    options: ApiTraceStartOptions,
+    targetParams: ApiTraceTargetParams
+  ): Promise<void> {
+    const instanceIndex = resolveInstanceIndex(options.instanceIndex);
+    try {
+      this.postState('checkingRuntime', 'Checking Node runtime and requesting Inspector startup.', false, false);
+      await this.dependencies.prepareCfCliSession(targetParams);
+      await this.dependencies.tryStartNodeInspector(buildRuntimeTarget(this.appId, targetParams, instanceIndex));
+      this.postState('openingTunnel', 'Opening Node Inspector tunnel.', false, false);
+      const tunnel = await this.dependencies.openInspectorTunnel(
+        buildRuntimeTarget(this.appId, targetParams, instanceIndex)
+      );
+      await this.attachInspectorClient(tunnel, options, instanceIndex);
+    } catch {
+      await this.stopRuntimeTrace(false);
+      this.postState('error', 'Runtime HTTP trace could not be started.', false, false);
+    }
+  }
+
+  private async attachInspectorClient(
+    tunnel: ApiTraceTunnelOpenResult,
+    options: ApiTraceStartOptions,
+    instanceIndex: number
+  ): Promise<void> {
+    if (tunnel.status !== 'ready') {
+      this.postState('needsInspector', buildNeedsInspectorMessage(), false, false);
+      return;
+    }
+    this.tunnelHandle = tunnel.handle;
+    const client = await this.dependencies.createInspectorClient(tunnel.handle.localPort);
+    if (client === null) {
+      await this.stopRuntimeTrace(false);
+      this.postState('needsInspector', buildNeedsInspectorMessage(), false, false);
+      return;
+    }
+    this.inspectorClient = client;
+    this.postState('injecting', 'Installing runtime HTTP trace hook.', false, false);
+    await client.evaluate(buildApiTraceInstallExpression({
+      appId: this.appId,
+      instance: String(instanceIndex),
+      captureHeaders: options.captureHeaders,
+      captureRequestBody: options.captureRequestBody,
+      captureResponseBody: options.captureResponseBody,
+      maxBodyBytes: options.maxBodyBytes,
+      maxEvents: TRACE_RUNTIME_QUEUE_SIZE,
+    }), TRACE_EVALUATE_TIMEOUT_MS);
+    this.startPolling(options.maxBodyBytes);
+    this.postState('streaming', 'Streaming runtime HTTP trace events.', true, false);
+  }
+
+  private startPolling(maxBodyBytes: number): void {
+    this.stopPolling();
+    this.pollTimer = this.dependencies.setInterval(() => {
+      void this.drainTraceEvents(maxBodyBytes);
+    }, TRACE_DRAIN_INTERVAL_MS);
+  }
+
+  private async drainTraceEvents(maxBodyBytes: number): Promise<void> {
+    if (this.drainInFlight || this.inspectorClient === undefined || this.state !== 'streaming') return;
+    this.drainInFlight = true;
+    try {
+      const payload = await this.inspectorClient.evaluate(
+        buildApiTraceDrainExpression(TRACE_DRAIN_BATCH_SIZE),
+        TRACE_EVALUATE_TIMEOUT_MS
+      );
+      this.publishDrainedEvents(payload, maxBodyBytes);
+    } catch {
+      await this.handleDrainFailure();
+    } finally {
+      this.drainInFlight = false;
+    }
+  }
+
+  private publishDrainedEvents(payload: unknown, maxBodyBytes: number): void {
+    const drained = parseApiTraceDrainResult(payload, { appId: this.appId, maxBodyBytes });
+    if (drained.events.length === 0) return;
+    this.events = [...this.events, ...drained.events].slice(-TRACE_RUNTIME_QUEUE_SIZE);
+    this.callbacks.postBatch({ events: drained.events });
+    this.callbacks.postUrlSummary({
+      urls: buildTraceUrlSummaries(this.events),
+      selectedUrl: 'all',
+    });
+  }
+
+  private async handleDrainFailure(): Promise<void> {
+    await this.stopRuntimeTrace(false);
+    this.postState('error', 'Runtime HTTP trace connection was lost.', false, true);
+  }
+
+  private async stopRuntimeTrace(uninstallRuntimeHook: boolean): Promise<boolean> {
+    this.stopPolling();
+    const uninstalled = await this.stopInspectorHook(uninstallRuntimeHook);
+    this.inspectorClient?.close();
+    this.inspectorClient = undefined;
+    this.tunnelHandle?.stop();
+    this.tunnelHandle = undefined;
+    return uninstalled;
+  }
+
+  private async stopInspectorHook(uninstallRuntimeHook: boolean): Promise<boolean> {
+    if (this.inspectorClient === undefined) return true;
+    try {
+      await this.inspectorClient.evaluate(
+        buildApiTraceStopExpression(uninstallRuntimeHook),
+        TRACE_EVALUATE_TIMEOUT_MS
+      );
+      return uninstallRuntimeHook;
+    } catch {
+      return false;
+    }
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer === undefined) return;
+    this.dependencies.clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
   }
 
   private startMockTrace(maxBodyBytes: number): void {
@@ -139,6 +298,23 @@ export class ApiTraceSession {
       runtimeHookMayRemain,
     });
   }
+}
+
+function resolveInstanceIndex(instanceIndex: ApiTraceStartOptions['instanceIndex']): number {
+  return instanceIndex === 'all' ? 0 : instanceIndex;
+}
+
+function buildRuntimeTarget(
+  appName: string,
+  targetParams: ApiTraceTargetParams,
+  instanceIndex: number
+): { readonly appName: string; readonly cfHomeDir?: string; readonly instanceIndex: number } {
+  const base = { appName, instanceIndex };
+  return targetParams.cfHomeDir === undefined ? base : { ...base, cfHomeDir: targetParams.cfHomeDir };
+}
+
+function buildNeedsInspectorMessage(): string {
+  return 'Runtime HTTP Trace needs Node Inspector on 127.0.0.1:9229 for this app. Start the app with --inspect or allow the signal-based Inspector startup, then try again.';
 }
 
 function createMockTraceEvents(appId: string): ApiTraceEvent[] {

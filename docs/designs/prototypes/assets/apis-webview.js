@@ -25,7 +25,6 @@ let apiTraceRuntimeHookInstalled = false;
 let apiTraceRuntimeHookMayRemain = false;
 let apiTraceEvents = [];
 let apiTraceSelectedEventId = '';
-let apiTraceSelectedDetailTab = 'overview';
 let apiTraceSelectedUrl = 'all';
 let apiTracePathFilter = '';
 let apiTraceMethodFilter = 'all';
@@ -594,36 +593,37 @@ function renderTraceDetailContent(event) {
   if (event === null) {
     return '<div class="api-trace-empty-detail">Select a request to inspect its request and response.</div>';
   }
-  if (apiTraceSelectedDetailTab === 'request') {
-    return `
+  return `
+    <section class="api-trace-detail-grid" aria-label="Trace event summary">
+      <div class="api-trace-detail-metric"><span>Status</span><strong>${event.status === null ? 'Unknown' : escapeHtml(String(event.status))}</strong></div>
+      <div class="api-trace-detail-metric"><span>Duration</span><strong>${event.durationMs === null ? '-' : `${event.durationMs}ms`}</strong></div>
+      <div class="api-trace-detail-metric"><span>Instance</span><strong>${escapeHtml(event.instance)}</strong></div>
+      <div class="api-trace-detail-metric"><span>Bytes</span><strong>${event.requestBytes} req / ${event.responseBytes} res</strong></div>
+      <div class="api-trace-detail-metric is-wide"><span>Trace ID</span><strong>${escapeHtml(event.traceId || event.id)}</strong></div>
+      <div class="api-trace-detail-metric is-wide"><span>Correlation ID</span><strong>${escapeHtml(event.correlationId || '-')}</strong></div>
+    </section>
+    <div class="api-trace-detail-columns">
       <section class="api-trace-detail-section">
-        <h4>Request Headers</h4>
+        <div class="api-trace-section-title">
+          <h4>Request</h4>
+          <span>${escapeHtml(event.method)} ${escapeHtml(event.normalizedUrl)}</span>
+        </div>
+        <h5>Request Headers</h5>
         ${renderHeaderTable(event.requestHeaders)}
-        <h4>Request Body Preview</h4>
+        <h5>Request Body Preview</h5>
         ${renderPreview(event.requestBodyPreview, event.requestBodyTruncated)}
       </section>
-    `;
-  }
-  if (apiTraceSelectedDetailTab === 'response') {
-    return `
       <section class="api-trace-detail-section">
-        <h4>Response Headers</h4>
+        <div class="api-trace-section-title">
+          <h4>Response</h4>
+          <span>${event.status === null ? 'Status unknown' : `HTTP ${escapeHtml(String(event.status))}`}</span>
+        </div>
+        <h5>Response Headers</h5>
         ${renderHeaderTable(event.responseHeaders)}
-        <h4>Response Body Preview</h4>
+        <h5>Response Body Preview</h5>
         ${renderPreview(event.responseBodyPreview, event.responseBodyTruncated)}
       </section>
-    `;
-  }
-  return `
-    <section class="api-trace-overview">
-      <div><span>Status</span><strong>${event.status === null ? 'Unknown' : escapeHtml(String(event.status))}</strong></div>
-      <div><span>Duration</span><strong>${event.durationMs === null ? '-' : `${event.durationMs}ms`}</strong></div>
-      <div><span>Instance</span><strong>${escapeHtml(event.instance)}</strong></div>
-      <div><span>Request bytes</span><strong>${event.requestBytes}</strong></div>
-      <div><span>Response bytes</span><strong>${event.responseBytes}</strong></div>
-      <div><span>Trace ID</span><strong>${escapeHtml(event.traceId || event.id)}</strong></div>
-      <div><span>Correlation ID</span><strong>${escapeHtml(event.correlationId || '-')}</strong></div>
-    </section>
+    </div>
   `;
 }
 
@@ -635,13 +635,6 @@ function renderTraceDetail(event) {
           <h3>Request/Response detail</h3>
           <p>${event === null ? 'No request selected' : `${escapeHtml(event.method)} ${escapeHtml(event.normalizedUrl)}`}</p>
         </div>
-      </div>
-      <div class="api-view-tabs" role="tablist" aria-label="Trace detail views">
-        ${['overview', 'request', 'response'].map((tab) => `
-          <button type="button" class="api-view-tab-btn${apiTraceSelectedDetailTab === tab ? ' is-active' : ''}" data-action="api-trace-switch-detail" data-detail-tab="${tab}">
-            ${tab === 'overview' ? 'Overview' : tab === 'request' ? 'Request' : 'Response'}
-          </button>
-        `).join('')}
       </div>
       <div class="api-trace-detail-body">
         ${renderTraceDetailContent(event)}
@@ -664,12 +657,11 @@ function renderLiveTracePanel() {
       <div class="api-trace-toolbar">
         <div class="api-trace-title">
           <h2>Live Trace</h2>
-          <p>Runtime HTTP Trace · Hook ${apiTraceRuntimeHookInstalled ? 'installed' : 'not installed'} · ${apiTraceRuntimeHookMayRemain ? 'hook may remain after local stop' : 'local session clean'}</p>
         </div>
         <div class="api-trace-actions">
-          <button type="button" class="primary-action" data-action="api-trace-start" ${isActive || apiTraceState === 'needsInspector' ? 'disabled' : ''}>Start Listening</button>
-          <button type="button" class="secondary-action" data-action="api-trace-stop" ${canStop ? '' : 'disabled'}>Stop Listening</button>
-          <button type="button" class="secondary-action" data-action="api-trace-clear">Clear</button>
+          <button type="button" class="primary-action api-trace-action-btn" data-action="api-trace-start" ${isActive ? 'disabled' : ''}>Start Listening</button>
+          <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-stop" ${canStop ? '' : 'disabled'}>Stop Listening</button>
+          <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-clear">Clear</button>
         </div>
       </div>
 
@@ -1277,11 +1269,6 @@ appElement.addEventListener('click', (event) => {
     renderLiveTracePanel();
     return;
   }
-
-  if (action === 'api-trace-switch-detail') {
-    apiTraceSelectedDetailTab = actionElement.dataset.detailTab ?? 'overview';
-    renderLiveTracePanel();
-  }
 });
 
 // Select
@@ -1586,7 +1573,6 @@ window.addEventListener('message', (event) => {
     apiTraceStatusFilter = 'all';
     apiTraceSearchText = '';
     apiTracePaused = false;
-    apiTraceSelectedDetailTab = 'overview';
     apiTraceCaptureHeaders = false;
     apiTraceCaptureRequestBody = false;
     apiTraceCaptureResponseBody = false;

@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.143 (stable)
+- Feature: Live Trace now attempts a real Node Inspector runtime trace path through CF SSH tunneling, Inspector WebSocket injection, bounded in-process event queues, and best-effort hook uninstall on stop.
+- UI: Live Trace now uses equal-height Start/Stop/Clear controls, removes the hook status subtitle, and shows request summary, request headers/body, and response headers/body in one combined detail view.
+
 ## 0.10.142 (stable)
 - Feature: APIs Explorer now includes a Live Trace workspace beside Request Runner, with a live request stream, observed URL aggregation, URL/status/method filters, and request/response detail inspection.
 - Change: Live Trace now preserves raw captured query values, headers, and body previews instead of masking trace data, while extension output logs still omit query strings.

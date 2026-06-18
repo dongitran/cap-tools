@@ -784,7 +784,7 @@ export class RegionSidebarProvider
       // An open event viewer is bound to the previous scope's app/queue; stop its
       // AMQP listener and delete its debug queue so we never leak a tap across scopes.
       this.eventMeshPanelManager.stopAllListeners('scope-changed');
-      this.apisExplorerPanelManager.stopAllTraces('scope-changed');
+      void this.apisExplorerPanelManager.stopAllTraces('scope-changed');
     }
     const shouldWriteSharedScope = options.writeSharedScope ?? true;
     if (shouldWriteSharedScope) {

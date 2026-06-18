@@ -229,12 +229,9 @@ test.describe('APIs Explorer Workspace Flow', () => {
       await expect(frame.getByRole('button', { name: /POST 201 \/odata\/v4\/orders/i })).toBeVisible();
       await expect(frame.getByRole('button', { name: /PATCH 400 \/odata\/v4\/orders\(1\)/i })).toHaveCount(0);
 
-      await clickWithFallback(frame.getByRole('button', { name: 'Request' }));
       await expect(frame.getByText('authorization')).toBeVisible();
       await expect(frame.getByText('Bearer demo-access-token').first()).toBeVisible();
       await expect(frame.getByRole('heading', { name: 'Request Body Preview' })).toBeVisible();
-
-      await clickWithFallback(frame.getByRole('button', { name: 'Response' }));
       await expect(frame.getByRole('heading', { name: 'Response Headers' })).toBeVisible();
       await expect(frame.getByRole('heading', { name: 'Response Body Preview' })).toBeVisible();
 
