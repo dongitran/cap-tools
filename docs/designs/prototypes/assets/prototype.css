@@ -4126,7 +4126,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   flex: 1;
   overflow: auto;
   min-height: 0;
-  background-color: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.08));
+  background-color: transparent;
   border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.22));
   border-radius: 6px;
   padding: 0;
@@ -4143,34 +4143,57 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   padding: 12px 14px;
 }
 
-.api-raw-json code {
-  font-family: inherit;
-  color: inherit;
-}
-
 .api-raw-json.is-json {
+  --api-json-key: #9cdcfe;
+  --api-json-string: #ce9178;
+  --api-json-number: #b5cea8;
+  --api-json-literal: #569cd6;
+  --api-json-punctuation: #d4d4d4;
   background: transparent;
 }
 
+body.vscode-light .api-raw-json.is-json,
+body.vscode-high-contrast-light .api-raw-json.is-json {
+  --api-json-key: #0451a5;
+  --api-json-string: #a31515;
+  --api-json-number: #098658;
+  --api-json-literal: #0000ff;
+  --api-json-punctuation: #6a737d;
+}
+
+body.vscode-high-contrast .api-raw-json.is-json {
+  --api-json-key: #9cdcfe;
+  --api-json-string: #ffb3a6;
+  --api-json-number: #b5f2a7;
+  --api-json-literal: #f8d66d;
+  --api-json-punctuation: var(--vscode-foreground, #ffffff);
+}
+
+.api-json-token {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
 .api-json-key {
-  color: var(--vscode-symbolIcon-propertyForeground, #4fc1ff);
+  color: var(--api-json-key);
 }
 
 .api-json-string {
-  color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+  color: var(--api-json-string);
 }
 
 .api-json-number {
-  color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+  color: var(--api-json-number);
 }
 
 .api-json-literal {
-  color: var(--vscode-symbolIcon-booleanForeground, #569cd6);
+  color: var(--api-json-literal);
   font-weight: 600;
 }
 
 .api-json-punctuation {
-  color: var(--vscode-descriptionForeground, #9a9a9a);
+  color: var(--api-json-punctuation);
 }
 
 /* Grid Table */

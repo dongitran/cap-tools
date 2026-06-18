@@ -96,11 +96,41 @@ test.describe('APIs Explorer Workspace Flow', () => {
       const statusText = await statusBadge.textContent();
       expect(statusText).toBeTruthy();
 
-      // Verify JSON View is rendered
-      const jsonView = frame.locator('.api-raw-json');
+      // Verify JSON View is rendered with Event Mesh-style transparent token highlighting.
+      const jsonView = frame.getByLabel('API JSON response');
       await expect(jsonView).toBeVisible();
+      const styleSnapshot = await jsonView.evaluate((payload) => {
+        const token = (className: string): HTMLElement | null =>
+          payload.querySelector(`.${className}`);
+        const styleFor = (element: HTMLElement | null): { color: string | null; background: string | null } => {
+          if (element === null) return { color: null, background: null };
+          const style = getComputedStyle(element);
+          return { color: style.color, background: style.backgroundColor };
+        };
+        const payloadStyle = getComputedStyle(payload);
+        const wrapper = payload.closest('.api-view-content');
+        return {
+          payloadBackground: payloadStyle.backgroundColor,
+          wrapperBackground: wrapper instanceof HTMLElement ? getComputedStyle(wrapper).backgroundColor : null,
+          codeCount: payload.querySelectorAll('code').length,
+          tokenCount: payload.querySelectorAll('.api-json-token').length,
+          key: styleFor(token('api-json-key')),
+          string: styleFor(token('api-json-string')),
+          punctuation: styleFor(token('api-json-punctuation')),
+        };
+      });
+
+      expect(styleSnapshot.payloadBackground).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.wrapperBackground).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.codeCount).toBe(0);
+      expect(styleSnapshot.tokenCount).toBeGreaterThan(0);
+      expect(styleSnapshot.key.background).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.string.background).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.punctuation.background).toBe('rgba(0, 0, 0, 0)');
+      expect(new Set([styleSnapshot.key.color, styleSnapshot.string.color, styleSnapshot.punctuation.color]).size).toBe(3);
 
       await frame.locator('body').screenshot({ path: 'test-results/debug-apis-panel.png' });
+      await jsonView.screenshot({ path: 'test-results/api-json-highlight-vscode.png' });
     } finally {
       await cleanupExtensionHost(session);
     }

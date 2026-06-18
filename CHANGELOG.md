@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.136 (stable)
+- Fix: APIs Explorer JSON responses now use the same transparent-background token text highlighting as Event Mesh received messages, with VS Code webview e2e coverage and screenshot verification.
+
 ## 0.10.135 (stable)
 - Release: Bumped the extension package version after verifying the Event Mesh JSON highlighting fix in the VS Code webview e2e flow.
 

@@ -486,21 +486,31 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('function highlightApiJson(json)');
     expect(source).toContain('function renderApiJsonResult(payload)');
     expect(source).toContain('JSON.stringify(payload, null, 2)');
-    expect(source).toContain('class="api-raw-json is-json"');
-    expect(source).toContain('class="${tokenClass}"');
+    expect(source).toContain('class="api-raw-json is-json" aria-label="API JSON response"');
+    expect(source).toContain('class="api-json-token ${tokenClass}"');
     expect(source).toContain("'api-json-key'");
     expect(source).toContain("'api-json-string'");
     expect(source).toContain("'api-json-number'");
     expect(source).toContain("'api-json-literal'");
     expect(source).toContain("'api-json-punctuation'");
+    expect(source).not.toContain('<code>${highlightApiJson(json)}</code>');
     expect(source).not.toContain('<pre class="api-raw-json" style=');
 
     expect(styles).toContain('.api-raw-json.is-json');
+    expect(styles).toContain('--api-json-key');
+    expect(styles).toContain('--api-json-string');
+    expect(styles).toContain('--api-json-number');
+    expect(styles).toContain('--api-json-literal');
+    expect(styles).toContain('--api-json-punctuation');
+    expect(styles).toContain('.api-json-token');
     expect(styles).toContain('.api-json-key');
     expect(styles).toContain('.api-json-string');
     expect(styles).toContain('.api-json-number');
     expect(styles).toContain('.api-json-literal');
     expect(styles).toContain('.api-json-punctuation');
+    expect(styles).toContain('background-color: transparent;');
+    expect(styles).not.toContain('background-color: var(--vscode-textCodeBlock-background');
+    expect(styles).not.toContain('.api-raw-json code');
   });
 
   it('renders APIs response controls with reusable classes and complete grid columns', async () => {

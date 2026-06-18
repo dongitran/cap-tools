@@ -267,13 +267,13 @@ function highlightApiJson(json) {
     } else if (token === 'true' || token === 'false' || token === 'null') {
       tokenClass = 'api-json-literal';
     }
-    return `<span class="${tokenClass}">${escapeHtml(token)}</span>`;
+    return `<span class="api-json-token ${tokenClass}">${escapeHtml(token)}</span>`;
   });
 }
 
 function renderApiJsonResult(payload) {
   const json = JSON.stringify(payload, null, 2);
-  return `<pre class="api-raw-json is-json"><code>${highlightApiJson(json)}</code></pre>`;
+  return `<pre class="api-raw-json is-json" aria-label="API JSON response">${highlightApiJson(json)}</pre>`;
 }
 
 function updateResponseSection() {
