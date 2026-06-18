@@ -160,6 +160,19 @@
           return;
         }
 
+        if (message.type === 'sapTools.events.publishEvent') {
+          window.setTimeout(() => {
+            postToViewer({
+              type: 'sapTools.events.publishResult',
+              bindingIndex: message.bindingIndex,
+              topic: message.topic,
+              ok: true,
+              status: 204,
+            });
+          }, 500);
+          return;
+        }
+
         if (message.type === 'sapTools.events.stopListening') {
           liveTopicsByBinding.clear();
           postToViewer({ type: 'sapTools.events.stopped', reason: 'user' });

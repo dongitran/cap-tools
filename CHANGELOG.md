@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.118 (stable)
+- Feature: Event Mesh viewer gains a **Publish** tab alongside the existing Subscribe tab. A tab switcher in the top-right of the viewer header lets you switch between the two modes. The Publish tab provides a dedicated form to send a single event directly to any topic via the SAP Event Mesh REST Messaging API: choose a messaging binding, enter the topic name, set a content-type (JSON or plain text), compose a payload with an optional "Format JSON" prettifier, and click "Publish Event". The result (HTTP status or error message) is shown inline below the form. No temporary queues are created and no AMQP connection is needed for publishing — only the REST messaging endpoint and its OAuth credentials are used. The Subscribe tab is unchanged.
+
 ## 0.10.117 (stable)
 - Feature: Event Mesh viewer now supports multiple messaging bindings per debug session. An "Add Binding" search picker replaces the single-binding selector — real apps can have up to 100 bindings, so only the bindings you want to inspect are added. Each selected binding has its own temporary debug queue, topic chooser, and AMQP listener. All listeners and queues are created atomically with rollback if any step fails. While listening, you can expand a live binding to add more topics (add-only; no live removal). Results render inline below setup, each message row carries a binding badge, and a filter bar lets you view events from all bindings or one.
 - Refactor: Multi-binding orchestration is extracted into a standalone `EventMeshListeningSession` module (unit-tested independently) so `eventMeshPanel.ts` stays under the 700-line limit and the logic remains testable without VS Code or real AMQP connections.

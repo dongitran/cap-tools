@@ -14,6 +14,7 @@ import {
   type EventMeshListenCallbacks,
   type EventMeshListenRequest,
 } from './eventMeshListeningSession';
+import { publishEventToMesh } from './eventMeshPublishClient';
 
 const EVENT_MESH_VIEW_TYPE = 'sapTools.eventMeshViewer';
 
@@ -305,6 +306,10 @@ export class EventMeshPanelManager implements vscode.Disposable {
       await this.addTopicsToBinding(session, idx, parseTopics(message['topics']));
       return;
     }
+    if (type === 'sapTools.events.publishEvent') {
+      await this.handlePublishEvent(session, message);
+      return;
+    }
     if (type === 'sapTools.events.stopListening') {
       await this.stopListening(session, 'user', true);
     }
@@ -488,6 +493,18 @@ export class EventMeshPanelManager implements vscode.Disposable {
     }
   }
 
+  private async handlePublishEvent(session: PanelSession, message: Record<string, unknown>): Promise<void> {
+    const idx = typeof message['bindingIndex'] === 'number' ? message['bindingIndex'] : -1;
+    const topic = typeof message['topic'] === 'string' ? message['topic'].trim() : '';
+    const payload = typeof message['payload'] === 'string' ? message['payload'] : '';
+    const ct = typeof message['contentType'] === 'string' ? message['contentType'] : 'application/json';
+    if (topic.length === 0) return;
+    if (isTestMode()) { setTimeout(() => { this.post(session, 'sapTools.events.publishResult', { bindingIndex: idx, topic, ok: true, status: 204 }); }, 400); return; }
+    const binding = session.bindings.find((b) => b.index === idx);
+    if (binding === undefined) return;
+    try { const status = await publishEventToMesh(binding, topic, payload, ct); this.post(session, 'sapTools.events.publishResult', { bindingIndex: idx, topic, ok: true, status }); }
+    catch (error) { this.post(session, 'sapTools.events.publishResult', { bindingIndex: idx, topic, ok: false, message: describeError(error) }); }
+  }
   private enqueueMessage(
     session: PanelSession,
     binding: EventMeshBinding,

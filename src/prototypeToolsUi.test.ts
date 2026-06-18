@@ -177,6 +177,31 @@ describe('prototype Log-API-Event workspace', () => {
 
     expect(values).toEqual(values.map(() => '0'));
   });
+
+  it('includes Subscribe/Publish tab switcher with delegated em-switch-tab action', async () => {
+    const source = await readEventWebviewSource();
+
+    expect(source).toContain('em-switch-tab');
+    expect(source).toContain('activeTab');
+    expect(source).toContain('data-tab="publish"');
+    expect(source).toContain('data-tab="subscribe"');
+  });
+
+  it('sends sapTools.events.publishEvent message and handles publishResult response', async () => {
+    const source = await readEventWebviewSource();
+
+    expect(source).toContain("'sapTools.events.publishEvent'");
+    expect(source).toContain("'sapTools.events.publishResult'");
+    expect(source).toContain('postPublishEvent');
+  });
+
+  it('prototype fixture handles publishEvent message with mock result', async () => {
+    const source = await readEventVariantSource();
+
+    expect(source).toContain("'sapTools.events.publishEvent'");
+    expect(source).toContain("'sapTools.events.publishResult'");
+    expect(source).toContain('status: 204');
+  });
 });
 
 describe('prototype S/4HANA SQL Workbench table refresh', () => {

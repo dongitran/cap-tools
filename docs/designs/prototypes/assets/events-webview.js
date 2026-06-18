@@ -15,6 +15,8 @@ let errorMessage = '';
 let startError = '';
 let statusLine = '';
 
+let activeTab = 'subscribe'; // 'subscribe' | 'publish'
+
 let bindings = [];
 const selectedBindingIndexes = new Set();
 const topicsByBinding = new Map();
@@ -26,6 +28,13 @@ let streaming = false;
 let stoppedReason = '';
 let paused = false;
 let bindingFilterIndex = null;
+
+let publishBindingIndex = null;
+let publishTopic = '';
+let publishContentType = 'application/json';
+let publishPayload = '';
+let publishResult = null; // { ok, status, topic, message }
+let publishSending = false;
 
 let messages = [];
 let totalReceived = 0;
@@ -164,6 +173,10 @@ function render() {
     root.innerHTML = renderError();
     return;
   }
+  if (activeTab === 'publish') {
+    root.innerHTML = renderPublishView();
+    return;
+  }
   root.innerHTML = renderReady();
   renderMessages();
 }
@@ -192,7 +205,13 @@ function renderHeader() {
         <span class="event-title">Event Mesh</span>
         <span class="event-app">${escapeHtml(appId)}</span>
       </div>
-      <div class="event-header-meta">${escapeHtml(meta)}</div>
+      <div class="event-header-end">
+        <div class="event-tabs" role="tablist">
+          <button type="button" class="event-tab${activeTab === 'subscribe' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="subscribe" aria-selected="${activeTab === 'subscribe'}">Subscribe</button>
+          <button type="button" class="event-tab${activeTab === 'publish' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="publish" aria-selected="${activeTab === 'publish'}">Publish</button>
+        </div>
+        <div class="event-header-meta">${escapeHtml(meta)}</div>
+      </div>
     </header>`;
 }
 
@@ -207,6 +226,66 @@ function renderReady() {
         ${renderResults()}
       </section>
     </main>`;
+}
+
+function renderPublishView() {
+  return `
+    ${renderHeader()}
+    <main class="event-shell">
+      <section class="event-publish" aria-label="Publish Event">
+        ${renderPublishForm()}
+      </section>
+    </main>`;
+}
+
+function renderPublishForm() {
+  const hasBindings = bindings.length > 0;
+  const selectedIdx = publishBindingIndex !== null ? publishBindingIndex : (bindings[0] !== undefined ? bindings[0].index : 0);
+  const selectedBinding = findBinding(selectedIdx);
+  const hint = selectedBinding ? `e.g. ${escapeHtml(selectedBinding.namespace)}/items/created` : 'e.g. namespace/entity/event';
+  return `
+    <div class="event-section-head">
+      <h2>Publish Event</h2>
+    </div>
+    <div class="event-publish-form">
+      <label class="event-field">
+        <span class="event-label">Messaging Binding</span>
+        <select class="event-input event-select" data-role="ep-binding-select">
+          ${hasBindings ? bindings.map((b) => `<option value="${b.index}"${b.index === selectedIdx ? ' selected' : ''}>${escapeHtml(b.name)} — ${escapeHtml(b.namespace)}</option>`).join('') : '<option value="">No bindings available</option>'}
+        </select>
+      </label>
+      <label class="event-field">
+        <span class="event-label">Topic</span>
+        <input type="text" class="event-input" data-role="ep-topic-input" value="${escapeHtml(publishTopic)}" placeholder="${hint}" autocomplete="off" />
+      </label>
+      <label class="event-field">
+        <span class="event-label">Content-Type</span>
+        <select class="event-input event-select" data-role="ep-content-type-select">
+          <option value="application/json"${publishContentType === 'application/json' ? ' selected' : ''}>application/json</option>
+          <option value="text/plain"${publishContentType === 'text/plain' ? ' selected' : ''}>text/plain</option>
+        </select>
+      </label>
+      <div class="event-field">
+        <div class="event-field-head">
+          <span class="event-label">Payload</span>
+          <button type="button" class="event-btn event-btn-compact" data-action="ep-format-json">Format JSON</button>
+        </div>
+        <textarea class="event-input event-textarea" data-role="ep-payload-input" rows="8" autocomplete="off" spellcheck="false">${escapeHtml(publishPayload)}</textarea>
+      </div>
+      ${renderPublishResult()}
+      <div class="event-config-actions">
+        <button type="button" class="event-btn event-btn-primary" data-action="ep-send" ${publishSending || !hasBindings || publishTopic.trim().length === 0 ? 'disabled' : ''}>${publishSending ? 'Sending…' : 'Publish Event'}</button>
+        <span class="event-hint">Event is published directly to the topic via the REST Messaging API.</span>
+      </div>
+    </div>`;
+}
+
+function renderPublishResult() {
+  if (publishResult === null) return '';
+  if (publishResult.ok) {
+    return `<div class="event-publish-result is-ok">✓ Published to <code>${escapeHtml(publishResult.topic)}</code> — HTTP ${publishResult.status ?? ''}</div>`;
+  }
+  return `<div class="event-publish-result is-error">✗ Failed: ${escapeHtml(publishResult.message || 'Unknown error')}</div>`;
 }
 
 function renderSelectedBindingsSection() {
@@ -561,6 +640,8 @@ window.addEventListener('message', (event) => {
     handleStopped(data);
   } else if (data.type === 'sapTools.events.error') {
     handleError(data);
+  } else if (data.type === 'sapTools.events.publishResult') {
+    handlePublishResult(data);
   }
 });
 
@@ -573,9 +654,23 @@ function handleReady(data) {
   addBindingOpen = bindings.length > 1;
   bindingSearch = '';
   startError = '';
+  publishBindingIndex = null;
+  publishResult = null;
+  publishSending = false;
   phase = 'ready';
   if (bindings.length === 1) addSelectedBinding(bindings[0].index);
   render();
+}
+
+function handlePublishResult(data) {
+  publishSending = false;
+  publishResult = {
+    ok: data.ok === true,
+    status: typeof data.status === 'number' ? data.status : undefined,
+    topic: typeof data.topic === 'string' ? data.topic : '',
+    message: typeof data.message === 'string' ? data.message : '',
+  };
+  if (phase === 'ready') render();
 }
 
 function handleTopics(data) {
@@ -736,13 +831,39 @@ function addCustomTopic(index) {
   render();
 }
 
+function postPublishEvent() {
+  const idx = publishBindingIndex !== null ? publishBindingIndex : (bindings[0] !== undefined ? bindings[0].index : -1);
+  const topic = publishTopic.trim();
+  if (!vscodeApi || !topic || publishSending) return;
+  publishSending = true;
+  publishResult = null;
+  render();
+  vscodeApi.postMessage({ type: 'sapTools.events.publishEvent', bindingIndex: idx, topic, payload: publishPayload, contentType: publishContentType });
+}
+
+function formatPublishPayload() {
+  try {
+    publishPayload = JSON.stringify(JSON.parse(publishPayload), null, 2);
+  } catch {
+    return;
+  }
+  render();
+}
+
 document.addEventListener('click', (event) => {
   const actionEl = event.target.closest('[data-action]');
   if (!actionEl) return;
   const action = actionEl.dataset.action;
   const index = bindingId(actionEl.dataset.bindingIndex);
 
-  if (action === 'em-retry') {
+  if (action === 'em-switch-tab') {
+    activeTab = actionEl.dataset.tab || 'subscribe';
+    render();
+  } else if (action === 'ep-send') {
+    postPublishEvent();
+  } else if (action === 'ep-format-json') {
+    formatPublishPayload();
+  } else if (action === 'em-retry') {
     phase = 'loading';
     render();
     if (vscodeApi) vscodeApi.postMessage({ type: 'sapTools.events.webviewReady' });
@@ -799,21 +920,29 @@ document.addEventListener('input', (event) => {
   if (el.matches('[data-role="em-binding-search"]')) {
     bindingSearch = el.value || '';
     render();
+  } else if (el.matches('[data-role="ep-topic-input"]')) {
+    publishTopic = el.value || '';
+  } else if (el.matches('[data-role="ep-payload-input"]')) {
+    publishPayload = el.value || '';
   }
 });
 
 document.addEventListener('change', (event) => {
   const el = event.target;
   if (!el || !el.matches) return;
-  if (!el.matches('[data-role="em-topic-checkbox"]')) return;
-
-  const index = bindingId(el.dataset.bindingIndex);
-  const topic = el.dataset.topic;
-  if (!topic) return;
-  const state = topicStateFor(index);
-  if (el.checked) state.selectedTopics.add(topic);
-  else state.selectedTopics.delete(topic);
-  render();
+  if (el.matches('[data-role="ep-binding-select"]')) {
+    publishBindingIndex = bindingId(el.value);
+  } else if (el.matches('[data-role="ep-content-type-select"]')) {
+    publishContentType = el.value || 'application/json';
+  } else if (el.matches('[data-role="em-topic-checkbox"]')) {
+    const index = bindingId(el.dataset.bindingIndex);
+    const topic = el.dataset.topic;
+    if (!topic) return;
+    const state = topicStateFor(index);
+    if (el.checked) state.selectedTopics.add(topic);
+    else state.selectedTopics.delete(topic);
+    render();
+  }
 });
 
 document.addEventListener('keydown', (event) => {
