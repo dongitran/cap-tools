@@ -51,6 +51,13 @@ async function readEventStylesSource(): Promise<string> {
   );
 }
 
+async function readApiStylesSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/styles/08-apis.css', import.meta.url),
+    'utf8'
+  );
+}
+
 async function readLogsStylesSource(): Promise<string> {
   return readFile(
     new URL('../docs/designs/prototypes/src/styles/03-logs-panel.css', import.meta.url),
@@ -61,6 +68,13 @@ async function readLogsStylesSource(): Promise<string> {
 async function readEventWebviewSource(): Promise<string> {
   return readFile(
     new URL('../docs/designs/prototypes/assets/events-webview.js', import.meta.url),
+    'utf8'
+  );
+}
+
+async function readApiWebviewSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/assets/apis-webview.js', import.meta.url),
     'utf8'
   );
 }
@@ -450,6 +464,58 @@ describe('prototype Log-API-Event workspace', () => {
     expect(index).toContain('value="event-mesh"');
     expect(gallery).toContain("id: 'event-mesh'");
     expect(gallery).toContain('./variants/events-webview.html');
+  });
+
+  it('syntax-highlights JSON responses after executing APIs requests', async () => {
+    const source = await readApiWebviewSource();
+    const styles = await readApiStylesSource();
+
+    expect(source).toContain('const API_JSON_TOKEN_PATTERN');
+    expect(source).toContain('function highlightApiJson(json)');
+    expect(source).toContain('function renderApiJsonResult(payload)');
+    expect(source).toContain('JSON.stringify(payload, null, 2)');
+    expect(source).toContain('class="api-raw-json is-json"');
+    expect(source).toContain('class="${tokenClass}"');
+    expect(source).toContain("'api-json-key'");
+    expect(source).toContain("'api-json-string'");
+    expect(source).toContain("'api-json-number'");
+    expect(source).toContain("'api-json-literal'");
+    expect(source).toContain("'api-json-punctuation'");
+    expect(source).not.toContain('<pre class="api-raw-json" style=');
+
+    expect(styles).toContain('.api-raw-json.is-json');
+    expect(styles).toContain('.api-json-key');
+    expect(styles).toContain('.api-json-string');
+    expect(styles).toContain('.api-json-number');
+    expect(styles).toContain('.api-json-literal');
+    expect(styles).toContain('.api-json-punctuation');
+  });
+
+  it('renders APIs response controls with reusable classes and complete grid columns', async () => {
+    const source = await readApiWebviewSource();
+    const styles = await readApiStylesSource();
+
+    expect(source).toContain('function collectApiGridColumns(rows)');
+    expect(source).toContain('const columns = collectApiGridColumns(rows);');
+    expect(source).toContain('class="api-response-title-group"');
+    expect(source).toContain('class="api-response-meta"');
+    expect(source).toContain('class="api-view-content"');
+    expect(source).not.toContain('class="api-view-content" style=');
+    expect(source).not.toContain('class="api-copy-btn" data-action="api-copy-response" style=');
+
+    expect(styles).toContain('.api-response-title-group');
+    expect(styles).toContain('.api-response-meta');
+    expect(styles).toContain('.api-copy-btn');
+    expect(styles).toContain('.api-grid-container');
+    expect(styles).toContain('.api-grid-empty');
+  });
+
+  it('loads the standalone APIs prototype with mock catalog data outside VS Code', async () => {
+    const source = await readApiWebviewSource();
+
+    expect(source).toContain('if (!vscodeApi) {');
+    expect(source).toContain("apiCatalogState = 'loaded';");
+    expect(source).toContain("apiCurrentCatalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];");
   });
 
   it('sends sapTools.events.publishEvent message and handles publishResult response', async () => {

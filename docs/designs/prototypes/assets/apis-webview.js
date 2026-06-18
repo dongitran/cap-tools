@@ -102,6 +102,39 @@ const API_MOCK_CATALOG = {
   }
 };
 
+const API_MOCK_RESPONSES = {
+  'demo-app': {
+    'Users': {
+      value: [
+        { id: 'U001', name: 'Alice', role: 'Admin', active: true },
+        { id: 'U002', name: 'Bob', role: 'User', region: 'APAC' },
+        { id: 'U003', name: 'Charlie', role: 'User', lastLogin: null }
+      ]
+    },
+    'Products': {
+      value: [
+        { id: 'P001', title: 'Laptop', price: 999, currency: 'USD' },
+        { id: 'P002', title: 'Mouse', price: 29.99, stock: 120 },
+        { id: 'P003', title: 'Keyboard', price: 59.5, tags: ['hardware', 'office'] }
+      ]
+    },
+    'Orders': {
+      value: [
+        { orderId: 'O1001', status: 'Shipped', total: 1028.99 },
+        { orderId: 'O1002', status: 'Pending', total: 59.5, priority: true }
+      ]
+    }
+  },
+  'api1': {
+    'Records': {
+      value: [
+        { recordID: 'REC001', companyName: 'Demo Company A', code: 'A123', status: 'ACTIVE' },
+        { recordID: 'REC002', companyName: 'Demo Company B', code: 'B456', status: 'INACTIVE' }
+      ]
+    }
+  }
+};
+
 const appElement = document.getElementById('webview-app');
 
 function escapeHtml(str) {
@@ -135,9 +168,9 @@ function copyResponseData() {
     const rows = extractArrayFromPayload(apiResultPayload);
     if (!rows || rows.length === 0) return;
 
-    const columns = Object.keys(rows[0]);
+    const columns = collectApiGridColumns(rows);
     const header = columns.join('\t');
-    const body = rows.map(r => columns.map(c => String(r[c] ?? '')).join('\t')).join('\n');
+    const body = rows.map(r => columns.map(c => formatApiGridCell(resolveApiGridCell(r, c))).join('\t')).join('\n');
     contentToCopy = `${header}\n${body}`;
   }
 
@@ -150,9 +183,7 @@ function copyResponseData() {
       btn.innerHTML = '&#10003; Copied!';
       setTimeout(() => { btn.innerHTML = originalText; }, 2000);
     }
-  }).catch(err => {
-    console.error('Failed to copy: ', err);
-  });
+  }).catch(() => undefined);
 }
 
 function renderApiParamRow(paramName, value, placeholder, type = 'text') {
@@ -175,13 +206,15 @@ function renderApiParamRow(paramName, value, placeholder, type = 'text') {
 
 function renderApiGridResult() {
   const rows = extractArrayFromPayload(apiResultPayload);
-  if (!rows) return '<p>No grid data available</p>';
-  if (rows.length === 0) return '<p>Empty result set</p>';
+  if (!rows) return '<div class="api-grid-empty">No tabular data in this response.</div>';
+  if (rows.length === 0) return '<div class="api-grid-empty">Empty result set.</div>';
   
-  const columns = Object.keys(rows[0]);
+  const columns = collectApiGridColumns(rows);
+  if (columns.length === 0) return '<div class="api-grid-empty">No columns available.</div>';
+
   const headerHtml = columns.map(c => `<th>${escapeHtml(c)}</th>`).join('');
   const rowsHtml = rows.map(r => {
-    return '<tr>' + columns.map(c => `<td>${escapeHtml(String(r[c] ?? ''))}</td>`).join('') + '</tr>';
+    return '<tr>' + columns.map(c => `<td>${escapeHtml(formatApiGridCell(resolveApiGridCell(r, c)))}</td>`).join('') + '</tr>';
   }).join('');
 
   return `
@@ -194,6 +227,55 @@ function renderApiGridResult() {
   `;
 }
 
+function collectApiGridColumns(rows) {
+  const columns = [];
+  for (const row of rows) {
+    if (row && typeof row === 'object' && !Array.isArray(row)) {
+      for (const key of Object.keys(row)) {
+        if (!columns.includes(key)) columns.push(key);
+      }
+    } else if (!columns.includes('value')) {
+      columns.push('value');
+    }
+  }
+  return columns;
+}
+
+function resolveApiGridCell(row, column) {
+  if (row && typeof row === 'object' && !Array.isArray(row)) {
+    return Object.prototype.hasOwnProperty.call(row, column) ? row[column] : '';
+  }
+  return column === 'value' ? row : '';
+}
+
+function formatApiGridCell(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+const API_JSON_TOKEN_PATTERN = /"(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\b(?:true|false|null)\b|[{}\[\],:]/g;
+
+function highlightApiJson(json) {
+  return json.replace(API_JSON_TOKEN_PATTERN, (token, offset, source) => {
+    let tokenClass = 'api-json-punctuation';
+    if (token.startsWith('"')) {
+      const afterToken = source.slice(offset + token.length);
+      tokenClass = /^\s*:/.test(afterToken) ? 'api-json-key' : 'api-json-string';
+    } else if (/^-?\d/.test(token)) {
+      tokenClass = 'api-json-number';
+    } else if (token === 'true' || token === 'false' || token === 'null') {
+      tokenClass = 'api-json-literal';
+    }
+    return `<span class="${tokenClass}">${escapeHtml(token)}</span>`;
+  });
+}
+
+function renderApiJsonResult(payload) {
+  const json = JSON.stringify(payload, null, 2);
+  return `<pre class="api-raw-json is-json"><code>${highlightApiJson(json)}</code></pre>`;
+}
+
 function updateResponseSection() {
   const responseBody = document.querySelector('.api-response-body');
   const headerSection = document.querySelector('.api-response-header');
@@ -202,29 +284,21 @@ function updateResponseSection() {
 
   if (apiResultState === 'done') {
     const statusClass = apiResultStatus.startsWith('2') ? 'success' : 'error';
-    
-    let copyBtnHtml = '';
-    if (apiResultPayload) {
-      copyBtnHtml = `
-        <button type="button" class="api-copy-btn" data-action="api-copy-data" style="background: transparent; color: var(--vscode-textLink-foreground, #3794ff); border: none; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;">
-          <span aria-hidden="true">&#128203;</span> Copy
-        </button>
-      `;
-    }
+    const hasPayload = apiResultPayload !== null && apiResultPayload !== undefined;
 
     headerSection.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 16px;">
-        <h3 style="margin: 0; line-height: 1;">Response</h3>
+      <div class="api-response-title-group">
+        <h3>Response</h3>
         
-        <div class="api-view-tabs" style="border-bottom: none; display: flex; align-items: center; gap: 4px; margin-bottom: 0; margin-top: 2px;">
-          <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json" style="padding: 2px 8px; font-size: 11px; height: 22px; box-sizing: border-box; display: flex; align-items: center;">JSON</button>
-          <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid" style="padding: 2px 8px; font-size: 11px; height: 22px; box-sizing: border-box; display: flex; align-items: center;">Grid Data</button>
+        <div class="api-view-tabs" role="tablist" aria-label="API response views">
+          <button type="button" class="api-view-tab-btn${apiActiveView === 'json' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="json">JSON</button>
+          <button type="button" class="api-view-tab-btn${apiActiveView === 'grid' ? ' is-active' : ''}" data-action="api-switch-view" data-view-id="grid">Grid Data</button>
         </div>
       </div>
       
-      <div style="display: flex; align-items: center; gap: 12px; font-size: 12px;">
-        ${apiResultPayload ? `
-          <button type="button" class="api-copy-btn" data-action="api-copy-response" style="background: transparent; border: 1px solid var(--vscode-button-secondaryBackground, #5f5f5f); color: var(--vscode-foreground); border-radius: 2px; cursor: pointer; padding: 2px 8px; height: 22px; box-sizing: border-box; display: flex; align-items: center;">
+      <div class="api-response-meta">
+        ${hasPayload ? `
+          <button type="button" class="api-copy-btn" data-action="api-copy-data">
             &#128203; Copy
           </button>
         ` : ''}
@@ -233,7 +307,11 @@ function updateResponseSection() {
       </div>
     `;
   } else {
-    headerSection.innerHTML = `<h3 style="margin: 0;">Response</h3>`;
+    headerSection.innerHTML = `
+      <div class="api-response-title-group">
+        <h3>Response</h3>
+      </div>
+    `;
   }
 
   if (apiResultState === 'idle') {
@@ -256,18 +334,16 @@ function updateResponseSection() {
     return;
   }
 
-  const payloadStr = JSON.stringify(apiResultPayload, null, 2);
-
   let viewContent = '';
   if (apiActiveView === 'json') {
-    viewContent = `<pre class="api-raw-json" style="background: transparent !important; margin: 0 !important; padding: 0 !important; margin-bottom: 0 !important; padding-bottom: 0 !important; display: block;"><code style="background: transparent !important; color: inherit; padding: 0 !important; margin: 0 !important; display: block;">${escapeHtml(payloadStr)}</code></pre>`;
+    viewContent = renderApiJsonResult(apiResultPayload);
   } else {
     viewContent = renderApiGridResult();
   }
 
   responseBody.innerHTML = `
-    <div class="api-results-wrapper" style="margin-top: 0; flex: 1; display: flex; flex-direction: column; padding-bottom: 0 !important; margin-bottom: 0 !important;">
-      <div class="api-view-content" style="flex: 1; overflow: auto; background-color: transparent; padding-top: 2px; padding-bottom: 0 !important; margin-bottom: 0 !important;">
+    <div class="api-results-wrapper">
+      <div class="api-view-content">
         ${viewContent}
       </div>
     </div>
@@ -544,7 +620,7 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
-  if (action === 'api-copy-data') {
+  if (action === 'api-copy-data' || action === 'api-copy-response') {
     copyResponseData();
     return;
   }
@@ -564,10 +640,11 @@ appElement.addEventListener('click', (event) => {
     } else {
       // Fallback for prototype testing without VS Code extension host
       setTimeout(() => {
+        const appResponses = API_MOCK_RESPONSES[apiSelectedAppId] || API_MOCK_RESPONSES['demo-app'];
         apiResultState = 'done';
         apiResultStatus = '200 OK';
         apiResultTime = 345;
-        apiResultPayload = API_MOCK_RESPONSES['demo-app']['Users'];
+        apiResultPayload = appResponses[apiSelectedEntity] || API_MOCK_RESPONSES['demo-app']['Users'];
         updateWorkbenchSection();
       }, 1000);
     }
@@ -636,6 +713,10 @@ function initWebview() {
   const appId = params.get('appId') || sessionStorage.getItem('saptools.apis.selectedAppId') || window.vscodeApiSelectedAppId;
   if (appId) {
     apiSelectedAppId = appId;
+    if (!vscodeApi) {
+      apiCatalogState = 'loaded';
+      apiCurrentCatalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
+    }
     
     // Select the first entity automatically if available
     const catalog = API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
@@ -780,8 +861,8 @@ window.addEventListener('message', (event) => {
   if (event.data.type === 'saptools.prototype.apis.appSelected') {
     apiSelectedAppId = event.data.payload.appId;
     
-    apiCatalogState = 'loading';
-    apiCurrentCatalog = null;
+    apiCatalogState = vscodeApi ? 'loading' : 'loaded';
+    apiCurrentCatalog = vscodeApi ? null : API_MOCK_CATALOG[apiSelectedAppId] || API_MOCK_CATALOG['demo-app'];
     
     apiSelectedEntity = '';
     apiHttpMethod = 'GET';

@@ -3962,10 +3962,13 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .api-response-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   padding-bottom: 8px;
+  min-height: 28px;
+  flex-wrap: wrap;
 }
 
 .api-response-header h3 {
@@ -3973,7 +3976,42 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   font-size: 13px;
   font-weight: 600;
   color: var(--vscode-foreground, #cccccc);
-  flex: 1;
+}
+
+.api-response-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.api-response-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.api-copy-btn {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--vscode-button-secondaryBackground, #5f5f5f);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground, #cccccc);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.api-copy-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
 }
 
 .api-status-badge {
@@ -4044,14 +4082,18 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .api-view-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
-  padding-bottom: 4px;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--vscode-panel-border, #3c3c3c);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--vscode-editor-background, #1e1e1e) 86%, var(--vscode-foreground, #cccccc));
 }
 
 .api-view-tab-btn {
@@ -4059,11 +4101,14 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   border: none;
   color: var(--vscode-tab-inactiveForeground, #808080);
   font-family: inherit;
-  font-size: 12px;
-  padding: 4px 10px;
+  font-size: 11px;
+  height: 22px;
+  padding: 0 9px;
   cursor: pointer;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px;
   transition: color 0.15s ease, background-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
 }
 
 .api-view-tab-btn:hover {
@@ -4073,16 +4118,18 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 
 .api-view-tab-btn.is-active {
   color: var(--vscode-tab-activeForeground, #ffffff);
-  border-bottom: 2px solid var(--vscode-tab-activeBorder, #007acc);
+  background: var(--vscode-list-activeSelectionBackground, #007acc);
   font-weight: 600;
 }
 
 .api-view-content {
   flex: 1;
   overflow: auto;
-  background-color: var(--vscode-textBlock-background, rgba(0,0,0,0.1));
-  border-radius: 4px;
-  padding: 8px;
+  min-height: 0;
+  background-color: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.22));
+  border-radius: 6px;
+  padding: 0;
 }
 
 .api-raw-json {
@@ -4091,13 +4138,47 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   font-size: 12px;
   color: var(--vscode-editor-foreground, #d4d4d4);
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  padding: 12px 14px;
+}
+
+.api-raw-json code {
+  font-family: inherit;
+  color: inherit;
+}
+
+.api-raw-json.is-json {
+  background: transparent;
+}
+
+.api-json-key {
+  color: var(--vscode-symbolIcon-propertyForeground, #4fc1ff);
+}
+
+.api-json-string {
+  color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+}
+
+.api-json-number {
+  color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+}
+
+.api-json-literal {
+  color: var(--vscode-symbolIcon-booleanForeground, #569cd6);
+  font-weight: 600;
+}
+
+.api-json-punctuation {
+  color: var(--vscode-descriptionForeground, #9a9a9a);
 }
 
 /* Grid Table */
+.api-grid-container,
 .api-grid-scroll-pane {
   overflow: auto;
   max-height: 100%;
+  min-height: 0;
 }
 
 .api-grid-table {
@@ -4116,6 +4197,9 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   background-color: var(--vscode-list-hoverBackground, rgba(255,255,255,0.03));
   color: var(--vscode-foreground, #cccccc);
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .api-grid-table tr:hover {
@@ -4125,7 +4209,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .api-grid-empty {
   color: var(--vscode-descriptionForeground, #808080);
   font-style: italic;
-  padding: 12px;
+  padding: 28px 12px;
   text-align: center;
 }
 /* --- END 08-apis.css --- */

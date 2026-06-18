@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.132 (stable)
+- UI: APIs Explorer `Execute` responses now render JSON with theme-aware syntax highlighting for keys, strings, numbers, booleans, nulls, and punctuation.
+- UI: The APIs response toolbar now uses reusable controls for `JSON`/`Grid Data`, Copy, status, and timing instead of inline response styling.
+- Fix: APIs `Grid Data` now includes columns discovered across all returned rows, and the standalone APIs prototype loads mock catalog data without waiting for a VS Code extension host.
+
 ## 0.10.131 (stable)
 - UI: Expanded Event Mesh received-message payloads now syntax-highlight valid JSON keys, strings, numbers, booleans, nulls, and punctuation.
 - UI: Non-JSON payloads still render as escaped plain text, preserving the existing fallback behavior for text and base64 messages.
