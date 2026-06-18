@@ -321,6 +321,93 @@
   margin-bottom: 3px;
 }
 
+/* --- simple subscribe tree --- */
+
+.event-simple-summary {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.event-simple-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.event-simple-group,
+.event-simple-binding {
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.26));
+  border-radius: 6px;
+  background: var(--vscode-editor-background);
+}
+
+.event-simple-group-row,
+.event-simple-binding {
+  display: grid;
+  grid-template-columns: 26px minmax(120px, 0.9fr) minmax(0, 1.4fr) max-content;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.event-simple-group-row {
+  grid-template-columns: 26px minmax(140px, 1fr) max-content;
+}
+
+.event-simple-expander {
+  border: 0;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  font: inherit;
+  padding: 2px;
+}
+
+.event-simple-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.event-simple-binding {
+  cursor: pointer;
+}
+
+.event-simple-binding:hover,
+.event-simple-group-row:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.16));
+}
+
+.event-simple-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 8px 34px;
+}
+
+.event-simple-children .event-simple-binding {
+  border-radius: 4px;
+}
+
+.event-simple-level-1 {
+  grid-template-columns: minmax(18px, max-content) minmax(120px, 0.9fr) minmax(0, 1.4fr) max-content;
+}
+
+.event-simple-level-2 {
+  grid-template-columns: minmax(18px, max-content) minmax(120px, 0.9fr) minmax(0, 1.4fr) max-content;
+}
+
+.event-simple-binding input,
+.event-simple-check input {
+  margin: 0;
+}
+
 /* --- selected binding rows --- */
 
 .event-binding-card {

@@ -14,13 +14,14 @@ let errorMessage = '';
 let startError = '';
 let statusLine = '';
 
-let activeTab = 'subscribe'; // 'subscribe' | 'publish'
+let activeTab = 'subscribe-simple'; // 'subscribe-simple' | 'subscribe-advance' | 'publish'
 
 let bindings = [];
 const selectedBindingIndexes = new Set();
 const topicsByBinding = new Map();
 let activeBindingIndex = null;
 let expandedBindingIndex = null;
+const simpleExpandedGroupKeys = new Set();
 let addBindingOpen = false;
 let bindingSearch = '';
 let streaming = false;
@@ -66,10 +67,6 @@ function findBinding(index) {
   return bindings.find((binding) => binding.index === index) || null;
 }
 
-function bindingLabel(binding) {
-  return binding ? `${binding.name} - ${binding.namespace}` : '';
-}
-
 function createTopicState() {
   return {
     loading: true,
@@ -102,6 +99,51 @@ function selectedBindings() {
   return sortedSelectedBindingIndexes()
     .map(findBinding)
     .filter((binding) => binding !== null);
+}
+
+function selectSimpleBinding(index) {
+  selectedBindingIndexes.add(index);
+  activeBindingIndex = index;
+}
+
+function simpleBindingTitle(binding) {
+  return String(binding?.name || binding?.instanceName || binding?.namespace || 'Binding');
+}
+
+function normalizeSimpleBindingGroupName(value) {
+  const trimmed = String(value || '').trim();
+  const withoutIndex = trimmed.replace(/[\s._-]*\d+$/, '').replace(/[\s._-]+$/, '').trim();
+  return withoutIndex.length > 0 ? withoutIndex : trimmed;
+}
+
+function simpleWildcardFor(binding) {
+  return `${binding.namespace}/*`;
+}
+
+function simpleGroupKey(label) {
+  return label.toLowerCase();
+}
+
+function buildSimpleBindingTree() {
+  const buckets = new Map();
+  for (const binding of [...bindings].sort((a, b) => simpleBindingTitle(a).localeCompare(simpleBindingTitle(b)))) {
+    const label = normalizeSimpleBindingGroupName(simpleBindingTitle(binding));
+    const key = simpleGroupKey(label);
+    const bucket = buckets.get(key) || { key, label, bindings: [] };
+    bucket.bindings.push(binding);
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function isSimpleBindingLocked(binding) {
+  return streaming || topicStateFor(binding.index).status === 'listening';
+}
+
+function selectedSimpleGroupCount() {
+  return buildSimpleBindingTree().filter((group) =>
+    group.bindings.some((binding) => selectedBindingIndexes.has(binding.index))
+  ).length;
 }
 
 function requestTopics(index) {
@@ -177,7 +219,10 @@ function render() {
     root.innerHTML = renderPublishView();
     return;
   }
-  root.innerHTML = renderReady();
+  root.innerHTML = activeTab === 'subscribe-advance'
+    ? renderReady()
+    : renderSimpleSubscribeView();
+  applySimpleIndeterminateState();
   renderMessages();
 }
 
@@ -188,6 +233,14 @@ function renderError() {
       <p>${escapeHtml(errorMessage)}</p>
       <button type="button" class="event-btn" data-action="em-retry">Try Again</button>
     </div>`;
+}
+
+function applySimpleIndeterminateState() {
+  for (const input of document.querySelectorAll('[data-indeterminate="true"]')) {
+    if (input instanceof HTMLInputElement) {
+      input.indeterminate = true;
+    }
+  }
 }
 
 function spinner() {
@@ -211,7 +264,8 @@ function renderHeader() {
       </div>
       <div class="event-header-end">
         <div class="event-tabs" role="tablist">
-          <button type="button" class="event-tab${activeTab === 'subscribe' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="subscribe" aria-selected="${activeTab === 'subscribe'}">Subscribe</button>
+          <button type="button" class="event-tab${activeTab === 'subscribe-simple' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="subscribe-simple" aria-selected="${activeTab === 'subscribe-simple'}">Subscribe Simple</button>
+          <button type="button" class="event-tab${activeTab === 'subscribe-advance' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="subscribe-advance" aria-selected="${activeTab === 'subscribe-advance'}">Subscribe Advance</button>
           <button type="button" class="event-tab${activeTab === 'publish' ? ' is-active' : ''}" role="tab" data-action="em-switch-tab" data-tab="publish" aria-selected="${activeTab === 'publish'}">Publish</button>
         </div>
         <div class="event-header-meta">${escapeHtml(meta)}</div>
@@ -230,6 +284,108 @@ function renderReady() {
         ${renderResults()}
       </section>
     </main>`;
+}
+
+function renderSimpleSubscribeView() {
+  return `
+    ${renderHeader()}
+    <main class="event-shell">
+      <section class="event-setup" aria-label="Event Mesh simple listener setup">
+        ${renderSimpleSubscribeSection()}
+      </section>
+      <section class="event-results" aria-label="Event Mesh results">
+        ${renderResults()}
+      </section>
+    </main>`;
+}
+
+function renderSimpleSubscribeSection() {
+  return `
+    <div class="event-section-head">
+      <h2>Client Binding Groups</h2>
+      <span class="event-simple-summary">${escapeHtml(simpleSelectionSummary())}</span>
+    </div>
+    ${renderSimpleTree()}
+    ${startError ? `<p class="event-inline-error" role="alert">${escapeHtml(startError)}</p>` : ''}
+    ${renderSimpleActions()}`;
+}
+
+function simpleSelectionSummary() {
+  const selected = selectedBindingIndexes.size;
+  if (selected === 0) {
+    return `${bindings.length} bindings available`;
+  }
+  const groups = selectedSimpleGroupCount();
+  return `${plural(selected, 'binding', 'bindings')} selected across ${plural(groups, 'group', 'groups')}`;
+}
+
+function renderSimpleTree() {
+  const groups = buildSimpleBindingTree();
+  if (groups.length === 0) {
+    return '<div class="event-selected-empty"><p>No messaging bindings available.</p></div>';
+  }
+  return `
+    <div class="event-simple-tree" role="tree" aria-label="Client Binding Groups">
+      ${groups.map(renderSimpleGroup).join('')}
+    </div>`;
+}
+
+function renderSimpleGroup(group) {
+  if (group.bindings.length === 1) {
+    return renderSimpleBindingRow(group.bindings[0], 1);
+  }
+  const selectedCount = group.bindings.filter((binding) => selectedBindingIndexes.has(binding.index)).length;
+  const expanded = simpleExpandedGroupKeys.has(group.key);
+  const checked = selectedCount === group.bindings.length;
+  const indeterminate = selectedCount > 0 && selectedCount < group.bindings.length;
+  return `
+    <div class="event-simple-group" role="treeitem" aria-expanded="${expanded}">
+      <div class="event-simple-group-row">
+        <button type="button" class="event-simple-expander" data-action="em-expand-simple-group" data-group-key="${escapeHtml(group.key)}" aria-label="${expanded ? 'Collapse' : 'Expand'} ${escapeHtml(group.label)}">${expanded ? '▾' : '▸'}</button>
+        <label class="event-simple-check" data-action="em-toggle-simple-group" data-group-key="${escapeHtml(group.key)}">
+          <input type="checkbox" data-role="em-simple-group-checkbox" ${checked ? 'checked' : ''} ${indeterminate ? 'data-indeterminate="true"' : ''} ${streaming ? 'disabled' : ''} />
+          <span class="event-binding-name">${escapeHtml(group.label)}</span>
+        </label>
+        <span class="event-binding-count">${selectedCount}/${group.bindings.length} selected</span>
+      </div>
+      ${expanded ? `<div class="event-simple-children" role="group">${group.bindings.map((binding) => renderSimpleBindingRow(binding, 2)).join('')}</div>` : ''}
+    </div>`;
+}
+
+function renderSimpleBindingRow(binding, level) {
+  const state = topicStateFor(binding.index);
+  const selected = selectedBindingIndexes.has(binding.index);
+  const live = state.status === 'listening';
+  const locked = isSimpleBindingLocked(binding);
+  return `
+    <label class="event-simple-binding event-simple-level-${level}" role="treeitem" data-action="em-toggle-simple-binding" data-binding-index="${binding.index}">
+      <input type="checkbox" data-role="em-simple-binding-checkbox" ${selected ? 'checked' : ''} ${locked ? 'disabled' : ''} />
+      <span class="event-binding-name">${escapeHtml(binding.name)}</span>
+      <span class="event-binding-namespace" title="${escapeHtml(binding.namespace)}">${escapeHtml(binding.namespace)}</span>
+      <span class="event-status-pill ${statusClass(state.status)}">${live ? 'Listening' : 'All Topics'}</span>
+    </label>`;
+}
+
+function renderSimpleActions() {
+  if (streaming) {
+    return renderSimpleStreamingActions();
+  }
+  const requests = collectSimpleStartRequests();
+  const anyStarting = selectedBindings().some((binding) => topicStateFor(binding.index).status === 'starting');
+  const label = requests.length === 1 ? 'Binding' : 'Bindings';
+  return `
+    <div class="event-config-actions">
+      <button type="button" class="event-btn event-btn-primary" data-action="em-start-simple" ${requests.length === 0 || anyStarting ? 'disabled' : ''}>${anyStarting ? `${btnSpinner()} Starting…` : `Start Listening To ${requests.length} ${label}`}</button>
+      <span class="event-hint">Simple mode subscribes each selected binding to all topics in its namespace.</span>
+    </div>`;
+}
+
+function renderSimpleStreamingActions() {
+  return `
+    <div class="event-config-actions">
+      <button type="button" class="event-btn" data-action="em-stop" ${stoppingAll ? 'disabled' : ''}>${stoppingAll ? `${btnSpinner()} Stopping…` : 'Stop All'}</button>
+      <span class="event-hint">Use Subscribe Advance to add topics or bindings while listening.</span>
+    </div>`;
 }
 
 function renderPublishView() {
@@ -542,6 +698,12 @@ function collectStartRequests() {
     .filter((entry) => entry.topics.length > 0);
 }
 
+function collectSimpleStartRequests() {
+  return selectedBindings()
+    .filter((binding) => topicStateFor(binding.index).status !== 'listening')
+    .map((binding) => ({ bindingIndex: binding.index, topics: [simpleWildcardFor(binding)] }));
+}
+
 function renderResults() {
   const stateClass = streaming ? 'is-live' : 'is-stopped';
   const stateLabel = streaming ? 'Listening' : 'Stopped';
@@ -683,6 +845,7 @@ function handleReady(data) {
   topicsByBinding.clear();
   activeBindingIndex = null;
   expandedBindingIndex = null;
+  simpleExpandedGroupKeys.clear();
   addBindingOpen = bindings.length > 1;
   bindingSearch = '';
   startError = '';
@@ -690,6 +853,7 @@ function handleReady(data) {
   publishResult = null;
   publishSending = false;
   stoppingAll = false;
+  activeTab = 'subscribe-simple';
   phase = 'ready';
   if (bindings.length === 1) addSelectedBinding(bindings[0].index);
   render();
@@ -820,6 +984,56 @@ function handleError(data) {
 
 // --- Webview -> host intents (delegated) -------------------------------------
 
+function postStartSimple() {
+  const requests = collectSimpleStartRequests();
+  if (!vscodeApi || requests.length === 0) return;
+  startError = '';
+  for (const request of requests) {
+    const state = topicStateFor(request.bindingIndex);
+    state.status = 'starting';
+    state.selectedTopics = new Set(request.topics);
+  }
+  render();
+  vscodeApi.postMessage({ type: 'sapTools.events.startListening', bindings: requests });
+}
+
+function findSimpleGroup(groupKey) {
+  return buildSimpleBindingTree().find((group) => group.key === groupKey) || null;
+}
+
+function toggleSimpleBinding(index) {
+  const binding = findBinding(index);
+  if (binding === null || isSimpleBindingLocked(binding)) return;
+  if (selectedBindingIndexes.has(index)) {
+    removeSelectedBinding(index);
+  } else {
+    selectSimpleBinding(index);
+  }
+  startError = '';
+  render();
+}
+
+function toggleSimpleGroup(groupKey) {
+  const group = findSimpleGroup(groupKey);
+  if (group === null || streaming) return;
+  const allSelected = group.bindings.every((binding) => selectedBindingIndexes.has(binding.index));
+  for (const binding of group.bindings) {
+    if (allSelected) removeSelectedBinding(binding.index);
+    else selectSimpleBinding(binding.index);
+  }
+  startError = '';
+  render();
+}
+
+function toggleSimpleGroupExpansion(groupKey) {
+  if (simpleExpandedGroupKeys.has(groupKey)) {
+    simpleExpandedGroupKeys.delete(groupKey);
+  } else {
+    simpleExpandedGroupKeys.add(groupKey);
+  }
+  render();
+}
+
 function postStartAll() {
   const requests = collectStartRequests();
   if (!vscodeApi || requests.length === 0 || requests.length !== selectedBindingIndexes.size) return;
@@ -891,7 +1105,7 @@ document.addEventListener('click', (event) => {
   const index = bindingId(actionEl.dataset.bindingIndex);
 
   if (action === 'em-switch-tab') {
-    activeTab = actionEl.dataset.tab || 'subscribe';
+    activeTab = actionEl.dataset.tab || 'subscribe-simple';
     render();
   } else if (action === 'ep-send') {
     postPublishEvent();
@@ -920,6 +1134,14 @@ document.addEventListener('click', (event) => {
     render();
   } else if (action === 'em-add-custom-topic') {
     addCustomTopic(index);
+  } else if (action === 'em-expand-simple-group') {
+    toggleSimpleGroupExpansion(actionEl.dataset.groupKey || '');
+  } else if (action === 'em-toggle-simple-group') {
+    toggleSimpleGroup(actionEl.dataset.groupKey || '');
+  } else if (action === 'em-toggle-simple-binding') {
+    toggleSimpleBinding(index);
+  } else if (action === 'em-start-simple') {
+    postStartSimple();
   } else if (action === 'em-start') {
     postStartAll();
   } else if (action === 'em-start-binding') {

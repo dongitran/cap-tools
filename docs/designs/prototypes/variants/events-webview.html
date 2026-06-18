@@ -29,18 +29,30 @@
       const params = new URLSearchParams(window.location.search);
       window.eventMeshAppId = params.get('appId') || 'demo-app';
 
+      const prototypeGroups = [
+        { name: 'orders-client', count: 36, namespace: 'demo/orders/client' },
+        { name: 'billing-client', count: 32, namespace: 'demo/billing/client' },
+        { name: 'inventory-client', count: 32, namespace: 'demo/inventory/client' },
+      ];
+
       const prototypeBindings = Array.from({ length: 100 }, (_, index) => {
-        const namespace =
-          index === 0
-            ? 'demo/service/app'
-            : index === 1
-              ? 'demo/audit/app'
-              : `demo/service-${String(index + 1).padStart(2, '0')}/app`;
+        let offset = index;
+        let group = prototypeGroups[0];
+        for (const candidate of prototypeGroups) {
+          if (offset < candidate.count) {
+            group = candidate;
+            break;
+          }
+          offset -= candidate.count;
+        }
+        const suffix = String(offset + 1).padStart(2, '0');
+        const bindingName = `${group.name}-${suffix}`;
+        const namespace = `${group.namespace}/${suffix}`;
         return {
           index,
-          name: index === 0 ? 'demo-service' : index === 1 ? 'audit-service' : `service-${index + 1}`,
+          name: bindingName,
           namespace,
-          instanceName: index === 0 ? 'demo-service' : index === 1 ? 'audit-service' : `service-${index + 1}`,
+          instanceName: bindingName,
         };
       });
       const liveTopicsByBinding = new Map();

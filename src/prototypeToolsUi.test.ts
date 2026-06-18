@@ -72,6 +72,20 @@ async function readEventVariantSource(): Promise<string> {
   );
 }
 
+async function readGallerySource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/assets/gallery.js', import.meta.url),
+    'utf8'
+  );
+}
+
+async function readPrototypeIndexSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/index.html', import.meta.url),
+    'utf8'
+  );
+}
+
 describe('prototype Microsoft Graph tools UI', () => {
   it('renders an explicit show/hide toggle for client secret fields', async () => {
     const source = await readToolsSource();
@@ -178,13 +192,48 @@ describe('prototype Log-API-Event workspace', () => {
     expect(values).toEqual(values.map(() => '0'));
   });
 
-  it('includes Subscribe/Publish tab switcher with delegated em-switch-tab action', async () => {
+  it('includes Simple, Advance, and Publish tabs with Simple as the default', async () => {
     const source = await readEventWebviewSource();
 
+    expect(source).toContain("activeTab = 'subscribe-simple'");
     expect(source).toContain('em-switch-tab');
     expect(source).toContain('activeTab');
+    expect(source).toContain('Subscribe Simple');
+    expect(source).toContain('Subscribe Advance');
     expect(source).toContain('data-tab="publish"');
-    expect(source).toContain('data-tab="subscribe"');
+    expect(source).toContain('data-tab="subscribe-simple"');
+    expect(source).toContain('data-tab="subscribe-advance"');
+  });
+
+  it('renders a grouped Simple subscribe tree with one-click group and child selection', async () => {
+    const source = await readEventWebviewSource();
+
+    expect(source).toContain('normalizeSimpleBindingGroupName');
+    expect(source).toContain('buildSimpleBindingTree');
+    expect(source).toContain('renderSimpleSubscribeView');
+    expect(source).toContain('collectSimpleStartRequests');
+    expect(source).toContain('em-toggle-simple-group');
+    expect(source).toContain('em-toggle-simple-binding');
+    expect(source).toContain('Client Binding Groups');
+  });
+
+  it('prototype fixture includes repeated client binding groups for Simple subscribe', async () => {
+    const source = await readEventVariantSource();
+
+    expect(source).toContain("name: 'orders-client'");
+    expect(source).toContain("name: 'billing-client'");
+    expect(source).toContain("name: 'inventory-client'");
+    expect(source).toContain("padStart(2, '0')");
+    expect(source).toContain('bindingName = `${group.name}-${suffix}`');
+  });
+
+  it('exposes the Event Mesh viewer variant from the prototype gallery index', async () => {
+    const gallery = await readGallerySource();
+    const index = await readPrototypeIndexSource();
+
+    expect(index).toContain('value="event-mesh"');
+    expect(gallery).toContain("id: 'event-mesh'");
+    expect(gallery).toContain('./variants/events-webview.html');
   });
 
   it('sends sapTools.events.publishEvent message and handles publishResult response', async () => {

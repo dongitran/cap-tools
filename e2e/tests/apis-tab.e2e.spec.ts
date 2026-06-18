@@ -141,7 +141,11 @@ test.describe('APIs Explorer Workspace Flow', () => {
       }
       const frame = eventFrame as Frame;
 
-      await expect(frame.getByText('Selected Bindings')).toBeVisible();
+      await expect(frame.getByRole('tab', { name: 'Subscribe Simple' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+      await expect(frame.getByText('Client Binding Groups')).toBeVisible();
       await clickWithFallback(frame.getByRole('button', { name: /Start Listening To/i }));
       await expect(frame.getByLabel('Event Mesh results').getByText('Listening', { exact: true })).toBeVisible();
       await expect(frame.getByText('demo/service/app/items/created')).toBeVisible();

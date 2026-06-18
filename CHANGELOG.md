@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.125 (stable)
+- Feature: Event Mesh viewer now opens on a new `Subscribe Simple` tab for fast all-topic listening across many client bindings. Bindings with the same base name and only a trailing numeric suffix are grouped into a compact tree, so a whole client group can be selected in one click while individual bindings remain selectable. Simple mode starts each selected binding with its namespace wildcard topic (`<namespace>/*`) and reuses the existing multi-binding listener backend.
+- UI: The previous subscribe workflow is preserved as `Subscribe Advance` for manual topic discovery, custom topics, add-topic while live, and per-binding controls. The Event viewer tabs now read `Subscribe Simple`, `Subscribe Advance`, and `Publish`.
+
 ## 0.10.124 (stable)
 - Fix: Binding cards no longer compress to near-zero height when a second binding is added while the first is already streaming. Root cause: `.event-setup` (`flex: 0 1 auto`) shrank under pressure from `.event-results` (`flex: 1 1 auto`), which propagated height constraints into the flex children and squashed each `.event-binding-card`. Fixed by setting `flex: 0 0 auto` on `.event-setup` (never shrinks) with `max-height: calc(100% - 180px)` for bounded scrolling, and `flex-shrink: 0` on `.event-binding-card` to prevent individual cards from being compressed by the flex algorithm.
 - UI: Buttons that trigger async operations now show an inline spinner while working: "Start Listening" spins as "Starting…" while queues are being created, "Stop All" spins as "Stopping…" while the session is shutting down, "Start This Binding" spins as "Starting…" for its individual binding, "Listen To N New Topics" spins as "Adding…" while new subscriptions are registered, and "Publish Event" spins as "Sending…" while the HTTP request is in flight.

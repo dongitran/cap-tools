@@ -10,7 +10,7 @@ const PROTOTYPE_THEME_CLASS_PREFIX = 'vscode-';
 const REGION_LAYOUT_CLASS = 'mode-region-menu';
 const CF_LOGS_LAYOUT_CLASS = 'mode-cf-logs-panel';
 const WHAT_NEWS_LAYOUT_CLASS = 'mode-what-news';
-const FULL_WIDTH_VARIANT_IDS = new Set(['cf-logs-panel', 'what-news']);
+const FULL_WIDTH_VARIANT_IDS = new Set(['cf-logs-panel', 'event-mesh', 'what-news']);
 
 const PROTOTYPE_VARIANTS = [
   {
@@ -30,6 +30,12 @@ const PROTOTYPE_VARIANTS = [
     hash: 'apis',
     label: 'Prototype: APIs Explorer',
     framePath: './variants/design.html?v=20260612x#apis',
+  },
+  {
+    id: 'event-mesh',
+    hash: 'event-mesh',
+    label: 'Prototype: Event Mesh Viewer',
+    framePath: './variants/events-webview.html?v=20260617',
   },
   {
     id: 'cf-logs-panel',
