@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.135 (stable)
+- Release: Bumped the extension package version after verifying the Event Mesh JSON highlighting fix in the VS Code webview e2e flow.
+
 ## 0.10.134 (stable)
 - Fix: Event Mesh received-message JSON highlighting now colors expanded payload text directly without adding gray inline-code backgrounds or coloring collapsed previews.
 
