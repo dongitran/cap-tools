@@ -47,6 +47,7 @@ let publishContentType = 'application/json';
 let publishPayload = '';
 let publishResult = null; // { ok, status, destinationKind, destination, message }
 let publishSending = false;
+let publishCandidateDropdown = null;
 let stoppingAll = false;
 
 let messages = [];
@@ -605,38 +606,90 @@ function renderPublishDestinationField(binding) {
 function renderPublishTopicField(binding) {
   const index = binding ? binding.index : 0;
   const state = topicStateFor(index);
-  const listId = `ep-topic-options-${index}`;
   const hint = binding ? `e.g. ${escapeHtml(binding.namespace)}/items/created` : 'e.g. namespace/entity/event';
-  return `
-    <label class="event-field">
-      <span class="event-label">Topic</span>
-      <input type="text" class="event-input" data-role="ep-topic-input" value="${escapeHtml(publishTopic)}" placeholder="${hint}" autocomplete="off" list="${listId}" />
-      ${renderPublishTopicOptions(listId, state)}
-    </label>
-    ${renderPublishMetadataHint(state, 'topic')}`;
+  return `${renderPublishCandidateField({
+    kind: 'topic',
+    label: 'Topic',
+    inputRole: 'ep-topic-input',
+    value: publishTopic,
+    placeholder: hint,
+    candidates: publishTopicCandidates(state),
+  })}
+  ${renderPublishMetadataHint(state, 'topic')}`;
 }
 
 function renderPublishQueueField(binding) {
   const index = binding ? binding.index : 0;
   const state = queueStateFor(index);
-  const listId = `ep-queue-options-${index}`;
   const hint = binding ? `e.g. ${escapeHtml(binding.namespace)}/queue` : 'e.g. namespace/queue';
+  return `${renderPublishCandidateField({
+    kind: 'queue',
+    label: 'Queue',
+    inputRole: 'ep-queue-input',
+    value: publishQueue,
+    placeholder: hint,
+    candidates: state.queues,
+  })}
+  ${renderPublishMetadataHint(state, 'queue')}`;
+}
+
+function renderPublishCandidateField({ kind, label, inputRole, value, placeholder, candidates }) {
+  const normalizedKind = kind === 'queue' ? 'queue' : 'topic';
+  const inputId = `ep-${normalizedKind}-input`;
+  const listId = `ep-${normalizedKind}-options`;
+  const isOpen = publishCandidateDropdown === normalizedKind;
+  const hasCandidates = candidates.length > 0;
   return `
-    <label class="event-field">
-      <span class="event-label">Queue</span>
-      <input type="text" class="event-input" data-role="ep-queue-input" value="${escapeHtml(publishQueue)}" placeholder="${hint}" autocomplete="off" list="${listId}" />
-      ${renderPublishQueueOptions(listId, state)}
-    </label>
-    ${renderPublishMetadataHint(state, 'queue')}`;
+    <div class="event-field">
+      <label class="event-label" for="${inputId}">${escapeHtml(label)}</label>
+      <div class="event-publish-combobox" data-role="ep-candidate-field" data-kind="${normalizedKind}">
+        <input
+          id="${inputId}"
+          type="text"
+          class="event-input event-publish-combobox-input"
+          data-role="${inputRole}"
+          value="${escapeHtml(value)}"
+          placeholder="${placeholder}"
+          autocomplete="off"
+          aria-autocomplete="list"
+          aria-controls="${listId}"
+          aria-expanded="${isOpen}"
+        />
+        <button
+          type="button"
+          class="event-publish-candidate-toggle"
+          data-action="ep-toggle-candidates"
+          data-candidate-kind="${normalizedKind}"
+          aria-label="Toggle ${escapeHtml(label)} candidates"
+          aria-controls="${listId}"
+          aria-expanded="${isOpen}"
+          ${hasCandidates ? '' : 'disabled'}
+        >⌄</button>
+        ${isOpen ? renderPublishCandidateOptions(normalizedKind, listId, candidates, value) : ''}
+      </div>
+    </div>`;
 }
 
-function renderPublishTopicOptions(listId, state) {
-  const topics = publishTopicCandidates(state);
-  return `<datalist id="${listId}">${topics.map((topic) => `<option value="${escapeHtml(topic)}"></option>`).join('')}</datalist>`;
-}
-
-function renderPublishQueueOptions(listId, state) {
-  return `<datalist id="${listId}">${state.queues.map((queue) => `<option value="${escapeHtml(queue)}"></option>`).join('')}</datalist>`;
+function renderPublishCandidateOptions(kind, listId, candidates, value) {
+  if (candidates.length === 0) return '';
+  return `
+    <div class="event-publish-options" id="${listId}" role="listbox" data-role="ep-candidate-options">
+      ${candidates
+        .map((candidate) => {
+          const selected = candidate === value;
+          return `
+            <button
+              type="button"
+              class="event-publish-option${selected ? ' is-selected' : ''}"
+              data-action="ep-select-candidate"
+              data-candidate-kind="${kind}"
+              data-value="${escapeHtml(candidate)}"
+              role="option"
+              aria-selected="${selected}"
+            >${escapeHtml(candidate)}</button>`;
+        })
+        .join('')}
+    </div>`;
 }
 
 function publishTopicCandidates(state) {
@@ -674,6 +727,29 @@ function publishDestinationHint() {
   return publishDestinationKind === 'queue'
     ? 'Event is published directly to the selected queue via the REST Messaging API.'
     : 'Event is published directly to the topic via the REST Messaging API.';
+}
+
+function togglePublishCandidateDropdown(kind) {
+  const normalizedKind = kind === 'queue' ? 'queue' : 'topic';
+  publishCandidateDropdown = publishCandidateDropdown === normalizedKind ? null : normalizedKind;
+  render();
+}
+
+function closePublishCandidateDropdown() {
+  if (publishCandidateDropdown === null) return false;
+  publishCandidateDropdown = null;
+  return true;
+}
+
+function selectPublishCandidate(kind, value) {
+  if (kind === 'queue') {
+    publishQueue = value;
+  } else {
+    publishTopic = value;
+  }
+  publishResult = null;
+  closePublishCandidateDropdown();
+  render();
 }
 
 function renderPublishResult() {
@@ -1125,6 +1201,7 @@ function handleReady(data) {
   publishQueue = '';
   publishResult = null;
   publishSending = false;
+  publishCandidateDropdown = null;
   stoppingAll = false;
   activeTab = 'subscribe-simple';
   phase = 'ready';
@@ -1418,12 +1495,22 @@ document.addEventListener('click', (event) => {
     target.closest &&
     (target.closest('[data-role="event-settings-panel"]') ||
       target.closest('[data-role="event-settings-toggle"]'));
+  const clickedPublishCandidate =
+    target &&
+    target.closest &&
+    target.closest('[data-role="ep-candidate-field"]');
   const actionEl = target && target.closest ? target.closest('[data-action]') : null;
   if (!actionEl) {
+    let shouldRender = false;
     if (eventSettingsOpen && !clickedSettings) {
       eventSettingsOpen = false;
-      render();
+      shouldRender = true;
     }
+    if (publishCandidateDropdown !== null && !clickedPublishCandidate) {
+      closePublishCandidateDropdown();
+      shouldRender = true;
+    }
+    if (shouldRender) render();
     return;
   }
   const action = actionEl.dataset.action;
@@ -1431,14 +1518,27 @@ document.addEventListener('click', (event) => {
   if (eventSettingsOpen && !clickedSettings && action !== 'em-toggle-settings') {
     eventSettingsOpen = false;
   }
+  if (
+    publishCandidateDropdown !== null &&
+    !clickedPublishCandidate &&
+    action !== 'ep-toggle-candidates' &&
+    action !== 'ep-select-candidate'
+  ) {
+    closePublishCandidateDropdown();
+  }
 
   if (action === 'em-switch-tab') {
     activeTab = actionEl.dataset.tab || 'subscribe-simple';
+    closePublishCandidateDropdown();
     if (activeTab === 'publish') requestPublishMetadata();
     render();
   } else if (action === 'em-toggle-settings') {
     eventSettingsOpen = !eventSettingsOpen;
     render();
+  } else if (action === 'ep-toggle-candidates') {
+    togglePublishCandidateDropdown(actionEl.dataset.candidateKind || publishDestinationKind);
+  } else if (action === 'ep-select-candidate') {
+    selectPublishCandidate(actionEl.dataset.candidateKind || publishDestinationKind, actionEl.dataset.value || '');
   } else if (action === 'ep-send') {
     postPublishEvent();
   } else if (action === 'ep-format-json') {
@@ -1529,11 +1629,13 @@ document.addEventListener('change', (event) => {
   if (el.matches('[data-role="ep-binding-select"]')) {
     publishBindingIndex = bindingId(el.value);
     publishResult = null;
+    closePublishCandidateDropdown();
     requestPublishMetadata(publishBindingIndex);
     render();
   } else if (el.matches('[data-role="ep-destination-kind"]')) {
     publishDestinationKind = el.value === 'queue' ? 'queue' : 'topic';
     publishResult = null;
+    closePublishCandidateDropdown();
     requestPublishMetadata();
     render();
   } else if (el.matches('[data-role="ep-content-type-select"]')) {
@@ -1556,6 +1658,12 @@ document.addEventListener('change', (event) => {
 
 document.addEventListener('keydown', (event) => {
   const el = event.target;
+  if (event.key === 'Escape' && publishCandidateDropdown !== null) {
+    event.preventDefault();
+    closePublishCandidateDropdown();
+    render();
+    return;
+  }
   if (el && el.matches && el.matches('[data-role="em-custom-topic-input"]') && event.key === 'Enter') {
     event.preventDefault();
     addCustomTopic(bindingId(el.dataset.bindingIndex));

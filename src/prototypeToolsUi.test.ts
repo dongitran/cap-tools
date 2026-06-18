@@ -459,17 +459,36 @@ describe('prototype Log-API-Event workspace', () => {
     expect(formMatch?.[1] ?? '').not.toContain('max-width: 640px');
   });
 
-  it('lets Publish choose discovered topics while preserving free-form topic entry', async () => {
+  it('lets Publish choose discovered topics with a custom picker while preserving free-form topic entry', async () => {
     const source = await readEventWebviewSource();
 
     expect(source).toContain('renderPublishTopicField');
-    expect(source).toContain('renderPublishTopicOptions');
+    expect(source).toContain('renderPublishCandidateField');
+    expect(source).toContain('renderPublishCandidateOptions');
     expect(source).toContain('publishTopicCandidates');
     expect(source).toContain('data-role="ep-topic-input"');
-    expect(source).toContain('<datalist id="${listId}">');
+    expect(source).toContain('data-action="ep-toggle-candidates"');
+    expect(source).toContain('data-action="ep-select-candidate"');
     expect(source).toContain('requestPublishMetadata');
     expect(source).toContain("'sapTools.events.selectPublishBinding'");
     expect(source).not.toContain('publishTopic = state.discoveredTopics');
+    expect(source).not.toContain('<datalist');
+  });
+
+  it('bounds the Publish candidate dropdown and toggles it closed from its button', async () => {
+    const source = await readEventWebviewSource();
+    const styles = await readEventStylesSource();
+
+    expect(source).toContain('let publishCandidateDropdown = null;');
+    expect(source).toContain('function togglePublishCandidateDropdown(kind)');
+    expect(source).toContain('function closePublishCandidateDropdown()');
+    expect(source).toContain('publishCandidateDropdown === normalizedKind ? null : normalizedKind');
+    expect(source).toContain("target.closest('[data-role=\"ep-candidate-field\"]')");
+    expect(source).toContain("closePublishCandidateDropdown();");
+
+    expect(styles).toMatch(/\.event-publish-options\s*\{[\s\S]*?max-height:\s*220px;/);
+    expect(styles).toMatch(/\.event-publish-options\s*\{[\s\S]*?overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.event-publish-options\s*\{[\s\S]*?z-index:\s*20;/);
   });
 
   it('adds Queue as a Publish destination with discovered queue candidates and manual entry', async () => {
@@ -485,7 +504,8 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain("'sapTools.events.queues'");
     expect(source).toContain('data-role="ep-destination-kind" value="queue"');
     expect(source).toContain('data-role="ep-queue-input"');
-    expect(source).toContain('renderPublishQueueOptions');
+    expect(source).toContain('renderPublishCandidateField');
+    expect(source).toContain('renderPublishCandidateOptions');
     expect(source).toContain("message.queueName = destination");
     expect(source).toContain("destinationKind: publishDestinationKind");
     expect(source).toContain('destination,');

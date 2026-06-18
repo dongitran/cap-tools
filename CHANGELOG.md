@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.130 (stable)
+- Fix: Event Mesh `Publish` topic and queue candidate pickers now use a controlled dropdown that toggles closed when the dropdown button is clicked again.
+- UI: Publish candidate lists now have a bounded height with internal scrolling, so long topic lists no longer stretch to the bottom of the VS Code panel.
+
 ## 0.10.129 (stable)
 - UI: Event Mesh `Publish` form controls now fill the available panel width instead of stopping at a fixed 640px form width.
 - UI: The `Publish` tab now offers discovered topic candidates for the selected messaging binding while keeping the topic field free-form for custom topics.
