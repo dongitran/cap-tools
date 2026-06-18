@@ -149,6 +149,39 @@ test.describe('APIs Explorer Workspace Flow', () => {
       await clickWithFallback(frame.getByRole('button', { name: /Start Listening To/i }));
       await expect(frame.getByLabel('Event Mesh results').getByText('Listening', { exact: true })).toBeVisible();
       await expect(frame.getByText('demo/service/app/items/created')).toBeVisible();
+      await clickWithFallback(frame.getByRole('button', { name: /#1/i }));
+
+      const jsonPayload = frame.getByLabel('Received JSON payload').first();
+      await expect(jsonPayload).toBeVisible();
+      const styleSnapshot = await jsonPayload.evaluate((payload) => {
+        const token = (className: string): HTMLElement | null =>
+          payload.querySelector(`.${className}`);
+        const styleFor = (element: HTMLElement | null): { color: string | null; background: string | null } => {
+          if (element === null) return { color: null, background: null };
+          const style = getComputedStyle(element);
+          return { color: style.color, background: style.backgroundColor };
+        };
+        const payloadStyle = getComputedStyle(payload);
+        return {
+          payloadBackground: payloadStyle.backgroundColor,
+          codeCount: payload.querySelectorAll('code').length,
+          tokenCount: payload.querySelectorAll('.event-json-token').length,
+          key: styleFor(token('event-json-key')),
+          string: styleFor(token('event-json-string')),
+          punctuation: styleFor(token('event-json-punctuation')),
+        };
+      });
+
+      expect(styleSnapshot.payloadBackground).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.codeCount).toBe(0);
+      expect(styleSnapshot.tokenCount).toBeGreaterThan(0);
+      expect(styleSnapshot.key.background).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.string.background).toBe('rgba(0, 0, 0, 0)');
+      expect(styleSnapshot.punctuation.background).toBe('rgba(0, 0, 0, 0)');
+      expect(new Set([styleSnapshot.key.color, styleSnapshot.string.color, styleSnapshot.punctuation.color]).size).toBe(3);
+      await frame.getByLabel('Event Mesh results').screenshot({
+        path: 'test-results/event-json-highlight-vscode.png',
+      });
     } finally {
       await cleanupExtensionHost(session);
     }

@@ -426,11 +426,12 @@ describe('prototype Log-API-Event workspace', () => {
     const styles = await readEventStylesSource();
 
     expect(source).toContain('function renderPayloadBody(message)');
+    expect(source).toContain('function formatJsonPayload(payload)');
     expect(source).toContain('function renderJsonPayload(payload)');
     expect(source).toContain('function highlightJsonPayload(json)');
-    expect(source).toContain('JSON.stringify(JSON.parse(payload), null, 2)');
+    expect(source).toContain('JSON.stringify(parsed, null, 2)');
     expect(source).toContain('class="event-payload is-json"');
-    expect(source).toContain('class="${tokenClass}"');
+    expect(source).toContain('class="event-json-token ${tokenClass}"');
     expect(source).toContain("'event-json-key'");
     expect(source).toContain("'event-json-string'");
     expect(source).toContain("'event-json-number'");
@@ -438,13 +439,24 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain("'event-json-punctuation'");
     expect(source).toContain('renderPayloadBody(message)');
     expect(source).not.toContain('<pre class="event-payload">${escapeHtml(message.payload)}');
+    expect(source).not.toContain('class="event-preview is-json"');
+    expect(source).not.toContain('<code>${highlightJsonPayload(json)}</code>');
 
     expect(styles).toContain('.event-payload.is-json');
-    expect(styles).toContain('.event-json-key');
-    expect(styles).toContain('.event-json-string');
-    expect(styles).toContain('.event-json-number');
-    expect(styles).toContain('.event-json-literal');
-    expect(styles).toContain('.event-json-punctuation');
+    expect(styles).toMatch(/\.event-payload\.is-json\s*\{[\s\S]*?background:\s*transparent;/);
+    expect(styles).toContain('--event-json-key:');
+    expect(styles).toContain('--event-json-string:');
+    expect(styles).toContain('--event-json-number:');
+    expect(styles).toContain('--event-json-literal:');
+    expect(styles).toContain('--event-json-punctuation:');
+    expect(styles).toContain('.event-json-token');
+    expect(styles).toMatch(/\.event-json-token\s*\{[\s\S]*?background:\s*transparent;/);
+    expect(styles).toContain('color: var(--event-json-key);');
+    expect(styles).toContain('color: var(--event-json-string);');
+    expect(styles).toContain('color: var(--event-json-number);');
+    expect(styles).toContain('color: var(--event-json-literal);');
+    expect(styles).toContain('color: var(--event-json-punctuation);');
+    expect(styles).not.toContain('color: var(--vscode-symbolIcon-propertyForeground');
   });
 
   it('prototype fixture includes repeated client binding groups for Simple subscribe', async () => {

@@ -762,29 +762,57 @@
 }
 
 .event-payload.is-json {
-  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.08));
+  --event-json-key: #9cdcfe;
+  --event-json-string: #ce9178;
+  --event-json-number: #b5cea8;
+  --event-json-literal: #569cd6;
+  --event-json-punctuation: #d4d4d4;
+  background: transparent;
   border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.22));
 }
 
+body.vscode-light .event-payload.is-json,
+body.vscode-high-contrast-light .event-payload.is-json {
+  --event-json-key: #0451a5;
+  --event-json-string: #a31515;
+  --event-json-number: #098658;
+  --event-json-literal: #0000ff;
+  --event-json-punctuation: #6a737d;
+}
+
+body.vscode-high-contrast .event-payload.is-json {
+  --event-json-key: #9cdcfe;
+  --event-json-string: #ffb3a6;
+  --event-json-number: #b5f2a7;
+  --event-json-literal: #f8d66d;
+  --event-json-punctuation: var(--vscode-foreground, #ffffff);
+}
+
+.event-json-token {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
 .event-json-key {
-  color: var(--vscode-symbolIcon-propertyForeground, #4fc1ff);
+  color: var(--event-json-key);
 }
 
 .event-json-string {
-  color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+  color: var(--event-json-string);
 }
 
 .event-json-number {
-  color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+  color: var(--event-json-number);
 }
 
 .event-json-literal {
-  color: var(--vscode-symbolIcon-booleanForeground, #569cd6);
+  color: var(--event-json-literal);
   font-weight: 600;
 }
 
 .event-json-punctuation {
-  color: var(--vscode-descriptionForeground);
+  color: var(--event-json-punctuation);
 }
 
 .event-payload-note {

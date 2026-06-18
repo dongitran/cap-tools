@@ -319,17 +319,25 @@ function highlightJsonPayload(json) {
     } else if (token === 'true' || token === 'false' || token === 'null') {
       tokenClass = 'event-json-literal';
     }
-    return `<span class="${tokenClass}">${escapeHtml(token)}</span>`;
+    return `<span class="event-json-token ${tokenClass}">${escapeHtml(token)}</span>`;
   });
 }
 
-function renderJsonPayload(payload) {
+function formatJsonPayload(payload) {
+  const text = String(payload ?? '').replace(/^\uFEFF/, '').trim();
+  if (text.length === 0) return null;
   try {
-    const json = JSON.stringify(JSON.parse(payload), null, 2);
-    return `<pre class="event-payload is-json">${highlightJsonPayload(json)}</pre>`;
+    const parsed = JSON.parse(text);
+    return JSON.stringify(parsed, null, 2);
   } catch {
     return null;
   }
+}
+
+function renderJsonPayload(payload) {
+  const json = formatJsonPayload(payload);
+  if (json === null) return null;
+  return `<pre class="event-payload is-json" aria-label="Received JSON payload">${highlightJsonPayload(json)}</pre>`;
 }
 
 function renderPayloadBody(message) {
@@ -339,7 +347,7 @@ function renderPayloadBody(message) {
     const note = message.truncated ? '<div class="event-payload-note">… (truncated)</div>' : '';
     return `${jsonPayload}${note}`;
   }
-  return `<pre class="event-payload">${escapeHtml(payload)}${message.truncated ? '\n… (truncated)' : ''}</pre>`;
+  return `<pre class="event-payload" aria-label="Received message payload">${escapeHtml(payload)}${message.truncated ? '\n… (truncated)' : ''}</pre>`;
 }
 
 // --- Rendering ---------------------------------------------------------------

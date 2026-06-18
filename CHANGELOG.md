@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.134 (stable)
+- Fix: Event Mesh received-message JSON highlighting now colors expanded payload text directly without adding gray inline-code backgrounds or coloring collapsed previews.
+
 ## 0.10.133 (stable)
 - Docs: Reworked the README into a modern product overview with marketplace badges, concise workflow framing, feature highlights, requirements, getting started steps, and safety notes.
 
