@@ -1,31 +1,101 @@
-# SAP Tools VS Code Extension
+# ⚡ SAP Tools
 
-SAP Tools is a VS Code extension focused on SAP BTP development workflows.
+> Run SAP BTP work from one focused Visual Studio Code workspace.
 
-## Current Features
-- SAP Tools activity-bar sidebar for login, SAP BTP area/region/org/space selection, Quick Org Search, scope restore, and cache sync controls.
-- CFLogs bottom-panel view for app log filtering, recent log fetches, live stream state, column visibility, font-size, and log-limit settings — plus an optional file-logging mode (dropdown left of the gear button) that writes each app-logging run to a timestamped file, and per-app pause/resume that freezes the live display while keeping the session and collected logs.
-- Workspace `Logs`, `Apps`, and `SQL` tabs for app logging, local service-folder mapping, service artifact export, SQLTools config export, and HANA SQL workflows.
-- Local npm package build & publish: from the Apps tab, a per-service **Build & Publish** button scans the root folder for locally-developed packages, builds them in dependency order, publishes them to a self-hosted Verdaccio registry (auto-installed and managed under `~/.saptools/verdaccio`), and reinstalls them in the service.
-- S/4HANA SQL Workbench for app-scoped SQL files, HANA table discovery, readable table names, SQL completions, quick `SELECT`, manual execution shortcuts (single or multi-statement batches with auto-rollback on failure), and CSV/JSON result export.
-- Sanitized SAP Tools output-channel logging for CF CLI and SQL command visibility without exposing credentials.
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/dongtran.sap-tools?label=VS%20Marketplace&logo=visual-studio-code&logoColor=white)](https://marketplace.visualstudio.com/items?itemName=dongtran.sap-tools)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![VS Code](https://img.shields.io/badge/vscode-%5E1.90.0-007ACC?logo=visual-studio-code)](https://code.visualstudio.com)
 
-## Configuration
-- `sapTools.sharedCapDebugConfig.remoteRoot` (User settings): remote source root inside the CF app container used to locate exported artifacts such as `pnpm-lock.yaml`. Accepts a fixed path (e.g. `/home/vcap/app`) or a regex (`regex:<pattern>` or `/pattern/flags`) resolved per CF app via `cf ssh` against the container's `package.json` folders. SAP Tools falls back to the CDS Debug extension's `cdsDebug.sharedCapDebugConfig`, so a single configuration serves both extensions.
-- `sapTools.appFolderMappings` (User settings): explicit `{ "appName", "folderName" }` entries that map a Cloud Foundry app to a local source folder basename in the Apps tab when the names differ too much for automatic `-`↔`_` matching. Merged with the CDS Debug extension's `cdsDebug.appFolderMappings` (SAP Tools entries win on conflicts), so a single configuration serves both extensions.
-- `sapTools.cfLogs.fileLogDirectory` (User settings): folder for CFLogs panel file logging when the panel's dropdown is set to **Log to file**. Supports `~`; empty means `~/.saptools/cflogs`. Each app-logging run creates `<app-name>_<YYYY-MM-DD_HH-mm-ss>.log`, so runs never collide.
-- `sapTools.localPackages.namePatterns` (User settings): comma-separated patterns matched against each repo's `package.json` `name` to mark which folders under the root are locally-developed npm packages (e.g. `@example/`). A pattern that is not valid regex is matched literally. Detection keys off the name, not a `build` script, so dependency-only packages are still found. Empty disables local-package scanning.
-- `sapTools.localPackages.versionBumpStrategy` (`prerelease-timestamp` | `none`, default `prerelease-timestamp`): make each publish version unique with the active CF `space-org` suffix so the local registry accepts the republish across org-space package sets, restoring the original `package.json` version afterward.
-- `sapTools.localPackages.deleteNpmrcBeforeBuild` (default `true`): delete each package's `.npmrc` before the local package build/install step so stale package-level registry or auth overrides cannot bypass the managed local registry flow.
-- `sapTools.localPackages.installInServiceAfterPublish` (default `true`): run `npm install` in the service after publishing so it picks up the fresh package versions.
-- `sapTools.localRegistry.port` (default `4873`), `sapTools.localRegistry.scopes` (default derived from `namePatterns`), `sapTools.localRegistry.defaultTag` (empty means derive from the active Cloud Foundry space and org, e.g. `cf-uat-finance-services-prod`; falls back to `local` when no scope is active), and `sapTools.localRegistry.autoStart` (default `true`) configure the self-hosted Verdaccio registry.
+---
 
-## Development
+## 😩 The Problem
+
+Working with SAP BTP on Cloud Foundry means switching context all day:
+
+- Picking the right region, org, and space before doing anything useful
+- Opening logs, APIs, Event Mesh tools, and HANA checks in separate places
+- Repeating the same client-binding and topic selections across many apps
+- Rebuilding local packages, exporting artifacts, and checking runtime state by hand
+
+**SAP Tools** makes SAP BTP work easier by removing those small context switches.
+
+---
+
+## 🚀 What It Does
+
+A Visual Studio Code panel connects to your SAP BTP landscape and gives you one place to:
+
+1. Select a region, org, and space
+2. Open an app's logs, APIs, Event Mesh tools, and HANA SQL workflow
+3. Subscribe, publish, inspect, export, and rebuild without losing the active app context
+
+---
+
+## ✨ Features
+
+- 🗺️ **Region / Org / Space Picker** — move through SAP BTP scopes without terminal hopping
+- 🔎 **Quick Org Search** — find the right org fast in large landscapes
+- 📡 **Log-API-Event Workspace** — open logs, APIs, subscribe, and publish tools from an app
+- 🧵 **Event Mesh Subscribe Simple** — group similar bindings and listen with fewer clicks
+- 🎛️ **Event Mesh Subscribe Advanced** — choose exact bindings, topics, and queue behavior
+- 📨 **Event Mesh Publish** — publish by topic or directly to a queue when supported
+- 🧯 **CF Logs Panel** — stream, filter, pause, and optionally write logs to files
+- 🧠 **HANA SQL Workbench** — run app-scoped SQL, discover tables, and export results
+- 📦 **Local Package Publish** — build and publish local packages through a managed registry
+- 🗂️ **Service Artifact Export** — pull useful runtime artifacts from the selected app context
+- 🤝 **CDS Debug Friendly** — reuse shared mappings with the companion CDS Debug workflow
+
+---
+
+## 📋 Requirements
+
+- **Visual Studio Code** ≥ 1.90.0
+- **Node.js** ≥ 20
+- **CF CLI** installed and available in your shell
+- SAP BTP and Cloud Foundry access
+- HANA bindings for SQL workflows
+- Event Mesh bindings for subscribe and publish workflows
+
+---
+
+## 🏁 Getting Started
+
+### 1 — Install
+
+Search **SAP Tools** in the Visual Studio Code Extensions panel, or install directly from the Marketplace:
+
 ```bash
-npm install
-npm run build
-npm run validate
-npm run test:unit
+ext install dongtran.sap-tools
 ```
 
-To debug the extension, press `F5` in VS Code.
+### 2 — Open the sidebar
+
+Click the **⚡ SAP Tools** icon in the Activity Bar.
+
+### 3 — Pick your SAP BTP scope
+
+Select a region, org, and space. SAP Tools keeps that scope visible while you work.
+
+### 4 — Open an app workflow
+
+Use the app list to open logs, APIs, Event Mesh subscribe/publish tools, SQL, package actions, or service exports.
+
+### 5 — Stay in flow
+
+Investigate runtime behavior from the same app context instead of jumping between terminals, portals, and separate tools.
+
+---
+
+## 🛡️ Safety Notes
+
+- Event Mesh messages are capped by the configured buffer
+- CF log streams can be paused without losing the active session
+- File logging writes each run to its own timestamped file
+- Local registry data is kept outside the project workspace
+- Shared CDS Debug mappings can be reused instead of duplicated
+
+---
+
+## 📜 License
+
+[MIT](LICENSE)

@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.133 (stable)
+- Docs: Reworked the README into a modern product overview with marketplace badges, concise workflow framing, feature highlights, requirements, getting started steps, and safety notes.
+
 ## 0.10.132 (stable)
 - UI: APIs Explorer `Execute` responses now render JSON with theme-aware syntax highlighting for keys, strings, numbers, booleans, nulls, and punctuation.
 - UI: The APIs response toolbar now uses reusable controls for `JSON`/`Grid Data`, Copy, status, and timing instead of inline response styling.
