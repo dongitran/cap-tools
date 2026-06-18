@@ -39,6 +39,20 @@ function createListener(): EventMeshListenerLike {
   };
 }
 
+function createDeferred(): {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+  readonly reject: (error: Error) => void;
+} {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function createSession(
   clients: Map<number, EventMeshManagementClientLike>,
   listeners: EventMeshListenerLike[]
@@ -164,6 +178,65 @@ describe('EventMeshListeningSession', () => {
     await expect(session.addTopics(42, ['demo/topic'])).rejects.toThrow(
       'Selected messaging binding is not listening.'
     );
+  });
+
+  it('deletes a queue when stop happens before startup becomes active', async () => {
+    const binding = makeBinding(0, 'demo/service/app');
+    const client = createClient();
+    const subscriptionGate = createDeferred();
+    client.addSubscription = vi.fn(() => subscriptionGate.promise);
+    const clients = new Map([[binding.index, client]]);
+    const listeners: EventMeshListenerLike[] = [];
+    const session = createSession(clients, listeners);
+
+    const startPromise = session.startBinding(
+      { binding, topics: ['demo/service/app/*'] },
+      { onMessage: vi.fn(), onStatus: vi.fn(), onConnected: vi.fn() }
+    );
+    await expect.poll(() => vi.mocked(client.createQueue).mock.calls.length).toBe(1);
+
+    const stopPromise = session.stopAll();
+    subscriptionGate.resolve();
+
+    await expect(startPromise).rejects.toThrow(/stopped/i);
+    await stopPromise;
+    expect(client.deleteQueue).toHaveBeenCalledWith('demo/service/app/saptools-debug/run-0');
+    expect(session.activeSummaries()).toEqual([]);
+  });
+
+  it('rejects a duplicate start while the binding is still starting', async () => {
+    const binding = makeBinding(0, 'demo/service/app');
+    const client = createClient();
+    const listenerGate = createDeferred();
+    const listeners: EventMeshListenerLike[] = [];
+    const session = new EventMeshListeningSession({
+      debugQueueSegment: 'saptools-debug',
+      buildRunId: (entry) => `run-${String(entry.index)}`,
+      getClient: () => client,
+      createListener: () => {
+        const listener = createListener();
+        listener.start = vi.fn(() => listenerGate.promise);
+        listeners.push(listener);
+        return listener;
+      },
+    });
+
+    const firstStart = session.startBinding(
+      { binding, topics: ['demo/service/app/*'] },
+      { onMessage: vi.fn(), onStatus: vi.fn(), onConnected: vi.fn() }
+    );
+    await expect.poll(() => listeners.length).toBe(1);
+
+    await expect(
+      session.startBinding(
+        { binding, topics: ['demo/service/app/items/created'] },
+        { onMessage: vi.fn(), onStatus: vi.fn(), onConnected: vi.fn() }
+      )
+    ).rejects.toThrow(/already listening/i);
+
+    listenerGate.resolve();
+    await firstStart;
+    await session.stopAll();
   });
 
   it('stops every listener and deletes every debug queue', async () => {

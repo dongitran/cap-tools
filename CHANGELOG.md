@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.138 (stable)
+- Hardening: Event Mesh listener startup now tracks pending debug queues immediately after creation, so Stop All, panel close, scope change, or shutdown can delete queues even before AMQP startup becomes fully active.
+- Hardening: Event Mesh debug queues are recorded in a credential-free registry under the user SAP Tools data folder and reaped on the next Event Mesh open for the same binding when the owner VS Code process is gone, while queues owned by another live window are preserved.
+- CI: The GitHub Actions CI workflow now runs VS Code Playwright E2E tests in four parallel shards while keeping each shard single-worker for extension-host isolation, then packages the VSIX only after all shards pass.
+
 ## 0.10.137 (stable)
 - Fix: APIs Explorer no longer shows demo `Users`, `Products`, and `Orders` endpoints while a real app catalog is still discovering, and selecting an endpoint from a long list no longer resets the endpoint sidebar scroll position.
 

@@ -54,6 +54,8 @@ export interface EventMeshListeningSessionOptions {
     binding: EventMeshBinding,
     client: EventMeshManagementClientLike
   ) => Promise<void>;
+  readonly onQueueCreated?: (binding: EventMeshBinding, queueName: string) => Promise<void>;
+  readonly onQueueDeleted?: (binding: EventMeshBinding, queueName: string) => Promise<void>;
   readonly onCleanupError?: (message: string) => void;
 }
 
@@ -63,6 +65,26 @@ interface ActiveEventMeshListen {
   readonly listener: EventMeshListenerLike;
   readonly queueName: string;
   readonly topics: string[];
+}
+
+interface PendingEventMeshListen {
+  readonly binding: EventMeshBinding;
+  readonly client: EventMeshManagementClientLike;
+  readonly queueName: string;
+  listener: EventMeshListenerLike | null;
+  queueCreated: boolean;
+  stopRequested: boolean;
+}
+
+class EventMeshStartupStoppedError extends Error {
+  constructor(queueName: string) {
+    super(`Event Mesh listener startup was stopped before queue ${queueName} became active.`);
+    this.name = 'EventMeshStartupStoppedError';
+  }
+}
+
+export function isEventMeshStartupStoppedError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'EventMeshStartupStoppedError';
 }
 
 function describeError(error: unknown): string {
@@ -94,6 +116,7 @@ function summarizeActive(active: ActiveEventMeshListen): EventMeshBindingSummary
 
 export class EventMeshListeningSession {
   private readonly activeByBinding = new Map<number, ActiveEventMeshListen>();
+  private readonly pendingByBinding = new Map<number, PendingEventMeshListen>();
 
   constructor(private readonly options: EventMeshListeningSessionOptions) {}
 
@@ -133,24 +156,37 @@ export class EventMeshListeningSession {
     const client = this.options.getClient(binding);
     const queueName = `${binding.namespace}/${this.options.debugQueueSegment}/${this.options.buildRunId(binding)}`;
     const topics = uniqueTopics(request.topics);
-    let queueCreated = false;
-    let listener: EventMeshListenerLike | null = null;
+    const pending: PendingEventMeshListen = {
+      binding,
+      client,
+      queueName,
+      listener: null,
+      queueCreated: false,
+      stopRequested: false,
+    };
+    this.pendingByBinding.set(binding.index, pending);
 
     try {
       await this.options.beforeCreateQueue?.(binding, client);
+      this.throwIfStartupStopped(pending);
       await client.createQueue(queueName);
-      queueCreated = true;
+      pending.queueCreated = true;
+      await this.options.onQueueCreated?.(binding, queueName);
+      this.throwIfStartupStopped(pending);
       await this.addSubscriptions(client, queueName, topics);
-      listener = this.options.createListener(binding, queueName, this.createCallbacks(binding, queueName, callbacks));
-      await listener.start();
+      this.throwIfStartupStopped(pending);
+      pending.listener = this.options.createListener(binding, queueName, this.createCallbacks(binding, queueName, callbacks));
+      await pending.listener.start();
+      this.throwIfStartupStopped(pending);
+      const listener = pending.listener;
       const active = { binding, client, listener, queueName, topics };
+      this.pendingByBinding.delete(binding.index);
       this.activeByBinding.set(binding.index, active);
       return summarizeActive(active);
     } catch (error) {
-      listener?.stop();
-      if (queueCreated) {
-        await this.deleteQueueSafely(client, queueName);
-      }
+      pending.listener?.stop();
+      await this.cleanupPendingQueue(pending);
+      this.pendingByBinding.delete(binding.index);
       throw error;
     }
   }
@@ -169,6 +205,7 @@ export class EventMeshListeningSession {
   }
 
   async stopAll(): Promise<void> {
+    await this.stopPendingBindings();
     const indexes = [...this.activeByBinding.keys()];
     for (const index of indexes) {
       await this.stopBindingByIndex(index);
@@ -176,11 +213,20 @@ export class EventMeshListeningSession {
   }
 
   private assertCanStart(request: EventMeshListenRequest): void {
-    if (this.activeByBinding.has(request.binding.index)) {
+    if (
+      this.activeByBinding.has(request.binding.index) ||
+      this.pendingByBinding.has(request.binding.index)
+    ) {
       throw new Error('Selected messaging binding is already listening.');
     }
     if (uniqueTopics(request.topics).length === 0) {
       throw new Error('Select at least one topic to listen to.');
+    }
+  }
+
+  private throwIfStartupStopped(pending: PendingEventMeshListen): void {
+    if (pending.stopRequested) {
+      throw new EventMeshStartupStoppedError(pending.queueName);
     }
   }
 
@@ -219,15 +265,34 @@ export class EventMeshListeningSession {
     }
     this.activeByBinding.delete(bindingIndex);
     active.listener.stop();
-    await this.deleteQueueSafely(active.client, active.queueName);
+    await this.deleteQueueSafely(active.binding, active.client, active.queueName);
+  }
+
+  private async stopPendingBindings(): Promise<void> {
+    const pendingList = [...this.pendingByBinding.values()];
+    for (const pending of pendingList) {
+      pending.stopRequested = true;
+      pending.listener?.stop();
+      await this.cleanupPendingQueue(pending);
+    }
+  }
+
+  private async cleanupPendingQueue(pending: PendingEventMeshListen): Promise<void> {
+    if (!pending.queueCreated) {
+      return;
+    }
+    pending.queueCreated = false;
+    await this.deleteQueueSafely(pending.binding, pending.client, pending.queueName);
   }
 
   private async deleteQueueSafely(
+    binding: EventMeshBinding,
     client: EventMeshManagementClientLike,
     queueName: string
   ): Promise<void> {
     try {
       await client.deleteQueue(queueName);
+      await this.options.onQueueDeleted?.(binding, queueName);
     } catch (error) {
       this.options.onCleanupError?.(
         `Failed to delete debug queue ${queueName}: ${describeError(error)}`

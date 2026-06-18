@@ -4,12 +4,15 @@ import { randomBytes } from 'node:crypto';
 import { fetchDefaultEnvJsonFromTarget, prepareCfCliSession } from './cfClient';
 import { extractEventMeshBindings, type EventMeshBinding, type EventMeshEndpoint } from './eventMeshBindings';
 import { EventMeshManagementClient } from './eventMeshClient';
+import { DEBUG_QUEUE_SEGMENT } from './eventMeshDebugQueues';
+import { EventMeshQueueCleaner } from './eventMeshQueueCleaner';
 import {
   EventMeshAmqpListener,
   type NormalizedEventMessage,
 } from './eventMeshAmqpListener';
 import {
   EventMeshListeningSession,
+  isEventMeshStartupStoppedError,
   type EventMeshBindingSummary,
   type EventMeshListenCallbacks,
   type EventMeshListenRequest,
@@ -25,8 +28,6 @@ import { buildEventMeshWebviewHtml } from './eventMeshWebviewHtml';
 
 const EVENT_MESH_VIEW_TYPE = 'sapTools.eventMeshViewer';
 
-/** Path segment used for every debug queue this extension creates, so leftover queues are easy to spot. */
-const DEBUG_QUEUE_SEGMENT = 'saptools-debug';
 /** Coalesce incoming AMQP messages and post them to the webview at most this often. */
 const FLUSH_INTERVAL_MS = 250;
 /** Flush immediately once the buffer reaches this many messages (burst handling). */
@@ -37,8 +38,6 @@ export const DEFAULT_EVENT_MESSAGE_BUFFER_LIMIT = 1000;
 const MAX_PAYLOAD_BYTES = 20000;
 /** Cap on how many existing queues to inspect when discovering candidate topics. */
 const TOPIC_DISCOVERY_QUEUE_CAP = 25;
-/** Leftover queues younger than this may belong to another active VS Code window. */
-const STALE_DEBUG_QUEUE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 export interface EventMeshTargetParams {
   readonly apiEndpoint: string;
@@ -78,6 +77,7 @@ interface PanelSession {
   readonly queuesByBinding: Map<number, string[]>;
   listenSession: EventMeshListeningSession | null;
   starting: boolean;
+  disposed: boolean;
   sequence: number;
   buffer: OutgoingEventMessage[];
   flushTimer: ReturnType<typeof setTimeout> | null;
@@ -112,32 +112,12 @@ function buildRunId(): string {
   return `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
 }
 
+function buildOwnerId(): string {
+  return `${String(process.pid)}-${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+}
+
 function wildcardTopicFor(namespace: string): string {
   return `${namespace}/*`;
-}
-
-function parseDebugQueueCreatedAt(queueName: string, namespace: string): number | null {
-  const prefix = `${namespace}/${DEBUG_QUEUE_SEGMENT}/`;
-  if (!queueName.startsWith(prefix)) {
-    return null;
-  }
-
-  const runId = queueName.slice(prefix.length).split('/')[0] ?? '';
-  const timestampPart = runId.split('-')[0] ?? '';
-  if (timestampPart.length < 8 || !/^[0-9a-z]+$/i.test(timestampPart)) {
-    return null;
-  }
-
-  const timestamp = Number.parseInt(timestampPart, 36);
-  return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-function isStaleDebugQueueName(queueName: string, namespace: string, nowMs: number): boolean {
-  const createdAt = parseDebugQueueCreatedAt(queueName, namespace);
-  if (createdAt === null) {
-    return false;
-  }
-  return nowMs - createdAt > STALE_DEBUG_QUEUE_MAX_AGE_MS;
 }
 
 function areTargetParamsEqual(
@@ -157,21 +137,20 @@ function areTargetParamsEqual(
   );
 }
 
-export function isStaleDebugQueueNameForTest(
-  queueName: string,
-  namespace: string,
-  nowMs: number
-): boolean {
-  return isStaleDebugQueueName(queueName, namespace, nowMs);
-}
-
 export class EventMeshPanelManager implements vscode.Disposable {
   private readonly sessions = new Map<string, PanelSession>();
+  private readonly ownerId = buildOwnerId();
+  private readonly queueCleaner: EventMeshQueueCleaner;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly outputChannel: vscode.OutputChannel
-  ) {}
+    private readonly outputChannel: vscode.OutputChannel,
+    queueCleaner?: EventMeshQueueCleaner
+  ) {
+    this.queueCleaner = queueCleaner ?? new EventMeshQueueCleaner(this.ownerId, (message) => {
+      this.log(message);
+    });
+  }
 
   private log(message: string): void {
     this.outputChannel.appendLine(`[EventMesh] ${message}`);
@@ -230,6 +209,7 @@ export class EventMeshPanelManager implements vscode.Disposable {
       queuesByBinding: new Map(),
       listenSession: null,
       starting: false,
+      disposed: false,
       sequence: 0,
       buffer: [],
       flushTimer: null,
@@ -240,6 +220,7 @@ export class EventMeshPanelManager implements vscode.Disposable {
     panel.webview.html = buildEventMeshWebviewHtml(this.extensionUri, panel.webview, appId);
 
     panel.onDidDispose(() => {
+      session.disposed = true;
       if (this.sessions.get(appId) === session) {
         this.sessions.delete(appId);
       }
@@ -299,6 +280,9 @@ export class EventMeshPanelManager implements vscode.Disposable {
   }
 
   private post(session: PanelSession, type: string, payload: Record<string, unknown>): void {
+    if (session.disposed) {
+      return;
+    }
     void session.panel.webview.postMessage({ type, ...payload });
   }
 
@@ -342,6 +326,9 @@ export class EventMeshPanelManager implements vscode.Disposable {
       }
       session.bindings = bindings;
       this.log(`Found ${String(bindings.length)} Event Mesh binding(s) for ${session.appId}`);
+      await this.queueCleaner.reapRegisteredForBindings(bindings, (binding) =>
+        this.getClient(session, binding)
+      );
       this.post(session, 'sapTools.events.ready', {
         appName: session.appId,
         bindings: bindings.map((binding) => ({
@@ -375,7 +362,13 @@ export class EventMeshPanelManager implements vscode.Disposable {
       createListener: (binding, queueName, callbacks) =>
         new EventMeshAmqpListener(binding, queueName, callbacks),
       beforeCreateQueue: async (binding): Promise<void> => {
-        await this.reapStaleDebugQueues(this.getClient(session, binding), binding.namespace);
+        await this.queueCleaner.reapForBinding(binding, this.getClient(session, binding));
+      },
+      onQueueCreated: async (binding, queueName): Promise<void> => {
+        await this.queueCleaner.recordQueue(session.appId, binding, queueName);
+      },
+      onQueueDeleted: async (_binding, queueName): Promise<void> => {
+        await this.queueCleaner.removeQueue(queueName);
       },
       onCleanupError: (message): void => {
         this.log(message);
@@ -486,7 +479,9 @@ export class EventMeshPanelManager implements vscode.Disposable {
       this.post(session, 'sapTools.events.listening', { bindings: summaries });
       this.log(`Listening on ${String(summaries.length)} binding(s)`);
     } catch (error) {
-      this.postError(session, 'start', describeError(error));
+      if (!isEventMeshStartupStoppedError(error)) {
+        this.postError(session, 'start', describeError(error));
+      }
     } finally {
       session.starting = false;
     }
@@ -499,7 +494,9 @@ export class EventMeshPanelManager implements vscode.Disposable {
       const summary = await session.listenSession.startBinding({ binding, topics }, this.makeListenCallbacks(session));
       this.post(session, 'sapTools.events.bindingListening', { ...summary });
     } catch (error) {
-      this.post(session, 'sapTools.events.error', { scope: 'topics', bindingIndex: binding.index, message: describeError(error) });
+      if (!isEventMeshStartupStoppedError(error)) {
+        this.post(session, 'sapTools.events.error', { scope: 'topics', bindingIndex: binding.index, message: describeError(error) });
+      }
     }
   }
 
@@ -598,22 +595,6 @@ export class EventMeshPanelManager implements vscode.Disposable {
     const events = session.buffer;
     session.buffer = [];
     this.post(session, 'sapTools.events.messages', { events });
-  }
-
-  private async reapStaleDebugQueues(
-    client: EventMeshManagementClient,
-    namespace: string
-  ): Promise<void> {
-    try {
-      const queues = await client.listQueueNames();
-      const nowMs = Date.now();
-      for (const name of queues.filter((q) => isStaleDebugQueueName(q, namespace, nowMs))) {
-        this.log(`Reaping leftover debug queue ${name}`);
-        try { await client.deleteQueue(name); } catch (e) { this.log(`Failed to delete ${name}: ${describeError(e)}`); }
-      }
-    } catch {
-      // Discovery/reaping is best-effort and must never block starting a listen.
-    }
   }
 
   private async stopListening(

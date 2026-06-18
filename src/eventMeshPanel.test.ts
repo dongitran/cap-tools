@@ -19,11 +19,11 @@ vi.mock('vscode', () => ({
 import {
   DEFAULT_EVENT_MESSAGE_BUFFER_LIMIT,
   EventMeshPanelManager,
-  isStaleDebugQueueNameForTest,
   trimOutgoingEventBuffer,
   type EventMeshTargetParams,
 } from './eventMeshPanel';
 import type { EventMeshBinding } from './eventMeshBindings';
+import { isStaleDebugQueueName } from './eventMeshDebugQueues';
 import { parsePublishEventRequest } from './eventMeshPublishRequest';
 
 interface MockPanel {
@@ -103,7 +103,7 @@ describe('EventMeshPanelManager debug queue cleanup', () => {
     const queueName = `${namespace}/saptools-debug/${createdAt.toString(36)}-abcd1234`;
 
     expect(
-      isStaleDebugQueueNameForTest(queueName, namespace, createdAt + 60_000)
+      isStaleDebugQueueName(queueName, namespace, createdAt + 60_000)
     ).toBe(false);
   });
 
@@ -113,7 +113,7 @@ describe('EventMeshPanelManager debug queue cleanup', () => {
     const queueName = `${namespace}/saptools-debug/${createdAt.toString(36)}-abcd1234`;
 
     expect(
-      isStaleDebugQueueNameForTest(queueName, namespace, createdAt + 7 * 60 * 60 * 1000)
+      isStaleDebugQueueName(queueName, namespace, createdAt + 7 * 60 * 60 * 1000)
     ).toBe(true);
   });
 
@@ -121,10 +121,10 @@ describe('EventMeshPanelManager debug queue cleanup', () => {
     const namespace = 'demo/service/app';
 
     expect(
-      isStaleDebugQueueNameForTest(`${namespace}/other-tool/abc`, namespace, Date.now())
+      isStaleDebugQueueName(`${namespace}/other-tool/abc`, namespace, Date.now())
     ).toBe(false);
     expect(
-      isStaleDebugQueueNameForTest(`${namespace}/saptools-debug/not-a-timestamp`, namespace, Date.now())
+      isStaleDebugQueueName(`${namespace}/saptools-debug/not-a-timestamp`, namespace, Date.now())
     ).toBe(false);
   });
 });
