@@ -18,6 +18,8 @@
 - Validate e2e: `npm --prefix e2e run validate`
 - Run full e2e: `npm --prefix e2e test`
 - Run one spec: `npm --prefix e2e test -- e2e/tests/sql-workbench.e2e.spec.ts`
+- CI e2e uses 12 timed lanes from `e2e/shard-timings.md`; when adding or changing tests, update that file with runtime data.
+- Keep the 12 lanes balanced by expected runtime before committing e2e changes.
 
 ## MCP Troubleshooting (Short)
 - If `ERR_CONNECTION_REFUSED`: check server first  

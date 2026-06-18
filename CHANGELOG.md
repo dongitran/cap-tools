@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.139 (stable)
+- CI: Replaced the imbalanced 4-way Playwright native shard with 12 explicit E2E lanes based on measured GitHub Actions test timings, keeping each lane close to the same expected runtime.
+- CI: Added `e2e/shard-timings.md` as the durable timing and lane-assignment source, plus a lane-map validator used by GitHub Actions before E2E execution.
+
 ## 0.10.138 (stable)
 - Hardening: Event Mesh listener startup now tracks pending debug queues immediately after creation, so Stop All, panel close, scope change, or shutdown can delete queues even before AMQP startup becomes fully active.
 - Hardening: Event Mesh debug queues are recorded in a credential-free registry under the user SAP Tools data folder and reaped on the next Event Mesh open for the same binding when the owner VS Code process is gone, while queues owned by another live window are preserved.

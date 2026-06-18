@@ -103,22 +103,41 @@ jobs:
       - name: Validate E2E project
         run: npm --prefix e2e run validate
 
+      - name: Validate E2E lane map
+        run: node scripts/run-e2e-lane.mjs --validate
+
   e2e:
-    name: E2E Tests (${{ matrix.shard }}/${{ matrix.total }})
+    name: E2E Lane ${{ matrix.lane }} (~${{ matrix.expected }}s)
     runs-on: ubuntu-latest
     needs: [build, e2e-validate]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - shard: 1
-            total: 4
-          - shard: 2
-            total: 4
-          - shard: 3
-            total: 4
-          - shard: 4
-            total: 4
+          - lane: '01'
+            expected: '84.1'
+          - lane: '02'
+            expected: '84.0'
+          - lane: '03'
+            expected: '84.0'
+          - lane: '04'
+            expected: '82.6'
+          - lane: '05'
+            expected: '80.5'
+          - lane: '06'
+            expected: '80.3'
+          - lane: '07'
+            expected: '85.9'
+          - lane: '08'
+            expected: '85.7'
+          - lane: '09'
+            expected: '85.4'
+          - lane: '10'
+            expected: '84.8'
+          - lane: '11'
+            expected: '84.7'
+          - lane: '12'
+            expected: '84.6'
     steps:
       - uses: actions/checkout@v4
 
@@ -152,13 +171,13 @@ jobs:
       - name: Run E2E tests
         env:
           VSCODE_EXECUTABLE_PATH: /usr/share/code/code
-        run: xvfb-run -a npm --prefix e2e test -- --shard=${{ matrix.shard }}/${{ matrix.total }}
+        run: xvfb-run -a node scripts/run-e2e-lane.mjs ${{ matrix.lane }}
 
       - name: Upload E2E report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-report-${{ matrix.shard }}-of-${{ matrix.total }}
+          name: e2e-report-lane-${{ matrix.lane }}
           path: |
             e2e/playwright-report
             e2e/test-results
