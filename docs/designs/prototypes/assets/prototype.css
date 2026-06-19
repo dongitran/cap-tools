@@ -3694,6 +3694,9 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
   border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
   background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background, #252526));
 }
@@ -3702,6 +3705,20 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   display: flex;
   align-items: center;
   gap: 0;
+}
+
+.api-main-trace-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  padding: 2px 10px;
+  margin-left: auto;
+}
+
+.api-main-trace-actions[hidden] {
+  display: none;
 }
 
 .api-main-tab-btn {
@@ -4488,28 +4505,6 @@ body.vscode-high-contrast .api-raw-json.is-json {
   overflow: hidden;
 }
 
-.api-trace-toolbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
-}
-
-.api-trace-title {
-  min-width: 0;
-}
-
-.api-trace-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.api-trace-title h2,
 .api-trace-stream-head h3,
 .api-trace-detail-head h3 {
   margin: 0;
@@ -4518,7 +4513,6 @@ body.vscode-high-contrast .api-raw-json.is-json {
   font-weight: 650;
 }
 
-.api-trace-title p,
 .api-trace-detail-head p {
   margin: 3px 0 0;
   color: var(--vscode-descriptionForeground, #a0a0a0);
@@ -4528,17 +4522,18 @@ body.vscode-high-contrast .api-raw-json.is-json {
 
 .api-trace-state-badge {
   flex: 0 0 auto;
-  min-height: 20px;
+  min-height: 22px;
   display: inline-flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 7px;
   border: 1px solid var(--vscode-panel-border, #3c3c3c);
   border-radius: 999px;
   background: rgba(128, 128, 128, 0.08);
   color: var(--vscode-descriptionForeground, #a0a0a0);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .api-trace-state-badge.is-streaming {
@@ -4562,13 +4557,15 @@ body.vscode-high-contrast .api-raw-json.is-json {
 }
 
 .api-trace-action-btn {
-  height: 30px;
-  min-height: 30px;
+  height: 26px;
+  min-height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
   line-height: 1;
+  padding: 0 9px;
+  font-size: 11px;
 }
 
 .api-trace-settings-container {
@@ -4578,9 +4575,9 @@ body.vscode-high-contrast .api-raw-json.is-json {
 }
 
 .api-trace-settings-btn {
-  width: 30px;
+  width: 26px;
   padding: 0;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .api-trace-settings-popover {
@@ -4607,9 +4604,9 @@ body.vscode-high-contrast .api-raw-json.is-json {
 .api-trace-filters {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
-  padding: 10px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
 }
 
@@ -4621,6 +4618,17 @@ body.vscode-high-contrast .api-raw-json.is-json {
   gap: 4px;
   color: var(--vscode-descriptionForeground, #a0a0a0);
   font-size: 11px;
+}
+
+.api-trace-control-field {
+  display: grid !important;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.api-trace-control-field span {
+  white-space: nowrap;
 }
 
 .api-trace-check {
@@ -4821,16 +4829,23 @@ body.vscode-high-contrast .api-raw-json.is-json {
 .api-trace-detail-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .api-trace-detail-metric {
   min-width: 0;
-  padding: 8px;
+  padding: 5px 8px;
   border: 1px solid rgba(128, 128, 128, 0.18);
   border-radius: 6px;
   background: rgba(128, 128, 128, 0.06);
+}
+
+.api-trace-metric-row {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .api-trace-detail-metric.is-wide {
@@ -4838,17 +4853,24 @@ body.vscode-high-contrast .api-raw-json.is-json {
 }
 
 .api-trace-detail-metric span {
-  display: block;
-  margin-bottom: 4px;
+  flex: 0 0 auto;
   color: var(--vscode-descriptionForeground, #a0a0a0);
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .api-trace-detail-metric strong {
-  display: block;
+  min-width: 0;
   color: var(--vscode-foreground, #cccccc);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-trace-id-row strong {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
 }
 
 .api-trace-detail-columns {
@@ -4888,14 +4910,48 @@ body.vscode-high-contrast .api-raw-json.is-json {
 }
 
 .api-trace-detail-section h5 {
-  margin: 12px 0 7px;
+  margin: 0 0 7px;
   color: var(--vscode-descriptionForeground, #a0a0a0);
   font-size: 11px;
   font-weight: 650;
 }
 
-.api-trace-detail-section h5:first-of-type {
-  margin-top: 0;
+.api-trace-subsection + .api-trace-subsection {
+  margin-top: 10px;
+}
+
+.api-trace-subsection-head {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.api-trace-subsection-head h5 {
+  margin: 0;
+}
+
+.api-trace-copy-body-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.16));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground, #cccccc));
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.api-trace-copy-body-btn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.24));
 }
 
 .api-trace-header-list {
@@ -4934,20 +4990,85 @@ body.vscode-high-contrast .api-raw-json.is-json {
 .api-trace-preview {
   margin: 0;
   padding: 10px;
+  max-height: 260px;
+  overflow: auto;
   border: 1px solid rgba(128, 128, 128, 0.18);
   border-radius: 6px;
   background: transparent;
   color: var(--vscode-editor-foreground, #d4d4d4);
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 12px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  line-height: 1.45;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+}
+
+.api-trace-preview.is-json {
+  --api-trace-json-key: #9cdcfe;
+  --api-trace-json-string: #ce9178;
+  --api-trace-json-number: #b5cea8;
+  --api-trace-json-literal: #569cd6;
+  --api-trace-json-punctuation: #d4d4d4;
+}
+
+body.vscode-light .api-trace-preview.is-json,
+body.vscode-high-contrast-light .api-trace-preview.is-json {
+  --api-trace-json-key: #0451a5;
+  --api-trace-json-string: #a31515;
+  --api-trace-json-number: #098658;
+  --api-trace-json-literal: #0000ff;
+  --api-trace-json-punctuation: #6a737d;
+}
+
+body.vscode-high-contrast .api-trace-preview.is-json {
+  --api-trace-json-key: #9cdcfe;
+  --api-trace-json-string: #ffb3a6;
+  --api-trace-json-number: #b5f2a7;
+  --api-trace-json-literal: #f8d66d;
+  --api-trace-json-punctuation: var(--vscode-foreground, #ffffff);
+}
+
+.api-trace-json-token {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.api-trace-json-key {
+  color: var(--api-trace-json-key);
+}
+
+.api-trace-json-string {
+  color: var(--api-trace-json-string);
+}
+
+.api-trace-json-number {
+  color: var(--api-trace-json-number);
+}
+
+.api-trace-json-literal {
+  color: var(--api-trace-json-literal);
+  font-weight: 600;
+}
+
+.api-trace-json-punctuation {
+  color: var(--api-trace-json-punctuation);
 }
 
 @media (max-width: 760px) {
-  .api-trace-toolbar {
+  .api-main-tabs-shell {
     align-items: flex-start;
     flex-direction: column;
+    gap: 0;
+  }
+
+  .api-main-trace-actions {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 6px 10px;
+    border-top: 1px solid var(--vscode-panel-border, #3c3c3c);
+    overflow-x: auto;
   }
 
   .api-trace-url-filter {
@@ -4976,6 +5097,10 @@ body.vscode-high-contrast .api-raw-json.is-json {
 
   .api-trace-detail-metric.is-wide {
     grid-column: auto;
+  }
+
+  .api-trace-control-field {
+    grid-template-columns: 88px minmax(0, 1fr);
   }
 
   .api-trace-row {
@@ -6130,4 +6255,3 @@ body.vscode-high-contrast .event-payload.is-json {
   border: 1px solid var(--vscode-inputValidation-errorBorder, rgba(255, 0, 0, 0.25));
 }
 /* --- END 09-events.css --- */
-

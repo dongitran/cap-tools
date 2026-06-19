@@ -542,8 +542,10 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('Live Trace');
     expect(source).toContain('role="tablist" aria-label="APIs Explorer modes"');
     expect(source).toContain('class="api-split-layout"');
+    expect(source).toContain('data-role="api-main-trace-actions"');
 
     expect(styles).toContain('.api-main-tabs');
+    expect(styles).toContain('.api-main-trace-actions');
     expect(styles).toContain('.api-main-tab-btn');
     expect(styles).toContain('.api-main-tab-panel');
   });
@@ -597,9 +599,12 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('class="api-trace-stream-toggle secondary-action"');
     expect(source).toContain('if (apiTracePaused) return;');
     expect(source).toContain("apiTraceState = 'preparingCli'");
-    expect(source).toContain('class="api-trace-title-row"');
+    expect(source).toContain('function renderTraceActionCluster()');
+    expect(source).toContain('function updateTraceTopActions()');
     expect(source).toContain('class="api-trace-state-badge ${statusClass}"');
     expect(source).toContain('formatTraceStateLabel(apiTraceState)');
+    expect(source).not.toContain('<h2>Live Trace</h2>');
+    expect(source).not.toContain('class="api-trace-toolbar"');
     expect(source).not.toContain('Ready to listen for runtime HTTP traffic.');
     expect(source).not.toContain('State: ${escapeHtml(apiTraceState)}');
     expect(source).not.toContain('No request selected');
@@ -619,11 +624,44 @@ describe('prototype Log-API-Event workspace', () => {
     expect(styles).toContain('.api-trace-detail-grid');
     expect(styles).toContain('.api-trace-detail-columns');
     expect(styles).toContain('.api-trace-url-select');
-    expect(styles).toContain('.api-trace-title-row');
     expect(styles).toContain('.api-trace-state-badge');
     expect(styles).toContain('.api-trace-settings-container');
     expect(styles).toContain('.api-trace-settings-popover');
     expect(styles).toContain('.api-trace-stream-toggle');
+  });
+
+  it('persists Live Trace capture preferences with rich conditional body rendering', async () => {
+    const source = await readApiWebviewSource();
+    const styles = await readApiStylesSource();
+
+    expect(source).toContain('let apiTraceCaptureHeaders = true;');
+    expect(source).toContain('let apiTraceCaptureRequestBody = true;');
+    expect(source).toContain('let apiTraceCaptureResponseBody = true;');
+    expect(source).toContain('const API_TRACE_PREFERENCES_KEY');
+    expect(source).toContain('function loadApiTracePreferences()');
+    expect(source).toContain('function saveApiTracePreferences()');
+    expect(source).toContain('vscodeApi.getState');
+    expect(source).toContain('vscodeApi.setState');
+    expect(source).toContain('sessionStorage.getItem(API_TRACE_PREFERENCES_KEY)');
+    expect(source).toContain('renderTraceHeaderSection');
+    expect(source).toContain('renderTraceBodySection');
+    expect(source).toContain('apiTraceCaptureHeaders ? renderTraceHeaderSection');
+    expect(source).toContain('apiTraceCaptureRequestBody ? renderTraceBodySection');
+    expect(source).toContain('apiTraceCaptureResponseBody ? renderTraceBodySection');
+    expect(source).toContain('const API_TRACE_JSON_TOKEN_PATTERN');
+    expect(source).toContain('function formatTraceJsonPreview(preview)');
+    expect(source).toContain('function highlightTraceJson(json)');
+    expect(source).toContain('api-trace-json-token');
+    expect(source).toContain('data-action="api-trace-copy-body"');
+    expect(source).toContain('function copyTraceBodyPreview');
+
+    expect(styles).toContain('.api-trace-control-field');
+    expect(styles).toContain('.api-trace-metric-row');
+    expect(styles).toContain('.api-trace-copy-body-btn');
+    expect(styles).toContain('.api-trace-preview.is-json');
+    expect(styles).toContain('.api-trace-json-token');
+    expect(styles).toMatch(/\.api-trace-preview\s*\{[\s\S]*?max-height:\s*260px;/);
+    expect(styles).toMatch(/\.api-trace-preview\s*\{[\s\S]*?overflow:\s*auto;/);
   });
 
   it('keeps Live Trace UI free of inline event handlers and new inline trace styles', async () => {

@@ -10,6 +10,18 @@ export interface ExecuteRequestPayload {
   readonly body?: string;
 }
 
+export interface ApiTracePreferencesPayload {
+  readonly captureHeaders: boolean;
+  readonly captureRequestBody: boolean;
+  readonly captureResponseBody: boolean;
+}
+
+export const DEFAULT_API_TRACE_PREFERENCES: ApiTracePreferencesPayload = {
+  captureHeaders: true,
+  captureRequestBody: true,
+  captureResponseBody: true,
+};
+
 export function readExecuteRequestPayload(payload: unknown): ExecuteRequestPayload | null {
   if (typeof payload !== 'object' || payload === null) {
     return null;
@@ -50,6 +62,18 @@ export function readTraceStartOptions(payload: unknown): ApiTraceStartOptions | 
     captureResponseBody: raw['captureResponseBody'] === true,
     maxBodyBytes: readPositiveNumber(raw['maxBodyBytes'], 4096, 20000),
     filters,
+  };
+}
+
+export function readTracePreferencesPayload(payload: unknown): ApiTracePreferencesPayload | null {
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+  const raw = payload as Record<string, unknown>;
+  return {
+    captureHeaders: raw['captureHeaders'] !== false,
+    captureRequestBody: raw['captureRequestBody'] !== false,
+    captureResponseBody: raw['captureResponseBody'] !== false,
   };
 }
 

@@ -99,6 +99,21 @@ function createManager(): ApisExplorerPanelManager {
   );
 }
 
+function createManagerWithGlobalState(globalState: {
+  readonly get: ReturnType<typeof vi.fn>;
+  readonly update: ReturnType<typeof vi.fn>;
+}): ApisExplorerPanelManager {
+  return new ApisExplorerPanelManager(
+    {} as never,
+    { appendLine: vi.fn() } as never,
+    {
+      getApiCatalog: vi.fn(async () => null),
+      setApiCatalog: vi.fn(async () => undefined),
+    } as never,
+    globalState as never
+  );
+}
+
 describe('ApisExplorerPanelManager', () => {
   beforeEach(() => {
     createWebviewPanelMock.mockReset();
@@ -230,5 +245,44 @@ describe('ApisExplorerPanelManager', () => {
         payload: expect.objectContaining({ state: 'stopped' }),
       })
     );
+  });
+
+  it('persists Live Trace capture preferences and injects them into new panels', async () => {
+    const values = new Map<string, unknown>();
+    values.set('sapTools.apis.trace.preferences', {
+      captureHeaders: false,
+      captureRequestBody: false,
+      captureResponseBody: true,
+    });
+    const globalState = {
+      get: vi.fn((key: string) => values.get(key)),
+      update: vi.fn(async (key: string, value: unknown) => {
+        values.set(key, value);
+      }),
+    };
+    const panel = createMockPanel();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = createManagerWithGlobalState(globalState);
+
+    manager.openApisExplorer('orders-api', makeTarget('space-a'));
+    expect(panel.webview.html).toContain('window.sapToolsApiTracePreferences');
+    expect(panel.webview.html).toContain('"captureHeaders":false');
+    expect(panel.webview.html).toContain('"captureRequestBody":false');
+    expect(panel.webview.html).toContain('"captureResponseBody":true');
+
+    await panel.messageHandler?.({
+      type: 'sapTools.apis.trace.preferencesChanged',
+      payload: {
+        captureHeaders: false,
+        captureRequestBody: true,
+        captureResponseBody: false,
+      },
+    });
+
+    expect(globalState.update).toHaveBeenCalledWith('sapTools.apis.trace.preferences', {
+      captureHeaders: false,
+      captureRequestBody: true,
+      captureResponseBody: false,
+    });
   });
 });

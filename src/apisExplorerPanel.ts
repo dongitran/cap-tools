@@ -1,13 +1,20 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import { fetchAppRouteUrlFromTarget, fetchCfOauthTokenFromTarget, fetchXsuaaTokenFromTarget, fetchRemoteCdsServicesFromTarget } from './cfClient.js';
-import { readExecuteRequestPayload, readTraceStartOptions, readUninstallRuntimeHook } from './apisExplorerMessages.js';
+import {
+  DEFAULT_API_TRACE_PREFERENCES,
+  readExecuteRequestPayload,
+  readTracePreferencesPayload,
+  readTraceStartOptions,
+  readUninstallRuntimeHook,
+} from './apisExplorerMessages.js';
 import { ApiTraceSession } from './apiTraceSession.js';
 import type { ApiTraceStopReason } from './apiTraceTypes.js';
-import type { ExecuteRequestPayload } from './apisExplorerMessages.js';
+import type { ApiTracePreferencesPayload, ExecuteRequestPayload } from './apisExplorerMessages.js';
 import type { CacheStore } from './cacheStore.js';
 
 const APIS_EXPLORER_VIEW_TYPE = 'sapTools.apisExplorer';
+const API_TRACE_PREFERENCES_KEY = 'sapTools.apis.trace.preferences';
 
 export interface ApisExplorerPanelSession {
   readonly panel: vscode.WebviewPanel;
@@ -54,7 +61,8 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly outputChannel: vscode.OutputChannel,
-    private readonly cacheStore: CacheStore
+    private readonly cacheStore: CacheStore,
+    private readonly tracePreferenceStore?: vscode.Memento
   ) {}
 
   private log(msg: string): void {
@@ -178,9 +186,26 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       await this.stopTraceSession(session, 'user', readUninstallRuntimeHook(msg['payload']));
       return;
     }
+    if (type === 'sapTools.apis.trace.preferencesChanged') {
+      await this.saveTracePreferences(msg['payload']);
+      return;
+    }
     if (type === 'sapTools.apis.trace.clear') {
       session.traceSession?.clear();
     }
+  }
+
+  private async saveTracePreferences(payload: unknown): Promise<void> {
+    const preferences = readTracePreferencesPayload(payload);
+    if (preferences === null) {
+      return;
+    }
+    await this.tracePreferenceStore?.update(API_TRACE_PREFERENCES_KEY, preferences);
+  }
+
+  private readTracePreferences(): ApiTracePreferencesPayload {
+    const stored = this.tracePreferenceStore?.get<unknown>(API_TRACE_PREFERENCES_KEY);
+    return readTracePreferencesPayload(stored) ?? DEFAULT_API_TRACE_PREFERENCES;
   }
 
   private startTrace(session: ApisExplorerPanelSession, payload: unknown): void {
@@ -587,6 +612,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     const fontUriStr = fontUri.toString();
     const prototypeCssUriStr = prototypeCssUri.with({ query: `t=${Date.now().toString()}` }).toString();
     const apisWebviewJsUriStr = apisWebviewJsUri.with({ query: `t=${Date.now().toString()}` }).toString();
+    const tracePreferences = this.readTracePreferences();
 
     const nonce = randomBytes(16).toString('base64url');
     const csp = [
@@ -636,6 +662,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
   <!-- Pass appId via a script tag so the JS can read it -->
   <script nonce="${nonce}">
     window.vscodeApiSelectedAppId = ${JSON.stringify(appId)};
+    window.sapToolsApiTracePreferences = ${JSON.stringify(tracePreferences)};
   </script>
   <!-- Load the main UI logic -->
   <script nonce="${nonce}" src="${apisWebviewJsUriStr}"></script>

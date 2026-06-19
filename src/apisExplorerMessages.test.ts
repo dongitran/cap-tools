@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   readExecuteRequestPayload,
+  readTracePreferencesPayload,
   readTraceStartOptions,
   readUninstallRuntimeHook,
 } from './apisExplorerMessages';
@@ -63,7 +64,7 @@ describe('APIs Explorer webview message parsing', () => {
       readTraceStartOptions({
         mode: 'runtime-http',
         instanceIndex: 1,
-        processName: 'srv',
+        processName: 'web',
         captureHeaders: true,
         captureRequestBody: true,
         captureResponseBody: true,
@@ -77,7 +78,7 @@ describe('APIs Explorer webview message parsing', () => {
     ).toEqual({
       mode: 'runtime-http',
       instanceIndex: 1,
-      processName: 'srv',
+      processName: 'web',
       captureHeaders: true,
       captureRequestBody: true,
       captureResponseBody: true,
@@ -94,5 +95,25 @@ describe('APIs Explorer webview message parsing', () => {
     expect(readUninstallRuntimeHook(undefined)).toBe(true);
     expect(readUninstallRuntimeHook({ uninstallRuntimeHook: true })).toBe(true);
     expect(readUninstallRuntimeHook({ uninstallRuntimeHook: false })).toBe(false);
+  });
+
+  it('parses trace preferences with enabled-by-default booleans', () => {
+    expect(readTracePreferencesPayload(undefined)).toBeNull();
+    expect(readTracePreferencesPayload({})).toEqual({
+      captureHeaders: true,
+      captureRequestBody: true,
+      captureResponseBody: true,
+    });
+    expect(
+      readTracePreferencesPayload({
+        captureHeaders: false,
+        captureRequestBody: true,
+        captureResponseBody: false,
+      })
+    ).toEqual({
+      captureHeaders: false,
+      captureRequestBody: true,
+      captureResponseBody: false,
+    });
   });
 });

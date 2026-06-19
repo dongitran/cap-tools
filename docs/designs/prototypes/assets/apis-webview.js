@@ -33,12 +33,13 @@ let apiTraceMethodFilter = 'all';
 let apiTraceStatusFilter = 'all';
 let apiTraceSearchText = '';
 let apiTracePaused = false;
-let apiTraceCaptureHeaders = false;
-let apiTraceCaptureRequestBody = false;
-let apiTraceCaptureResponseBody = false;
+let apiTraceCaptureHeaders = true;
+let apiTraceCaptureRequestBody = true;
+let apiTraceCaptureResponseBody = true;
 let apiTraceSettingsOpen = false;
 
 const API_TRACE_EVENT_LIMIT = 1000;
+const API_TRACE_PREFERENCES_KEY = 'saptools.apis.trace.preferences';
 
 const endpointSessions = new Map();
 
@@ -93,6 +94,64 @@ function loadEndpointSession(entityName) {
 
 // Global VS Code API reference
 const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+
+function currentApiTracePreferences() {
+  return {
+    captureHeaders: apiTraceCaptureHeaders,
+    captureRequestBody: apiTraceCaptureRequestBody,
+    captureResponseBody: apiTraceCaptureResponseBody
+  };
+}
+
+function applyApiTracePreferences(value) {
+  if (!value || typeof value !== 'object') return false;
+  apiTraceCaptureHeaders = typeof value.captureHeaders === 'boolean' ? value.captureHeaders : true;
+  apiTraceCaptureRequestBody = typeof value.captureRequestBody === 'boolean' ? value.captureRequestBody : true;
+  apiTraceCaptureResponseBody = typeof value.captureResponseBody === 'boolean' ? value.captureResponseBody : true;
+  return true;
+}
+
+function readSessionApiTracePreferences() {
+  try {
+    const raw = sessionStorage.getItem(API_TRACE_PREFERENCES_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadApiTracePreferences() {
+  const webviewState = vscodeApi && typeof vscodeApi.getState === 'function' ? vscodeApi.getState() : null;
+  const statePreferences = webviewState && typeof webviewState === 'object' ? webviewState.apiTracePreferences : null;
+  const candidates = [
+    statePreferences,
+    window.sapToolsApiTracePreferences,
+    readSessionApiTracePreferences()
+  ];
+  for (const candidate of candidates) {
+    if (applyApiTracePreferences(candidate)) return;
+  }
+}
+
+function saveApiTracePreferences() {
+  const preferences = currentApiTracePreferences();
+  if (vscodeApi && typeof vscodeApi.getState === 'function' && typeof vscodeApi.setState === 'function') {
+    const currentState = vscodeApi.getState();
+    const nextState = currentState && typeof currentState === 'object' ? { ...currentState } : {};
+    nextState.apiTracePreferences = preferences;
+    vscodeApi.setState(nextState);
+    vscodeApi.postMessage({
+      type: 'sapTools.apis.trace.preferencesChanged',
+      payload: preferences
+    });
+    return;
+  }
+  try {
+    sessionStorage.setItem(API_TRACE_PREFERENCES_KEY, JSON.stringify(preferences));
+  } catch {
+    // Ignore storage failures; trace capture defaults remain available in memory.
+  }
+}
 
 // We just copy the mock data from 07h-render-apis.js for independence in the webview
 const API_MOCK_CATALOG = {
@@ -400,6 +459,44 @@ function renderApiJsonResult(payload) {
   return `<pre class="api-raw-json is-json" aria-label="API JSON response">${highlightApiJson(json)}</pre>`;
 }
 
+const API_TRACE_JSON_TOKEN_PATTERN = /"(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\b(?:true|false|null)\b|[{}\[\],:]/g;
+
+function highlightTraceJson(json) {
+  return json.replace(API_TRACE_JSON_TOKEN_PATTERN, (token, offset, source) => {
+    let tokenClass = 'api-trace-json-punctuation';
+    if (token.startsWith('"')) {
+      const afterToken = source.slice(offset + token.length);
+      tokenClass = /^\s*:/.test(afterToken) ? 'api-trace-json-key' : 'api-trace-json-string';
+    } else if (/^-?\d/.test(token)) {
+      tokenClass = 'api-trace-json-number';
+    } else if (token === 'true' || token === 'false' || token === 'null') {
+      tokenClass = 'api-trace-json-literal';
+    }
+    return `<span class="api-trace-json-token ${tokenClass}">${escapeHtml(token)}</span>`;
+  });
+}
+
+function formatTraceJsonPreview(preview) {
+  const text = String(preview ?? '').replace(/^\uFEFF/, '').trim();
+  if (text.length === 0) return null;
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return null;
+  }
+}
+
+function renderTracePreview(preview, truncated, ariaLabel) {
+  const text = String(preview ?? '');
+  if (!text) return '<div class="api-trace-empty-detail">No body preview captured.</div>';
+  const json = formatTraceJsonPreview(text);
+  const suffix = truncated ? '\n[truncated]' : '';
+  if (json !== null) {
+    return `<pre class="api-trace-preview is-json" aria-label="${escapeHtml(ariaLabel)}">${highlightTraceJson(json)}${escapeHtml(suffix)}</pre>`;
+  }
+  return `<pre class="api-trace-preview" aria-label="${escapeHtml(ariaLabel)}">${escapeHtml(text)}${escapeHtml(suffix)}</pre>`;
+}
+
 function formatTraceClock(timestamp) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return '--:--:--';
@@ -550,11 +647,41 @@ function renderHeaderTable(headers) {
   `;
 }
 
-function renderPreview(preview, truncated) {
-  if (!preview) return '<div class="api-trace-empty-detail">No body preview captured.</div>';
+function renderTraceHeaderSection(title, headers) {
   return `
-    <pre class="api-trace-preview">${escapeHtml(preview)}${truncated ? '\n[truncated]' : ''}</pre>
+    <section class="api-trace-subsection">
+      <h5>${escapeHtml(title)}</h5>
+      ${renderHeaderTable(headers)}
+    </section>
   `;
+}
+
+function renderTraceBodySection(kind, title, preview, truncated) {
+  const hasPreview = typeof preview === 'string' && preview.length > 0;
+  return `
+    <section class="api-trace-subsection">
+      <div class="api-trace-subsection-head">
+        <h5>${escapeHtml(title)}</h5>
+        ${hasPreview ? `<button type="button" class="api-trace-copy-body-btn" data-action="api-trace-copy-body" data-body-kind="${escapeHtml(kind)}" aria-label="Copy ${escapeHtml(title)}" title="Copy ${escapeHtml(title)}">&#128203;</button>` : ''}
+      </div>
+      ${renderTracePreview(preview, truncated, title)}
+    </section>
+  `;
+}
+
+function copyTraceBodyPreview(kind, button) {
+  const event = selectedTraceEvent();
+  if (event === null) return;
+  const preview = kind === 'response' ? event.responseBodyPreview : event.requestBodyPreview;
+  if (!preview || !navigator.clipboard) return;
+  navigator.clipboard.writeText(preview).then(() => {
+    if (!button) return;
+    const previous = button.innerHTML;
+    button.innerHTML = '&#10003;';
+    window.setTimeout(() => {
+      button.innerHTML = previous;
+    }, 1200);
+  }).catch(() => undefined);
 }
 
 function renderTraceStats(summaries, events) {
@@ -612,14 +739,22 @@ function renderTraceDetailContent(event) {
   if (event === null) {
     return '<div class="api-trace-empty-detail">Select a request to inspect its request and response.</div>';
   }
+  const requestSections = [
+    apiTraceCaptureHeaders ? renderTraceHeaderSection('Request Headers', event.requestHeaders) : '',
+    apiTraceCaptureRequestBody ? renderTraceBodySection('request', 'Request Body Preview', event.requestBodyPreview, event.requestBodyTruncated) : ''
+  ].join('');
+  const responseSections = [
+    apiTraceCaptureHeaders ? renderTraceHeaderSection('Response Headers', event.responseHeaders) : '',
+    apiTraceCaptureResponseBody ? renderTraceBodySection('response', 'Response Body Preview', event.responseBodyPreview, event.responseBodyTruncated) : ''
+  ].join('');
   return `
     <section class="api-trace-detail-grid" aria-label="Trace event summary">
-      <div class="api-trace-detail-metric"><span>Status</span><strong>${event.status === null ? 'Unknown' : escapeHtml(String(event.status))}</strong></div>
-      <div class="api-trace-detail-metric"><span>Duration</span><strong>${event.durationMs === null ? '-' : `${event.durationMs}ms`}</strong></div>
-      <div class="api-trace-detail-metric"><span>Instance</span><strong>${escapeHtml(event.instance)}</strong></div>
-      <div class="api-trace-detail-metric"><span>Bytes</span><strong>${event.requestBytes} req / ${event.responseBytes} res</strong></div>
-      <div class="api-trace-detail-metric is-wide"><span>Trace ID</span><strong>${escapeHtml(event.traceId || event.id)}</strong></div>
-      <div class="api-trace-detail-metric is-wide"><span>Correlation ID</span><strong>${escapeHtml(event.correlationId || '-')}</strong></div>
+      <div class="api-trace-detail-metric api-trace-metric-row"><span>Status</span><strong>${event.status === null ? 'Unknown' : escapeHtml(String(event.status))}</strong></div>
+      <div class="api-trace-detail-metric api-trace-metric-row"><span>Duration</span><strong>${event.durationMs === null ? '-' : `${event.durationMs}ms`}</strong></div>
+      <div class="api-trace-detail-metric api-trace-metric-row"><span>Instance</span><strong>${escapeHtml(event.instance)}</strong></div>
+      <div class="api-trace-detail-metric api-trace-metric-row"><span>Bytes</span><strong>${event.requestBytes} req / ${event.responseBytes} res</strong></div>
+      <div class="api-trace-detail-metric api-trace-metric-row api-trace-id-row is-wide"><span>Trace ID</span><strong title="${escapeHtml(event.traceId || event.id)}">${escapeHtml(event.traceId || event.id)}</strong></div>
+      <div class="api-trace-detail-metric api-trace-metric-row api-trace-id-row is-wide"><span>Correlation ID</span><strong title="${escapeHtml(event.correlationId || '-')}">${escapeHtml(event.correlationId || '-')}</strong></div>
     </section>
     <div class="api-trace-detail-columns">
       <section class="api-trace-detail-section">
@@ -627,20 +762,14 @@ function renderTraceDetailContent(event) {
           <h4>Request</h4>
           <span>${escapeHtml(event.method)} ${escapeHtml(event.normalizedUrl)}</span>
         </div>
-        <h5>Request Headers</h5>
-        ${renderHeaderTable(event.requestHeaders)}
-        <h5>Request Body Preview</h5>
-        ${renderPreview(event.requestBodyPreview, event.requestBodyTruncated)}
+        ${requestSections || '<div class="api-trace-empty-detail">Request capture sections are disabled.</div>'}
       </section>
       <section class="api-trace-detail-section">
         <div class="api-trace-section-title">
           <h4>Response</h4>
           <span>${event.status === null ? 'Status unknown' : `HTTP ${escapeHtml(String(event.status))}`}</span>
         </div>
-        <h5>Response Headers</h5>
-        ${renderHeaderTable(event.responseHeaders)}
-        <h5>Response Body Preview</h5>
-        ${renderPreview(event.responseBodyPreview, event.responseBodyTruncated)}
+        ${responseSections || '<div class="api-trace-empty-detail">Response capture sections are disabled.</div>'}
       </section>
     </div>
   `;
@@ -663,50 +792,53 @@ function renderTraceDetail(event) {
   `;
 }
 
-function renderLiveTracePanel() {
-  const panel = document.querySelector('.api-live-trace-panel');
-  if (!panel) return;
-  const summaries = buildTraceUrlSummaries();
-  const events = filteredTraceEvents();
-  const selected = selectedTraceEvent();
+function renderTraceActionCluster() {
   const isActive = isTraceActiveState(apiTraceState);
   const canStop = isTraceStoppableState(apiTraceState);
   const statusClass = apiTraceState === 'error' ? 'is-error' : isActive ? 'is-streaming' : 'is-idle';
   const traceToggleAction = canStop ? 'api-trace-stop' : 'api-trace-start';
   const traceToggleLabel = canStop ? 'Stop Listening' : 'Start Listening';
   const traceToggleClass = canStop ? 'secondary-action' : 'primary-action';
+  return `
+    <span class="api-trace-state-badge ${statusClass}" aria-label="Live Trace state">${escapeHtml(formatTraceStateLabel(apiTraceState))}</span>
+    <button type="button" class="${traceToggleClass} api-trace-action-btn" data-action="${traceToggleAction}">${traceToggleLabel}</button>
+    <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-clear">Clear</button>
+    <div class="api-trace-settings-container">
+      <button type="button" class="secondary-action api-trace-action-btn api-trace-settings-btn" data-action="api-trace-toggle-settings" aria-label="Trace settings" aria-expanded="${apiTraceSettingsOpen ? 'true' : 'false'}" title="Trace settings">&#9881;&#65039;</button>
+      <div class="api-trace-settings-popover${apiTraceSettingsOpen ? ' is-open' : ''}" aria-label="Trace settings">
+        <label class="api-trace-check"><input type="checkbox" checked disabled /> Method/path/status/time</label>
+        <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-headers" ${apiTraceCaptureHeaders ? 'checked' : ''} /> Headers</label>
+        <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-request-body" ${apiTraceCaptureRequestBody ? 'checked' : ''} /> Request body preview</label>
+        <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-response-body" ${apiTraceCaptureResponseBody ? 'checked' : ''} /> Response preview</label>
+      </div>
+    </div>
+  `;
+}
+
+function updateTraceTopActions() {
+  const container = document.querySelector('[data-role="api-main-trace-actions"]');
+  if (!container) return;
+  const shouldShow = apiActiveMainTab === 'live-trace' && Boolean(apiSelectedAppId);
+  container.hidden = !shouldShow;
+  container.innerHTML = shouldShow ? renderTraceActionCluster() : '';
+}
+
+function renderLiveTracePanel() {
+  const panel = document.querySelector('.api-live-trace-panel');
+  if (!panel) return;
+  const summaries = buildTraceUrlSummaries();
+  const events = filteredTraceEvents();
+  const selected = selectedTraceEvent();
   panel.innerHTML = `
     <section class="api-trace-shell" aria-label="Live Trace HTTP inspector">
-      <div class="api-trace-toolbar">
-        <div class="api-trace-title">
-          <div class="api-trace-title-row">
-            <h2>Live Trace</h2>
-            <span class="api-trace-state-badge ${statusClass}" aria-label="Live Trace state">${escapeHtml(formatTraceStateLabel(apiTraceState))}</span>
-          </div>
-        </div>
-        <div class="api-trace-actions">
-          <button type="button" class="${traceToggleClass} api-trace-action-btn" data-action="${traceToggleAction}">${traceToggleLabel}</button>
-          <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-clear">Clear</button>
-          <div class="api-trace-settings-container">
-            <button type="button" class="secondary-action api-trace-action-btn api-trace-settings-btn" data-action="api-trace-toggle-settings" aria-label="Trace settings" aria-expanded="${apiTraceSettingsOpen ? 'true' : 'false'}" title="Trace settings">&#9881;&#65039;</button>
-            <div class="api-trace-settings-popover${apiTraceSettingsOpen ? ' is-open' : ''}" aria-label="Trace settings">
-              <label class="api-trace-check"><input type="checkbox" checked disabled /> Method/path/status/time</label>
-              <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-headers" ${apiTraceCaptureHeaders ? 'checked' : ''} /> Headers</label>
-              <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-request-body" ${apiTraceCaptureRequestBody ? 'checked' : ''} /> Request body preview</label>
-              <label class="api-trace-check"><input type="checkbox" data-action="api-trace-capture-response-body" ${apiTraceCaptureResponseBody ? 'checked' : ''} /> Response preview</label>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="api-trace-controls" aria-label="Trace target controls">
-        <label>
+        <label class="api-trace-control-field">
           <span>Instance</span>
           <select data-action="api-trace-instance" aria-label="Trace instance">
             <option value="0">Instance 0</option>
           </select>
         </label>
-        <label>
+        <label class="api-trace-control-field">
           <span>Mode</span>
           <select aria-label="Trace mode" disabled>
             <option>Runtime HTTP Trace</option>
@@ -715,29 +847,29 @@ function renderLiveTracePanel() {
       </div>
 
       <div class="api-trace-filters" aria-label="Live Trace filters">
-        <label class="api-trace-url-filter">
+        <label class="api-trace-control-field api-trace-url-filter">
           <span>Observed URL</span>
           <select class="api-trace-url-select" data-action="api-trace-select-url" aria-label="Observed URL">
             ${renderTraceUrlOptions(summaries)}
           </select>
         </label>
-        <label>
+        <label class="api-trace-control-field">
           <span>Path or URL contains</span>
           <input type="search" data-action="api-trace-filter-path" value="${escapeHtml(apiTracePathFilter)}" placeholder="/odata/v4/products" />
         </label>
-        <label>
+        <label class="api-trace-control-field">
           <span>Method</span>
           <select data-action="api-trace-filter-method" aria-label="Trace method filter">
             ${['all', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => `<option value="${method}" ${apiTraceMethodFilter === method ? 'selected' : ''}>${method === 'all' ? 'All' : method}</option>`).join('')}
           </select>
         </label>
-        <label>
+        <label class="api-trace-control-field">
           <span>Status</span>
           <select data-action="api-trace-filter-status" aria-label="Trace status filter">
             ${['all', '2xx', '3xx', '4xx', '5xx'].map((status) => `<option value="${status}" ${apiTraceStatusFilter === status ? 'selected' : ''}>${status === 'all' ? 'All' : status}</option>`).join('')}
           </select>
         </label>
-        <label>
+        <label class="api-trace-control-field">
           <span>Search</span>
           <input type="search" data-action="api-trace-filter-search" value="${escapeHtml(apiTraceSearchText)}" placeholder="trace id, header, body" />
         </label>
@@ -761,6 +893,7 @@ function renderLiveTracePanel() {
   `;
   const select = panel.querySelector('[data-action="api-trace-select-url"]');
   if (select) select.value = apiTraceSelectedUrl;
+  updateTraceTopActions();
 }
 
 function isTraceActiveState(state) {
@@ -1100,6 +1233,7 @@ function initLayout() {
               Live Trace
             </button>
           </div>
+          <div class="api-main-trace-actions" data-role="api-main-trace-actions" hidden></div>
         </header>
         <section id="api-request-runner-panel" class="api-main-tab-panel api-request-runner-panel" data-role="api-request-runner-panel" role="tabpanel">
           <div class="api-split-layout">
@@ -1137,6 +1271,7 @@ function updateMainTabVisibility() {
   });
   if (requestPanel) requestPanel.hidden = apiActiveMainTab !== 'request-runner';
   if (tracePanel) tracePanel.hidden = apiActiveMainTab !== 'live-trace';
+  updateTraceTopActions();
 }
 
 function updateApiEntitySelection() {
@@ -1187,6 +1322,11 @@ appElement.addEventListener('click', (event) => {
 
   if (action === 'api-copy-data' || action === 'api-copy-response') {
     copyResponseData();
+    return;
+  }
+
+  if (action === 'api-trace-copy-body') {
+    copyTraceBodyPreview(actionElement.dataset.bodyKind ?? 'request', actionElement);
     return;
   }
 
@@ -1307,14 +1447,20 @@ appElement.addEventListener('change', (event) => {
     const action = target.dataset.action;
     if (action === 'api-trace-capture-headers') {
       apiTraceCaptureHeaders = target.checked;
+      saveApiTracePreferences();
+      renderLiveTracePanel();
       return;
     }
     if (action === 'api-trace-capture-request-body') {
       apiTraceCaptureRequestBody = target.checked;
+      saveApiTracePreferences();
+      renderLiveTracePanel();
       return;
     }
     if (action === 'api-trace-capture-response-body') {
       apiTraceCaptureResponseBody = target.checked;
+      saveApiTracePreferences();
+      renderLiveTracePanel();
       return;
     }
   }
@@ -1398,6 +1544,7 @@ appElement.addEventListener('input', (event) => {
 });
 
 function initWebview() {
+  loadApiTracePreferences();
   const params = new URLSearchParams(window.location.search);
   const appId = params.get('appId') || sessionStorage.getItem('saptools.apis.selectedAppId') || window.vscodeApiSelectedAppId;
   if (appId) {
@@ -1602,9 +1749,6 @@ window.addEventListener('message', (event) => {
     apiTraceStatusFilter = 'all';
     apiTraceSearchText = '';
     apiTracePaused = false;
-    apiTraceCaptureHeaders = false;
-    apiTraceCaptureRequestBody = false;
-    apiTraceCaptureResponseBody = false;
     apiTraceSettingsOpen = false;
     apiParams = {
       $select: '',

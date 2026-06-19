@@ -35,7 +35,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const cfLogsPanel = new CfLogsPanelProvider(context);
   const hanaSqlWorkbench = new HanaSqlWorkbench(outputChannel, cacheStore);
-  const apisExplorerPanelManager = new ApisExplorerPanelManager(context.extensionUri, outputChannel, cacheStore);
+  const apisExplorerPanelManager = new ApisExplorerPanelManager(
+    context.extensionUri,
+    outputChannel,
+    cacheStore,
+    context.globalState
+  );
   const eventMeshPanelManager = new EventMeshPanelManager(context.extensionUri, outputChannel);
 
   const regionSidebarProvider = new RegionSidebarProvider(

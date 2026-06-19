@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.146 (stable)
+- UI: Live Trace now moves the state badge and Start/Stop, Clear, and settings controls into the top tab row beside Request Runner/Live Trace, removes the duplicate inner title, and keeps target/filter controls on compact one-line rows.
+- Feature: Live Trace capture settings now default to headers, request body preview, and response preview enabled, persist through VS Code global state, and immediately hide disabled request/response sections from the detail view.
+- UI: Live Trace request and response body previews now auto-format/highlight JSON, provide copy buttons, and stay bounded with scroll for long payloads.
+
 ## 0.10.145 (stable)
 - Fix: Live Trace now starts Node Inspector more reliably by finding Node processes through `/proc` executable metadata instead of relying on the process thread name being `node`, then confirming Inspector readiness before treating startup as successful.
 - UI: Live Trace now uses one Start/Stop toggle, moves capture settings behind a gear menu, removes the secondary status line, and tightens the stream pause/resume control.
