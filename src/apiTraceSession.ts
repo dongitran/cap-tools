@@ -377,6 +377,9 @@ function createMockEvent(
 }
 
 function applyBodyPreviewLimit(event: ApiTraceEvent, maxBodyChars: number): ApiTraceEvent {
+  if (maxBodyChars <= 0) {
+    return event;
+  }
   const requestBody = truncatePreview(event.requestBodyPreview, maxBodyChars);
   const responseBody = truncatePreview(event.responseBodyPreview, maxBodyChars);
   return {

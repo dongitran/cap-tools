@@ -840,19 +840,11 @@ body.vscode-high-contrast .api-raw-json.is-json {
   overflow: hidden;
 }
 
-.api-trace-stream-head h3,
-.api-trace-detail-head h3 {
+.api-trace-stream-head h3 {
   margin: 0;
   color: var(--vscode-foreground, #cccccc);
   font-size: 13px;
   font-weight: 650;
-}
-
-.api-trace-detail-head p {
-  margin: 3px 0 0;
-  color: var(--vscode-descriptionForeground, #a0a0a0);
-  font-size: 11px;
-  overflow-wrap: anywhere;
 }
 
 .api-trace-state-badge {
@@ -1051,8 +1043,98 @@ body.vscode-high-contrast .api-raw-json.is-json {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
+}
+
+.api-trace-detail-head {
+  min-height: 37px;
+}
+
+.api-trace-selected-request {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.api-trace-selected-request.is-empty {
+  color: var(--vscode-descriptionForeground, #a0a0a0);
+  font-size: 12px;
+}
+
+.api-trace-selected-request .api-trace-method {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(88, 166, 255, 0.14);
+  color: #79c0ff;
+  font-size: 11px;
+}
+
+.api-trace-selected-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vscode-foreground, #cccccc);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+}
+
+.api-trace-detail-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.api-trace-detail-tabs {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border, #3c3c3c);
+  border-radius: 5px;
+  background: rgba(128, 128, 128, 0.06);
+}
+
+.api-trace-detail-tab-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid rgba(128, 128, 128, 0.18);
+  background: transparent;
+  color: var(--vscode-descriptionForeground, #a0a0a0);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.api-trace-detail-tab-btn:last-child {
+  border-right: 0;
+}
+
+.api-trace-detail-tab-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+  color: var(--vscode-foreground, #cccccc);
+}
+
+.api-trace-detail-tab-btn.is-active {
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.18));
+  color: var(--vscode-foreground, #cccccc);
+}
+
+.api-trace-copy-curl-btn {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .api-trace-stream-toggle {
@@ -1163,9 +1245,11 @@ body.vscode-high-contrast .api-raw-json.is-json {
 
 .api-trace-detail-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
   gap: 6px;
-  margin-bottom: 10px;
+}
+
+.api-trace-overview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .api-trace-detail-metric {
@@ -1208,51 +1292,26 @@ body.vscode-high-contrast .api-raw-json.is-json {
   font-size: 11px;
 }
 
-.api-trace-detail-columns {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
-  gap: 12px;
+.api-trace-subsection + .api-trace-subsection {
+  margin-top: 10px;
 }
 
-.api-trace-detail-section {
+.api-trace-tab-panel {
   min-width: 0;
-  padding: 10px;
-  border: 1px solid rgba(128, 128, 128, 0.18);
-  border-radius: 6px;
-  background: rgba(128, 128, 128, 0.04);
-}
-
-.api-trace-section-title {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 10px;
-  margin-bottom: 10px;
 }
 
-.api-trace-section-title h4 {
-  margin: 0;
-  color: var(--vscode-foreground, #cccccc);
-  font-size: 12px;
+.api-trace-tab-panel .api-trace-subsection + .api-trace-subsection {
+  margin-top: 0;
 }
 
-.api-trace-section-title span {
-  min-width: 0;
-  color: var(--vscode-descriptionForeground, #a0a0a0);
-  font-size: 11px;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.api-trace-detail-section h5 {
+.api-trace-subsection h5 {
   margin: 0 0 7px;
   color: var(--vscode-descriptionForeground, #a0a0a0);
   font-size: 11px;
   font-weight: 650;
-}
-
-.api-trace-subsection + .api-trace-subsection {
-  margin-top: 10px;
 }
 
 .api-trace-subsection-head {
@@ -1425,8 +1484,21 @@ body.vscode-high-contrast .api-trace-preview.is-json {
     min-height: 320px;
   }
 
-  .api-trace-detail-grid,
-  .api-trace-detail-columns {
+  .api-trace-detail-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .api-trace-detail-actions {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .api-trace-detail-tabs {
+    flex: 0 0 auto;
+  }
+
+  .api-trace-detail-grid {
     grid-template-columns: 1fr;
   }
 

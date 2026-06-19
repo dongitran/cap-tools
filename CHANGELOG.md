@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.147 (stable)
+- UI: Live Trace detail inspection now uses compact Overview, Request, and Response tabs beside the selected method/URL, with Overview showing six two-column metrics and Bytes without request/response labels.
+- Feature: Live Trace now adds Copy cURL for the selected request, preserving captured method, URL, headers, and body when those capture sections are enabled.
+- Fix: Runtime HTTP trace body capture now supports an unlimited body sentinel from the webview, so valid JSON request/response bodies can render fully with syntax highlighting instead of showing `[truncated]`.
+
 ## 0.10.146 (stable)
 - UI: Live Trace now moves the state badge and Start/Stop, Clear, and settings controls into the top tab row beside Request Runner/Live Trace, removes the duplicate inner title, and keeps target/filter controls on compact one-line rows.
 - Feature: Live Trace capture settings now default to headers, request body preview, and response preview enabled, persist through VS Code global state, and immediately hide disabled request/response sections from the detail view.

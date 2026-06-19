@@ -36,4 +36,22 @@ describe('apiTraceInjectionSource', () => {
     expect(buildApiTraceStopExpression(true)).toContain('.uninstall()');
     expect(buildApiTraceStopExpression(false)).toContain('.disable()');
   });
+
+  it('supports unlimited body preview capture when maxBodyBytes is zero', () => {
+    expect(API_TRACE_RUNTIME_SOURCE).toContain('state.options.maxBodyBytes <= 0');
+    expect(API_TRACE_RUNTIME_SOURCE).toContain('return current + text;');
+    expect(API_TRACE_RUNTIME_SOURCE).toContain('state.options.maxBodyBytes > 0 && requestPreview.length >= state.options.maxBodyBytes');
+    expect(API_TRACE_RUNTIME_SOURCE).toContain('state.options.maxBodyBytes > 0 && responsePreview.length >= state.options.maxBodyBytes');
+    expect(
+      buildApiTraceInstallExpression({
+        appId: 'orders-api',
+        instance: '0',
+        captureHeaders: true,
+        captureRequestBody: true,
+        captureResponseBody: true,
+        maxBodyBytes: 0,
+        maxEvents: 1000,
+      })
+    ).toContain('"maxBodyBytes":0');
+  });
 });

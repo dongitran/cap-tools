@@ -60,7 +60,7 @@ export function readTraceStartOptions(payload: unknown): ApiTraceStartOptions | 
     captureHeaders: raw['captureHeaders'] === true,
     captureRequestBody: raw['captureRequestBody'] === true,
     captureResponseBody: raw['captureResponseBody'] === true,
-    maxBodyBytes: readPositiveNumber(raw['maxBodyBytes'], 4096, 20000),
+    maxBodyBytes: readTraceBodyLimit(raw['maxBodyBytes'], 4096, 20000),
     filters,
   };
 }
@@ -118,6 +118,13 @@ function readPositiveNumber(value: unknown, fallback: number, max: number): numb
     return fallback;
   }
   return Math.min(Math.floor(value), max);
+}
+
+function readTraceBodyLimit(value: unknown, fallback: number, max: number): number {
+  if (value === 0) {
+    return 0;
+  }
+  return readPositiveNumber(value, fallback, max);
 }
 
 function isHttpUrl(value: string): boolean {

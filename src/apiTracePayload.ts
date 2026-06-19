@@ -42,8 +42,8 @@ function parseRuntimeTraceEvent(
   if (rawUrl === null) {
     return null;
   }
-  const requestBody = truncatePreview(readString(payload['requestBodyPreview']) ?? '', options.maxBodyBytes);
-  const responseBody = truncatePreview(readString(payload['responseBodyPreview']) ?? '', options.maxBodyBytes);
+  const requestBody = limitBodyPreview(readString(payload['requestBodyPreview']) ?? '', options.maxBodyBytes);
+  const responseBody = limitBodyPreview(readString(payload['responseBodyPreview']) ?? '', options.maxBodyBytes);
   return {
     id: readString(payload['id']) ?? nextFallbackEventId(),
     timestamp: readString(payload['timestamp']) ?? new Date().toISOString(),
@@ -85,6 +85,10 @@ function readHeaders(value: unknown): Record<string, string> {
     }
   }
   return headers;
+}
+
+function limitBodyPreview(preview: string, maxChars: number): { readonly preview: string; readonly truncated: boolean } {
+  return maxChars <= 0 ? { preview, truncated: false } : truncatePreview(preview, maxChars);
 }
 
 function normalizePath(rawUrl: string): string {

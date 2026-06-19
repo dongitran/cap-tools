@@ -91,6 +91,38 @@ describe('APIs Explorer webview message parsing', () => {
     });
   });
 
+  it('accepts zero max body bytes as the unlimited trace body sentinel', () => {
+    expect(
+      readTraceStartOptions({
+        mode: 'runtime-http',
+        instanceIndex: 0,
+        processName: 'web',
+        captureHeaders: true,
+        captureRequestBody: true,
+        captureResponseBody: true,
+        maxBodyBytes: 0,
+        filters: {
+          method: [],
+          pathContains: '',
+          statusClass: 'all',
+        },
+      })
+    ).toEqual({
+      mode: 'runtime-http',
+      instanceIndex: 0,
+      processName: 'web',
+      captureHeaders: true,
+      captureRequestBody: true,
+      captureResponseBody: true,
+      maxBodyBytes: 0,
+      filters: {
+        method: [],
+        pathContains: '',
+        statusClass: 'all',
+      },
+    });
+  });
+
   it('defaults uninstallRuntimeHook to true unless explicitly false', () => {
     expect(readUninstallRuntimeHook(undefined)).toBe(true);
     expect(readUninstallRuntimeHook({ uninstallRuntimeHook: true })).toBe(true);

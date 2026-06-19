@@ -50,8 +50,11 @@ export const API_TRACE_RUNTIME_SOURCE = `
     return '';
   };
   const appendPreview = (current, chunk, enabled) => {
-    if (!enabled || current.length >= state.options.maxBodyBytes) return current;
-    return (current + chunkText(chunk)).slice(0, state.options.maxBodyBytes);
+    if (!enabled) return current;
+    const text = chunkText(chunk);
+    if (state.options.maxBodyBytes <= 0) return current + text;
+    if (current.length >= state.options.maxBodyBytes) return current;
+    return (current + text).slice(0, state.options.maxBodyBytes);
   };
   const enqueue = (event) => {
     if (state.queue.length >= state.options.maxEvents) {
@@ -118,8 +121,8 @@ export const API_TRACE_RUNTIME_SOURCE = `
         responseHeaders: toHeaderRecord(typeof res.getHeaders === 'function' ? res.getHeaders() : {}),
         requestBodyPreview: requestPreview,
         responseBodyPreview: responsePreview,
-        requestBodyTruncated: requestPreview.length >= state.options.maxBodyBytes,
-        responseBodyTruncated: responsePreview.length >= state.options.maxBodyBytes,
+        requestBodyTruncated: state.options.maxBodyBytes > 0 && requestPreview.length >= state.options.maxBodyBytes,
+        responseBodyTruncated: state.options.maxBodyBytes > 0 && responsePreview.length >= state.options.maxBodyBytes,
         droppedBeforeEvent: state.droppedCount,
         traceId,
         correlationId: req.headers && typeof req.headers['x-saptools-trace-id'] === 'string' ? req.headers['x-saptools-trace-id'] : null

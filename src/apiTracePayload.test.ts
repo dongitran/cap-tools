@@ -90,4 +90,43 @@ describe('apiTracePayload', () => {
       })
     );
   });
+
+  it('preserves full body previews when trace body limit is unlimited', () => {
+    const longJson = JSON.stringify({
+      value: Array.from({ length: 40 }, (_, index) => ({
+        id: `item-${String(index).padStart(2, '0')}`,
+        status: 'ready',
+      })),
+    });
+    const parsed = parseApiTraceDrainResult(
+      {
+        events: [
+          {
+            method: 'POST',
+            url: '/odata/v4/items',
+            requestBodyPreview: longJson,
+            responseBodyPreview: longJson,
+            requestBodyTruncated: false,
+            responseBodyTruncated: false,
+          },
+        ],
+        droppedCount: 0,
+        queueSize: 0,
+      },
+      {
+        appId: 'orders-api',
+        maxBodyBytes: 0,
+      }
+    );
+
+    expect(parsed.events).toHaveLength(1);
+    expect(parsed.events[0]).toEqual(
+      expect.objectContaining({
+        requestBodyPreview: longJson,
+        requestBodyTruncated: false,
+        responseBodyPreview: longJson,
+        responseBodyTruncated: false,
+      })
+    );
+  });
 });
