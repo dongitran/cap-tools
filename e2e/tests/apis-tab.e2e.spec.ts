@@ -230,6 +230,7 @@ test.describe('APIs Explorer Workspace Flow', () => {
 
       const detailTabs = frame.getByRole('tablist', { name: 'Trace detail sections' });
       await expect(detailTabs.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(frame.getByLabel('Selected request URL')).toContainText('/odata/v4/orders');
       await expect(frame.getByLabel('Trace event overview')).toContainText('Status');
       await expect(frame.getByLabel('Trace event overview')).toContainText('Duration');
       await expect(frame.getByLabel('Trace event overview')).toContainText('Trace ID');

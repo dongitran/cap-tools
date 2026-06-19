@@ -760,6 +760,16 @@ function renderTraceEventRows(events) {
   }).join('');
 }
 
+function renderTraceSelectedUrlRow(event) {
+  const displayUrl = event.normalizedUrl || normalizeTraceUrl(event.url || event.path);
+  return `
+    <section class="api-trace-selected-url-row" aria-label="Selected request URL">
+      <span>URL</span>
+      <code title="${escapeHtml(displayUrl)}">${escapeHtml(displayUrl)}</code>
+    </section>
+  `;
+}
+
 function renderTraceOverview(event) {
   const totalBytes = event.requestBytes + event.responseBytes;
   const metrics = [
@@ -771,6 +781,7 @@ function renderTraceOverview(event) {
     ['Correlation ID', event.correlationId || '-']
   ];
   return `
+    ${renderTraceSelectedUrlRow(event)}
     <section class="api-trace-detail-grid api-trace-overview-grid" aria-label="Trace event overview">
       ${metrics.map(([label, value]) => `
         <div class="api-trace-detail-metric api-trace-metric-row">
@@ -842,7 +853,6 @@ function renderTraceDetail(event) {
     : `
       <div class="api-trace-selected-request">
         <span class="api-trace-method">${escapeHtml(event.method)}</span>
-        <span class="api-trace-selected-url" title="${escapeHtml(event.normalizedUrl)}">${escapeHtml(event.normalizedUrl)}</span>
       </div>
     `;
   return `

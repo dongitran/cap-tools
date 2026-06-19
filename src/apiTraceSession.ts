@@ -81,6 +81,7 @@ export class ApiTraceSession {
   private inspectorClient: ApiTraceInspectorClient | undefined;
   private pollTimer: NodeJS.Timeout | undefined;
   private state: ApiTraceStatePayload['state'] = 'idle';
+  private stopRequested = false;
   private targetParams: ApiTraceTargetParams | undefined;
   private tunnelHandle: { readonly stop: () => void } | undefined;
 
@@ -99,6 +100,7 @@ export class ApiTraceSession {
   async start(options: ApiTraceStartOptions): Promise<void> {
     if (this.disposed) return;
     if (this.isRunning()) return;
+    this.stopRequested = false;
     this.postState('preparingCli', 'Preparing runtime HTTP trace session.', false, false);
     if (this.isTestMode) {
       this.startMockTrace(options.maxBodyBytes);
@@ -112,6 +114,7 @@ export class ApiTraceSession {
   }
 
   async stop(reason: ApiTraceStopReason, uninstallRuntimeHook: boolean): Promise<void> {
+    this.stopRequested = true;
     if (this.disposed && reason !== 'shutdown') return;
     if (!this.isRunning() && this.state !== 'needsInspector') {
       this.postState('stopped', `Trace stopped (${reason}).`, false, false);
@@ -158,14 +161,21 @@ export class ApiTraceSession {
     try {
       this.postState('checkingRuntime', 'Checking Node runtime and requesting Inspector startup.', false, false);
       await this.dependencies.prepareCfCliSession(targetParams);
+      if (this.isStopRequested()) return;
       await this.dependencies.tryStartNodeInspector(buildRuntimeTarget(this.appId, targetParams, instanceIndex));
+      if (this.isStopRequested()) return;
       this.postState('openingTunnel', 'Opening Node Inspector tunnel.', false, false);
       const tunnel = await this.dependencies.openInspectorTunnel(
         buildRuntimeTarget(this.appId, targetParams, instanceIndex)
       );
+      if (this.isStopRequested()) {
+        stopLateTunnel(tunnel);
+        return;
+      }
       await this.attachInspectorClient(tunnel, options, instanceIndex);
     } catch {
       await this.stopRuntimeTrace(false);
+      if (this.isStopRequested()) return;
       this.postState('error', 'Runtime HTTP trace could not be started.', false, false);
     }
   }
@@ -175,12 +185,24 @@ export class ApiTraceSession {
     options: ApiTraceStartOptions,
     instanceIndex: number
   ): Promise<void> {
+    if (this.isStopRequested()) {
+      stopLateTunnel(tunnel);
+      return;
+    }
     if (tunnel.status !== 'ready') {
       this.postState('needsInspector', buildNeedsInspectorMessage(), false, false);
       return;
     }
     this.tunnelHandle = tunnel.handle;
     const client = await this.dependencies.createInspectorClient(tunnel.handle.localPort);
+    if (this.isStopRequested()) {
+      if (client !== null) {
+        client.close();
+      }
+      this.tunnelHandle.stop();
+      this.tunnelHandle = undefined;
+      return;
+    }
     if (client === null) {
       await this.stopRuntimeTrace(false);
       this.postState('needsInspector', buildNeedsInspectorMessage(), false, false);
@@ -197,8 +219,20 @@ export class ApiTraceSession {
       maxBodyBytes: options.maxBodyBytes,
       maxEvents: TRACE_RUNTIME_QUEUE_SIZE,
     }), TRACE_EVALUATE_TIMEOUT_MS);
+    if (this.isStopRequested()) {
+      await this.stopRuntimeTrace(true);
+      return;
+    }
     this.startPolling(options.maxBodyBytes);
+    if (this.isStopRequested()) {
+      await this.stopRuntimeTrace(true);
+      return;
+    }
     this.postState('streaming', 'Streaming runtime HTTP trace events.', true, false);
+  }
+
+  private isStopRequested(): boolean {
+    return this.stopRequested || this.disposed;
   }
 
   private startPolling(maxBodyBytes: number): void {
@@ -302,6 +336,12 @@ export class ApiTraceSession {
 
 function resolveInstanceIndex(instanceIndex: ApiTraceStartOptions['instanceIndex']): number {
   return instanceIndex === 'all' ? 0 : instanceIndex;
+}
+
+function stopLateTunnel(tunnel: ApiTraceTunnelOpenResult): void {
+  if (tunnel.status === 'ready') {
+    tunnel.handle.stop();
+  }
 }
 
 function buildRuntimeTarget(

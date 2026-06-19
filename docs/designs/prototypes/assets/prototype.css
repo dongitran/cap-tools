@@ -4732,6 +4732,38 @@ body.vscode-high-contrast .api-raw-json.is-json {
   font-size: 12px;
 }
 
+.api-trace-selected-url-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  box-sizing: border-box;
+  border: 1px solid rgba(128, 128, 128, 0.18);
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.06);
+}
+
+.api-trace-selected-url-row span {
+  color: var(--vscode-descriptionForeground, #a0a0a0);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.api-trace-selected-url-row code {
+  min-width: 0;
+  color: var(--vscode-foreground, #cccccc);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .api-trace-detail-actions {
   flex: 0 0 auto;
   display: flex;

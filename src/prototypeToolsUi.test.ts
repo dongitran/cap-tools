@@ -602,6 +602,11 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('Response Headers');
     expect(source).toContain('Request Body');
     expect(source).toContain('Response Body');
+    expect(source).toContain('function renderTraceSelectedUrlRow(event)');
+    expect(source.indexOf('renderTraceSelectedUrlRow(event)')).toBeLessThan(
+      source.indexOf('class="api-trace-detail-grid api-trace-overview-grid"')
+    );
+    expect(source).toContain('aria-label="Selected request URL"');
     expect(source).toContain('api-trace-detail-grid');
     expect(source).toContain('api-trace-overview-grid');
     expect(source).toContain('api-trace-detail-tabs');
@@ -662,6 +667,7 @@ describe('prototype Log-API-Event workspace', () => {
     expect(styles).toContain('.api-trace-detail-tab-btn');
     expect(styles).toContain('.api-trace-copy-curl-btn');
     expect(styles).toContain('.api-trace-selected-request');
+    expect(styles).toContain('.api-trace-selected-url-row');
     expect(styles).toContain('.api-trace-tab-panel');
     expect(styles).toContain('.api-trace-url-select');
     expect(styles).toContain('.api-trace-state-badge');

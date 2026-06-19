@@ -5,6 +5,20 @@ import type { ApiTraceStatePayload } from './apiTraceTypes';
 import type { ApiTraceInspectorClient } from './apiTraceInspectorClient';
 import type { ApiTraceTunnelReadyResult } from './apiTraceTunnel';
 
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+  readonly reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function createSession(): {
   readonly batches: unknown[];
   readonly session: ApiTraceSession;
@@ -220,6 +234,71 @@ describe('ApiTraceSession', () => {
     expect(inspectorClient.evaluate).toHaveBeenCalledWith(expect.stringContaining('uninstall'), 5000);
     expect(inspectorClient.close).toHaveBeenCalledTimes(1);
     expect(tunnelHandle.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels late tunnel startup when tracing is stopped during startup', async () => {
+    const states: ApiTraceStatePayload[] = [];
+    const tunnelDeferred = createDeferred<ApiTraceTunnelReadyResult>();
+    const tunnelHandle = {
+      localPort: 51235,
+      stop: vi.fn(),
+    };
+    const createInspectorClient = vi.fn(async (): Promise<ApiTraceInspectorClient | null> => ({
+      evaluate: vi.fn(),
+      close: vi.fn(),
+    }));
+    const session = new ApiTraceSession({
+      appId: 'finance-uat-api',
+      targetParams: {
+        apiEndpoint: 'https://api.example.com',
+        email: 'user@example.com',
+        password: 'secret',
+        orgName: 'demo-org',
+        spaceName: 'demo-space',
+      },
+      isTestMode: false,
+      callbacks: {
+        postState: (state) => states.push(state),
+        postBatch: vi.fn(),
+        postUrlSummary: vi.fn(),
+        log: vi.fn(),
+      },
+      dependencies: {
+        prepareCfCliSession: vi.fn(async () => undefined),
+        tryStartNodeInspector: vi.fn(async () => true),
+        openInspectorTunnel: vi.fn(async () => tunnelDeferred.promise),
+        createInspectorClient,
+        setInterval: vi.fn(() => 8 as unknown as NodeJS.Timeout),
+        clearInterval: vi.fn(),
+      },
+    });
+
+    const startPromise = session.start({
+      mode: 'runtime-http',
+      instanceIndex: 0,
+      processName: 'web',
+      captureHeaders: true,
+      captureRequestBody: false,
+      captureResponseBody: true,
+      maxBodyBytes: 4096,
+      filters: {
+        method: [],
+        pathContains: '',
+        statusClass: 'all',
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(states.map((state) => state.state)).toContain('openingTunnel');
+    });
+    await session.stop('panel-closed', true);
+    tunnelDeferred.resolve({ status: 'ready', handle: tunnelHandle });
+    await startPromise;
+
+    expect(tunnelHandle.stop).toHaveBeenCalledTimes(1);
+    expect(createInspectorClient).not.toHaveBeenCalled();
+    expect(states.at(-1)?.state).toBe('stopped');
+    expect(session.isRunning()).toBe(false);
   });
 
   it('treats needsInspector as stoppable without marking it as actively streaming', async () => {

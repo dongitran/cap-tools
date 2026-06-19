@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.151 (stable)
+- UI: Live Trace selected request details now show the path/query URL in a full-width Overview row above the status metrics.
+- Hardening: Live Trace now cancels late Inspector tunnel startup when an APIs Explorer panel is closed while tracing is still starting.
+
 ## 0.10.150 (stable)
 - UI: Live Trace now removes the fixed Mode selector and compact summary strip, moves Observed URL beside Instance, and combines path/URL and detail search into one Search Trace filter.
 

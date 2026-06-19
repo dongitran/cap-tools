@@ -186,6 +186,39 @@ describe('ApisExplorerPanelManager', () => {
     );
   });
 
+  it('stops active Live Trace when the APIs panel is disposed', async () => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const panel = createMockPanel();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = createManager();
+
+    const session = manager.openApisExplorer('finance-uat-api', makeTarget('space-a'));
+    await panel.messageHandler?.({
+      type: 'sapTools.apis.trace.start',
+      payload: {
+        mode: 'runtime-http',
+        instanceIndex: 0,
+        processName: 'web',
+        captureHeaders: false,
+        captureRequestBody: false,
+        captureResponseBody: false,
+        maxBodyBytes: 4096,
+        filters: {
+          method: [],
+          pathContains: '',
+          statusClass: 'all',
+        },
+      },
+    });
+
+    expect(session.traceSession?.isRunning()).toBe(true);
+    panel.dispose();
+
+    await vi.waitFor(() => {
+      expect(session.traceSession?.isRunning()).toBe(false);
+    });
+  });
+
   it('reuses an APIs panel with updated target params instead of executing with a stale scope', async () => {
     const panel = createMockPanel();
     createWebviewPanelMock.mockReturnValue(panel);
