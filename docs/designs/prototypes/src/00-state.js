@@ -170,7 +170,7 @@ const vscodeApi = resolveVscodeApi();
 const HANA_SQL_RUN_SHORTCUT_LABEL = /Mac/i.test(navigator.platform)
   ? 'Cmd+E Cmd+E'
   : 'Ctrl+E Ctrl+E';
-const HANA_SQL_SHORTCUT_NOTIFICATION_MS = 1500;
+const HANA_SQL_SHORTCUT_NOTIFICATION_MS = 4500;
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
 const SERVICE_MAP_PATH_LABEL_MAX_CHARS = 72;
@@ -227,6 +227,8 @@ let detectedPackagesPatterns = '';
 let detectedPackagesError = '';
 let hanaServiceOptions = null;
 let selectedHanaServiceId = '';
+let hanaSqlOpenRequestSequence = 0;
+let latestHanaSqlOpenRequestId = 0;
 let sqlAppSearchKeyword = '';
 let hanaQueryStatusMessage = '';
 let hanaQueryStatusTone = 'info';

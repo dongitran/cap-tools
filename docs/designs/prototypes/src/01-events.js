@@ -184,12 +184,15 @@ window.addEventListener('message', (event) => {
   }
 
   if (msg.type === HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE) {
+    const requestId = Number.isSafeInteger(msg.requestId) ? msg.requestId : 0;
     const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
-    const message = typeof msg.message === 'string' ? msg.message : '';
-    const previousServiceId = selectedHanaServiceId;
-    if (serviceId.length > 0) {
-      selectedHanaServiceId = serviceId;
+    if (
+      requestId !== latestHanaSqlOpenRequestId ||
+      serviceId !== selectedHanaServiceId
+    ) {
+      return;
     }
+    const message = typeof msg.message === 'string' ? msg.message : '';
     if (msg.success === true) {
       hanaQueryStatusTone = 'info';
       hanaQueryStatusMessage = '';
@@ -198,10 +201,6 @@ window.addEventListener('message', (event) => {
       hanaQueryStatusMessage = message;
     }
     if (isWorkspaceSqlMounted()) {
-      if (previousServiceId !== selectedHanaServiceId) {
-        refreshMountedSqlWorkbench();
-        return;
-      }
       updateHanaQueryStatusElement();
       return;
     }
@@ -231,7 +230,9 @@ window.addEventListener('message', (event) => {
         typeof msg.message === 'string' ? msg.message : 'Failed to load tables.'
       );
     }
-    refreshUiAfterSqlStateChange();
+    if (serviceId === selectedHanaServiceId) {
+      refreshUiAfterSqlStateChange();
+    }
     refreshSqlTunnelIndicators();
     return;
   }

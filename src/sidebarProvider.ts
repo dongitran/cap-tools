@@ -227,6 +227,12 @@ interface ExportSqlToolsConfigPayload {
 }
 
 interface OpenHanaSqlFilePayload {
+  readonly requestId: number;
+  readonly serviceId: string;
+  readonly serviceName: string;
+}
+
+interface RefreshHanaTablesPayload {
   readonly serviceId: string;
   readonly serviceName: string;
 }
@@ -628,8 +634,8 @@ export class RegionSidebarProvider
       return;
     }
 
-    if (type === MSG_REFRESH_HANA_TABLES && isOpenHanaSqlFileMessage(message)) {
-      const payload = readOpenHanaSqlFilePayload(message);
+    if (type === MSG_REFRESH_HANA_TABLES && isRefreshHanaTablesMessage(message)) {
+      const payload = readRefreshHanaTablesPayload(message);
       await this.handleRefreshHanaTables(payload);
       return;
     }
@@ -2640,7 +2646,9 @@ export class RegionSidebarProvider
       this.outputChannel.appendLine(
         `[sql-ui] open sql file rejected: app not found serviceId=${sanitizeSqlUiLogValue(payload.serviceId)} serviceName=${sanitizeSqlUiLogValue(payload.serviceName)}`
       );
-      this.postHanaSqlFileOpenResult(payload.serviceId, false, 'Selected app was not found.');
+      this.postHanaSqlFileOpenResult(
+        payload.requestId, payload.serviceId, false, 'Selected app was not found.'
+      );
       return;
     }
 
@@ -2650,8 +2658,7 @@ export class RegionSidebarProvider
         `[sql-ui] open sql file rejected: no active session app=${sanitizeSqlUiLogValue(targetApp.name)}`
       );
       this.postHanaSqlFileOpenResult(
-        payload.serviceId,
-        false,
+        payload.requestId, payload.serviceId, false,
         'No active CF scope session. Confirm scope and choose app again.'
       );
       return;
@@ -2669,15 +2676,14 @@ export class RegionSidebarProvider
       this.outputChannel.appendLine(
         `[sql-ui] open sql file succeeded app=${sanitizeSqlUiLogValue(targetApp.name)}`
       );
-      this.postHanaSqlFileOpenResult(targetApp.id, true, '');
+      this.postHanaSqlFileOpenResult(payload.requestId, targetApp.id, true, '');
       void this.publishHanaTablesForApp(targetApp.id, targetApp.name, sessionSeed);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to open SQL file.';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to open SQL file.';
       this.outputChannel.appendLine(
         `[sql-ui] open sql file failed app=${sanitizeSqlUiLogValue(targetApp.name)} message=${sanitizeSqlUiLogValue(errorMessage)}`
       );
-      this.postHanaSqlFileOpenResult(targetApp.id, false, errorMessage);
+      this.postHanaSqlFileOpenResult(payload.requestId, targetApp.id, false, errorMessage);
     }
   }
 
@@ -2731,7 +2737,9 @@ export class RegionSidebarProvider
     }
   }
 
-  private async handleRefreshHanaTables(payload: OpenHanaSqlFilePayload): Promise<void> {
+  private async handleRefreshHanaTables(
+    payload: RefreshHanaTablesPayload
+  ): Promise<void> {
     const targetApp =
       this.currentApps.find((app) => app.id === payload.serviceId) ??
       this.currentApps.find((app) => app.name === payload.serviceName);
@@ -2818,12 +2826,14 @@ export class RegionSidebarProvider
   }
 
   private postHanaSqlFileOpenResult(
+    requestId: number,
     serviceId: string,
     success: boolean,
     message: string
   ): void {
     this.postMessage({
       type: MSG_HANA_SQL_FILE_OPEN_RESULT,
+      requestId,
       serviceId,
       success,
       message,
@@ -4280,6 +4290,9 @@ function readExportSqlToolsConfigPayload(
 
 function isOpenHanaSqlFileMessage(value: Record<string, unknown>): boolean {
   return (
+    typeof value['requestId'] === 'number' &&
+    Number.isSafeInteger(value['requestId']) &&
+    value['requestId'] > 0 &&
     isNonEmptyString(value['serviceId'], 128) &&
     isNonEmptyString(value['serviceName'], 128)
   );
@@ -4288,6 +4301,23 @@ function isOpenHanaSqlFileMessage(value: Record<string, unknown>): boolean {
 function readOpenHanaSqlFilePayload(
   value: Record<string, unknown>
 ): OpenHanaSqlFilePayload {
+  return {
+    requestId: Number(value['requestId']),
+    serviceId: String(value['serviceId']).trim(),
+    serviceName: String(value['serviceName']).trim(),
+  };
+}
+
+function isRefreshHanaTablesMessage(value: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(value['serviceId'], 128) &&
+    isNonEmptyString(value['serviceName'], 128)
+  );
+}
+
+function readRefreshHanaTablesPayload(
+  value: Record<string, unknown>
+): RefreshHanaTablesPayload {
   return {
     serviceId: String(value['serviceId']).trim(),
     serviceName: String(value['serviceName']).trim(),

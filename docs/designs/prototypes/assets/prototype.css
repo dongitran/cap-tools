@@ -2528,27 +2528,6 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   margin-left: auto;
 }
 
-.sql-shortcut-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  color: var(--muted-color);
-  font-size: 0.58rem;
-  white-space: nowrap;
-}
-
-.sql-shortcut-hint kbd {
-  padding: 1px 5px;
-  border: 1px solid color-mix(in oklab, var(--border-color) 84%, var(--mix-base));
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--surface-bg) 86%, var(--frame-bg));
-  color: var(--text-color);
-  font: inherit;
-  font-weight: 700;
-}
-
 .sql-workbench-header h2 {
   margin: 0;
   font-size: 0.86rem;
@@ -2566,12 +2545,6 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 @media (max-width: 720px) {
   .sql-workbench-header {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 420px) {
-  .sql-shortcut-hint-label {
-    display: none;
   }
 }
 
@@ -2628,15 +2601,24 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .sql-service-row:hover {
-  border-color: color-mix(in oklab, var(--accent-color) 44%, var(--mix-base));
-  background: color-mix(in oklab, var(--surface-bg) 72%, var(--accent-soft));
-  box-shadow: 0 6px 14px color-mix(in oklab, var(--accent-color) 20%, transparent);
+  border-color: color-mix(in oklab, var(--accent-color) 34%, var(--mix-base));
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
+  box-shadow: 0 5px 12px color-mix(in oklab, var(--accent-color) 12%, transparent);
   transform: translateY(-1px);
 }
 
 .sql-service-row.is-selected {
   border-color: color-mix(in oklab, var(--accent-color) 58%, var(--mix-base));
   background: color-mix(in oklab, var(--accent-soft) 66%, var(--mix-base));
+  box-shadow: inset 3px 0 0 var(--accent-color);
+}
+
+.sql-service-row.is-selected:hover {
+  border-color: color-mix(in oklab, var(--accent-color) 64%, var(--mix-base));
+  background: color-mix(in oklab, var(--accent-soft) 72%, var(--mix-base));
+  box-shadow:
+    inset 3px 0 0 var(--accent-color),
+    0 5px 12px color-mix(in oklab, var(--accent-color) 14%, transparent);
 }
 
 .sql-service-name,

@@ -171,7 +171,7 @@ const vscodeApi = resolveVscodeApi();
 const HANA_SQL_RUN_SHORTCUT_LABEL = /Mac/i.test(navigator.platform)
   ? 'Cmd+E Cmd+E'
   : 'Ctrl+E Ctrl+E';
-const HANA_SQL_SHORTCUT_NOTIFICATION_MS = 1500;
+const HANA_SQL_SHORTCUT_NOTIFICATION_MS = 4500;
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
 const SERVICE_MAP_PATH_LABEL_MAX_CHARS = 72;
@@ -228,6 +228,8 @@ let detectedPackagesPatterns = '';
 let detectedPackagesError = '';
 let hanaServiceOptions = null;
 let selectedHanaServiceId = '';
+let hanaSqlOpenRequestSequence = 0;
+let latestHanaSqlOpenRequestId = 0;
 let sqlAppSearchKeyword = '';
 let hanaQueryStatusMessage = '';
 let hanaQueryStatusTone = 'info';
@@ -929,12 +931,15 @@ window.addEventListener('message', (event) => {
   }
 
   if (msg.type === HANA_SQL_FILE_OPEN_RESULT_MESSAGE_TYPE) {
+    const requestId = Number.isSafeInteger(msg.requestId) ? msg.requestId : 0;
     const serviceId = typeof msg.serviceId === 'string' ? msg.serviceId : '';
-    const message = typeof msg.message === 'string' ? msg.message : '';
-    const previousServiceId = selectedHanaServiceId;
-    if (serviceId.length > 0) {
-      selectedHanaServiceId = serviceId;
+    if (
+      requestId !== latestHanaSqlOpenRequestId ||
+      serviceId !== selectedHanaServiceId
+    ) {
+      return;
     }
+    const message = typeof msg.message === 'string' ? msg.message : '';
     if (msg.success === true) {
       hanaQueryStatusTone = 'info';
       hanaQueryStatusMessage = '';
@@ -943,10 +948,6 @@ window.addEventListener('message', (event) => {
       hanaQueryStatusMessage = message;
     }
     if (isWorkspaceSqlMounted()) {
-      if (previousServiceId !== selectedHanaServiceId) {
-        refreshMountedSqlWorkbench();
-        return;
-      }
       updateHanaQueryStatusElement();
       return;
     }
@@ -976,7 +977,9 @@ window.addEventListener('message', (event) => {
         typeof msg.message === 'string' ? msg.message : 'Failed to load tables.'
       );
     }
-    refreshUiAfterSqlStateChange();
+    if (serviceId === selectedHanaServiceId) {
+      refreshUiAfterSqlStateChange();
+    }
     refreshSqlTunnelIndicators();
     return;
   }
@@ -2691,13 +2694,13 @@ function requestHanaServicesIfNeeded() {
   syncSqlAppTargetsFromCurrentApps();
 }
 
-function showPrototypeHanaSqlShortcutToast(appName) {
+function showPrototypeHanaSqlShortcutToast() {
   document.querySelector('.hana-shortcut-toast')?.remove();
   const toast = document.createElement('div');
   toast.className = 'hana-shortcut-toast';
   toast.setAttribute('role', 'status');
   toast.setAttribute('aria-live', 'polite');
-  toast.textContent = `${appName} SQL ready. Select SQL and press ${HANA_SQL_RUN_SHORTCUT_LABEL} to run.`;
+  toast.textContent = `Select SQL and press ${HANA_SQL_RUN_SHORTCUT_LABEL} to run.`;
   document.body.append(toast);
   window.setTimeout(() => toast.remove(), HANA_SQL_SHORTCUT_NOTIFICATION_MS);
 }
@@ -2712,14 +2715,17 @@ function triggerOpenHanaSqlFile() {
 
   hanaQueryStatusTone = 'info';
   hanaQueryStatusMessage = '';
+  const requestId = ++hanaSqlOpenRequestSequence;
+  latestHanaSqlOpenRequestId = requestId;
 
   if (vscodeApi === null) {
-    showPrototypeHanaSqlShortcutToast(selectedService.name);
+    showPrototypeHanaSqlShortcutToast();
     return true;
   }
 
   vscodeApi.postMessage({
     type: OPEN_HANA_SQL_FILE_MESSAGE_TYPE,
+    requestId,
     serviceId: selectedService.id,
     serviceName: selectedService.name,
   });
@@ -6232,14 +6238,6 @@ function renderSqlWorkbenchTab() {
         <div class="sql-workbench-title-row">
           <h2>S/4HANA SQL Workbench</h2>
           <div class="sql-workbench-title-actions">
-            <span
-              class="sql-shortcut-hint"
-              aria-label="Run selected SQL with ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}"
-              title="Select SQL in the app editor, then press ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)} to run it"
-            >
-              <span class="sql-shortcut-hint-label">Run selected SQL</span>
-              <kbd>${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}</kbd>
-            </span>
             <span
               class="sql-tunnel-badge"
               data-role="hana-tunnel-indicator"

@@ -1033,26 +1033,44 @@ describe('prototype S/4HANA SQL Workbench table refresh', () => {
       /action === 'select-hana-service' \|\| action === 'refresh-hana-tables'\)[\s\S]*?refreshMountedSqlWorkbench\(\)/
     );
   });
+
+  it('does not repaint the selected tables panel for another app response', async () => {
+    const events = await readEventsSource();
+
+    expect(events).toMatch(
+      /msg\.type === HANA_TABLES_LOADED_MESSAGE_TYPE[\s\S]*?if \(serviceId === selectedHanaServiceId\) \{\s*refreshUiAfterSqlStateChange\(\);\s*\}/
+    );
+  });
 });
 
 describe('prototype S/4HANA SQL Workbench shortcut discovery', () => {
-  it('keeps the run chord visible and simulates a 1.5-second standalone notification', async () => {
+  it('shows only a 4.5-second shortcut notification and removes the title hint', async () => {
     const state = await readStateSource();
+    const events = await readEventsSource();
     const render = await readSqlRenderSource();
     const quickSelection = await readQuickSelectionSource();
     const styles = await readSqlStylesSource();
 
     expect(state).toContain("? 'Cmd+E Cmd+E'");
     expect(state).toContain(": 'Ctrl+E Ctrl+E'");
-    expect(state).toContain('HANA_SQL_SHORTCUT_NOTIFICATION_MS = 1500');
-    expect(render).toContain('class="sql-shortcut-hint"');
-    expect(render).toContain('Run selected SQL with ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}');
-    expect(quickSelection).toContain('showPrototypeHanaSqlShortcutToast(selectedService.name)');
+    expect(state).toContain('HANA_SQL_SHORTCUT_NOTIFICATION_MS = 4500');
+    expect(state).toContain('latestHanaSqlOpenRequestId = 0');
+    expect(render).not.toContain('class="sql-shortcut-hint"');
+    expect(quickSelection).toContain(
+      'toast.textContent = `Select SQL and press ${HANA_SQL_RUN_SHORTCUT_LABEL} to run.`'
+    );
+    expect(quickSelection).toMatch(/postMessage\(\{[\s\S]*?requestId,[\s\S]*?serviceId:/);
     expect(quickSelection).toContain(
       'window.setTimeout(() => toast.remove(), HANA_SQL_SHORTCUT_NOTIFICATION_MS)'
     );
-    expect(styles).toContain('.sql-shortcut-hint kbd');
+    expect(events).toContain('requestId !== latestHanaSqlOpenRequestId');
+    expect(events).toContain('serviceId !== selectedHanaServiceId');
+    expect(events).not.toContain('selectedHanaServiceId = serviceId');
+    expect(styles).not.toContain('.sql-shortcut-hint');
     expect(styles).toContain('.hana-shortcut-toast');
+    expect(styles).toMatch(
+      /\.sql-service-row\.is-selected\s*\{[\s\S]*?box-shadow:\s*inset 3px 0 0 var\(--accent-color\);/
+    );
   });
 });
 

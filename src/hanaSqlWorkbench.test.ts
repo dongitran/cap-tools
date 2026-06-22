@@ -197,7 +197,7 @@ describe('HanaSqlWorkbench shortcut notification', () => {
       session: null,
     });
 
-    expect(showHanaSqlShortcutNotificationMock).toHaveBeenCalledWith('finance-uat-api');
+    expect(showHanaSqlShortcutNotificationMock).toHaveBeenCalledWith();
   });
 
   test('does not show the shortcut notification when the SQL file fails to open', async () => {

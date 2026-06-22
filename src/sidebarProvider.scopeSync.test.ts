@@ -139,7 +139,9 @@ interface ProviderFixture {
   readonly cfLogsPanelUpdateAppsMock: ReturnType<typeof vi.fn>;
   readonly eventMeshOpenViewerMock: ReturnType<typeof vi.fn>;
   readonly globalStateUpdateMock: ReturnType<typeof vi.fn>;
+  readonly hanaOpenSqlDocumentMock: ReturnType<typeof vi.fn>;
   readonly hanaInvalidateAllAppContextsMock: ReturnType<typeof vi.fn>;
+  readonly hanaRefreshTableEntriesMock: ReturnType<typeof vi.fn>;
   readonly outputAppendLineMock: ReturnType<typeof vi.fn>;
   readonly provider: RegionSidebarProvider;
 }
@@ -215,6 +217,9 @@ function createProviderFixture(): ProviderFixture {
   } as unknown as CfLogsPanelProvider;
   const hanaSqlWorkbench = {
     invalidateAllAppContexts: vi.fn(),
+    loadTableEntriesForApp: vi.fn().mockResolvedValue([]),
+    openSqlDocumentForApp: vi.fn(),
+    refreshTableEntriesForApp: vi.fn().mockResolvedValue([]),
     registerActiveSessionProvider: vi.fn(),
     registerTunnelStateListener: vi.fn(),
     isAppTunneled: vi.fn().mockReturnValue(false),
@@ -256,8 +261,12 @@ function createProviderFixture(): ProviderFixture {
     cfLogsPanelUpdateAppsMock: cfLogsPanel.updateApps as ReturnType<typeof vi.fn>,
     eventMeshOpenViewerMock: eventMeshPanelManager.openEventMeshViewer as ReturnType<typeof vi.fn>,
     globalStateUpdateMock,
+    hanaOpenSqlDocumentMock:
+      hanaSqlWorkbench.openSqlDocumentForApp as ReturnType<typeof vi.fn>,
     hanaInvalidateAllAppContextsMock:
       hanaSqlWorkbench.invalidateAllAppContexts as ReturnType<typeof vi.fn>,
+    hanaRefreshTableEntriesMock:
+      hanaSqlWorkbench.refreshTableEntriesForApp as ReturnType<typeof vi.fn>,
     outputAppendLineMock: outputChannel.appendLine as ReturnType<typeof vi.fn>,
     provider,
   };
@@ -619,6 +628,64 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
       type: 'sapTools.eventMeshOpenSettled',
       appId: 'finance-uat-api',
     });
+  });
+
+  it('echoes the latest SQL open request id to the sidebar', async () => {
+    const { access, hanaOpenSqlDocumentMock } = createProviderFixture();
+    const postMessageSpy = vi.spyOn(access, 'postMessage');
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    access.currentApps = [
+      { id: 'finance-uat-api', name: 'finance-uat-api', runningInstances: 1 },
+    ];
+
+    await access.handleWebviewMessage({
+      type: 'sapTools.openHanaSqlFile',
+      requestId: 7,
+      serviceId: 'finance-uat-api',
+      serviceName: 'finance-uat-api',
+    });
+
+    expect(hanaOpenSqlDocumentMock).toHaveBeenCalledOnce();
+    expect(postMessageSpy).toHaveBeenCalledWith({
+      type: 'sapTools.hanaSqlFileOpenResult',
+      requestId: 7,
+      serviceId: 'finance-uat-api',
+      success: true,
+      message: '',
+    });
+  });
+
+  it('ignores SQL open messages without a positive integer request id', async () => {
+    const { access, hanaOpenSqlDocumentMock } = createProviderFixture();
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    access.currentApps = [
+      { id: 'finance-uat-api', name: 'finance-uat-api', runningInstances: 1 },
+    ];
+
+    await access.handleWebviewMessage({
+      type: 'sapTools.openHanaSqlFile',
+      requestId: 0,
+      serviceId: 'finance-uat-api',
+      serviceName: 'finance-uat-api',
+    });
+
+    expect(hanaOpenSqlDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshes SQL tables without requiring an open request id', async () => {
+    const { access, hanaRefreshTableEntriesMock } = createProviderFixture();
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    access.currentApps = [
+      { id: 'finance-uat-api', name: 'finance-uat-api', runningInstances: 1 },
+    ];
+
+    await access.handleWebviewMessage({
+      type: 'sapTools.refreshHanaTables',
+      serviceId: 'finance-uat-api',
+      serviceName: 'finance-uat-api',
+    });
+
+    expect(hanaRefreshTableEntriesMock).toHaveBeenCalledOnce();
   });
 
   it('confirms quick scope selection with org GUID resolved from test mode topology', async () => {

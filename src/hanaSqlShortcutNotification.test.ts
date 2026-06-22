@@ -34,27 +34,27 @@ describe('showHanaSqlShortcutNotification', () => {
   ])('uses the %s run chord in the notification', (platform, shortcut) => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
 
-    showHanaSqlShortcutNotification('finance-uat-api');
+    showHanaSqlShortcutNotification();
 
     expect(withProgressMock).toHaveBeenCalledWith(
       {
         cancellable: false,
         location: 15,
-        title: `finance-uat-api SQL ready. Select SQL and press ${shortcut} to run.`,
+        title: `Select SQL and press ${shortcut} to run.`,
       },
       expect.any(Function)
     );
   });
 
-  test('keeps the notification open for exactly 1.5 seconds', async () => {
-    showHanaSqlShortcutNotification('finance-uat-api');
+  test('keeps the notification open for exactly 4.5 seconds', async () => {
+    showHanaSqlShortcutNotification();
     const progressPromise = withProgressMock.mock.results[0]?.value as Promise<void>;
     let resolved = false;
     void progressPromise.then(() => {
       resolved = true;
     });
 
-    await vi.advanceTimersByTimeAsync(1499);
+    await vi.advanceTimersByTimeAsync(4499);
     expect(resolved).toBe(false);
 
     await vi.advanceTimersByTimeAsync(1);

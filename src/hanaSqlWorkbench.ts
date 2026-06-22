@@ -331,7 +331,7 @@ export class HanaSqlWorkbench
     this.appIdByDocumentUri.set(fileUri.toString(), context.appId);
     this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
     this.logSql(`editor ready for app ${sanitizeSqlLogValue(context.appName)}`);
-    showHanaSqlShortcutNotification(context.appName);
+    showHanaSqlShortcutNotification();
     void this.prefetchTableNames(context.appId);
   }
 

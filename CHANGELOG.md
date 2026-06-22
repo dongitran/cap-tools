@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.160 (stable)
+- UI/UX: SQL Workbench shortcut guidance now shows only the Ctrl/Cmd+E double-chord instruction in a 4.5-second native notification, without duplicating the hint in the workbench header.
+- Fix: SQL app switching now ignores stale editor-open responses and late table refresh repaints from previously selected services, keeping only the current service visually selected and responsive.
+
 ## 0.10.159 (stable)
 - UI/UX: Reduced the BTP Workspace title, Change Region action, and selected scope summary typography to the requested 75%, 75%, and 80% sizes.
 - UI/UX: Event actions now open the Event Mesh editor immediately while keeping the app-row APIs and Event actions visible with an Event loading indicator until provider discovery settles.
