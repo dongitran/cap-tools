@@ -134,9 +134,12 @@ interface ProviderFixture {
   readonly access: SidebarProviderTestAccess;
   readonly apisOpenExplorerMock: ReturnType<typeof vi.fn>;
   readonly apisStopAllTracesMock: ReturnType<typeof vi.fn>;
+  readonly cacheStoreGetExportRootFolderMock: ReturnType<typeof vi.fn>;
+  readonly cacheSyncGetCachedSpacesMock: ReturnType<typeof vi.fn>;
   readonly cfLogsPanelUpdateAppsMock: ReturnType<typeof vi.fn>;
   readonly globalStateUpdateMock: ReturnType<typeof vi.fn>;
   readonly hanaInvalidateAllAppContextsMock: ReturnType<typeof vi.fn>;
+  readonly outputAppendLineMock: ReturnType<typeof vi.fn>;
   readonly provider: RegionSidebarProvider;
 }
 
@@ -245,10 +248,15 @@ function createProviderFixture(): ProviderFixture {
     access: provider as unknown as SidebarProviderTestAccess,
     apisOpenExplorerMock: apisExplorerPanelManager.openApisExplorer as ReturnType<typeof vi.fn>,
     apisStopAllTracesMock: apisExplorerPanelManager.stopAllTraces as ReturnType<typeof vi.fn>,
+    cacheStoreGetExportRootFolderMock:
+      cacheStore.getExportRootFolder as ReturnType<typeof vi.fn>,
+    cacheSyncGetCachedSpacesMock:
+      cacheSyncService.getCachedSpaces as ReturnType<typeof vi.fn>,
     cfLogsPanelUpdateAppsMock: cfLogsPanel.updateApps as ReturnType<typeof vi.fn>,
     globalStateUpdateMock,
     hanaInvalidateAllAppContextsMock:
       hanaSqlWorkbench.invalidateAllAppContexts as ReturnType<typeof vi.fn>,
+    outputAppendLineMock: outputChannel.appendLine as ReturnType<typeof vi.fn>,
     provider,
   };
 }
@@ -689,6 +697,89 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(spacesErrorSpy).toHaveBeenCalledWith(
       'Could not confirm scope. Please try again or use Custom tab.'
+    );
+  });
+
+  it('continues loading spaces when cached root folder restore fails for an org', async () => {
+    const {
+      access,
+      cacheStoreGetExportRootFolderMock,
+      cacheSyncGetCachedSpacesMock,
+      outputAppendLineMock,
+    } = createProviderFixture();
+    const postMessageSpy = vi.spyOn(access, 'postMessage');
+    access.selectedRegionId = 'us10';
+    access.selectedRegionCode = 'us-10';
+    access.cfSession = {
+      ...createMockSession(),
+      token: {
+        accessToken: 'token',
+        expiresAt: Date.now() + 120_000,
+        refreshToken: '',
+      },
+    };
+    access.cfSessionRegionCode = 'us-10';
+    cacheStoreGetExportRootFolderMock.mockRejectedValue(
+      new Error('root folder cache unavailable')
+    );
+    cacheSyncGetCachedSpacesMock.mockResolvedValue(null);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (): Promise<Response> => {
+        return new Response(
+          JSON.stringify({
+            resources: [{ guid: 'space-guid-1', name: 'dev' }],
+            pagination: { next: { href: null } },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      })
+    );
+
+    await access.handleOrgSelected({ guid: 'org-guid-1', name: 'demo-org' });
+
+    expect(postMessageSpy).toHaveBeenCalledWith({
+      type: 'sapTools.spacesLoaded',
+      spaces: [{ guid: 'space-guid-1', name: 'dev' }],
+    });
+    expect(outputAppendLineMock).toHaveBeenCalledWith(
+      expect.stringContaining('[cache] Failed to restore root folder for org org-guid-1:')
+    );
+  });
+
+  it('posts a spaces error when cached space lookup fails for an org', async () => {
+    const { access, cacheSyncGetCachedSpacesMock, outputAppendLineMock } =
+      createProviderFixture();
+    const spacesErrorSpy = vi.spyOn(access, 'postSpacesError');
+    access.selectedRegionId = 'us10';
+    access.selectedRegionCode = 'us-10';
+    cacheSyncGetCachedSpacesMock.mockRejectedValue(new Error('cache read failed'));
+
+    await access.handleOrgSelected({ guid: 'org-guid-1', name: 'demo-org' });
+
+    expect(spacesErrorSpy).toHaveBeenCalledWith('cache read failed');
+    expect(outputAppendLineMock).toHaveBeenCalledWith(
+      expect.stringContaining('[spaces] Failed to load spaces for org org-guid-1:')
+    );
+  });
+
+  it('handles org selection message failures without leaving the space picker loading', async () => {
+    const { access, outputAppendLineMock } = createProviderFixture();
+    vi.spyOn(access, 'handleOrgSelected').mockRejectedValue(
+      new Error('unexpected org handler failure')
+    );
+    const spacesErrorSpy = vi.spyOn(access, 'postSpacesError');
+
+    await access.handleWebviewMessage({
+      type: 'sapTools.orgSelected',
+      org: { guid: 'org-guid-1', name: 'demo-org' },
+    });
+
+    expect(spacesErrorSpy).toHaveBeenCalledWith(
+      'Failed to load spaces for the selected organization.'
+    );
+    expect(outputAppendLineMock).toHaveBeenCalledWith(
+      expect.stringContaining('[webview] org selection failed:')
     );
   });
 

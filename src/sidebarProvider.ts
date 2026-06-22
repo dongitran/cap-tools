@@ -423,7 +423,9 @@ export class RegionSidebarProvider
 
     const messageSubscription = webviewView.webview.onDidReceiveMessage(
       (message: unknown): void => {
-        void this.handleWebviewMessage(message);
+        void this.handleWebviewMessage(message).catch((error: unknown) => {
+          this.logWebviewMessageFailure('message dispatch', error);
+        });
       }
     );
     this.disposables.push(messageSubscription);
@@ -464,7 +466,12 @@ export class RegionSidebarProvider
 
     if (type === MSG_ORG_SELECTED && isOrgSelectedMessage(message)) {
       const payload = readOrgSelectionPayload(message);
-      await this.handleOrgSelected(payload);
+      try {
+        await this.handleOrgSelected(payload);
+      } catch (error) {
+        this.logWebviewMessageFailure('org selection', error);
+        this.postSpacesError('Failed to load spaces for the selected organization.');
+      }
       return;
     }
 
@@ -1797,6 +1804,25 @@ export class RegionSidebarProvider
     }
   }
 
+  private async restoreRootFolderForCurrentOrgBestEffort(
+    requestId: number,
+    orgGuid: string
+  ): Promise<void> {
+    try {
+      await this.restoreRootFolderForCurrentOrg(requestId);
+    } catch (error) {
+      if (!this.isCurrentOrgRequest(requestId)) {
+        return;
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to restore root folder.';
+      this.outputChannel.appendLine(
+        `[cache] Failed to restore root folder for org ${sanitizeForLog(orgGuid)}: ${sanitizeErrorForLog(errorMessage)}`
+      );
+      this.clearRootFolderSelection();
+    }
+  }
+
   private async persistRootFolderForCurrentScope(rootFolderPath: string): Promise<void> {
     const normalizedRootFolderPath = rootFolderPath.trim();
     if (normalizedRootFolderPath.length === 0) {
@@ -3059,7 +3085,7 @@ export class RegionSidebarProvider
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
     });
-    await this.restoreRootFolderForCurrentOrg(requestId);
+    await this.restoreRootFolderForCurrentOrgBestEffort(requestId, org.guid);
     if (!this.isCurrentOrgRequest(requestId)) {
       return;
     }
@@ -3069,26 +3095,26 @@ export class RegionSidebarProvider
       return;
     }
 
-    const cachedSpaces = await this.cacheSyncService.getCachedSpaces(
-      this.selectedRegionId,
-      org.guid
-    );
-    if (!this.isCurrentOrgRequest(requestId)) {
-      return;
-    }
-
-    if (cachedSpaces !== null) {
-      this.postMessage({ type: MSG_SPACES_LOADED, spaces: cachedSpaces });
-      return;
-    }
-
-    const credentials = await getEffectiveCredentials(this.context);
-    if (credentials === null) {
-      this.postSpacesError('No credentials found. Please re-open SAP Tools and log in.');
-      return;
-    }
-
     try {
+      const cachedSpaces = await this.cacheSyncService.getCachedSpaces(
+        this.selectedRegionId,
+        org.guid
+      );
+      if (!this.isCurrentOrgRequest(requestId)) {
+        return;
+      }
+
+      if (cachedSpaces !== null) {
+        this.postMessage({ type: MSG_SPACES_LOADED, spaces: cachedSpaces });
+        return;
+      }
+
+      const credentials = await getEffectiveCredentials(this.context);
+      if (credentials === null) {
+        this.postSpacesError('No credentials found. Please re-open SAP Tools and log in.');
+        return;
+      }
+
       const session = await this.ensureRegionSession(credentials);
       if (!this.isCurrentOrgRequest(requestId)) {
         return;
@@ -3104,6 +3130,9 @@ export class RegionSidebarProvider
       }
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to fetch spaces.';
+      this.outputChannel.appendLine(
+        `[spaces] Failed to load spaces for org ${sanitizeForLog(org.guid)}: ${sanitizeErrorForLog(errorMessage)}`
+      );
       this.postSpacesError(errorMessage);
     }
   }
@@ -3526,6 +3555,14 @@ export class RegionSidebarProvider
     }
   }
 
+  private logWebviewMessageFailure(context: string, error: unknown): void {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unexpected webview message failure.';
+    this.outputChannel.appendLine(
+      `[webview] ${sanitizeForLog(context)} failed: ${sanitizeErrorForLog(errorMessage)}`
+    );
+  }
+
   // ── postMessage helpers ──────────────────────────────────────────────────
 
   private postMessage(message: Record<string, unknown>): void {
@@ -3754,6 +3791,15 @@ function createNonce(): string {
 
 function sanitizeForLog(value: string): string {
   return value.replaceAll(/\s+/g, ' ').trim();
+}
+
+function sanitizeErrorForLog(value: string): string {
+  return sanitizeForLog(value)
+    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1<redacted>')
+    .replace(/(access_token=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/(refresh_token=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/(client_secret=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/(password\s*[:=]\s*)[^\s,;]+/gi, '$1<redacted>');
 }
 
 function readOptionalString(value: unknown, maxLength: number): string {

@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.156 (stable)
+- Fix: Custom SAP BTP org selection no longer leaves "Choose Space" stuck on "Loading spaces..." when root-folder restore, cache lookup, or session setup fails; failures now log to the SAP Tools output channel and return a space-stage error to the webview.
+
 ## 0.10.155 (stable)
 - UI: Live Trace Error badges now expose the safe error message on hover and show an inline info indicator beside the Error label.
 - Feature: Live Trace selected requests can now be replayed from the detail toolbar with a loading state while reusing the existing authenticated request runner path.
