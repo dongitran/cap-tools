@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.155 (stable)
+- UI: Live Trace Error badges now expose the safe error message on hover and show an inline info indicator beside the Error label.
+- Feature: Live Trace selected requests can now be replayed from the detail toolbar with a loading state while reusing the existing authenticated request runner path.
+- Hardening: Live Trace failures are logged to the SAP Tools output channel with sensitive token/password fields redacted, and trace replay responses no longer overwrite Request Runner results.
+
 ## 0.10.154 (stable)
 - Feature: Advanced Event Mesh now supports live queue and topic listening through the Solace Web Messaging client, with bounded message sessions and lifecycle cleanup.
 - Fix: APIs Explorer isolates catalog caching by CF API, org, space, and app, resets reused panels immediately, and ignores stale discovery results after a scope switch.

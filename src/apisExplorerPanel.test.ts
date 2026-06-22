@@ -216,6 +216,36 @@ describe('ApisExplorerPanelManager', () => {
     );
   });
 
+  it('logs invalid Live Trace start requests to the SAP Tools output channel', async () => {
+    const panel = createMockPanel();
+    const appendLine = vi.fn();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = new ApisExplorerPanelManager(
+      {} as never,
+      { appendLine } as never,
+      {
+        getApiCatalog: vi.fn(async () => null),
+        setApiCatalog: vi.fn(async () => undefined),
+      } as never
+    );
+
+    manager.openApisExplorer('finance-uat-api', makeTarget('space-a'));
+    await panel.messageHandler?.({
+      type: 'sapTools.apis.trace.start',
+      payload: { mode: 'unsupported' },
+    });
+
+    expect(appendLine).toHaveBeenCalledWith(
+      '[ApisExplorer] Live Trace error for finance-uat-api: Invalid trace start request.'
+    );
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sapTools.apis.trace.state',
+        payload: expect.objectContaining({ state: 'error' }),
+      })
+    );
+  });
+
   it('stops active Live Trace when the APIs panel is disposed', async () => {
     process.env['SAP_TOOLS_TEST_MODE'] = '1';
     const panel = createMockPanel();
@@ -271,6 +301,36 @@ describe('ApisExplorerPanelManager', () => {
       expect.objectContaining({
         spaceName: 'space-b',
         cfHomeDir: '/tmp/cf-space-b',
+      })
+    );
+  });
+
+  it('echoes trace replay markers on execute responses', async () => {
+    const panel = createMockPanel();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = createManager();
+
+    manager.openApisExplorer('finance-uat-api', makeTarget('space-a'));
+    await panel.messageHandler?.({
+      type: 'sapTools.apis.executeRequest',
+      payload: {
+        url: 'https://app.example.com/odata/v4/orders',
+        method: 'POST',
+        auth: 'xsuaa-auto',
+        body: '{"amount":1200}',
+        source: 'traceReplay',
+        requestId: 'trace-replay-trace-002-123',
+      },
+    });
+
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sapTools.apis.executeResponse',
+        payload: expect.objectContaining({
+          source: 'traceReplay',
+          requestId: 'trace-replay-trace-002-123',
+          status: '200 OK',
+        }),
       })
     );
   });

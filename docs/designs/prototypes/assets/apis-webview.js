@@ -37,6 +37,8 @@ let apiTraceCaptureRequestBody = true;
 let apiTraceCaptureResponseBody = true;
 let apiTraceSettingsOpen = false;
 let apiTraceDetailTab = 'overview';
+let apiTraceReplayInFlightEventId = '';
+let apiTraceReplayRequestId = '';
 
 const API_TRACE_EVENT_LIMIT = 1000;
 const API_TRACE_PREFERENCES_KEY = 'saptools.apis.trace.preferences';
@@ -529,6 +531,14 @@ function formatTraceStateLabel(state) {
   return labels[state] || 'Idle';
 }
 
+function formatTraceStateTooltip(state, message) {
+  const statusMessage = typeof message === 'string' ? message.trim() : '';
+  if (state === 'error' && statusMessage.length > 0) return statusMessage;
+  if (state === 'needsInspector' && statusMessage.length > 0) return statusMessage;
+  if (statusMessage.length > 0) return statusMessage;
+  return formatTraceStateLabel(state);
+}
+
 function normalizeTraceUrl(rawUrl) {
   if (typeof rawUrl !== 'string' || rawUrl.length === 0) return '/';
   try {
@@ -731,6 +741,37 @@ function copyTraceCurl(button) {
   }).catch(() => undefined);
 }
 
+function replayTraceRequest(button) {
+  const event = selectedTraceEvent();
+  if (event === null || apiTraceReplayInFlightEventId !== '') return;
+  apiTraceReplayInFlightEventId = event.id;
+  apiTraceReplayRequestId = `trace-replay-${event.id}-${Date.now()}`;
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<span class="api-spinner"></span> Replaying...';
+  }
+  if (vscodeApi) {
+    vscodeApi.postMessage({
+      type: 'sapTools.apis.executeRequest',
+      payload: {
+        url: resolveTraceCurlUrl(event),
+        method: event.method,
+        auth: 'xsuaa-auto',
+        body: event.requestBodyPreview || undefined,
+        source: 'traceReplay',
+        requestId: apiTraceReplayRequestId
+      }
+    });
+    renderLiveTracePanel();
+    return;
+  }
+  window.setTimeout(() => {
+    apiTraceReplayInFlightEventId = '';
+    apiTraceReplayRequestId = '';
+    renderLiveTracePanel();
+  }, 600);
+}
+
 function renderTraceUrlOptions(summaries) {
   const options = summaries.map((summary) => {
     const methods = summary.methods.join(',');
@@ -849,6 +890,18 @@ function renderTraceDetailTabs() {
   `;
 }
 
+function renderTraceReplayButton(event) {
+  const isReplaying = apiTraceReplayInFlightEventId === event.id;
+  const content = isReplaying
+    ? '<span class="api-spinner"></span> Replaying...'
+    : 'Replay Request';
+  return `
+    <button type="button" class="secondary-action api-trace-replay-btn" data-action="api-trace-replay-request" ${isReplaying ? 'disabled' : ''}>
+      ${content}
+    </button>
+  `;
+}
+
 function renderTraceDetail(event) {
   const selectedRequest = event === null
     ? '<div class="api-trace-selected-request is-empty">Captured request details will appear here.</div>'
@@ -863,6 +916,7 @@ function renderTraceDetail(event) {
         ${selectedRequest}
         <div class="api-trace-detail-actions">
           ${event === null ? '' : renderTraceDetailTabs()}
+          ${event === null ? '' : renderTraceReplayButton(event)}
           ${event === null ? '' : '<button type="button" class="secondary-action api-trace-copy-curl-btn" data-action="api-trace-copy-curl">Copy cURL</button>'}
         </div>
       </div>
@@ -887,10 +941,13 @@ function renderTraceActionCluster() {
   const traceToggleAction = canStop ? 'api-trace-stop' : 'api-trace-start';
   const traceToggleLabel = canStop ? 'Stop Listening' : 'Start Listening';
   const traceToggleClass = canStop ? 'secondary-action' : 'primary-action';
+  const traceStateLabel = formatTraceStateLabel(apiTraceState);
+  const traceStateTooltip = formatTraceStateTooltip(apiTraceState, apiTraceStatusMessage);
   return `
-    <span class="api-trace-state-badge ${statusClass}" aria-label="Live Trace state" role="status" aria-live="polite" aria-busy="${isProgress ? 'true' : 'false'}">
+    <span class="api-trace-state-badge ${statusClass}" aria-label="Live Trace state" role="status" aria-live="polite" aria-busy="${isProgress ? 'true' : 'false'}" title="${escapeHtml(traceStateTooltip)}">
       ${isProgress ? '<span class="api-trace-state-spinner" aria-hidden="true"></span>' : ''}
-      ${escapeHtml(formatTraceStateLabel(apiTraceState))}
+      ${escapeHtml(traceStateLabel)}
+      ${apiTraceState === 'error' ? '<span class="api-trace-state-info" aria-hidden="true">i</span>' : ''}
     </span>
     <button type="button" class="${traceToggleClass} api-trace-action-btn" data-action="${traceToggleAction}">${traceToggleLabel}</button>
     <button type="button" class="secondary-action api-trace-action-btn" data-action="api-trace-clear">Clear</button>
@@ -1414,6 +1471,11 @@ appElement.addEventListener('click', (event) => {
     return;
   }
 
+  if (action === 'api-trace-replay-request') {
+    replayTraceRequest(actionElement);
+    return;
+  }
+
   if (action === 'api-trace-switch-detail-tab') {
     const tabId = actionElement.dataset.tabId;
     apiTraceDetailTab = tabId === 'request' || tabId === 'response' ? tabId : 'overview';
@@ -1782,6 +1844,12 @@ window.addEventListener('message', (event) => {
 
   if (event.data.type === 'sapTools.apis.executeResponse') {
     const payload = event.data.payload;
+    if (payload.source === 'traceReplay' && payload.requestId === apiTraceReplayRequestId) {
+      apiTraceReplayInFlightEventId = '';
+      apiTraceReplayRequestId = '';
+      renderLiveTracePanel();
+      return;
+    }
     apiResultState = 'done';
     apiResultTime = payload.time;
     apiResultStatus = payload.status;

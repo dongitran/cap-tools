@@ -264,6 +264,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     runtimeHookInstalled: boolean,
     runtimeHookMayRemain: boolean
   ): void {
+    this.log(`Live Trace error for ${session.appId}: ${message}`);
     this.post(session, {
       type: 'sapTools.apis.trace.state',
       payload: {
@@ -421,6 +422,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
           void session.panel.webview.postMessage({
             type: 'sapTools.apis.executeResponse',
             payload: {
+              ...executeResponseMetadata(payload),
               status: '200 OK',
               time: 42,
               data: { value: [{ MockData: "Test success from mock execution" }] }
@@ -479,6 +481,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       void session.panel.webview.postMessage({
         type: 'sapTools.apis.executeResponse',
         payload: {
+          ...executeResponseMetadata(payload),
           status: `${String(res.status)} ${res.statusText}`,
           time: elapsedTime,
           data: responsePayload
@@ -489,6 +492,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       void session.panel.webview.postMessage({
         type: 'sapTools.apis.executeResponse',
         payload: {
+          ...executeResponseMetadata(payload),
           status: 'Error',
           time: 0,
           data: { error: e instanceof Error ? e.message : String(e) }
@@ -573,4 +577,12 @@ function formatUrlForLog(rawUrl: string): string {
   } catch {
     return '<invalid-url>';
   }
+}
+
+function executeResponseMetadata(
+  payload: ExecuteRequestPayload
+): { readonly source: 'traceReplay'; readonly requestId: string } | Record<string, never> {
+  return payload.source === 'traceReplay' && payload.requestId !== undefined
+    ? { source: 'traceReplay', requestId: payload.requestId }
+    : {};
 }

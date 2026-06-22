@@ -8,6 +8,8 @@ export interface ExecuteRequestPayload {
   readonly method: string;
   readonly auth: string;
   readonly body?: string;
+  readonly source?: 'traceReplay';
+  readonly requestId?: string;
 }
 
 export interface ApiTracePreferencesPayload {
@@ -36,10 +38,15 @@ export function readExecuteRequestPayload(payload: unknown): ExecuteRequestPaylo
   if (typeof raw['auth'] !== 'string' || !ALLOWED_AUTH_METHODS.has(raw['auth'])) {
     return null;
   }
+  const replayMetadata = readExecuteReplayMetadata(raw);
+  if (replayMetadata === null) {
+    return null;
+  }
   const body = typeof raw['body'] === 'string' ? raw['body'] : undefined;
-  return body === undefined
+  const base = body === undefined
     ? { url: raw['url'], method: raw['method'], auth: raw['auth'] }
     : { url: raw['url'], method: raw['method'], auth: raw['auth'], body };
+  return replayMetadata === undefined ? base : { ...base, ...replayMetadata };
 }
 
 export function readTraceStartOptions(payload: unknown): ApiTraceStartOptions | null {
@@ -111,6 +118,25 @@ function readStatusClass(value: unknown): ApiTraceStartOptions['filters']['statu
   return value === '2xx' || value === '3xx' || value === '4xx' || value === '5xx'
     ? value
     : 'all';
+}
+
+function readExecuteReplayMetadata(
+  raw: Record<string, unknown>
+): { readonly source: 'traceReplay'; readonly requestId: string } | undefined | null {
+  if (raw['source'] === undefined && raw['requestId'] === undefined) {
+    return undefined;
+  }
+  if (raw['source'] !== 'traceReplay') {
+    return null;
+  }
+  if (typeof raw['requestId'] !== 'string' || !isSafeRequestId(raw['requestId'])) {
+    return null;
+  }
+  return { source: 'traceReplay', requestId: raw['requestId'] };
+}
+
+function isSafeRequestId(value: string): boolean {
+  return value.length > 0 && value.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(value);
 }
 
 function readPositiveNumber(value: unknown, fallback: number, max: number): number {

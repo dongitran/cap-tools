@@ -173,7 +173,8 @@ export class ApiTraceSession {
         return;
       }
       await this.attachInspectorClient(tunnel, options, instanceIndex);
-    } catch {
+    } catch (error) {
+      this.logError('startup', error);
       await this.stopRuntimeTrace(false);
       if (this.isStopRequested()) return;
       this.postState('error', 'Runtime HTTP trace could not be started.', false, false);
@@ -251,8 +252,8 @@ export class ApiTraceSession {
         TRACE_EVALUATE_TIMEOUT_MS
       );
       this.publishDrainedEvents(payload, maxBodyBytes);
-    } catch {
-      await this.handleDrainFailure();
+    } catch (error) {
+      await this.handleDrainFailure(error);
     } finally {
       this.drainInFlight = false;
     }
@@ -269,7 +270,8 @@ export class ApiTraceSession {
     });
   }
 
-  private async handleDrainFailure(): Promise<void> {
+  private async handleDrainFailure(error: unknown): Promise<void> {
+    this.logError('stream', error);
     await this.stopRuntimeTrace(false);
     this.postState('error', 'Runtime HTTP trace connection was lost.', false, true);
   }
@@ -292,7 +294,8 @@ export class ApiTraceSession {
         TRACE_EVALUATE_TIMEOUT_MS
       );
       return uninstallRuntimeHook;
-    } catch {
+    } catch (error) {
+      this.logError('cleanup', error);
       return false;
     }
   }
@@ -332,6 +335,10 @@ export class ApiTraceSession {
       runtimeHookMayRemain,
     });
   }
+
+  private logError(phase: 'startup' | 'stream' | 'cleanup', error: unknown): void {
+    this.callbacks.log(`Live Trace ${phase} failed for ${this.appId}: ${formatTraceError(error)}`);
+  }
 }
 
 function resolveInstanceIndex(instanceIndex: ApiTraceStartOptions['instanceIndex']): number {
@@ -355,6 +362,21 @@ function buildRuntimeTarget(
 
 function buildNeedsInspectorMessage(): string {
   return 'Runtime HTTP Trace needs Node Inspector on 127.0.0.1:9229 for this app. Start the app with --inspect or allow the signal-based Inspector startup, then try again.';
+}
+
+function formatTraceError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const trimmed = message.trim();
+  return redactTraceError(trimmed.length > 0 ? trimmed : 'Unknown error');
+}
+
+function redactTraceError(message: string): string {
+  return message
+    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1<redacted>')
+    .replace(/(access_token=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/(refresh_token=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/(client_secret=)[^&\s]+/gi, '$1<redacted>')
+    .replace(/(password\s*[:=]\s*)[^\s,;]+/gi, '$1<redacted>');
 }
 
 function createMockTraceEvents(appId: string): ApiTraceEvent[] {

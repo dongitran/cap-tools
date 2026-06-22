@@ -656,11 +656,15 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('function updateTraceTopActions()');
     expect(source).toContain('class="api-trace-state-badge ${statusClass}"');
     expect(source).toContain('formatTraceStateLabel(apiTraceState)');
+    expect(source).toContain('formatTraceStateTooltip(apiTraceState, apiTraceStatusMessage)');
     expect(source).toContain("checkingRuntime: 'Checking runtime'");
     expect(source).toContain("injecting: 'Installing hook'");
     expect(source).toContain("streaming: 'Listening'");
     expect(source).toContain("paused: 'Paused'");
     expect(source).toContain('class="api-trace-state-spinner"');
+    expect(source).toContain('class="api-trace-state-info"');
+    expect(source).toContain("apiTraceState === 'error'");
+    expect(source).toContain('title="${escapeHtml(traceStateTooltip)}"');
     expect(source).toContain("aria-busy=\"${isProgress ? 'true' : 'false'}\"");
     expect(source).not.toContain('function renderTraceStats');
     expect(source).not.toContain('aria-label="Live Trace summary"');
@@ -707,6 +711,7 @@ describe('prototype Log-API-Event workspace', () => {
     expect(styles).toContain('.api-trace-state-badge');
     expect(styles).toContain('.api-trace-state-badge.is-progress');
     expect(styles).toContain('.api-trace-state-spinner');
+    expect(styles).toContain('.api-trace-state-info');
     expect(styles).toContain('@keyframes api-trace-state-spin');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
     expect(styles).toContain('.api-trace-settings-container');
@@ -714,6 +719,37 @@ describe('prototype Log-API-Event workspace', () => {
     expect(styles).toContain('.api-trace-stream-toggle');
     expect(styles).not.toContain('.api-trace-stats');
     expect(styles).not.toContain('.api-trace-detail-columns');
+  });
+
+  it('renders a replay action for selected Live Trace requests', async () => {
+    const source = await readApiWebviewSource();
+    const styles = await readApiStylesSource();
+
+    expect(source).toContain('let apiTraceReplayInFlightEventId');
+    expect(source).toContain('let apiTraceReplayRequestId');
+    expect(source).toContain('function replayTraceRequest(button)');
+    expect(source).toContain('data-action="api-trace-replay-request"');
+    expect(source).toContain('Replay Request');
+    expect(source.indexOf('renderTraceDetailTabs()')).toBeLessThan(
+      source.indexOf('data-action="api-trace-replay-request"')
+    );
+    expect(source.indexOf('data-action="api-trace-replay-request"')).toBeLessThan(
+      source.indexOf('data-action="api-trace-copy-curl"')
+    );
+    expect(source).toContain('url: resolveTraceCurlUrl(event)');
+    expect(source).toContain('method: event.method');
+    expect(source).toContain("auth: 'xsuaa-auto'");
+    expect(source).toContain('body: event.requestBodyPreview || undefined');
+    expect(source).toContain("source: 'traceReplay'");
+    expect(source).toContain('requestId: apiTraceReplayRequestId');
+    expect(source).toContain("payload.source === 'traceReplay'");
+    expect(source).toContain('payload.requestId === apiTraceReplayRequestId');
+    expect(source).toContain("apiTraceReplayInFlightEventId !== ''");
+    expect(source).toContain("apiTraceReplayInFlightEventId = event.id");
+    expect(source).toContain("apiTraceReplayInFlightEventId = ''");
+
+    expect(styles).toContain('.api-trace-replay-btn');
+    expect(styles).toContain('.api-trace-replay-btn .api-spinner');
   });
 
   it('persists Live Trace capture preferences with rich conditional body rendering', async () => {

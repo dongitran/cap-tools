@@ -236,6 +236,131 @@ describe('ApiTraceSession', () => {
     expect(tunnelHandle.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('logs runtime startup failures before showing the trace error state', async () => {
+    const states: ApiTraceStatePayload[] = [];
+    const log = vi.fn();
+    const session = new ApiTraceSession({
+      appId: 'finance-uat-api',
+      targetParams: {
+        apiEndpoint: 'https://api.example.com',
+        email: 'user@example.com',
+        password: 'secret',
+        orgName: 'demo-org',
+        spaceName: 'demo-space',
+      },
+      isTestMode: false,
+      callbacks: {
+        postState: (state) => states.push(state),
+        postBatch: vi.fn(),
+        postUrlSummary: vi.fn(),
+        log,
+      },
+      dependencies: {
+        prepareCfCliSession: vi.fn(async () => {
+          throw new Error('CF CLI session failed');
+        }),
+        tryStartNodeInspector: vi.fn(async () => true),
+        openInspectorTunnel: vi.fn(async () => ({ status: 'not-reachable' })),
+        createInspectorClient: vi.fn(),
+      },
+    });
+
+    await session.start({
+      mode: 'runtime-http',
+      instanceIndex: 0,
+      processName: 'web',
+      captureHeaders: false,
+      captureRequestBody: false,
+      captureResponseBody: false,
+      maxBodyBytes: 4096,
+      filters: {
+        method: [],
+        pathContains: '',
+        statusClass: 'all',
+      },
+    });
+
+    expect(states.at(-1)?.state).toBe('error');
+    expect(log).toHaveBeenCalledWith(
+      'Live Trace startup failed for finance-uat-api: CF CLI session failed'
+    );
+    expect(log.mock.calls.flat().join('\n')).not.toContain('secret');
+  });
+
+  it('logs runtime drain failures before showing the trace error state', async () => {
+    let pollCallback: (() => void) | undefined;
+    const states: ApiTraceStatePayload[] = [];
+    const log = vi.fn();
+    let evaluateCalls = 0;
+    const inspectorClient: ApiTraceInspectorClient = {
+      evaluate: vi.fn(async () => {
+        evaluateCalls += 1;
+        if (evaluateCalls > 1) {
+          throw new Error('Inspector target closed');
+        }
+        return { installed: true };
+      }),
+      close: vi.fn(),
+    };
+    const session = new ApiTraceSession({
+      appId: 'finance-uat-api',
+      targetParams: {
+        apiEndpoint: 'https://api.example.com',
+        email: 'user@example.com',
+        password: 'secret',
+        orgName: 'demo-org',
+        spaceName: 'demo-space',
+      },
+      isTestMode: false,
+      callbacks: {
+        postState: (state) => states.push(state),
+        postBatch: vi.fn(),
+        postUrlSummary: vi.fn(),
+        log,
+      },
+      dependencies: {
+        prepareCfCliSession: vi.fn(async () => undefined),
+        tryStartNodeInspector: vi.fn(async () => true),
+        openInspectorTunnel: vi.fn(async (): Promise<ApiTraceTunnelReadyResult> => ({
+          status: 'ready',
+          handle: {
+            localPort: 51236,
+            stop: vi.fn(),
+          },
+        })),
+        createInspectorClient: vi.fn(async () => inspectorClient),
+        setInterval: vi.fn((callback: () => void) => {
+          pollCallback = callback;
+          return 9 as unknown as NodeJS.Timeout;
+        }),
+        clearInterval: vi.fn(),
+      },
+    });
+
+    await session.start({
+      mode: 'runtime-http',
+      instanceIndex: 0,
+      processName: 'web',
+      captureHeaders: false,
+      captureRequestBody: false,
+      captureResponseBody: false,
+      maxBodyBytes: 4096,
+      filters: {
+        method: [],
+        pathContains: '',
+        statusClass: 'all',
+      },
+    });
+    pollCallback?.();
+
+    await vi.waitFor(() => {
+      expect(states.at(-1)?.state).toBe('error');
+    });
+    expect(log).toHaveBeenCalledWith(
+      'Live Trace stream failed for finance-uat-api: Inspector target closed'
+    );
+  });
+
   it('cancels late tunnel startup when tracing is stopped during startup', async () => {
     const states: ApiTraceStatePayload[] = [];
     const tunnelDeferred = createDeferred<ApiTraceTunnelReadyResult>();

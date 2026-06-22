@@ -35,6 +35,26 @@ describe('APIs Explorer webview message parsing', () => {
     });
   });
 
+  it('accepts trace replay markers on execute payloads', () => {
+    expect(
+      readExecuteRequestPayload({
+        url: 'https://app.example.com/odata/v4/orders',
+        method: 'POST',
+        auth: 'xsuaa-auto',
+        body: '{"amount":1200}',
+        source: 'traceReplay',
+        requestId: 'trace-replay-trace-002-123',
+      })
+    ).toEqual({
+      url: 'https://app.example.com/odata/v4/orders',
+      method: 'POST',
+      auth: 'xsuaa-auto',
+      body: '{"amount":1200}',
+      source: 'traceReplay',
+      requestId: 'trace-replay-trace-002-123',
+    });
+  });
+
   it('rejects execute payloads with unsafe URLs, methods, or auth modes', () => {
     expect(
       readExecuteRequestPayload({
