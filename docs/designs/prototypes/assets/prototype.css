@@ -1786,9 +1786,10 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   background: transparent;
   color: inherit;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   column-gap: 8px;
+  position: relative;
   text-align: left;
   padding: 8px 10px;
   width: 100%;
@@ -1912,16 +1913,16 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 }
 
 .service-map-hover-actions {
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   gap: 4px;
   align-items: center;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease;
-  position: relative;
   z-index: 2;
 }
 
@@ -2566,6 +2567,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   overflow: auto;
   min-width: 0;
   min-height: 0;
+  padding: 4px 3px;
 }
 
 .workspace-body-sql .sql-service-list {
@@ -3360,7 +3362,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   }
 
   .service-map-row {
-    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-columns: 18px minmax(0, 1fr);
     column-gap: 6px;
     align-items: start;
   }
@@ -3380,7 +3382,7 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   }
 
   .service-map-hover-actions {
-    grid-column: 3;
+    grid-column: auto;
   }
 }
 /* --- END 06-hana-sql.css --- */

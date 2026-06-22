@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.158 (stable)
+- UI/UX: Apps service mapping hover actions now overlay mapped rows without reserving hidden width, so service names keep the full available row space until actions are shown.
+- UI/UX: SQL Workbench service lists now keep enough internal breathing room for first-row hover borders and shadows.
+
 ## 0.10.157 (stable)
 - UI/UX: The SQL workbench now keeps the platform-specific selected-SQL run chord visible in its header and shows a 1.5-second native notification after an app SQL editor opens successfully.
 - UI/UX: Increased the `APIs` and `Event` action height by 15% while preserving the compact `Log-API-Event` app-row height.

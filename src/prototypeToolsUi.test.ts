@@ -65,6 +65,13 @@ async function readLogsStylesSource(): Promise<string> {
   );
 }
 
+async function readServiceExportStylesSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/styles/04-service-export.css', import.meta.url),
+    'utf8'
+  );
+}
+
 async function readSqlStylesSource(): Promise<string> {
   return readFile(
     new URL('../docs/designs/prototypes/src/styles/06-hana-sql.css', import.meta.url),
@@ -933,6 +940,32 @@ describe('prototype Log-API-Event workspace', () => {
   });
 });
 
+describe('prototype Apps service mapping list', () => {
+  it('overlays mapped-service actions without reserving title width', async () => {
+    const serviceStyles = await readServiceExportStylesSource();
+    const sqlStyles = await readSqlStylesSource();
+
+    expect(serviceStyles).toMatch(
+      /\.service-map-row\s*\{[\s\S]*?grid-template-columns:\s*18px minmax\(0, 1fr\);[\s\S]*?position:\s*relative;/
+    );
+    expect(serviceStyles).toMatch(
+      /\.service-map-hover-actions\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset-inline-end:\s*10px;[\s\S]*?top:\s*50%;[\s\S]*?transform:\s*translateY\(-50%\);/
+    );
+    expect(serviceStyles).toMatch(
+      /\.service-map-row:hover \.service-map-hover-actions,[\s\S]*?\.service-map-hover-actions:focus-within\s*\{[\s\S]*?opacity:\s*1;[\s\S]*?pointer-events:\s*auto;/
+    );
+    expect(serviceStyles).not.toMatch(
+      /\.service-map-hover-actions\s*\{[\s\S]*?grid-column:\s*3;/
+    );
+    expect(sqlStyles).toMatch(
+      /@media \(max-width: 380px\)[\s\S]*?\.service-map-row\s*\{[\s\S]*?grid-template-columns:\s*18px minmax\(0, 1fr\);/
+    );
+    expect(sqlStyles).toMatch(
+      /@media \(max-width: 380px\)[\s\S]*?\.service-map-hover-actions\s*\{[\s\S]*?grid-column:\s*auto;/
+    );
+  });
+});
+
 describe('prototype S/4HANA SQL Workbench table refresh', () => {
   it('treats refresh-hana-tables as an in-place SQL-only action so the service list is not re-rendered', async () => {
     const topology = await readFile(
@@ -971,6 +1004,19 @@ describe('prototype S/4HANA SQL Workbench shortcut discovery', () => {
     );
     expect(styles).toContain('.sql-shortcut-hint kbd');
     expect(styles).toContain('.hana-shortcut-toast');
+  });
+});
+
+describe('prototype S/4HANA SQL Workbench service-list hover', () => {
+  it('keeps breathing room for the first app row hover transform', async () => {
+    const styles = await readSqlStylesSource();
+
+    expect(styles).toMatch(
+      /\.sql-service-list\s*\{[\s\S]*?overflow:\s*auto;[\s\S]*?padding:\s*4px 3px;/
+    );
+    expect(styles).toMatch(
+      /\.sql-service-row:hover\s*\{[\s\S]*?transform:\s*translateY\(-1px\);/
+    );
   });
 });
 
