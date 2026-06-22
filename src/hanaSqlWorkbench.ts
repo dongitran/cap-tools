@@ -33,6 +33,7 @@ const TUNNEL_PROBE_SQL = 'SELECT 1 FROM DUMMY';
 import { splitHanaSqlStatements } from './hanaSqlStatementSplitter';
 import { HANA_SQL_DEFAULT_SELECT_LIMIT, applyDefaultHanaSelectLimit } from './hanaSqlLimitGuard';
 import { resolveHanaConnectionFromApp, type HanaSqlScopeSession } from './hanaSqlConnectionResolver';
+import { showHanaSqlShortcutNotification } from './hanaSqlShortcutNotification';
 
 export interface HanaTableListCacheGateway {
   getHanaTableList(scopeKey: string): Promise<HanaTableListCacheEntry | null>;
@@ -330,6 +331,7 @@ export class HanaSqlWorkbench
     this.appIdByDocumentUri.set(fileUri.toString(), context.appId);
     this.updateSqlEditorContextKey(vscode.window.activeTextEditor);
     this.logSql(`editor ready for app ${sanitizeSqlLogValue(context.appName)}`);
+    showHanaSqlShortcutNotification(context.appName);
     void this.prefetchTableNames(context.appId);
   }
 

@@ -167,6 +167,10 @@ const TOPOLOGY_ORG_SELECTED_MESSAGE_TYPE = 'sapTools.topologyOrgSelected';
 const QUICK_SCOPE_CONFIRM_MESSAGE_TYPE = 'sapTools.quickScopeConfirm';
 const TOPOLOGY_ORG_SEARCH_LIMIT = 50;
 const vscodeApi = resolveVscodeApi();
+const HANA_SQL_RUN_SHORTCUT_LABEL = /Mac/i.test(navigator.platform)
+  ? 'Cmd+E Cmd+E'
+  : 'Ctrl+E Ctrl+E';
+const HANA_SQL_SHORTCUT_NOTIFICATION_MS = 1500;
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
 const SERVICE_MAP_PATH_LABEL_MAX_CHARS = 72;

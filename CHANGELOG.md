@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.157 (stable)
+- UI/UX: The SQL workbench now keeps the platform-specific selected-SQL run chord visible in its header and shows a 1.5-second native notification after an app SQL editor opens successfully.
+- UI/UX: Increased the `APIs` and `Event` action height by 15% while preserving the compact `Log-API-Event` app-row height.
+
 ## 0.10.156 (stable)
 - Fix: Custom SAP BTP org selection no longer leaves "Choose Space" stuck on "Loading spaces..." when root-folder restore, cache lookup, or session setup fails; failures now log to the SAP Tools output channel and return a space-stage error to the webview.
 

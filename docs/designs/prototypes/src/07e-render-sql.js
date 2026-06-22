@@ -177,12 +177,22 @@ function renderSqlWorkbenchTab() {
       <header class="sql-workbench-header">
         <div class="sql-workbench-title-row">
           <h2>S/4HANA SQL Workbench</h2>
-          <span
-            class="sql-tunnel-badge"
-            data-role="hana-tunnel-indicator"
-            title="HANA connections in this workbench are routed through a cf ssh tunnel"
-            ${tunnelActive ? '' : 'hidden'}
-          >&#128279; Tunnel</span>
+          <div class="sql-workbench-title-actions">
+            <span
+              class="sql-shortcut-hint"
+              aria-label="Run selected SQL with ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}"
+              title="Select SQL in the app editor, then press ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)} to run it"
+            >
+              <span class="sql-shortcut-hint-label">Run selected SQL</span>
+              <kbd>${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}</kbd>
+            </span>
+            <span
+              class="sql-tunnel-badge"
+              data-role="hana-tunnel-indicator"
+              title="HANA connections in this workbench are routed through a cf ssh tunnel"
+              ${tunnelActive ? '' : 'hidden'}
+            >&#128279; Tunnel</span>
+          </div>
         </div>
         <label class="sql-app-search-row search-input-with-icon">
           <span class="search-input-icon" aria-hidden="true">&#128269;</span>

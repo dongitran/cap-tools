@@ -11,13 +11,18 @@ const {
   executeCommandMock,
   onDidChangeActiveTextEditorMock,
   onDidCloseTextDocumentMock,
+  openTextDocumentMock,
   registerCommandMock,
   registerCompletionItemProviderMock,
   resolveHanaConnectionFromAppMock,
+  setTextDocumentLanguageMock,
+  showHanaSqlShortcutNotificationMock,
+  showTextDocumentMock,
 } = vi.hoisted(() => ({
   executeCommandMock: vi.fn(),
   onDidChangeActiveTextEditorMock: vi.fn(() => ({ dispose: vi.fn() })),
   onDidCloseTextDocumentMock: vi.fn(() => ({ dispose: vi.fn() })),
+  openTextDocumentMock: vi.fn(),
   registerCommandMock: vi.fn(() => ({ dispose: vi.fn() })),
   registerCompletionItemProviderMock: vi.fn(() => ({ dispose: vi.fn() })),
   resolveHanaConnectionFromAppMock: vi.fn(async (options) => ({
@@ -29,12 +34,27 @@ const {
     },
     schema: `resolved-${options.session.spaceName}-schema`,
   })),
+  setTextDocumentLanguageMock: vi.fn(),
+  showHanaSqlShortcutNotificationMock: vi.fn(),
+  showTextDocumentMock: vi.fn(),
 }));
 
 vi.mock('./hanaSqlConnectionResolver', () => ({
   resolveHanaConnectionFromApp: resolveHanaConnectionFromAppMock,
 }));
 
+vi.mock('./hanaSqlShortcutNotification', () => ({
+  showHanaSqlShortcutNotification: showHanaSqlShortcutNotificationMock,
+}));
+
+function createMockUri(scheme: string, fsPath: string) {
+  return {
+    fsPath,
+    scheme,
+    toString: () => `${scheme}:${fsPath}`,
+    with: (change: { scheme?: string }) => createMockUri(change.scheme ?? scheme, fsPath),
+  };
+}
 
 vi.mock('vscode', () => ({
   commands: {
@@ -56,16 +76,25 @@ vi.mock('vscode', () => ({
   },
   languages: {
     registerCompletionItemProvider: registerCompletionItemProviderMock,
+    setTextDocumentLanguage: setTextDocumentLanguageMock,
+  },
+  Uri: {
+    file: (fsPath: string) => createMockUri('file', fsPath),
+    joinPath: (base: { fsPath: string; scheme: string }, child: string) =>
+      createMockUri(base.scheme, `${base.fsPath}/${child}`),
   },
   window: {
     activeTextEditor: undefined,
     onDidChangeActiveTextEditor: onDidChangeActiveTextEditorMock,
     showErrorMessage: vi.fn(),
+    showTextDocument: showTextDocumentMock,
     showWarningMessage: vi.fn(),
     visibleTextEditors: [],
   },
   workspace: {
     onDidCloseTextDocument: onDidCloseTextDocumentMock,
+    openTextDocument: openTextDocumentMock,
+    workspaceFolders: [],
   },
 }));
 
@@ -141,6 +170,50 @@ function createScopeSession(overrides: Partial<HanaSqlScopeSession> = {}): HanaS
     ...overrides,
   };
 }
+
+describe('HanaSqlWorkbench shortcut notification', () => {
+  beforeEach(() => {
+    const uri = createMockUri('untitled', '/tmp/saptools-finance-uat-api.sql');
+    const document = {
+      getText: vi.fn(() => 'SELECT CURRENT_USER FROM DUMMY;'),
+      languageId: 'sql',
+      uri,
+    };
+    openTextDocumentMock.mockReset();
+    openTextDocumentMock.mockResolvedValue(document);
+    setTextDocumentLanguageMock.mockReset();
+    setTextDocumentLanguageMock.mockResolvedValue(document);
+    showTextDocumentMock.mockReset();
+    showTextDocumentMock.mockResolvedValue({ edit: vi.fn() });
+    showHanaSqlShortcutNotificationMock.mockReset();
+  });
+
+  test('shows the shortcut notification after opening the app SQL file', async () => {
+    const workbench = createWorkbench();
+
+    await workbench.openSqlDocumentForApp({
+      appId: 'finance-uat-api',
+      appName: 'finance-uat-api',
+      session: null,
+    });
+
+    expect(showHanaSqlShortcutNotificationMock).toHaveBeenCalledWith('finance-uat-api');
+  });
+
+  test('does not show the shortcut notification when the SQL file fails to open', async () => {
+    const workbench = createWorkbench();
+    openTextDocumentMock.mockRejectedValueOnce(new Error('Open failed'));
+
+    await expect(
+      workbench.openSqlDocumentForApp({
+        appId: 'finance-uat-api',
+        appName: 'finance-uat-api',
+        session: null,
+      })
+    ).rejects.toThrow('Open failed');
+    expect(showHanaSqlShortcutNotificationMock).not.toHaveBeenCalled();
+  });
+});
 
 describe('HanaSqlWorkbench scope cache invalidation', () => {
   beforeEach(() => {

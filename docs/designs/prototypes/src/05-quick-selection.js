@@ -2,6 +2,17 @@ function requestHanaServicesIfNeeded() {
   syncSqlAppTargetsFromCurrentApps();
 }
 
+function showPrototypeHanaSqlShortcutToast(appName) {
+  document.querySelector('.hana-shortcut-toast')?.remove();
+  const toast = document.createElement('div');
+  toast.className = 'hana-shortcut-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  toast.textContent = `${appName} SQL ready. Select SQL and press ${HANA_SQL_RUN_SHORTCUT_LABEL} to run.`;
+  document.body.append(toast);
+  window.setTimeout(() => toast.remove(), HANA_SQL_SHORTCUT_NOTIFICATION_MS);
+}
+
 function triggerOpenHanaSqlFile() {
   const selectedService = resolveSelectedHanaService();
   if (selectedService === undefined) {
@@ -14,6 +25,7 @@ function triggerOpenHanaSqlFile() {
   hanaQueryStatusMessage = '';
 
   if (vscodeApi === null) {
+    showPrototypeHanaSqlShortcutToast(selectedService.name);
     return true;
   }
 

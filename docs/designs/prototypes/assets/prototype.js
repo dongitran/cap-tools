@@ -168,6 +168,10 @@ const TOPOLOGY_ORG_SELECTED_MESSAGE_TYPE = 'sapTools.topologyOrgSelected';
 const QUICK_SCOPE_CONFIRM_MESSAGE_TYPE = 'sapTools.quickScopeConfirm';
 const TOPOLOGY_ORG_SEARCH_LIMIT = 50;
 const vscodeApi = resolveVscodeApi();
+const HANA_SQL_RUN_SHORTCUT_LABEL = /Mac/i.test(navigator.platform)
+  ? 'Cmd+E Cmd+E'
+  : 'Ctrl+E Ctrl+E';
+const HANA_SQL_SHORTCUT_NOTIFICATION_MS = 1500;
 
 const SYNC_INTERVAL_OPTIONS = [12, 24, 48, 96];
 const SERVICE_MAP_PATH_LABEL_MAX_CHARS = 72;
@@ -2659,6 +2663,17 @@ function requestHanaServicesIfNeeded() {
   syncSqlAppTargetsFromCurrentApps();
 }
 
+function showPrototypeHanaSqlShortcutToast(appName) {
+  document.querySelector('.hana-shortcut-toast')?.remove();
+  const toast = document.createElement('div');
+  toast.className = 'hana-shortcut-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  toast.textContent = `${appName} SQL ready. Select SQL and press ${HANA_SQL_RUN_SHORTCUT_LABEL} to run.`;
+  document.body.append(toast);
+  window.setTimeout(() => toast.remove(), HANA_SQL_SHORTCUT_NOTIFICATION_MS);
+}
+
 function triggerOpenHanaSqlFile() {
   const selectedService = resolveSelectedHanaService();
   if (selectedService === undefined) {
@@ -2671,6 +2686,7 @@ function triggerOpenHanaSqlFile() {
   hanaQueryStatusMessage = '';
 
   if (vscodeApi === null) {
+    showPrototypeHanaSqlShortcutToast(selectedService.name);
     return true;
   }
 
@@ -6174,12 +6190,22 @@ function renderSqlWorkbenchTab() {
       <header class="sql-workbench-header">
         <div class="sql-workbench-title-row">
           <h2>S/4HANA SQL Workbench</h2>
-          <span
-            class="sql-tunnel-badge"
-            data-role="hana-tunnel-indicator"
-            title="HANA connections in this workbench are routed through a cf ssh tunnel"
-            ${tunnelActive ? '' : 'hidden'}
-          >&#128279; Tunnel</span>
+          <div class="sql-workbench-title-actions">
+            <span
+              class="sql-shortcut-hint"
+              aria-label="Run selected SQL with ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}"
+              title="Select SQL in the app editor, then press ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)} to run it"
+            >
+              <span class="sql-shortcut-hint-label">Run selected SQL</span>
+              <kbd>${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}</kbd>
+            </span>
+            <span
+              class="sql-tunnel-badge"
+              data-role="hana-tunnel-indicator"
+              title="HANA connections in this workbench are routed through a cf ssh tunnel"
+              ${tunnelActive ? '' : 'hidden'}
+            >&#128279; Tunnel</span>
+          </div>
         </div>
         <label class="sql-app-search-row search-input-with-icon">
           <span class="search-input-icon" aria-hidden="true">&#128269;</span>

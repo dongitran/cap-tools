@@ -65,6 +65,13 @@ async function readLogsStylesSource(): Promise<string> {
   );
 }
 
+async function readSqlStylesSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/styles/06-hana-sql.css', import.meta.url),
+    'utf8'
+  );
+}
+
 async function readEventWebviewSource(): Promise<string> {
   return readFile(
     new URL('../docs/designs/prototypes/assets/events-webview.js', import.meta.url),
@@ -159,7 +166,8 @@ describe('prototype Log-API-Event workspace', () => {
     const source = await readLogsStylesSource();
 
     expect(source).toMatch(/\.app-log-item\s*\{[\s\S]*?padding:\s*8px 10px;/);
-    expect(source).toMatch(/\.app-log-apis-btn\s*\{[\s\S]*?min-height:\s*20px;/);
+    expect(source).toMatch(/\.app-log-apis-btn\s*\{[\s\S]*?min-height:\s*23px;/);
+    expect(source).toMatch(/\.app-log-apis-btn\s*\{[\s\S]*?margin-block:\s*-4\.5px;/);
     expect(source).toMatch(/\.app-log-apis-btn\s*\{[\s\S]*?line-height:\s*1\.2;/);
     expect(source).toMatch(/\.app-log-apis-btn\s*\{[\s\S]*?box-sizing:\s*border-box;/);
   });
@@ -942,6 +950,27 @@ describe('prototype S/4HANA SQL Workbench table refresh', () => {
     expect(events).toMatch(
       /action === 'select-hana-service' \|\| action === 'refresh-hana-tables'\)[\s\S]*?refreshMountedSqlWorkbench\(\)/
     );
+  });
+});
+
+describe('prototype S/4HANA SQL Workbench shortcut discovery', () => {
+  it('keeps the run chord visible and simulates a 1.5-second standalone notification', async () => {
+    const state = await readStateSource();
+    const render = await readSqlRenderSource();
+    const quickSelection = await readQuickSelectionSource();
+    const styles = await readSqlStylesSource();
+
+    expect(state).toContain("? 'Cmd+E Cmd+E'");
+    expect(state).toContain(": 'Ctrl+E Ctrl+E'");
+    expect(state).toContain('HANA_SQL_SHORTCUT_NOTIFICATION_MS = 1500');
+    expect(render).toContain('class="sql-shortcut-hint"');
+    expect(render).toContain('Run selected SQL with ${escapeHtml(HANA_SQL_RUN_SHORTCUT_LABEL)}');
+    expect(quickSelection).toContain('showPrototypeHanaSqlShortcutToast(selectedService.name)');
+    expect(quickSelection).toContain(
+      'window.setTimeout(() => toast.remove(), HANA_SQL_SHORTCUT_NOTIFICATION_MS)'
+    );
+    expect(styles).toContain('.sql-shortcut-hint kbd');
+    expect(styles).toContain('.hana-shortcut-toast');
   });
 });
 
