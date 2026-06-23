@@ -201,18 +201,56 @@ describe('CacheStore', () => {
       '  Dev.User@Example.Com ',
       ' US-10 ',
       ' ORG-GUID-1 ',
+      ' UAT ',
       ' /tmp/workspace/services '
     );
 
     const cachedEntry = await store.getExportRootFolder(
       'dev.user@example.com',
       'us-10',
-      'org-guid-1'
+      'org-guid-1',
+      'uat'
     );
 
     expect(cachedEntry?.rootFolderPath).toBe('/tmp/workspace/services');
     expect(typeof cachedEntry?.updatedAt).toBe('string');
     expect(cachedEntry?.updatedAt.length).toBeGreaterThan(0);
+  });
+
+  it('keeps export root folders isolated by space within the same org', async () => {
+    const context = createMockContext();
+    const store = new CacheStore(context);
+
+    await store.setExportRootFolder(
+      'dev@example.com',
+      'us-10',
+      'org-guid-1',
+      'uat',
+      '/tmp/workspace/uat-services'
+    );
+    await store.setExportRootFolder(
+      'dev@example.com',
+      'us-10',
+      'org-guid-1',
+      'prod',
+      '/tmp/workspace/prod-services'
+    );
+
+    const uatEntry = await store.getExportRootFolder(
+      'dev@example.com',
+      'us-10',
+      'org-guid-1',
+      'uat'
+    );
+    const prodEntry = await store.getExportRootFolder(
+      'dev@example.com',
+      'us-10',
+      'org-guid-1',
+      'prod'
+    );
+
+    expect(uatEntry?.rootFolderPath).toBe('/tmp/workspace/uat-services');
+    expect(prodEntry?.rootFolderPath).toBe('/tmp/workspace/prod-services');
   });
 
   it('deletes export root folder cache for scope', async () => {
@@ -223,14 +261,16 @@ describe('CacheStore', () => {
       'dev@example.com',
       'us-10',
       'org-guid-1',
+      'uat',
       '/tmp/workspace/services'
     );
-    await store.deleteExportRootFolder('dev@example.com', 'us-10', 'org-guid-1');
+    await store.deleteExportRootFolder('dev@example.com', 'us-10', 'org-guid-1', 'uat');
 
     const cachedEntry = await store.getExportRootFolder(
       'dev@example.com',
       'us-10',
-      'org-guid-1'
+      'org-guid-1',
+      'uat'
     );
     expect(cachedEntry).toBeNull();
   });
@@ -245,14 +285,15 @@ describe('normalizeUserEmail', () => {
 });
 
 describe('buildExportRootFolderScopeKey', () => {
-  it('normalizes email, region code and org guid', () => {
+  it('normalizes email, region code, org guid and space name', () => {
     expect(
       buildExportRootFolderScopeKey(
         ' Dev.User@Example.Com ',
         ' US-10 ',
-        ' ORG-GUID-1 '
+        ' ORG-GUID-1 ',
+        ' UAT '
       )
-    ).toBe('dev.user@example.com::us-10::org-guid-1');
+    ).toBe('dev.user@example.com::us-10::org-guid-1::uat');
   });
 });
 

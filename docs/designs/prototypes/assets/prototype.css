@@ -1440,16 +1440,16 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
   opacity: 1;
 }
 
-.app-log-item:is(:hover, .is-event-opening) .app-log-apis-btn {
+.app-log-item:is(:hover, .is-app-action-opening, .is-apis-opening, .is-event-opening) .app-log-apis-btn {
   display: inline-flex;
 }
 
-.app-log-events-btn.is-opening {
+.app-log-apis-btn.is-opening {
   cursor: progress;
   opacity: 1;
 }
 
-.app-log-event-spinner {
+.app-log-action-spinner {
   width: 8px;
   height: 8px;
   margin-right: 5px;
@@ -1466,7 +1466,7 @@ body.vscode-high-contrast-light.prototype-page .confirm-button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-log-event-spinner {
+  .app-log-action-spinner {
     animation: none;
   }
 }

@@ -29,7 +29,7 @@ import {
 } from './serviceArtifactExporter';
 import { readSharedAppFolderMappings, readSharedRemoteRoot } from './sharedDebugConfig';
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
-import type { ApisExplorerPanelManager } from './apisExplorerPanel';
+import type { ApisExplorerPanelManager, ApisExplorerPanelSession } from './apisExplorerPanel';
 import type { EventMeshTargetParams } from './eventMeshPanel';
 import {
   resolveMockApps,
@@ -148,7 +148,8 @@ const MSG_BUILD_PUBLISH_PROGRESS = 'sapTools.buildPublishProgress';
 const MSG_BUILD_PUBLISH_RESULT = 'sapTools.buildPublishResult';
 const MSG_MICROSOFT_GRAPH_TOOL_PROGRESS = 'sapTools.microsoftGraphToolProgress';
 const MSG_MICROSOFT_GRAPH_TOOL_RESULT = 'sapTools.microsoftGraphToolResult';
-const MSG_EVENT_MESH_OPEN_SETTLED = 'sapTools.eventMeshOpenSettled';
+const MSG_APIS_EXPLORER_SETTLED = 'sapTools.apisExplorerSettled';
+const MSG_EVENT_MESH_VIEWER_SETTLED = 'sapTools.eventMeshViewerSettled';
 
 // ── Payload interfaces ───────────────────────────────────────────────────────
 
@@ -291,6 +292,13 @@ interface PersistedConfirmedScopeEntry {
 
 interface LoadedScopeState {
   readonly regionId: string;
+  readonly orgGuid: string;
+  readonly spaceName: string;
+}
+
+interface RootFolderCacheScope {
+  readonly email: string;
+  readonly regionCode: string;
   readonly orgGuid: string;
   readonly spaceName: string;
 }
@@ -518,24 +526,7 @@ export class RegionSidebarProvider
 
     if (type === MSG_OPEN_APIS_EXPLORER) {
       const appId = message['appId'] as string;
-      if (appId !== '' && this.currentConfirmedScope !== undefined) {
-        const credentials = await getEffectiveCredentials(this.context);
-        if (credentials !== null) {
-          const cfHomeDir = await ensureCfHomeDir(this.context);
-          this.apisExplorerPanelManager.openApisExplorer(appId, {
-            apiEndpoint: getCfApiEndpoint(this.currentConfirmedScope.regionCode),
-            email: credentials.email,
-            password: credentials.password,
-            orgName: this.currentConfirmedScope.orgName,
-            spaceName: this.currentConfirmedScope.spaceName,
-            cfHomeDir,
-          });
-        } else {
-          this.apisExplorerPanelManager.openApisExplorer(appId);
-        }
-      } else if (appId !== '') {
-        this.apisExplorerPanelManager.openApisExplorer(appId);
-      }
+      await this.handleOpenApisExplorer(appId);
       return;
     }
 
@@ -563,7 +554,7 @@ export class RegionSidebarProvider
         await this.eventMeshPanelManager.openEventMeshViewer(appId);
       } finally {
         this.postMessage({
-          type: MSG_EVENT_MESH_OPEN_SETTLED,
+          type: MSG_EVENT_MESH_VIEWER_SETTLED,
           appId,
         });
       }
@@ -718,6 +709,43 @@ export class RegionSidebarProvider
       await this.handleLogout();
       return;
     }
+  }
+
+  private async handleOpenApisExplorer(appId: string): Promise<void> {
+    if (appId.length === 0) {
+      return;
+    }
+    try {
+      const session = await this.openApisExplorerSession(appId);
+      await session.initialLoad;
+    } finally {
+      this.postMessage({
+        type: MSG_APIS_EXPLORER_SETTLED,
+        appId,
+      });
+    }
+  }
+
+  private async openApisExplorerSession(appId: string): Promise<ApisExplorerPanelSession> {
+    const confirmedScope = this.currentConfirmedScope;
+    if (confirmedScope === undefined) {
+      return this.apisExplorerPanelManager.openApisExplorer(appId);
+    }
+
+    const credentials = await getEffectiveCredentials(this.context);
+    if (credentials === null) {
+      return this.apisExplorerPanelManager.openApisExplorer(appId);
+    }
+
+    const cfHomeDir = await ensureCfHomeDir(this.context);
+    return this.apisExplorerPanelManager.openApisExplorer(appId, {
+      apiEndpoint: getCfApiEndpoint(confirmedScope.regionCode),
+      email: credentials.email,
+      password: credentials.password,
+      orgName: confirmedScope.orgName,
+      spaceName: confirmedScope.spaceName,
+      cfHomeDir,
+    });
   }
 
   private async handleRequestInitialState(): Promise<void> {
@@ -1371,7 +1399,8 @@ export class RegionSidebarProvider
     const cachedEntry = await this.cacheStore.getExportRootFolder(
       credentials.email,
       persistedScope.regionCode,
-      persistedScope.orgGuid
+      persistedScope.orgGuid,
+      persistedScope.spaceName
     );
     if (cachedEntry === null) {
       return;
@@ -1382,7 +1411,8 @@ export class RegionSidebarProvider
       await this.cacheStore.deleteExportRootFolder(
         credentials.email,
         persistedScope.regionCode,
-        persistedScope.orgGuid
+        persistedScope.orgGuid,
+        persistedScope.spaceName
       );
       return;
     }
@@ -1760,9 +1790,29 @@ export class RegionSidebarProvider
     }
   }
 
-  private async restoreRootFolderForCurrentOrg(requestId: number): Promise<void> {
-    const cacheScope = await this.resolveCurrentRootFolderScope();
-    if (!this.isCurrentOrgRequest(requestId)) {
+  private async restoreRootFolderForLoadedSpace(
+    payload: SpaceSelectionPayload
+  ): Promise<void> {
+    try {
+      await this.restoreRootFolderForLoadedSpaceUnsafe(payload);
+    } catch (error) {
+      if (!this.isLoadedScope(payload.orgGuid, payload.spaceName)) {
+        return;
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to restore root folder.';
+      this.outputChannel.appendLine(
+        `[cache] Failed to restore root folder for space ${sanitizeForLog(payload.spaceName)}: ${sanitizeErrorForLog(errorMessage)}`
+      );
+      this.clearRootFolderSelection();
+    }
+  }
+
+  private async restoreRootFolderForLoadedSpaceUnsafe(
+    payload: SpaceSelectionPayload
+  ): Promise<void> {
+    const cacheScope = await this.resolveRootFolderScopeForLoadedSpace(payload);
+    if (!this.isLoadedScope(payload.orgGuid, payload.spaceName)) {
       return;
     }
 
@@ -1774,9 +1824,10 @@ export class RegionSidebarProvider
     const cachedEntry = await this.cacheStore.getExportRootFolder(
       cacheScope.email,
       cacheScope.regionCode,
-      cacheScope.orgGuid
+      cacheScope.orgGuid,
+      cacheScope.spaceName
     );
-    if (!this.isCurrentOrgRequest(requestId)) {
+    if (!this.isLoadedScope(payload.orgGuid, payload.spaceName)) {
       return;
     }
 
@@ -1786,23 +1837,16 @@ export class RegionSidebarProvider
     }
 
     const folderExists = await pathExists(cachedEntry.rootFolderPath);
-    if (!this.isCurrentOrgRequest(requestId)) {
+    if (!this.isLoadedScope(payload.orgGuid, payload.spaceName)) {
       return;
     }
 
     if (!folderExists) {
-      await this.cacheStore.deleteExportRootFolder(
-        cacheScope.email,
-        cacheScope.regionCode,
-        cacheScope.orgGuid
-      );
-      if (!this.isCurrentOrgRequest(requestId)) {
+      await this.deleteMissingRootFolderCache(cacheScope);
+      if (!this.isLoadedScope(payload.orgGuid, payload.spaceName)) {
         return;
       }
 
-      this.outputChannel.appendLine(
-        `[cache] Removed missing root folder cache for org ${sanitizeForLog(cacheScope.orgGuid)}`
-      );
       this.clearRootFolderSelection();
       return;
     }
@@ -1812,29 +1856,20 @@ export class RegionSidebarProvider
       type: MSG_LOCAL_ROOT_FOLDER_UPDATED,
       path: this.selectedLocalRootFolderPath,
     });
-
-    if (this.currentApps.length > 0) {
-      await this.refreshServiceFolderMappings();
-    }
   }
 
-  private async restoreRootFolderForCurrentOrgBestEffort(
-    requestId: number,
-    orgGuid: string
+  private async deleteMissingRootFolderCache(
+    cacheScope: RootFolderCacheScope
   ): Promise<void> {
-    try {
-      await this.restoreRootFolderForCurrentOrg(requestId);
-    } catch (error) {
-      if (!this.isCurrentOrgRequest(requestId)) {
-        return;
-      }
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to restore root folder.';
-      this.outputChannel.appendLine(
-        `[cache] Failed to restore root folder for org ${sanitizeForLog(orgGuid)}: ${sanitizeErrorForLog(errorMessage)}`
-      );
-      this.clearRootFolderSelection();
-    }
+    await this.cacheStore.deleteExportRootFolder(
+      cacheScope.email,
+      cacheScope.regionCode,
+      cacheScope.orgGuid,
+      cacheScope.spaceName
+    );
+    this.outputChannel.appendLine(
+      `[cache] Removed missing root folder cache for space ${sanitizeForLog(cacheScope.spaceName)}`
+    );
   }
 
   private async persistRootFolderForCurrentScope(rootFolderPath: string): Promise<void> {
@@ -1853,6 +1888,7 @@ export class RegionSidebarProvider
         cacheScope.email,
         cacheScope.regionCode,
         cacheScope.orgGuid,
+        cacheScope.spaceName,
         normalizedRootFolderPath
       );
     } catch (error) {
@@ -1864,14 +1900,26 @@ export class RegionSidebarProvider
     }
   }
 
-  private async resolveCurrentRootFolderScope(): Promise<{
-    readonly email: string;
-    readonly regionCode: string;
-    readonly orgGuid: string;
-  } | null> {
+  private async resolveCurrentRootFolderScope(): Promise<RootFolderCacheScope | null> {
+    const loadedScope = this.lastLoadedScope;
+    if (loadedScope === null) {
+      return null;
+    }
+
+    return this.resolveRootFolderScopeForLoadedSpace({
+      spaceName: loadedScope.spaceName,
+      orgGuid: loadedScope.orgGuid,
+      orgName: '',
+    });
+  }
+
+  private async resolveRootFolderScopeForLoadedSpace(
+    payload: SpaceSelectionPayload
+  ): Promise<RootFolderCacheScope | null> {
     const regionCode = this.selectedRegionCode.trim();
-    const orgGuid = this.selectedOrgGuid.trim();
-    if (regionCode.length === 0 || orgGuid.length === 0) {
+    const orgGuid = payload.orgGuid.trim();
+    const spaceName = payload.spaceName.trim();
+    if (regionCode.length === 0 || orgGuid.length === 0 || spaceName.length === 0) {
       return null;
     }
 
@@ -1879,12 +1927,19 @@ export class RegionSidebarProvider
     if (credentials === null) {
       return null;
     }
-
     return {
       email: credentials.email,
       regionCode,
       orgGuid,
+      spaceName,
     };
+  }
+
+  private isLoadedScope(orgGuid: string, spaceName: string): boolean {
+    return (
+      this.lastLoadedScope?.orgGuid === orgGuid &&
+      this.lastLoadedScope.spaceName === spaceName
+    );
   }
 
   private clearRootFolderSelection(): void {
@@ -3099,11 +3154,11 @@ export class RegionSidebarProvider
     this.exportInProgress = false;
     this.lastLoadedScope = null;
     this.hanaSqlWorkbench.invalidateAllAppContexts();
+    this.clearRootFolderSelection();
     this.postMessage({
       type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
       mappings: this.serviceFolderMappings,
     });
-    await this.restoreRootFolderForCurrentOrgBestEffort(requestId, org.guid);
     if (!this.isCurrentOrgRequest(requestId)) {
       return;
     }
@@ -3324,6 +3379,7 @@ export class RegionSidebarProvider
       spaceName: payload.spaceName,
     };
     this.exportInProgress = false;
+    await this.restoreRootFolderForLoadedSpace(payload);
     const restoredMappings = await this.restoreServiceFolderMappingsForCurrentScope();
     if (!restoredMappings) {
       this.serviceFolderMappings = [];
@@ -3430,32 +3486,15 @@ export class RegionSidebarProvider
       apps,
       scopeKey: `${getCfApiEndpoint(regionCode)}::${payload.orgName}::${payload.spaceName}`,
     });
-    this.cfLogsPanel.updateScope(
-      buildScopeLabel(regionCode, payload.orgName, payload.spaceName)
-    );
-    this.cfLogsPanel.updateApps(apps, {
-      apiEndpoint: getCfApiEndpoint(regionCode),
-      email: credentials.email,
-      password: credentials.password,
-      orgName: payload.orgName,
-      spaceName: payload.spaceName,
-      cfHomeDir,
-    } satisfies CfLogSessionSeed);
+    this.updateCfLogsForLoadedApps(apps, payload, credentials, cfHomeDir, regionCode);
     this.currentApps = apps;
-    this.currentLogSessionSeed = {
-      apiEndpoint: getCfApiEndpoint(regionCode),
-      email: credentials.email,
-      password: credentials.password,
-      orgName: payload.orgName,
-      spaceName: payload.spaceName,
-      cfHomeDir,
-    };
     this.lastLoadedScope = {
       regionId: this.selectedRegionId,
       orgGuid: payload.orgGuid,
       spaceName: payload.spaceName,
     };
     this.exportInProgress = false;
+    await this.restoreRootFolderForLoadedSpace(payload);
     const restoredMappings = await this.restoreServiceFolderMappingsForCurrentScope();
     if (!restoredMappings) {
       this.serviceFolderMappings = [];
@@ -3469,6 +3508,28 @@ export class RegionSidebarProvider
     if (this.selectedLocalRootFolderPath.length > 0) {
       void this.refreshServiceFolderMappings();
     }
+  }
+
+  private updateCfLogsForLoadedApps(
+    apps: SidebarAppEntry[],
+    payload: SpaceSelectionPayload,
+    credentials: { readonly email: string; readonly password: string },
+    cfHomeDir: string,
+    regionCode: string
+  ): void {
+    const sessionSeed: CfLogSessionSeed = {
+      apiEndpoint: getCfApiEndpoint(regionCode),
+      email: credentials.email,
+      password: credentials.password,
+      orgName: payload.orgName,
+      spaceName: payload.spaceName,
+      cfHomeDir,
+    };
+    this.cfLogsPanel.updateScope(
+      buildScopeLabel(regionCode, payload.orgName, payload.spaceName)
+    );
+    this.cfLogsPanel.updateApps(apps, sessionSeed);
+    this.currentLogSessionSeed = sessionSeed;
   }
 
   private postOrgsError(message: string): void {

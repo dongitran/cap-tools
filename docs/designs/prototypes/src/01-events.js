@@ -150,7 +150,13 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  if (msg.type === 'sapTools.eventMeshOpenSettled') {
+  if (msg.type === 'sapTools.apisExplorerSettled') {
+    const appId = typeof msg.appId === 'string' ? msg.appId : '';
+    clearApisExplorerOpening(appId);
+    return;
+  }
+
+  if (msg.type === 'sapTools.eventMeshViewerSettled') {
     const appId = typeof msg.appId === 'string' ? msg.appId : '';
     clearEventMeshOpening(appId);
     return;
@@ -538,6 +544,7 @@ let logsData = cloneSeedLogs();
 let selectedAppLogIds = [];
 let activeAppLogIds = [];
 let pausedAppLogIds = [];
+let apisOpeningAppId = '';
 let eventOpeningAppId = '';
 let pendingSelectionMotion = null;
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
@@ -561,7 +568,7 @@ window.addEventListener('keydown', (event) => {
   refreshSqlResultPreviewPanel();
 });
 
-function refreshEventMeshOpeningState() {
+function refreshLogActionOpeningState() {
   if (isWorkspaceLogsMounted()) {
     refreshWorkspaceLogsView();
     return;
@@ -569,9 +576,22 @@ function refreshEventMeshOpeningState() {
   renderPrototype();
 }
 
+function setApisExplorerOpening(appId) {
+  apisOpeningAppId = appId;
+  refreshLogActionOpeningState();
+}
+
+function clearApisExplorerOpening(appId) {
+  if (appId.length > 0 && apisOpeningAppId !== appId) {
+    return;
+  }
+  apisOpeningAppId = '';
+  refreshLogActionOpeningState();
+}
+
 function setEventMeshOpening(appId) {
   eventOpeningAppId = appId;
-  refreshEventMeshOpeningState();
+  refreshLogActionOpeningState();
 }
 
 function clearEventMeshOpening(appId) {
@@ -579,7 +599,7 @@ function clearEventMeshOpening(appId) {
     return;
   }
   eventOpeningAppId = '';
-  refreshEventMeshOpeningState();
+  refreshLogActionOpeningState();
 }
 
 if (typeof window.ResizeObserver === 'function') {

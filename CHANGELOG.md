@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.161 (stable)
+- UI/UX: Log-API-Event app-row Event loading now stays visible until the Event Mesh editor finishes its initial data load.
+- UI/UX: Log-API-Event app-row APIS actions now show their own loading indicator until APIs Explorer finishes its initial catalog load.
+- Fix: Apps root-folder selection is now cached and restored per email, region, org, and space so switching scopes returns to the correct saved folder.
+
 ## 0.10.160 (stable)
 - UI/UX: SQL Workbench shortcut guidance now shows only the Ctrl/Cmd+E double-chord instruction in a 4.5-second native notification, without duplicating the hint in the workbench header.
 - Fix: SQL app switching now ignores stale editor-open responses and late table refresh repaints from previously selected services, keeping only the current service visually selected and responsive.

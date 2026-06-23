@@ -412,6 +412,7 @@ function handleLogsControlAction(action, actionElement) {
   if (action === 'open-app-apis') {
     const appId = actionElement.dataset.appId || 'demo-app';
     if (appId) {
+      setApisExplorerOpening(appId);
       if (typeof window !== 'undefined' && window.sessionStorage) {
         sessionStorage.setItem('saptools.apis.selectedAppId', appId);
       }
@@ -423,6 +424,9 @@ function handleLogsControlAction(action, actionElement) {
           type: 'saptools.prototype.openCenterPanel',
           url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
         }, '*');
+        window.setTimeout(() => {
+          clearApisExplorerOpening(appId);
+        }, 900);
       }
     }
     return true;

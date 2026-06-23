@@ -176,6 +176,33 @@ describe('ApisExplorerPanelManager', () => {
     expect(panel.webview.html).toContain('nonce-');
   });
 
+  it('settles the open session only after the initial API catalog load posts ready', async () => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const panel = createMockPanel();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = createManager();
+    const session = manager.openApisExplorer('finance-uat-api', makeTarget('space-a'));
+    const initialLoad = (
+      session as typeof session & { readonly initialLoad: Promise<void> }
+    ).initialLoad;
+    let settled = false;
+
+    void initialLoad.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    await panel.messageHandler?.({ type: 'sapTools.apis.webviewReady' });
+    await initialLoad;
+
+    expect(settled).toBe(true);
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'sapTools.apis.catalogLoaded' })
+    );
+  });
+
   it('routes Live Trace start/stop messages through a trace session in test mode', async () => {
     process.env['SAP_TOOLS_TEST_MODE'] = '1';
     const panel = createMockPanel();

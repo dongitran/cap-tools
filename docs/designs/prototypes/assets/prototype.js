@@ -897,7 +897,13 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  if (msg.type === 'sapTools.eventMeshOpenSettled') {
+  if (msg.type === 'sapTools.apisExplorerSettled') {
+    const appId = typeof msg.appId === 'string' ? msg.appId : '';
+    clearApisExplorerOpening(appId);
+    return;
+  }
+
+  if (msg.type === 'sapTools.eventMeshViewerSettled') {
     const appId = typeof msg.appId === 'string' ? msg.appId : '';
     clearEventMeshOpening(appId);
     return;
@@ -1285,6 +1291,7 @@ let logsData = cloneSeedLogs();
 let selectedAppLogIds = [];
 let activeAppLogIds = [];
 let pausedAppLogIds = [];
+let apisOpeningAppId = '';
 let eventOpeningAppId = '';
 let pendingSelectionMotion = null;
 const DESIGN_PATTERN_CLASS_PREFIX = 'pattern-';
@@ -1308,7 +1315,7 @@ window.addEventListener('keydown', (event) => {
   refreshSqlResultPreviewPanel();
 });
 
-function refreshEventMeshOpeningState() {
+function refreshLogActionOpeningState() {
   if (isWorkspaceLogsMounted()) {
     refreshWorkspaceLogsView();
     return;
@@ -1316,9 +1323,22 @@ function refreshEventMeshOpeningState() {
   renderPrototype();
 }
 
+function setApisExplorerOpening(appId) {
+  apisOpeningAppId = appId;
+  refreshLogActionOpeningState();
+}
+
+function clearApisExplorerOpening(appId) {
+  if (appId.length > 0 && apisOpeningAppId !== appId) {
+    return;
+  }
+  apisOpeningAppId = '';
+  refreshLogActionOpeningState();
+}
+
 function setEventMeshOpening(appId) {
   eventOpeningAppId = appId;
-  refreshEventMeshOpeningState();
+  refreshLogActionOpeningState();
 }
 
 function clearEventMeshOpening(appId) {
@@ -1326,7 +1346,7 @@ function clearEventMeshOpening(appId) {
     return;
   }
   eventOpeningAppId = '';
-  refreshEventMeshOpeningState();
+  refreshLogActionOpeningState();
 }
 
 if (typeof window.ResizeObserver === 'function') {
@@ -3104,6 +3124,7 @@ function handleLogsControlAction(action, actionElement) {
   if (action === 'open-app-apis') {
     const appId = actionElement.dataset.appId || 'demo-app';
     if (appId) {
+      setApisExplorerOpening(appId);
       if (typeof window !== 'undefined' && window.sessionStorage) {
         sessionStorage.setItem('saptools.apis.selectedAppId', appId);
       }
@@ -3115,6 +3136,9 @@ function handleLogsControlAction(action, actionElement) {
           type: 'saptools.prototype.openCenterPanel',
           url: `./variants/apis-webview.html?appId=${encodeURIComponent(appId)}`
         }, '*');
+        window.setTimeout(() => {
+          clearApisExplorerOpening(appId);
+        }, 900);
       }
     }
     return true;
@@ -5755,10 +5779,12 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
     .map((app) => {
       const isLogging = activeApps.has(app.id);
       const isChecked = isLogging || selectedApps.has(app.id);
+      const isApisOpening = apisOpeningAppId === app.id;
       const isEventOpening = eventOpeningAppId === app.id;
+      const isActionOpening = isApisOpening || isEventOpening;
 
       return `
-        <div class="app-log-item${isLogging ? ' is-logging is-locked' : ''}${isEventOpening ? ' is-event-opening' : ''}">
+        <div class="app-log-item${isLogging ? ' is-logging is-locked' : ''}${isActionOpening ? ' is-app-action-opening' : ''}${isApisOpening ? ' is-apis-opening' : ''}${isEventOpening ? ' is-event-opening' : ''}">
           <input
             type="checkbox"
             data-role="log-app-checkbox"
@@ -5769,7 +5795,15 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
           />
           <span class="app-log-name">${escapeHtml(app.name)}</span>
           <div class="app-log-actions">
-            <button type="button" class="app-log-apis-btn" data-action="open-app-apis" data-app-id="${app.id}" aria-label="Open APIs for ${escapeHtml(app.name)}">APIs</button>
+            <button
+              type="button"
+              class="app-log-apis-btn${isApisOpening ? ' is-opening' : ''}"
+              data-action="open-app-apis"
+              data-app-id="${app.id}"
+              aria-label="Open APIs for ${escapeHtml(app.name)}"
+              aria-busy="${isApisOpening}"
+              ${isApisOpening ? 'disabled' : ''}
+            >${isApisOpening ? '<span class="app-log-apis-spinner app-log-action-spinner" aria-hidden="true"></span>' : ''}<span>APIs</span></button>
             <button
               type="button"
               class="app-log-apis-btn app-log-events-btn${isEventOpening ? ' is-opening' : ''}"
@@ -5778,7 +5812,7 @@ function renderAppLogCatalogMarkup(availableApps, selectedApps, activeApps) {
               aria-label="Open Events for ${escapeHtml(app.name)}"
               aria-busy="${isEventOpening}"
               ${isEventOpening ? 'disabled' : ''}
-            >${isEventOpening ? '<span class="app-log-event-spinner" aria-hidden="true"></span>' : ''}<span>Event</span></button>
+            >${isEventOpening ? '<span class="app-log-event-spinner app-log-action-spinner" aria-hidden="true"></span>' : ''}<span>Event</span></button>
           </div>
         </div>
       `;
@@ -7418,6 +7452,7 @@ function resetActiveAppLoggingState() {
   selectedAppLogIds = [];
   activeAppLogIds = [];
   pausedAppLogIds = [];
+  apisOpeningAppId = '';
   eventOpeningAppId = '';
   statusMessage = '';
   if (hadActiveApps) {

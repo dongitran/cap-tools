@@ -53,21 +53,26 @@ export class EventMeshProviderRouter {
       return;
     }
 
-    await this.classicViewer.openEventMeshViewer(appId, targetParams);
+    const classicReadiness = Promise.resolve(
+      this.classicViewer.openEventMeshViewer(appId, targetParams)
+    );
     const defaultEnv = await this.tryReadDefaultEnv(appId, targetParams);
     if (defaultEnv === null) {
+      await classicReadiness;
       return;
     }
     const classicBindings = extractEventMeshBindings(defaultEnv);
     const advancedBindings = extractAdvancedEventMeshDiscovery(defaultEnv).brokerBindings;
     if (advancedBindings.length > 0) {
       this.classicViewer.closeEventMeshViewer(appId);
+      void classicReadiness.catch(() => undefined);
       await this.advancedViewer.openAdvancedEventMeshViewer(appId, targetParams, {
         classicAvailable: classicBindings.length > 0,
         defaultEnv,
       });
       return;
     }
+    await classicReadiness;
   }
 
   stopAllListeners(reason: EventMeshStopReason): void {

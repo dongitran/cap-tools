@@ -146,6 +146,77 @@ describe('EventMeshProviderRouter', () => {
     expect(classic.closeEventMeshViewer).not.toHaveBeenCalled();
   });
 
+  it('waits for classic viewer readiness after regular provider detection', async () => {
+    const classicGate = createDeferred<undefined>();
+    const classic = {
+      openEventMeshViewer: vi.fn(() => classicGate.promise),
+      closeEventMeshViewer: vi.fn(),
+      stopAllListeners: vi.fn(),
+    };
+    const advanced = { openAdvancedEventMeshViewer: vi.fn(), stopAllListeners: vi.fn() };
+    const params = makeTargetParams();
+    const fetchEnv = vi.fn(async () => JSON.stringify(regularEventEnv()));
+    const router = new EventMeshProviderRouter(classic, advanced, {
+      prepareCfCliSession: vi.fn(async () => undefined),
+      fetchDefaultEnvJsonFromTarget: fetchEnv,
+    });
+    let settled = false;
+
+    const openPromise = router.openEventMeshViewer('demo-app', params);
+    void openPromise.then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(fetchEnv).toHaveBeenCalled());
+
+    expect(settled).toBe(false);
+    expect(advanced.openAdvancedEventMeshViewer).not.toHaveBeenCalled();
+
+    classicGate.resolve(undefined);
+    await openPromise;
+
+    expect(settled).toBe(true);
+  });
+
+  it('waits for advanced viewer readiness without blocking provider detection on classic readiness', async () => {
+    const classicGate = createDeferred<undefined>();
+    const advancedGate = createDeferred<undefined>();
+    const classic = {
+      openEventMeshViewer: vi.fn(() => classicGate.promise),
+      closeEventMeshViewer: vi.fn(),
+      stopAllListeners: vi.fn(),
+    };
+    const advanced = {
+      openAdvancedEventMeshViewer: vi.fn(() => advancedGate.promise),
+      stopAllListeners: vi.fn(),
+    };
+    const params = makeTargetParams();
+    const env = advancedEventEnv();
+    const fetchEnv = vi.fn(async () => JSON.stringify(env));
+    const router = new EventMeshProviderRouter(classic, advanced, {
+      prepareCfCliSession: vi.fn(async () => undefined),
+      fetchDefaultEnvJsonFromTarget: fetchEnv,
+    });
+    let settled = false;
+
+    const openPromise = router.openEventMeshViewer('demo-app', params);
+    void openPromise.then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(fetchEnv).toHaveBeenCalled());
+
+    expect(classic.closeEventMeshViewer).toHaveBeenCalledWith('demo-app');
+    expect(advanced.openAdvancedEventMeshViewer).toHaveBeenCalledWith('demo-app', params, {
+      classicAvailable: false,
+      defaultEnv: env,
+    });
+    expect(settled).toBe(false);
+
+    advancedGate.resolve(undefined);
+    await openPromise;
+
+    expect(settled).toBe(true);
+  });
+
   it('opens the regular Event Mesh panel when only enterprise-messaging is bound', async () => {
     const classic = { openEventMeshViewer: vi.fn(), closeEventMeshViewer: vi.fn(), stopAllListeners: vi.fn() };
     const advanced = { openAdvancedEventMeshViewer: vi.fn(), stopAllListeners: vi.fn() };

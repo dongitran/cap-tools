@@ -147,6 +147,37 @@ describe('AdvancedEventMeshPanelManager webview security', () => {
     expect(firstPanel.reveal).not.toHaveBeenCalled();
   });
 
+  it('settles the open promise only after Advanced Event Mesh discovery posts ready', async () => {
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    const panel = createMockPanel();
+    createWebviewPanelMock.mockReturnValue(panel);
+    const manager = new AdvancedEventMeshPanelManager({} as never, { appendLine: vi.fn() } as never);
+    let settled = false;
+
+    const openPromise = Promise.resolve(
+      manager.openAdvancedEventMeshViewer('demo-app', makeTargetParams('space-a'), {
+        classicAvailable: false,
+      })
+    );
+    void openPromise.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    const handler = panel.webview.onDidReceiveMessage.mock.calls[0]?.[0] as
+      | ((raw: unknown) => void)
+      | undefined;
+    handler?.({ type: 'sapTools.aem.webviewReady' });
+    await openPromise;
+
+    expect(settled).toBe(true);
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'sapTools.aem.ready' })
+    );
+  });
+
   it('uses a preloaded default env on first initialization instead of fetching CF env again', async () => {
     const panel = createMockPanel();
     createWebviewPanelMock.mockReturnValue(panel);

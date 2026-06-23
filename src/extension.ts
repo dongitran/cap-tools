@@ -48,7 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.extensionUri,
     outputChannel,
     (appId, targetParams) => {
-      eventMeshPanelManager.openEventMeshViewer(appId, targetParams);
+      void eventMeshPanelManager.openEventMeshViewer(appId, targetParams);
     }
   );
   const eventMeshProviderRouter = new EventMeshProviderRouter(

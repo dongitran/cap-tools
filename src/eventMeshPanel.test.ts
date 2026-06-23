@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { createWebviewPanelMock } = vi.hoisted(() => ({
   createWebviewPanelMock: vi.fn(),
@@ -25,6 +25,10 @@ import {
 import type { EventMeshBinding } from './eventMeshBindings';
 import { isStaleDebugQueueName } from './eventMeshDebugQueues';
 import { parsePublishEventRequest } from './eventMeshPublishRequest';
+
+beforeEach(() => {
+  createWebviewPanelMock.mockReset();
+});
 
 interface MockPanel {
   readonly webview: {
@@ -130,6 +134,40 @@ describe('EventMeshPanelManager debug queue cleanup', () => {
 });
 
 describe('EventMeshPanelManager panel reuse', () => {
+  it('settles the open promise only after the initial Event Mesh load posts ready', async () => {
+    const originalTestMode = process.env['SAP_TOOLS_TEST_MODE'];
+    process.env['SAP_TOOLS_TEST_MODE'] = '1';
+    try {
+      const panel = createMockPanel();
+      createWebviewPanelMock.mockReturnValue(panel);
+      const manager = new EventMeshPanelManager({} as never, { appendLine: vi.fn() } as never);
+      let settled = false;
+
+      const openPromise = Promise.resolve(
+        manager.openEventMeshViewer('demo-app', makeTargetParams('space-a'))
+      );
+      void openPromise.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+
+      const handler = panel.webview.onDidReceiveMessage.mock.calls[0]?.[0] as
+        | ((raw: unknown) => void)
+        | undefined;
+      handler?.({ type: 'sapTools.events.webviewReady' });
+      await openPromise;
+
+      expect(settled).toBe(true);
+      expect(panel.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'sapTools.events.ready' })
+      );
+    } finally {
+      process.env['SAP_TOOLS_TEST_MODE'] = originalTestMode;
+    }
+  });
+
   it('recreates an existing app panel when the target scope changes', () => {
     const panels = [createMockPanel(), createMockPanel()];
     createWebviewPanelMock.mockImplementation(() => {

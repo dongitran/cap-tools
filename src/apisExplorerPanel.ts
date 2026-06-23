@@ -20,6 +20,7 @@ const API_TRACE_PREFERENCES_KEY = 'sapTools.apis.trace.preferences';
 export interface ApisExplorerPanelSession {
   readonly panel: vscode.WebviewPanel;
   readonly appId: string;
+  initialLoad: Promise<void>;
   catalogLoadGeneration: number;
   targetParams?: ApisExplorerTargetParams;
   traceSession?: ApiTraceSession;
@@ -56,9 +57,33 @@ function areTargetParamsEqual(
   );
 }
 
+interface InitialLoadGate {
+  readonly promise: Promise<void>;
+  settle(): void;
+}
+
+function createInitialLoadGate(): InitialLoadGate {
+  let settled = false;
+  let resolvePromise: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    settle: (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolvePromise();
+    },
+  };
+}
+
 export class ApisExplorerPanelManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly sessions = new Map<string, ApisExplorerPanelSession>();
+  private readonly initialLoadGates = new WeakMap<ApisExplorerPanelSession, InitialLoadGate>();
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -95,25 +120,51 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
   openApisExplorer(appId: string, targetParams?: ApisExplorerTargetParams): ApisExplorerPanelSession {
     const existingSession = this.sessions.get(appId);
     if (existingSession !== undefined) {
-      const targetChanged = !areTargetParamsEqual(existingSession.targetParams, targetParams);
-      if (targetChanged && (existingSession.traceSession?.isRunning() ?? false)) {
-        void this.stopTraceSession(existingSession, 'target-changed', true);
-      }
-      if (targetParams === undefined) {
-        delete existingSession.targetParams;
-      } else {
-        existingSession.targetParams = targetParams;
-      }
-      existingSession.traceSession?.updateTargetParams(targetParams);
-      existingSession.panel.reveal();
-      if (targetParams !== undefined) {
-        this.startApiDataLoad(existingSession, targetParams, targetChanged);
-      }
-      return existingSession;
+      return this.reopenApisExplorer(existingSession, targetParams);
     }
 
     this.log(`open APIs Explorer for app ${appId}`);
+    return this.createApisExplorerSession(appId, targetParams);
+  }
 
+  private reopenApisExplorer(
+    session: ApisExplorerPanelSession,
+    targetParams?: ApisExplorerTargetParams
+  ): ApisExplorerPanelSession {
+    const targetChanged = !areTargetParamsEqual(session.targetParams, targetParams);
+    if (targetChanged && (session.traceSession?.isRunning() ?? false)) {
+      void this.stopTraceSession(session, 'target-changed', true);
+    }
+    if (targetParams === undefined) {
+      delete session.targetParams;
+    } else {
+      session.targetParams = targetParams;
+    }
+    session.traceSession?.updateTargetParams(targetParams);
+    session.panel.reveal();
+    this.startApisLoadForSession(session, targetParams, targetChanged);
+    return session;
+  }
+
+  private startApisLoadForSession(
+    session: ApisExplorerPanelSession,
+    targetParams: ApisExplorerTargetParams | undefined,
+    targetChanged: boolean
+  ): void {
+    if (targetParams === undefined) {
+      this.settleInitialLoad(session);
+      return;
+    }
+    if (targetChanged) {
+      this.resetInitialLoad(session);
+    }
+    this.startApiDataLoad(session, targetParams, targetChanged);
+  }
+
+  private createApisExplorerSession(
+    appId: string,
+    targetParams?: ApisExplorerTargetParams
+  ): ApisExplorerPanelSession {
     const panel = vscode.window.createWebviewPanel(
       APIS_EXPLORER_VIEW_TYPE,
       `APIs Explorer · ${appId}`,
@@ -128,34 +179,51 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     const session: ApisExplorerPanelSession = {
       panel,
       appId,
+      initialLoad: Promise.resolve(),
       catalogLoadGeneration: 0,
       disposed: false,
     };
+    this.resetInitialLoad(session);
+    if (targetParams === undefined) {
+      this.settleInitialLoad(session);
+    }
     if (targetParams !== undefined) {
       session.targetParams = targetParams;
     }
     this.sessions.set(appId, session);
 
     panel.webview.html = this.buildWebviewHtml(panel.webview, appId);
+    this.bindPanelLifecycle(session);
+    return session;
+  }
 
+  private bindPanelLifecycle(session: ApisExplorerPanelSession): void {
     const panelDisposables: vscode.Disposable[] = [];
-
-    panel.onDidDispose(() => {
+    session.panel.onDidDispose(() => {
       session.disposed = true;
-      this.sessions.delete(appId);
+      this.settleInitialLoad(session);
+      this.sessions.delete(session.appId);
       void this.stopTraceSession(session, 'panel-closed', true);
       while (panelDisposables.length > 0) {
         panelDisposables.pop()?.dispose();
       }
     });
-
-    panel.webview.onDidReceiveMessage(
+    session.panel.webview.onDidReceiveMessage(
       (message: unknown) => this.handleWebviewMessage(session, message),
       null,
       panelDisposables
     );
+  }
 
-    return session;
+  private resetInitialLoad(session: ApisExplorerPanelSession): void {
+    this.initialLoadGates.get(session)?.settle();
+    const gate = createInitialLoadGate();
+    this.initialLoadGates.set(session, gate);
+    session.initialLoad = gate.promise;
+  }
+
+  private settleInitialLoad(session: ApisExplorerPanelSession): void {
+    this.initialLoadGates.get(session)?.settle();
   }
 
   private async handleWebviewMessage(
@@ -308,6 +376,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
   ): Promise<void> {
     if (isTestMode()) {
       this.postMockApiCatalog(session);
+      this.settleInitialLoad(session);
       return;
     }
     try {
@@ -319,6 +388,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
         type: 'sapTools.apis.error',
         payload: { message: error instanceof Error ? error.message : String(error) },
       });
+      this.settleInitialLoad(session);
     }
   }
 
@@ -351,6 +421,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
         type: 'sapTools.apis.error',
         payload: { message: `No route found for app ${session.appId}` },
       });
+      this.settleInitialLoad(session);
       return;
     }
     const cacheKey = JSON.stringify([
@@ -364,6 +435,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
     if (cachedCatalog !== null) {
       this.log(`Cache hit for ${session.appId} API catalog; refreshing in background.`);
       this.post(session, { type: 'sapTools.apis.catalogLoaded', payload: cachedCatalog });
+      this.settleInitialLoad(session);
     }
     await this.refreshApiCatalog(session, targetParams, generation, routeUrl, cacheKey, cachedCatalog !== null);
   }
@@ -407,6 +479,7 @@ export class ApisExplorerPanelManager implements vscode.Disposable {
       type: 'sapTools.apis.catalogLoaded',
       payload: { ...catalog, isBackgroundUpdate },
     });
+    this.settleInitialLoad(session);
   }
 
   private async handleExecuteRequest(

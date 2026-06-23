@@ -69,6 +69,7 @@ interface PanelSession {
   readonly panel: vscode.WebviewPanel;
   readonly appId: string;
   readonly targetParams: EventMeshTargetParams | undefined;
+  readonly initialLoad: InitialLoadGate;
   bindings: EventMeshBinding[];
   readonly clientsByBinding: Map<number, EventMeshManagementClient>;
   readonly discoveredByBinding: Map<number, string[]>;
@@ -79,6 +80,29 @@ interface PanelSession {
   sequence: number;
   buffer: OutgoingEventMessage[];
   flushTimer: ReturnType<typeof setTimeout> | null;
+}
+
+interface InitialLoadGate {
+  readonly promise: Promise<void>;
+  settle(): void;
+}
+
+function createInitialLoadGate(): InitialLoadGate {
+  let settled = false;
+  let resolvePromise: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    settle: (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolvePromise();
+    },
+  };
 }
 
 function isTestMode(): boolean {
@@ -182,22 +206,44 @@ export class EventMeshPanelManager implements vscode.Disposable {
     }
   }
 
-  openEventMeshViewer(appId: string, targetParams?: EventMeshTargetParams): void {
-    const existing = this.sessions.get(appId);
-    if (existing !== undefined) {
-      if (areTargetParamsEqual(existing.targetParams, targetParams)) {
-        existing.panel.reveal();
-        return;
-      }
-      existing.panel.dispose();
-      if (this.sessions.get(appId) === existing) {
-        this.sessions.delete(appId);
-      }
+  openEventMeshViewer(appId: string, targetParams?: EventMeshTargetParams): Promise<void> {
+    const existingReadiness = this.revealExistingSession(appId, targetParams);
+    if (existingReadiness !== null) {
+      return existingReadiness;
     }
 
     this.log(`open Event viewer for app ${appId}`);
+    const panel = this.createPanel(appId);
+    const session = this.createPanelSession(panel, appId, targetParams);
+    this.sessions.set(appId, session);
+    panel.webview.html = buildEventMeshWebviewHtml(this.extensionUri, panel.webview, appId);
+    this.bindPanelLifecycle(session);
+    return session.initialLoad.promise;
+  }
 
-    const panel = vscode.window.createWebviewPanel(
+  private revealExistingSession(
+    appId: string,
+    targetParams?: EventMeshTargetParams
+  ): Promise<void> | null {
+    const existing = this.sessions.get(appId);
+    if (existing === undefined) {
+      return null;
+    }
+
+    if (areTargetParamsEqual(existing.targetParams, targetParams)) {
+      existing.panel.reveal();
+      return existing.initialLoad.promise;
+    }
+
+    existing.panel.dispose();
+    if (this.sessions.get(appId) === existing) {
+      this.sessions.delete(appId);
+    }
+    return null;
+  }
+
+  private createPanel(appId: string): vscode.WebviewPanel {
+    return vscode.window.createWebviewPanel(
       EVENT_MESH_VIEW_TYPE,
       `Event Mesh · ${appId}`,
       { preserveFocus: false, viewColumn: vscode.ViewColumn.Active },
@@ -207,11 +253,18 @@ export class EventMeshPanelManager implements vscode.Disposable {
         retainContextWhenHidden: true,
       }
     );
+  }
 
+  private createPanelSession(
+    panel: vscode.WebviewPanel,
+    appId: string,
+    targetParams?: EventMeshTargetParams
+  ): PanelSession {
     const session: PanelSession = {
       panel,
       appId,
       targetParams,
+      initialLoad: createInitialLoadGate(),
       bindings: [],
       clientsByBinding: new Map(),
       discoveredByBinding: new Map(),
@@ -224,19 +277,20 @@ export class EventMeshPanelManager implements vscode.Disposable {
       flushTimer: null,
     };
     session.listenSession = this.createListenSession(session);
-    this.sessions.set(appId, session);
+    return session;
+  }
 
-    panel.webview.html = buildEventMeshWebviewHtml(this.extensionUri, panel.webview, appId);
-
-    panel.onDidDispose(() => {
+  private bindPanelLifecycle(session: PanelSession): void {
+    session.panel.onDidDispose(() => {
       session.disposed = true;
-      if (this.sessions.get(appId) === session) {
-        this.sessions.delete(appId);
+      session.initialLoad.settle();
+      if (this.sessions.get(session.appId) === session) {
+        this.sessions.delete(session.appId);
       }
       void this.stopListening(session, 'panel-closed', false);
     });
 
-    panel.webview.onDidReceiveMessage((raw: unknown) => {
+    session.panel.webview.onDidReceiveMessage((raw: unknown) => {
       void this.handleWebviewMessage(session, raw);
     });
   }
@@ -302,12 +356,14 @@ export class EventMeshPanelManager implements vscode.Disposable {
   private async initSession(session: PanelSession): Promise<void> {
     if (isTestMode()) {
       this.postMockReady(session);
+      session.initialLoad.settle();
       return;
     }
 
     const target = session.targetParams;
     if (target === undefined) {
       this.postError(session, 'init', 'Sign in and confirm a region/org/space before listening to events.');
+      session.initialLoad.settle();
       return;
     }
 
@@ -331,6 +387,7 @@ export class EventMeshPanelManager implements vscode.Disposable {
           'init',
           `No "enterprise-messaging" service is bound to "${session.appId}".`
         );
+        session.initialLoad.settle();
         return;
       }
       session.bindings = bindings;
@@ -347,9 +404,11 @@ export class EventMeshPanelManager implements vscode.Disposable {
           instanceName: binding.instanceName,
         })),
       });
+      session.initialLoad.settle();
       await this.discoverAndPostTopics(session, bindings[0]?.index ?? 0);
     } catch (error) {
       this.postError(session, 'init', describeError(error));
+      session.initialLoad.settle();
     }
   }
 

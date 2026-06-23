@@ -1,4 +1,8 @@
 // cspell:words unstub
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as vscode from 'vscode';
@@ -228,7 +232,7 @@ function createProviderFixture(): ProviderFixture {
     appendLine: vi.fn(),
   } as unknown as vscode.OutputChannel;
   const apisExplorerPanelManager = {
-    openApisExplorer: vi.fn(),
+    openApisExplorer: vi.fn(() => ({ initialLoad: Promise.resolve() })),
     stopAllTraces: vi.fn(),
     dispose: vi.fn(),
   } as unknown as ApisExplorerPanelManager;
@@ -602,19 +606,53 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     );
   });
 
-  it('notifies the sidebar when Event Mesh opening settles', async () => {
-    const { access, eventMeshOpenViewerMock } = createProviderFixture();
+  it('notifies the sidebar only after APIs Explorer readiness settles', async () => {
+    const { access, apisOpenExplorerMock } = createProviderFixture();
     const postMessageSpy = vi.spyOn(access, 'postMessage');
+    const openGate = createDeferred();
+    apisOpenExplorerMock.mockReturnValue({ initialLoad: openGate.promise });
     access.currentConfirmedScope = {
       regionCode: 'us10',
       orgName: 'finance-services-prod',
       spaceName: 'uat',
     };
 
-    await access.handleWebviewMessage({
+    const openMessage = access.handleWebviewMessage({
+      type: 'saptools.openApisExplorer',
+      appId: 'finance-uat-api',
+    });
+    await vi.waitFor(() => expect(apisOpenExplorerMock).toHaveBeenCalled());
+
+    expect(postMessageSpy).not.toHaveBeenCalledWith({
+      type: 'sapTools.apisExplorerSettled',
+      appId: 'finance-uat-api',
+    });
+
+    openGate.resolve();
+    await openMessage;
+
+    expect(postMessageSpy).toHaveBeenCalledWith({
+      type: 'sapTools.apisExplorerSettled',
+      appId: 'finance-uat-api',
+    });
+  });
+
+  it('notifies the sidebar only after Event Mesh viewer readiness settles', async () => {
+    const { access, eventMeshOpenViewerMock } = createProviderFixture();
+    const postMessageSpy = vi.spyOn(access, 'postMessage');
+    const openGate = createDeferred();
+    eventMeshOpenViewerMock.mockReturnValue(openGate.promise);
+    access.currentConfirmedScope = {
+      regionCode: 'us10',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+    };
+
+    const openMessage = access.handleWebviewMessage({
       type: 'saptools.openEventMesh',
       appId: 'finance-uat-api',
     });
+    await vi.waitFor(() => expect(eventMeshOpenViewerMock).toHaveBeenCalled());
 
     expect(eventMeshOpenViewerMock).toHaveBeenCalledWith(
       'finance-uat-api',
@@ -624,7 +662,19 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
         spaceName: 'uat',
       })
     );
+    expect(postMessageSpy).not.toHaveBeenCalledWith({
+      type: 'sapTools.eventMeshViewerSettled',
+      appId: 'finance-uat-api',
+    });
+
+    openGate.resolve();
+    await openMessage;
+
     expect(postMessageSpy).toHaveBeenCalledWith({
+      type: 'sapTools.eventMeshViewerSettled',
+      appId: 'finance-uat-api',
+    });
+    expect(postMessageSpy).not.toHaveBeenCalledWith({
       type: 'sapTools.eventMeshOpenSettled',
       appId: 'finance-uat-api',
     });
@@ -797,12 +847,11 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
     );
   });
 
-  it('continues loading spaces when cached root folder restore fails for an org', async () => {
+  it('continues loading spaces without restoring root folders at org selection', async () => {
     const {
       access,
       cacheStoreGetExportRootFolderMock,
       cacheSyncGetCachedSpacesMock,
-      outputAppendLineMock,
     } = createProviderFixture();
     const postMessageSpy = vi.spyOn(access, 'postMessage');
     access.selectedRegionId = 'us10';
@@ -816,9 +865,7 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
       },
     };
     access.cfSessionRegionCode = 'us-10';
-    cacheStoreGetExportRootFolderMock.mockRejectedValue(
-      new Error('root folder cache unavailable')
-    );
+    cacheStoreGetExportRootFolderMock.mockRejectedValue(new Error('should not read'));
     cacheSyncGetCachedSpacesMock.mockResolvedValue(null);
     vi.stubGlobal(
       'fetch',
@@ -839,9 +886,73 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
       type: 'sapTools.spacesLoaded',
       spaces: [{ guid: 'space-guid-1', name: 'dev' }],
     });
-    expect(outputAppendLineMock).toHaveBeenCalledWith(
-      expect.stringContaining('[cache] Failed to restore root folder for org org-guid-1:')
-    );
+    expect(cacheStoreGetExportRootFolderMock).not.toHaveBeenCalled();
+  });
+
+  it('restores cached Apps root folders by loaded space', async () => {
+    const rootFolder = mkdtempSync(join(tmpdir(), 'sap-tools-root-'));
+    try {
+      const { access, cacheStoreGetExportRootFolderMock } = createProviderFixture();
+      const postMessageSpy = vi.spyOn(access, 'postMessage');
+      const apps = [
+        { id: 'finance-uat-api', name: 'finance-uat-api', runningInstances: 1 },
+      ];
+      cacheStoreGetExportRootFolderMock.mockImplementation(
+        async (
+          _email: string,
+          _regionCode: string,
+          _orgGuid: string,
+          spaceName: string
+        ) => {
+          return spaceName === 'uat'
+            ? { rootFolderPath: rootFolder, updatedAt: '2026-06-22T00:00:00.000Z' }
+            : null;
+        }
+      );
+      access.selectedRegionId = 'us10';
+      access.selectedRegionCode = 'us-10';
+      access.selectedOrgGuid = 'org-guid-1';
+
+      await access.postAppsLoaded(
+        apps,
+        { spaceName: 'uat', orgGuid: 'org-guid-1', orgName: 'demo-org' },
+        { email: 'test@example.com', password: 'test-password' },
+        '/tmp/cf-home',
+        'us-10'
+      );
+
+      expect(cacheStoreGetExportRootFolderMock).toHaveBeenCalledWith(
+        'test@example.com',
+        'us-10',
+        'org-guid-1',
+        'uat'
+      );
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: 'sapTools.localRootFolderUpdated',
+        path: rootFolder,
+      });
+
+      await access.postAppsLoaded(
+        apps,
+        { spaceName: 'prod', orgGuid: 'org-guid-1', orgName: 'demo-org' },
+        { email: 'test@example.com', password: 'test-password' },
+        '/tmp/cf-home',
+        'us-10'
+      );
+
+      expect(cacheStoreGetExportRootFolderMock).toHaveBeenCalledWith(
+        'test@example.com',
+        'us-10',
+        'org-guid-1',
+        'prod'
+      );
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: 'sapTools.localRootFolderUpdated',
+        path: '',
+      });
+    } finally {
+      rmSync(rootFolder, { recursive: true, force: true });
+    }
   });
 
   it('posts a spaces error when cached space lookup fails for an org', async () => {

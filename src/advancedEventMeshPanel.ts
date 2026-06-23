@@ -51,6 +51,7 @@ interface AdvancedEventMeshPanelSession {
   readonly appId: string;
   readonly targetParams: EventMeshTargetParams;
   readonly providerTabs: AdvancedEventMeshProviderTabs;
+  readonly initialLoad: InitialLoadGate;
   preloadedDefaultEnv: Record<string, unknown> | null;
   abortController: AbortController | null;
   binding: AdvancedEventMeshBinding | null;
@@ -61,6 +62,29 @@ interface AdvancedEventMeshPanelSession {
   buffer: AdvancedOutgoingEventMessage[];
   flushTimer: ReturnType<typeof setTimeout> | null;
   disposed: boolean;
+}
+
+interface InitialLoadGate {
+  readonly promise: Promise<void>;
+  settle(): void;
+}
+
+function createInitialLoadGate(): InitialLoadGate {
+  let settled = false;
+  let resolvePromise: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    settle: (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolvePromise();
+    },
+  };
 }
 
 interface AdvancedEventMeshBindingPayload {
@@ -222,7 +246,7 @@ export class AdvancedEventMeshPanelManager implements vscode.Disposable {
     appId: string,
     targetParams: EventMeshTargetParams,
     options: AdvancedEventMeshPanelOptions
-  ): void {
+  ): Promise<void> {
     const providerTabs = { classicAvailable: options.classicAvailable };
     const existing = this.sessions.get(appId);
     if (existing !== undefined) {
@@ -231,7 +255,7 @@ export class AdvancedEventMeshPanelManager implements vscode.Disposable {
         existing.providerTabs.classicAvailable === providerTabs.classicAvailable
       ) {
         existing.panel.reveal();
-        return;
+        return existing.initialLoad.promise;
       }
       existing.panel.dispose();
       if (this.sessions.get(appId) === existing) {
@@ -246,6 +270,7 @@ export class AdvancedEventMeshPanelManager implements vscode.Disposable {
       appId,
       targetParams,
       providerTabs,
+      initialLoad: createInitialLoadGate(),
       preloadedDefaultEnv: options.defaultEnv ?? null,
       abortController: null,
       binding: null,
@@ -265,6 +290,7 @@ export class AdvancedEventMeshPanelManager implements vscode.Disposable {
       providerTabs
     );
     this.bindPanelLifecycle(session);
+    return session.initialLoad.promise;
   }
 
   private createPanel(appId: string): vscode.WebviewPanel {
@@ -283,6 +309,7 @@ export class AdvancedEventMeshPanelManager implements vscode.Disposable {
   private bindPanelLifecycle(session: AdvancedEventMeshPanelSession): void {
     session.panel.onDidDispose(() => {
       session.disposed = true;
+      session.initialLoad.settle();
       session.abortController?.abort();
       void this.stopListening(session, 'panel-closed', false);
       if (this.sessions.get(session.appId) === session) {
@@ -342,10 +369,12 @@ export class AdvancedEventMeshPanelManager implements vscode.Disposable {
       unreadableQueueCount: payload.unreadableQueueCount,
       providerTabs: payload.providerTabs,
     });
+    session.initialLoad.settle();
   }
 
   private postError(session: AdvancedEventMeshPanelSession, message: string): void {
     this.post(session, 'sapTools.aem.error', { message });
+    session.initialLoad.settle();
   }
 
   private async initSession(session: AdvancedEventMeshPanelSession): Promise<void> {

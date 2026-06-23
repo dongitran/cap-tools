@@ -77,9 +77,10 @@ export class CacheStore {
   async getExportRootFolder(
     email: string,
     regionCode: string,
-    orgGuid: string
+    orgGuid: string,
+    spaceName: string
   ): Promise<ExportRootFolderCacheEntry | null> {
-    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid);
+    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid, spaceName);
     if (scopeKey.length === 0) {
       return null;
     }
@@ -93,9 +94,10 @@ export class CacheStore {
     email: string,
     regionCode: string,
     orgGuid: string,
+    spaceName: string,
     rootFolderPath: string
   ): Promise<ExportRootFolderCacheEntry> {
-    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid);
+    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid, spaceName);
     if (scopeKey.length === 0) {
       throw new Error('Cannot cache export root folder for an empty scope key.');
     }
@@ -126,9 +128,10 @@ export class CacheStore {
   async deleteExportRootFolder(
     email: string,
     regionCode: string,
-    orgGuid: string
+    orgGuid: string,
+    spaceName: string
   ): Promise<void> {
-    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid);
+    const scopeKey = buildExportRootFolderScopeKey(email, regionCode, orgGuid, spaceName);
     if (scopeKey.length === 0) {
       return;
     }
@@ -391,20 +394,23 @@ export function normalizeOrgGuid(orgGuid: string): string {
 export function buildExportRootFolderScopeKey(
   email: string,
   regionCode: string,
-  orgGuid: string
+  orgGuid: string,
+  spaceName: string
 ): string {
   const normalizedEmail = normalizeUserEmail(email);
   const normalizedRegionCode = normalizeRegionCode(regionCode);
   const normalizedOrgGuid = normalizeOrgGuid(orgGuid);
+  const normalizedSpaceName = normalizeSpaceName(spaceName);
   if (
     normalizedEmail.length === 0 ||
     normalizedRegionCode.length === 0 ||
-    normalizedOrgGuid.length === 0
+    normalizedOrgGuid.length === 0 ||
+    normalizedSpaceName.length === 0
   ) {
     return '';
   }
 
-  return `${normalizedEmail}::${normalizedRegionCode}::${normalizedOrgGuid}`;
+  return `${normalizedEmail}::${normalizedRegionCode}::${normalizedOrgGuid}::${normalizedSpaceName}`;
 }
 
 export function normalizeApiEndpoint(value: string): string {
@@ -653,13 +659,14 @@ function normalizeExportRootFolders(
 }
 
 function normalizeScopeKey(scopeKey: string): string {
-  const [emailPartRaw, regionCodePartRaw, orgGuidPartRaw] = scopeKey
+  const [emailPartRaw, regionCodePartRaw, orgGuidPartRaw, spaceNamePartRaw] = scopeKey
     .split('::')
     .map((part) => part.trim());
   if (
     emailPartRaw === undefined ||
     regionCodePartRaw === undefined ||
-    orgGuidPartRaw === undefined
+    orgGuidPartRaw === undefined ||
+    spaceNamePartRaw === undefined
   ) {
     return '';
   }
@@ -667,7 +674,8 @@ function normalizeScopeKey(scopeKey: string): string {
   return buildExportRootFolderScopeKey(
     emailPartRaw,
     regionCodePartRaw,
-    orgGuidPartRaw
+    orgGuidPartRaw,
+    spaceNamePartRaw
   );
 }
 

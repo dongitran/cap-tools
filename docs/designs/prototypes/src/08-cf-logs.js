@@ -275,6 +275,7 @@ function resetActiveAppLoggingState() {
   selectedAppLogIds = [];
   activeAppLogIds = [];
   pausedAppLogIds = [];
+  apisOpeningAppId = '';
   eventOpeningAppId = '';
   statusMessage = '';
   if (hadActiveApps) {

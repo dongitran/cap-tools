@@ -197,19 +197,29 @@ describe('prototype Log-API-Event workspace', () => {
   it('keeps Log-API-Event actions visible with an Event spinner while Event opens', async () => {
     const renderSource = await readWorkspaceRenderSource();
     const eventsSource = await readEventsSource();
+    const quickSelectionSource = await readQuickSelectionSource();
     const styles = await readLogsStylesSource();
 
+    expect(renderSource).toContain('apisOpeningAppId === app.id');
     expect(renderSource).toContain('eventOpeningAppId === app.id');
+    expect(renderSource).toContain('is-apis-opening');
     expect(renderSource).toContain('is-event-opening');
+    expect(renderSource).toContain('aria-busy="${isApisOpening}"');
+    expect(renderSource).toContain("${isApisOpening ? 'disabled' : ''}");
     expect(renderSource).toContain('aria-busy="${isEventOpening}"');
     expect(renderSource).toContain("${isEventOpening ? 'disabled' : ''}");
+    expect(renderSource).toContain('app-log-apis-spinner');
     expect(renderSource).toContain('app-log-event-spinner');
+    expect(quickSelectionSource).toContain('setApisExplorerOpening(appId)');
+    expect(eventsSource).toContain("apisOpeningAppId = appId;");
     expect(eventsSource).toContain("eventOpeningAppId = appId;");
-    expect(eventsSource).toContain("'sapTools.eventMeshOpenSettled'");
+    expect(eventsSource).toContain("'sapTools.apisExplorerSettled'");
+    expect(eventsSource).toContain("'sapTools.eventMeshViewerSettled'");
+    expect(eventsSource).not.toContain("'sapTools.eventMeshOpenSettled'");
     expect(styles).toMatch(
-      /\.app-log-item:is\(:hover,\s*\.is-event-opening\) \.app-log-apis-btn\s*\{[\s\S]*?display:\s*inline-flex;/
+      /\.app-log-item:is\(:hover,[\s\S]*?\.is-apis-opening,[\s\S]*?\.is-event-opening\) \.app-log-apis-btn\s*\{[\s\S]*?display:\s*inline-flex;/
     );
-    expect(styles).toContain('.app-log-event-spinner');
+    expect(styles).toContain('.app-log-action-spinner');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
