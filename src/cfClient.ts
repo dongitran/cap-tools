@@ -38,6 +38,7 @@ const CF_API_REQUEST_TIMEOUT_MS = 20_000;
 const CF_V3_PAGE_SIZE = 200;
 const CF_RETRY_MAX_ATTEMPTS = 3;
 const CF_RETRY_BASE_DELAY_MS = 120;
+const CF_SSH_READY_TIMEOUT_MS = 60_000;
 
 interface CfCliExecutionOptions {
   readonly cfHomeDir?: string;
@@ -610,6 +611,43 @@ export function spawnCfSshPortForward(params: {
   };
 }
 
+export async function ensureCfAppSshEnabled(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<void> {
+  const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
+  const statusStdout = await runCfCommand(['ssh-enabled', params.appName], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to check CF SSH status for app "${params.appName}".`,
+  });
+  const status = parseCfAppSshStatus(statusStdout);
+  if (status === 'enabled') {
+    return;
+  }
+  if (status !== 'disabled') {
+    throw new Error(`Could not determine CF SSH status for app "${params.appName}".`);
+  }
+  await runCfCommand(['enable-ssh', params.appName], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to enable CF SSH for app "${params.appName}".`,
+  });
+  await runCfCommand(['restart', params.appName], {
+    ...cfHomeOptions,
+    failureMessage: `Failed to restart app "${params.appName}" after enabling CF SSH.`,
+  });
+  const smokeCheckParams = {
+    appName: params.appName,
+    command: 'true',
+    timeoutMs: CF_SSH_READY_TIMEOUT_MS,
+    failureMessage: `CF SSH did not become reachable for app "${params.appName}" after restart.`,
+  };
+  await runCfSshCommandFromTarget(
+    params.cfHomeDir === undefined
+      ? smokeCheckParams
+      : { ...smokeCheckParams, cfHomeDir: params.cfHomeDir }
+  );
+}
+
 export async function runCfSshCommandFromTarget(params: {
   readonly appName: string;
   readonly command: string;
@@ -633,6 +671,17 @@ export async function runCfSshCommandFromTarget(params: {
     buildCfSshArgs(params.appName, params.instanceIndex, ['-c', params.command]),
     commandOptions
   );
+}
+
+function parseCfAppSshStatus(stdout: string): 'enabled' | 'disabled' | 'unknown' {
+  const normalized = stdout.toLowerCase().replaceAll(/\s+/g, ' ').trim();
+  if (normalized.includes('disabled') || normalized.includes('not enabled')) {
+    return 'disabled';
+  }
+  if (normalized.includes('enabled')) {
+    return 'enabled';
+  }
+  return 'unknown';
 }
 
 async function runCfCommand(

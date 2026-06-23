@@ -187,6 +187,7 @@ describe('ApiTraceSession', () => {
       },
       dependencies: {
         prepareCfCliSession: vi.fn(async () => undefined),
+        ensureAppSshEnabled: vi.fn(async () => undefined),
         tryStartNodeInspector: vi.fn(async () => true),
         openInspectorTunnel: vi.fn(async (): Promise<ApiTraceTunnelReadyResult> => ({
           status: 'ready',
@@ -220,6 +221,7 @@ describe('ApiTraceSession', () => {
 
     expect(states.map((state) => state.state)).toEqual([
       'preparingCli',
+      'enablingSsh',
       'checkingRuntime',
       'openingTunnel',
       'injecting',
@@ -234,6 +236,125 @@ describe('ApiTraceSession', () => {
     expect(inspectorClient.evaluate).toHaveBeenCalledWith(expect.stringContaining('uninstall'), 5000);
     expect(inspectorClient.close).toHaveBeenCalledTimes(1);
     expect(tunnelHandle.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('ensures CF SSH is enabled before signaling the Node Inspector', async () => {
+    const calls: string[] = [];
+    const ensureAppSshEnabled = vi.fn(async () => {
+      calls.push('ensure-ssh');
+    });
+    const tryStartNodeInspector = vi.fn(async () => {
+      calls.push('signal-inspector');
+      return false;
+    });
+    const session = new ApiTraceSession({
+      appId: 'finance-uat-api',
+      targetParams: {
+        apiEndpoint: 'https://api.example.com',
+        email: 'user@example.com',
+        password: 'secret',
+        orgName: 'demo-org',
+        spaceName: 'demo-space',
+        cfHomeDir: '/tmp/cf-home',
+      },
+      isTestMode: false,
+      callbacks: {
+        postState: vi.fn(),
+        postBatch: vi.fn(),
+        postUrlSummary: vi.fn(),
+        log: vi.fn(),
+      },
+      dependencies: {
+        prepareCfCliSession: vi.fn(async () => {
+          calls.push('prepare-cli');
+        }),
+        ensureAppSshEnabled,
+        tryStartNodeInspector,
+        openInspectorTunnel: vi.fn(async () => ({ status: 'not-reachable' })),
+        createInspectorClient: vi.fn(),
+      },
+    });
+
+    await session.start({
+      mode: 'runtime-http',
+      instanceIndex: 0,
+      processName: 'web',
+      captureHeaders: false,
+      captureRequestBody: false,
+      captureResponseBody: false,
+      maxBodyBytes: 4096,
+      filters: {
+        method: [],
+        pathContains: '',
+        statusClass: 'all',
+      },
+    });
+
+    expect(calls).toEqual(['prepare-cli', 'ensure-ssh', 'signal-inspector']);
+    expect(ensureAppSshEnabled).toHaveBeenCalledWith({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/cf-home',
+      instanceIndex: 0,
+    });
+    expect(tryStartNodeInspector).toHaveBeenCalledWith({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/cf-home',
+      instanceIndex: 0,
+    });
+  });
+
+  it('reports a startup error instead of needsInspector when CF SSH enablement fails', async () => {
+    const states: ApiTraceStatePayload[] = [];
+    const log = vi.fn();
+    const tryStartNodeInspector = vi.fn(async () => true);
+    const session = new ApiTraceSession({
+      appId: 'finance-uat-api',
+      targetParams: {
+        apiEndpoint: 'https://api.example.com',
+        email: 'user@example.com',
+        password: 'secret',
+        orgName: 'demo-org',
+        spaceName: 'demo-space',
+      },
+      isTestMode: false,
+      callbacks: {
+        postState: (state) => states.push(state),
+        postBatch: vi.fn(),
+        postUrlSummary: vi.fn(),
+        log,
+      },
+      dependencies: {
+        prepareCfCliSession: vi.fn(async () => undefined),
+        ensureAppSshEnabled: vi.fn(async () => {
+          throw new Error('CF SSH cannot be enabled for this app.');
+        }),
+        tryStartNodeInspector,
+        openInspectorTunnel: vi.fn(async () => ({ status: 'not-reachable' })),
+        createInspectorClient: vi.fn(),
+      },
+    });
+
+    await session.start({
+      mode: 'runtime-http',
+      instanceIndex: 0,
+      processName: 'web',
+      captureHeaders: false,
+      captureRequestBody: false,
+      captureResponseBody: false,
+      maxBodyBytes: 4096,
+      filters: {
+        method: [],
+        pathContains: '',
+        statusClass: 'all',
+      },
+    });
+
+    expect(states.map((state) => state.state)).toEqual(['preparingCli', 'enablingSsh', 'error']);
+    expect(states.map((state) => state.state)).not.toContain('needsInspector');
+    expect(tryStartNodeInspector).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      'Live Trace startup failed for finance-uat-api: CF SSH cannot be enabled for this app.'
+    );
   });
 
   it('logs runtime startup failures before showing the trace error state', async () => {
@@ -320,6 +441,7 @@ describe('ApiTraceSession', () => {
       },
       dependencies: {
         prepareCfCliSession: vi.fn(async () => undefined),
+        ensureAppSshEnabled: vi.fn(async () => undefined),
         tryStartNodeInspector: vi.fn(async () => true),
         openInspectorTunnel: vi.fn(async (): Promise<ApiTraceTunnelReadyResult> => ({
           status: 'ready',
@@ -390,6 +512,7 @@ describe('ApiTraceSession', () => {
       },
       dependencies: {
         prepareCfCliSession: vi.fn(async () => undefined),
+        ensureAppSshEnabled: vi.fn(async () => undefined),
         tryStartNodeInspector: vi.fn(async () => true),
         openInspectorTunnel: vi.fn(async () => tunnelDeferred.promise),
         createInspectorClient,
@@ -446,6 +569,7 @@ describe('ApiTraceSession', () => {
       },
       dependencies: {
         prepareCfCliSession: vi.fn(async () => undefined),
+        ensureAppSshEnabled: vi.fn(async () => undefined),
         tryStartNodeInspector: vi.fn(async () => false),
         openInspectorTunnel: vi.fn(async () => ({ status: 'not-reachable' })),
         createInspectorClient: vi.fn(),

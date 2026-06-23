@@ -530,6 +530,7 @@ function formatTraceStateLabel(state) {
   const labels = {
     idle: 'Idle',
     preparingCli: 'Starting',
+    enablingSsh: 'Enabling SSH',
     checkingRuntime: 'Checking runtime',
     openingTunnel: 'Opening tunnel',
     injecting: 'Installing hook',
@@ -957,7 +958,7 @@ function renderTraceDetail(event) {
 function renderTraceActionCluster() {
   const isActive = isTraceActiveState(apiTraceState);
   const canStop = isTraceStoppableState(apiTraceState);
-  const isProgress = ['preparingCli', 'checkingRuntime', 'openingTunnel', 'injecting', 'stopping'].includes(apiTraceState);
+  const isProgress = ['preparingCli', 'enablingSsh', 'checkingRuntime', 'openingTunnel', 'injecting', 'stopping'].includes(apiTraceState);
   const statusClass = apiTraceState === 'error'
     ? 'is-error'
     : isProgress
@@ -1059,7 +1060,7 @@ function renderLiveTracePanel() {
 }
 
 function isTraceActiveState(state) {
-  return ['preparingCli', 'checkingRuntime', 'openingTunnel', 'injecting', 'streaming', 'paused', 'stopping'].includes(state);
+  return ['preparingCli', 'enablingSsh', 'checkingRuntime', 'openingTunnel', 'injecting', 'streaming', 'paused', 'stopping'].includes(state);
 }
 
 function isTraceStoppableState(state) {

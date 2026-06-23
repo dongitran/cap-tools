@@ -1,6 +1,6 @@
 import { truncatePreview } from './apiTracePreview';
 import { buildTraceUrlSummaries } from './apiTraceSummary';
-import { prepareCfCliSession } from './cfClient';
+import { ensureCfAppSshEnabled, prepareCfCliSession } from './cfClient';
 import { buildApiTraceDrainExpression, buildApiTraceInstallExpression, buildApiTraceStopExpression } from './apiTraceInjectionSource';
 import { createApiTraceInspectorClient, type ApiTraceInspectorClient } from './apiTraceInspectorClient';
 import { parseApiTraceDrainResult } from './apiTracePayload';
@@ -41,6 +41,11 @@ export interface ApiTraceSessionOptions {
 
 export interface ApiTraceSessionDependencies {
   prepareCfCliSession(targetParams: ApiTraceTargetParams): Promise<void>;
+  ensureAppSshEnabled(params: {
+    readonly appName: string;
+    readonly cfHomeDir?: string;
+    readonly instanceIndex: number;
+  }): Promise<void>;
   tryStartNodeInspector(params: {
     readonly appName: string;
     readonly cfHomeDir?: string;
@@ -63,6 +68,7 @@ const TRACE_EVALUATE_TIMEOUT_MS = 5000;
 
 const defaultApiTraceSessionDependencies: ApiTraceSessionDependencies = {
   prepareCfCliSession,
+  ensureAppSshEnabled: ensureCfAppSshEnabled,
   tryStartNodeInspector,
   openInspectorTunnel: openApiTraceInspectorTunnel,
   createInspectorClient: createApiTraceInspectorClient,
@@ -134,6 +140,7 @@ export class ApiTraceSession {
   isRunning(): boolean {
     return (
       this.state === 'preparingCli' ||
+      this.state === 'enablingSsh' ||
       this.state === 'checkingRuntime' ||
       this.state === 'openingTunnel' ||
       this.state === 'injecting' ||
@@ -159,15 +166,17 @@ export class ApiTraceSession {
   ): Promise<void> {
     const instanceIndex = resolveInstanceIndex(options.instanceIndex);
     try {
-      this.postState('checkingRuntime', 'Checking Node runtime and requesting Inspector startup.', false, false);
       await this.dependencies.prepareCfCliSession(targetParams);
       if (this.isStopRequested()) return;
-      await this.dependencies.tryStartNodeInspector(buildRuntimeTarget(this.appId, targetParams, instanceIndex));
+      const runtimeTarget = buildRuntimeTarget(this.appId, targetParams, instanceIndex);
+      this.postState('enablingSsh', 'Ensuring CF SSH access before starting Live Trace.', false, false);
+      await this.dependencies.ensureAppSshEnabled(runtimeTarget);
+      if (this.isStopRequested()) return;
+      this.postState('checkingRuntime', 'Checking Node runtime and requesting Inspector startup.', false, false);
+      await this.dependencies.tryStartNodeInspector(runtimeTarget);
       if (this.isStopRequested()) return;
       this.postState('openingTunnel', 'Opening Node Inspector tunnel.', false, false);
-      const tunnel = await this.dependencies.openInspectorTunnel(
-        buildRuntimeTarget(this.appId, targetParams, instanceIndex)
-      );
+      const tunnel = await this.dependencies.openInspectorTunnel(runtimeTarget);
       if (this.isStopRequested()) {
         stopLateTunnel(tunnel);
         return;

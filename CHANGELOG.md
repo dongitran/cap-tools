@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.163 (stable)
+- Fix: Live Trace now checks CF app SSH before starting runtime tracing, automatically enables SSH and restarts the app when SSH is disabled, then smoke-checks `cf ssh` before attempting the Node Inspector tunnel.
+- UI/UX: Live Trace startup now shows an `Enabling SSH` progress state while CF SSH enablement is in progress, avoiding the misleading `Needs Inspector` state for disabled app SSH.
+
 ## 0.10.162 (stable)
 - UI: Live Trace now removes the Trace request stream Pause/Resume control and marks the Live Trace tab with a red record indicator.
 - Fix: Replay Request now replays from the captured trace URL, method, body, and safe request headers without re-fetching CF/XSUAA auth, and its loading spinner stays visible in light and dark themes.

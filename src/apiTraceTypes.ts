@@ -1,6 +1,7 @@
 export type ApiTraceLifecycleState =
   | 'idle'
   | 'preparingCli'
+  | 'enablingSsh'
   | 'checkingRuntime'
   | 'needsInspector'
   | 'openingTunnel'

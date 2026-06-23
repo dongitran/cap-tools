@@ -21,6 +21,7 @@ const cfClientMocks = vi.hoisted(() => ({
   fetchCfOauthTokenFromTarget: vi.fn(),
   fetchRemoteCdsServicesFromTarget: vi.fn(),
   fetchXsuaaTokenFromTarget: vi.fn(),
+  ensureCfAppSshEnabled: vi.fn(),
   prepareCfCliSession: vi.fn(),
   runCfSshCommandFromTarget: vi.fn(),
   spawnCfSshPortForward: vi.fn(),

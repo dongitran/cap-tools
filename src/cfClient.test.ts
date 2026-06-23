@@ -26,6 +26,7 @@ vi.mock('node:child_process', () => ({
 
 import {
   configureCfCommandLogger,
+  ensureCfAppSshEnabled,
   fetchDefaultEnvJsonFromTarget,
   fetchOrgs,
   fetchPnpmLockFromTarget,
@@ -535,6 +536,73 @@ describe('spawnAppLogStreamFromTarget', () => {
 
     streamHandle.stop();
     expect(spawnedProcessMock.kill).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ensureCfAppSshEnabled', () => {
+  beforeEach(() => {
+    execFileAsyncMock.mockReset();
+  });
+
+  it('does not restart the app when CF SSH is already enabled', async () => {
+    execFileAsyncMock.mockResolvedValueOnce({
+      stdout: "ssh support is enabled for app 'finance-uat-api'\n",
+    });
+
+    await ensureCfAppSshEnabled({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    expect(execFileAsyncMock).toHaveBeenCalledTimes(1);
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      1,
+      'cf',
+      ['ssh-enabled', 'finance-uat-api'],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          CF_HOME: '/tmp/sap-tools-cf-home',
+        }),
+      })
+    );
+  });
+
+  it('enables CF SSH and restarts the app when SSH is disabled', async () => {
+    execFileAsyncMock
+      .mockResolvedValueOnce({
+        stdout: "ssh support is disabled for app 'finance-uat-api'\n",
+      })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockResolvedValueOnce({ stdout: '' });
+
+    await ensureCfAppSshEnabled({ appName: 'finance-uat-api' });
+
+    expect(execFileAsyncMock).toHaveBeenCalledTimes(4);
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      1,
+      'cf',
+      ['ssh-enabled', 'finance-uat-api'],
+      expect.any(Object)
+    );
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      2,
+      'cf',
+      ['enable-ssh', 'finance-uat-api'],
+      expect.any(Object)
+    );
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      3,
+      'cf',
+      ['restart', 'finance-uat-api'],
+      expect.any(Object)
+    );
+    expect(execFileAsyncMock).toHaveBeenNthCalledWith(
+      4,
+      'cf',
+      ['ssh', 'finance-uat-api', '-c', 'true'],
+      expect.any(Object)
+    );
   });
 });
 

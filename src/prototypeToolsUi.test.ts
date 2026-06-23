@@ -779,6 +779,8 @@ describe('prototype Log-API-Event workspace', () => {
     expect(source).toContain('class="api-trace-state-badge ${statusClass}"');
     expect(source).toContain('formatTraceStateLabel(apiTraceState)');
     expect(source).toContain('formatTraceStateTooltip(apiTraceState, apiTraceStatusMessage)');
+    expect(source).toContain("enablingSsh: 'Enabling SSH'");
+    expect(source).toContain("'enablingSsh', 'checkingRuntime'");
     expect(source).toContain("checkingRuntime: 'Checking runtime'");
     expect(source).toContain("injecting: 'Installing hook'");
     expect(source).toContain("streaming: 'Listening'");
