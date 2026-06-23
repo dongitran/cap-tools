@@ -1072,6 +1072,23 @@ function renderLiveTracePanel() {
   updateTraceTopActions();
 }
 
+function updateTraceSelectionDetails() {
+  const selected = selectedTraceEvent();
+  const rows = document.querySelectorAll('.api-trace-row');
+  rows.forEach((row) => {
+    const isSelected = selected !== null && row.dataset.eventId === selected.id;
+    row.classList.toggle('is-active', isSelected);
+    row.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  });
+
+  const detail = document.querySelector('.api-trace-detail');
+  if (!detail) {
+    renderLiveTracePanel();
+    return;
+  }
+  detail.outerHTML = renderTraceDetail(selected);
+}
+
 function isTraceActiveState(state) {
   return ['preparingCli', 'enablingSsh', 'checkingRuntime', 'openingTunnel', 'injecting', 'streaming', 'paused', 'stopping'].includes(state);
 }
@@ -1628,7 +1645,7 @@ appElement.addEventListener('click', (event) => {
   if (action === 'api-trace-select-event') {
     apiTraceSelectedEventId = actionElement.dataset.eventId ?? '';
     apiTraceDetailTab = 'overview';
-    renderLiveTracePanel();
+    updateTraceSelectionDetails();
     return;
   }
 });

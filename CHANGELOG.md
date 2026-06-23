@@ -1,5 +1,8 @@
 # SAP Tools Extension Changelog
 
+## 0.10.166 (stable)
+- Fix: Live Trace request selection now updates the active row and detail pane without rebuilding the request stream, preserving scroll position in long traces.
+
 ## 0.10.165 (stable)
 - Hardening: Live Trace now treats transient Inspector `Runtime.evaluate` drain timeouts as retryable, keeping the stream active unless timeouts repeat.
 - Performance: Live Trace drain payloads now cap large request/response body previews before returning them through the Node Inspector tunnel, reducing timeout risk for apps with large bodies or slower CF SSH tunnels.

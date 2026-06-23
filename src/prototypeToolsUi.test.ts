@@ -887,6 +887,19 @@ describe('prototype Log-API-Event workspace', () => {
     expect(styles).toMatch(/\.api-trace-replay-spinner\s*\{[\s\S]*?border-top-color:\s*currentColor;/);
   });
 
+  it('updates Live Trace request selection without rerendering the request stream', async () => {
+    const source = await readApiWebviewSource();
+    const selectEventBlock =
+      /if \(action === 'api-trace-select-event'\) \{([\s\S]*?)\n  \}/.exec(source)?.[1] ?? '';
+
+    expect(source).toContain('function updateTraceSelectionDetails()');
+    expect(source).toContain("const rows = document.querySelectorAll('.api-trace-row');");
+    expect(source).toContain("const detail = document.querySelector('.api-trace-detail');");
+    expect(source).toContain('detail.outerHTML = renderTraceDetail(selected);');
+    expect(selectEventBlock).toContain('updateTraceSelectionDetails();');
+    expect(selectEventBlock).not.toContain('renderLiveTracePanel();');
+  });
+
   it('marks Live Trace with an idle orange and active red record indicator', async () => {
     const source = await readApiWebviewSource();
     const styles = await readApiStylesSource();
