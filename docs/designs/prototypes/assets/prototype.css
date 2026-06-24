@@ -2620,6 +2620,33 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   }
 }
 
+.sql-backup-history-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--border-color) 82%, var(--mix-base));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--surface-bg) 88%, var(--frame-bg));
+  color: var(--chip-text);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.sql-backup-history-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sql-backup-history-button:hover {
+  border-color: color-mix(in oklab, var(--accent-color) 45%, var(--border-color));
+  background: color-mix(in oklab, var(--accent-soft) 48%, var(--frame-bg));
+  color: var(--text-color);
+}
+
 .hana-shortcut-toast {
   position: fixed;
   right: 14px;

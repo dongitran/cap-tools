@@ -47,6 +47,8 @@ import {
 } from './cfTopology';
 import { refreshCfSyncSpace } from './cfSpaceRefresh';
 import type { HanaSqlWorkbench } from './hanaSqlWorkbench';
+import type { HanaSqlBackupStore } from './hanaSqlBackupStore';
+import type { HanaSqlHistoryPanelManager } from './hanaSqlHistoryPanel';
 import { writeScopeIfChanged, type SharedCfScope } from './scopeSync';
 import {
   readLocalPackagesConfig,
@@ -111,6 +113,7 @@ const MSG_LOCAL_REGISTRY_STATUS = 'sapTools.localRegistryStatus';
 const MSG_OPEN_LOCAL_PACKAGES_SETTINGS = 'sapTools.openLocalPackagesSettings';
 const MSG_RUN_MICROSOFT_GRAPH_TOOL = 'sapTools.runMicrosoftGraphTool';
 const MSG_RELOAD_APP_LIST = 'sapTools.reloadAppList';
+const MSG_OPEN_SQL_BACKUP_HISTORY = 'sapTools.openSqlBackupHistory';
 const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
 const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
 const BUILTIN_EXTENSION_OPEN_COMMAND = 'extension.open';
@@ -368,7 +371,9 @@ export class RegionSidebarProvider
     private readonly cacheStore: CacheStore,
     private readonly hanaSqlWorkbench: HanaSqlWorkbench,
     private readonly apisExplorerPanelManager: ApisExplorerPanelManager,
-    private readonly eventMeshPanelManager: EventMeshViewerController
+    private readonly eventMeshPanelManager: EventMeshViewerController,
+    private readonly hanaSqlBackupStore: HanaSqlBackupStore | null = null,
+    private readonly hanaSqlHistoryPanelManager: HanaSqlHistoryPanelManager | null = null
   ) {
     this.hanaSqlWorkbench.registerActiveSessionProvider(() => this.currentLogSessionSeed);
     this.hanaSqlWorkbench.registerTunnelStateListener((appId, active) => {
@@ -640,6 +645,11 @@ export class RegionSidebarProvider
     if (type === MSG_OPEN_HANA_SQL_FILE && isOpenHanaSqlFileMessage(message)) {
       const payload = readOpenHanaSqlFilePayload(message);
       await this.handleOpenHanaSqlFile(payload);
+      return;
+    }
+
+    if (type === MSG_OPEN_SQL_BACKUP_HISTORY) {
+      await this.handleOpenSqlBackupHistory();
       return;
     }
 
@@ -2884,6 +2894,15 @@ export class RegionSidebarProvider
       );
       this.postHanaSqlFileOpenResult(payload.requestId, targetApp.id, false, errorMessage);
     }
+  }
+
+  private async handleOpenSqlBackupHistory(): Promise<void> {
+    if (this.hanaSqlHistoryPanelManager === null || this.hanaSqlBackupStore === null) {
+      this.outputChannel.appendLine('[sql-history] history panel manager or backup store not available');
+      return;
+    }
+    this.outputChannel.appendLine('[sql-history] opening backup history panel');
+    await this.hanaSqlHistoryPanelManager.openOrReveal(this.hanaSqlBackupStore);
   }
 
   private async publishHanaTablesForApp(

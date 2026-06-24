@@ -108,6 +108,10 @@
     "qname",
     "mgmt",
     "acking",
-    "Seqs"
+    "Seqs",
+    "mmss",
+    "slugified",
+    "Cascadia",
+    "Menlo"
   ]
 }

@@ -324,3 +324,21 @@ function buildPrototypeSqlResultRows(state) {
   });
 }
 
+function triggerOpenSqlBackupHistory() {
+  if (vscodeApi !== null) {
+    vscodeApi.postMessage({ type: 'sapTools.openSqlBackupHistory' });
+    return;
+  }
+  // Standalone prototype mode: show a visual indicator
+  const existing = document.querySelector('[data-role="hana-query-status"]');
+  if (existing instanceof HTMLElement) {
+    existing.hidden = false;
+    existing.className = 'hana-query-status is-info';
+    existing.setAttribute('role', 'status');
+    existing.textContent = '📋 SQL Backup History panel would open in VS Code.';
+    window.setTimeout(() => {
+      existing.hidden = true;
+      existing.textContent = '';
+    }, 3000);
+  }
+}

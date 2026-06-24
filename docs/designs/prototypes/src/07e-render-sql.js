@@ -161,6 +161,23 @@ function renderPlaceholderTab(tabId) {
   `;
 }
 
+function renderSqlBackupHistoryButton() {
+  return `
+    <button
+      type="button"
+      class="sql-backup-history-button"
+      data-action="open-sql-backup-history"
+      aria-label="View SQL backup history"
+      title="View SQL backup history"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+    </button>
+  `;
+}
+
 function renderSqlWorkbenchTab() {
   const services = resolveHanaServices();
   const visibleServices = filterHanaServiceRows(services);
@@ -178,6 +195,7 @@ function renderSqlWorkbenchTab() {
         <div class="sql-workbench-title-row">
           <h2>S/4HANA SQL Workbench</h2>
           <div class="sql-workbench-title-actions">
+            ${renderSqlBackupHistoryButton()}
             ${renderAppListReloadButton()}
             <span
               class="sql-tunnel-badge"

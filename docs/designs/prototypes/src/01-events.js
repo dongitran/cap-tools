@@ -817,6 +817,10 @@ appElement.addEventListener('click', (event) => {
       refreshWorkspaceSqlView();
       return;
     }
+    if (action === 'open-sql-backup-history') {
+      triggerOpenSqlBackupHistory();
+      return;
+    }
     if (action === 'select-hana-service' || action === 'refresh-hana-tables') {
       // Update the tables panel + selection in place. This must NOT re-render the
       // whole workbench (renderPrototype), which would rebuild the service list

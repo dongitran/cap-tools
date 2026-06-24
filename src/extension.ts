@@ -6,6 +6,8 @@ import { CacheSyncService } from './cacheSyncService';
 import { configureCfCommandLogger } from './cfClient';
 import { getEffectiveCredentials } from './credentialStore';
 import { HanaSqlWorkbench } from './hanaSqlWorkbench';
+import { HanaSqlBackupStore } from './hanaSqlBackupStore';
+import { HanaSqlHistoryPanelManager } from './hanaSqlHistoryPanel';
 import { reapOrphanedTunnels } from './hanaTunnelRegistry';
 import { REGION_VIEW_ID, RegionSidebarProvider } from './sidebarProvider';
 import { readCurrentScope } from './scopeSync';
@@ -36,7 +38,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const cacheSyncService = new CacheSyncService(cacheStore, context, outputChannel);
 
   const cfLogsPanel = new CfLogsPanelProvider(context);
-  const hanaSqlWorkbench = new HanaSqlWorkbench(outputChannel, cacheStore);
+  const hanaSqlBackupStore = new HanaSqlBackupStore();
+  const hanaSqlHistoryPanelManager = new HanaSqlHistoryPanelManager(outputChannel);
+  const hanaSqlWorkbench = new HanaSqlWorkbench(outputChannel, cacheStore, hanaSqlBackupStore);
   const apisExplorerPanelManager = new ApisExplorerPanelManager(
     context.extensionUri,
     outputChannel,
@@ -65,7 +69,9 @@ export function activate(context: vscode.ExtensionContext): void {
     cacheStore,
     hanaSqlWorkbench,
     apisExplorerPanelManager,
-    eventMeshProviderRouter
+    eventMeshProviderRouter,
+    hanaSqlBackupStore,
+    hanaSqlHistoryPanelManager
   );
 
   void getEffectiveCredentials(context)
@@ -144,6 +150,7 @@ export function activate(context: vscode.ExtensionContext): void {
     regionSidebarProvider,
     cfLogsPanel,
     hanaSqlWorkbench,
+    hanaSqlHistoryPanelManager,
     apisExplorerPanelManager,
     eventMeshPanelManager,
     advancedEventMeshPanelManager,

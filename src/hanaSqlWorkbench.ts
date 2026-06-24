@@ -82,6 +82,9 @@ import {
   toPositiveViewColumnNumber,
 } from './hanaSqlWorkbenchRuntime';
 import { HanaSqlResultPanelManager, type HanaSqlResultPanelSession } from './hanaSqlResultPanel';
+import type { HanaSqlBackupStore } from './hanaSqlBackupStore';
+import { analyzeMutatingStatement } from './hanaSqlMutationAnalyzer';
+import { formatHanaSqlResultSetCsv } from './hanaSqlResultExport';
 export { buildHanaSqlResultHtml, buildInitialHanaSqlTemplate } from './hanaSqlWorkbenchSupport';
 export const RUN_HANA_SQL_COMMAND_ID = 'sapTools.runHanaSql';
 const HANA_SQL_EDITOR_CONTEXT_KEY = 'sapTools.hanaSqlEditor';
@@ -236,7 +239,8 @@ export class HanaSqlWorkbench
 
   constructor(
     private readonly outputChannel: vscode.OutputChannel,
-    private readonly cacheStore: HanaTableListCacheGateway | null = null
+    private readonly cacheStore: HanaTableListCacheGateway | null = null,
+    private readonly backupStore: HanaSqlBackupStore | null = null
   ) {
     this.isTestMode = process.env['SAP_TOOLS_TEST_MODE'] === '1';
     this.resultPanelManager = new HanaSqlResultPanelManager(outputChannel);
@@ -1013,6 +1017,9 @@ export class HanaSqlWorkbench
       throw new Error('Unable to resolve HANA connection.');
     }
 
+    // Backup data for mutating statements before execution (best-effort).
+    await this.backupMutatingStatements(context, prepared);
+
     const inputs: HanaStatementInput[] = prepared.map((statement) => ({
       sql: statement.executionSql,
       statementKind: statement.statementKind,
@@ -1024,6 +1031,71 @@ export class HanaSqlWorkbench
         ...overrides,
       })
     );
+  }
+
+  /**
+   * For each mutating statement in the batch that has a WHERE clause, run a
+   * backup SELECT and persist the result to disk BEFORE the mutation executes.
+   * Failures are purely best-effort — a backup error never blocks the query.
+   */
+  private async backupMutatingStatements(
+    context: HanaSqlAppContext,
+    prepared: readonly PreparedStatement[]
+  ): Promise<void> {
+    if (this.backupStore === null || context.session === null) return;
+
+    for (const statement of prepared) {
+      if (statement.statementKind !== 'mutating') continue;
+      await this.backupSingleStatement(context, statement);
+    }
+  }
+
+  private async backupSingleStatement(
+    context: HanaSqlAppContext,
+    statement: PreparedStatement
+  ): Promise<void> {
+    if (this.backupStore === null || context.session === null) return;
+    const session = context.session;
+    const analysis = analyzeMutatingStatement(statement.executionSql, context.schema);
+    if (analysis === null || !analysis.canBackup || analysis.backupSelectSql === null) {
+      if (analysis !== null && !analysis.canBackup) {
+        this.logSql(
+          `backup skipped for ${analysis.statementType} on ${sanitizeSqlLogValue(analysis.tableName)} — no WHERE clause`
+        );
+      }
+      return;
+    }
+
+    this.logSql(
+      `running backup SELECT for ${analysis.statementType} on ${sanitizeSqlLogValue(analysis.tableName)}`
+    );
+    try {
+      const result = await this.withTunnelFallback(context, (connection, overrides) =>
+        executeHanaQuery(connection, analysis.backupSelectSql ?? '', { statementKind: 'readonly', timeoutMs: 30_000, ...overrides })
+      );
+      if (result.kind !== 'resultset') return;
+
+      const csvContent = formatHanaSqlResultSetCsv(result);
+      const timestamp = new Date();
+      const saved = await this.backupStore.saveBackup({
+        session,
+        appName: context.appName,
+        statementType: analysis.statementType,
+        tableName: analysis.tableName,
+        originalSql: statement.executionSql,
+        csvContent,
+        rowCount: result.rowCount,
+        timestamp,
+      });
+      if (saved !== null) {
+        this.logSql(
+          `backup saved: ${sanitizeSqlLogValue(saved.id)} (${String(result.rowCount)} rows)`
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(`backup SELECT failed for ${sanitizeSqlLogValue(analysis.tableName)}: ${sanitizeSqlLogValue(message)}`);
+    }
   }
 
   private async prefetchTableNames(appId: string): Promise<void> {

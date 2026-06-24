@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.168 (stable)
+- Feature: S/4HANA SQL Workbench now auto-backs up affected data before executing UPDATE, DELETE, or MERGE statements that include a WHERE clause. The backup SELECT runs before the mutation and saves a `.sql` (original query) and `backup.csv` (captured rows) under `~/.saptools/sql-backups/YYYYMM/<region-org-space-app-type-table-timestamp>/`.
+- Feature: New **SQL Backup History** button (clock icon 🕐) added to the S/4HANA SQL Workbench header. Clicking it opens a dedicated editor panel with a two-pane layout: a left sidebar listing all past mutation backups (newest-first) and a right detail pane showing the full SQL statement and a table view of the backed-up data, with a **Copy CSV** button.
+
 ## 0.10.167 (stable)
 - Fix: Live Trace `Search trace` now filters request rows and updates the detail pane without replacing the search input, so focus and typing continue across multiple characters.
 
