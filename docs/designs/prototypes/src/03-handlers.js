@@ -34,6 +34,10 @@ function handleSqlTabAction(action, actionElement) {
     return true;
   }
 
+  if (action === 'open-sql-backup-history') {
+    return true;
+  }
+
   if (
     action === 'copy-sql-result-csv' ||
     action === 'copy-sql-result-json' ||

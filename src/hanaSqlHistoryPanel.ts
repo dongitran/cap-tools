@@ -333,7 +333,7 @@ function buildHistoryPanelJs(): string {
 
       function renderEntryList() {
         if (entries.length === 0) {
-          entryList.innerHTML = '<div class="empty-list-msg">No backups found yet.<br>Backups are created automatically when you run UPDATE or DELETE statements with a WHERE clause.</div>';
+          entryList.innerHTML = '<p class="empty-list">No backups found yet.<br/>Backups are created automatically when you run UPDATE, DELETE, or MERGE statements with a WHERE clause.</p>';
           return;
         }
         entryList.innerHTML = entries.map((entry, i) => {

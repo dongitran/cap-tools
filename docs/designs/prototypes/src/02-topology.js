@@ -201,7 +201,8 @@ function shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction
     action === 'copy-sql-result-row-object' ||
     action === 'copy-sql-result-cell-value' ||
     action === 'export-sql-result-csv' ||
-    action === 'export-sql-result-json';
+    action === 'export-sql-result-json' ||
+    action === 'open-sql-backup-history';
   if (!isSqlOnlyAction) {
     return false;
   }
