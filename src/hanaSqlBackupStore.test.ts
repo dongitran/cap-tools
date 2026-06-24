@@ -192,4 +192,45 @@ describe('hanaSqlBackupStore', () => {
       expect(content).toBeNull();
     });
   });
+
+  describe('HanaSqlBackupStore.readBackupSql', () => {
+    it('should read sql file content', async () => {
+      const store = new HanaSqlBackupStore();
+      vi.mocked(fs.readFile).mockResolvedValueOnce('SELECT * FROM T');
+
+      const content = await store.readBackupSql({ folderPath: '/fake/path' } as unknown as HanaSqlBackupEntry);
+      expect(content).toBe('SELECT * FROM T');
+    });
+
+    it('should return null on read failure', async () => {
+      const store = new HanaSqlBackupStore();
+      vi.mocked(fs.readFile).mockRejectedValueOnce(new Error('ENOENT'));
+
+      const content = await store.readBackupSql({ folderPath: '/fake/path' } as unknown as HanaSqlBackupEntry);
+      expect(content).toBeNull();
+    });
+  });
+
+  describe('HanaSqlBackupStore.listBackups edge cases', () => {
+    it('should gracefully skip a month bucket if readdir on the bucket fails', async () => {
+      const store = new HanaSqlBackupStore();
+      
+      // readdir for root returns two valid month buckets
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['202605', '202606'] as unknown as fs.Dirent[]);
+      
+      // readdir for 202606 (newest) throws an error
+      vi.mocked(fs.readdir).mockRejectedValueOnce(new Error('EACCES'));
+      
+      // readdir for 202605 succeeds and returns one valid folder
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['eu10-org-space-app-update-table-20260524T100000'] as unknown as fs.Dirent[]);
+
+      // reading metadata.json fails so it falls back to parseFolderNameToEntry
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'));
+
+      const list = await store.listBackups(10);
+      
+      expect(list).toHaveLength(1);
+      expect(list[0]?.id).toBe('eu10-org-space-app-update-table-20260524T100000');
+    });
+  });
 });

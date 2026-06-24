@@ -127,4 +127,26 @@ describe('applyDefaultHanaSelectLimit', () => {
       sql: 'SELECT * FROM ORDERS LIMIT 50',
     });
   });
+
+  describe('Edge Cases (EOF handling)', () => {
+    test('gracefully handles unclosed double quotes at EOF', () => {
+      // The double quote opens but never closes before the end of the string
+      const sql = 'SELECT * FROM "UNCLOSED_TABLE';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: sql + ' LIMIT ' + HANA_SQL_DEFAULT_SELECT_LIMIT,
+      });
+    });
+
+    test('gracefully handles unclosed block comments at EOF', () => {
+      // The block comment opens but never closes
+      const sql = 'SELECT * FROM ORDERS /* UNCLOSED COMMENT';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true, // we still apply it because there is no existing limit outside
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: sql + ' LIMIT ' + HANA_SQL_DEFAULT_SELECT_LIMIT,
+      });
+    });
+  });
 });

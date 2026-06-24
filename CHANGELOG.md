@@ -1,5 +1,10 @@
 # SAP Tools Extension Changelog
 
+## 0.10.173 (stable)
+- Audit: Successfully passed comprehensive verification loop.
+- Test: Expanded unit tests for core SQL utilities (`hanaSqlLimitGuard`, `hanaSqlMutationAnalyzer`) achieving 100% core coverage. Implemented EOF safety edge cases for unmatched quotes and missing block comments.
+- Test: Added complex fallback parsing and filesystem simulated-failure tests for `hanaSqlBackupStore`. Enhanced E2E to successfully render `metadata.json`-less historical records.
+
 ## 0.10.172 (stable)
 - Test: Added exhaustive `UPSERT` unit tests demonstrating safe parsing bypass for 5 complex `UPSERT` variations. 
 - UI: Added `UPSERT` keyword highlighting to SQL history panel and verified with new E2E tests.

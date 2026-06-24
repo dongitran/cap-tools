@@ -161,5 +161,23 @@ describe('hanaSqlMutationAnalyzer', () => {
       expect(result?.tableName).toBe('"Dest"');
       expect(result?.whereClause).toBe('"Dest"."ID" = "Source"."ID" AND ("Dest"."Cat" = "Source"."Cat" OR "Dest"."Type" = 5)');
     });
+
+    it('should handle missing table name in analyzeSqlMutation directly', () => {
+      const sql = 'UPDATE ';
+      const result = analyzeMutatingStatement(sql, 'SCH');
+      expect(result).toBeNull();
+    });
+
+    it('should gracefully handle unclosed single quotes at EOF', () => {
+      const sql = "UPDATE t SET name = 'unclosed";
+      const result = analyzeMutatingStatement(sql, 'SCH');
+      expect(result).toBeDefined();
+    });
+
+    it('should gracefully handle unclosed double quotes at EOF', () => {
+      const sql = 'DELETE FROM "unclosed_table';
+      const result = analyzeMutatingStatement(sql, 'SCH');
+      expect(result?.canBackup).toBe(false); // No WHERE clause found, but it parsed safely to EOF
+    });
   });
 });

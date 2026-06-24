@@ -176,18 +176,14 @@ test.describe('SAP Tools SQL Backup History', () => {
     const tsBase = new Date();
     const monthFolder = tsBase.toISOString().slice(0, 7).replace('-', '');
     
-    // Backup 1
-    const ts1 = new Date(tsBase.getTime());
+    // Backup 1 (Tests fallback parser by omitting metadata.json)
+    const ts1 = tsBase;
     const id1 = `us10-org-space-app-update-table-${ts1.toISOString().replace(/[-:.Z]/g, '').slice(0, 15)}`;
     const dir1 = path.join(getBackupRoot(), monthFolder, id1);
     fs.mkdirSync(dir1, { recursive: true });
-    fs.writeFileSync(path.join(dir1, 'query.sql'), 'UPDATE 1', 'utf8');
+    fs.writeFileSync(path.join(dir1, 'query.sql'), 'UPDATE T1 SET Col1 = 1', 'utf8');
     fs.writeFileSync(path.join(dir1, 'backup.csv'), 'Col1\nVal1', 'utf8');
-    fs.writeFileSync(path.join(dir1, 'metadata.json'), JSON.stringify({
-      id: id1, timestamp: ts1.toISOString(), timestampLabel: 'TS1',
-      region: 'r1', org: 'o1', space: 's1', appName: 'a1',
-      statementType: 'UPDATE', tableName: 'T1', rowCount: 1, folderPath: dir1
-    }), 'utf8');
+    // Deliberately omitting metadata.json to test `parseFolderNameToEntry` fallback
 
     // Backup 2
     const ts2 = new Date(tsBase.getTime() - 1000);
