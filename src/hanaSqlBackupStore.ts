@@ -110,11 +110,7 @@ export class HanaSqlBackupStore {
     const folderName = buildFolderName(region, session.orgName, session.spaceName, appName, statementType, tableName, timestamp);
     const folderPath = join(SAPTOOLS_BACKUP_ROOT, monthBucket, folderName);
 
-    await mkdir(folderPath, { recursive: true });
-    await writeFile(join(folderPath, 'query.sql'), originalSql, 'utf8');
-    await writeFile(join(folderPath, 'backup.csv'), csvContent, 'utf8');
-
-    return {
+    const entryData = {
       id: folderName,
       timestamp: timestamp.toISOString(),
       timestampLabel: formatTimestampLabel(timestamp),
@@ -127,6 +123,13 @@ export class HanaSqlBackupStore {
       rowCount,
       folderPath,
     };
+
+    await mkdir(folderPath, { recursive: true });
+    await writeFile(join(folderPath, 'query.sql'), originalSql, 'utf8');
+    await writeFile(join(folderPath, 'backup.csv'), csvContent, 'utf8');
+    await writeFile(join(folderPath, 'metadata.json'), JSON.stringify(entryData, null, 2), 'utf8');
+
+    return entryData;
   }
 
   private async doListBackups(limit: number): Promise<HanaSqlBackupEntry[]> {
@@ -160,7 +163,15 @@ export class HanaSqlBackupStore {
 
       for (const folderName of folderNames) {
         if (entries.length >= limit) break;
-        const entry = parseFolderNameToEntry(folderName, join(bucketPath, folderName));
+        const entryFolderPath = join(bucketPath, folderName);
+        let entry: HanaSqlBackupEntry | null = null;
+        try {
+          const metaStr = await readFile(join(entryFolderPath, 'metadata.json'), 'utf8');
+          entry = JSON.parse(metaStr) as HanaSqlBackupEntry;
+        } catch {
+          // Fallback to error-prone folder name parsing for backward compatibility
+          entry = parseFolderNameToEntry(folderName, entryFolderPath);
+        }
         if (entry !== null) {
           entries.push(entry);
         }

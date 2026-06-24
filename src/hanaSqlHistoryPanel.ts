@@ -11,6 +11,7 @@
 import * as vscode from 'vscode';
 import { randomBytes } from 'node:crypto';
 import type { HanaSqlBackupStore, HanaSqlBackupEntry } from './hanaSqlBackupStore';
+import type { HanaSqlHistoryScope } from './hanaSqlConnectionResolver';
 
 const HISTORY_PANEL_VIEW_TYPE = 'sapTools.hanaSqlHistory';
 
@@ -40,7 +41,7 @@ export class HanaSqlHistoryPanelManager implements vscode.Disposable {
     }
   }
 
-  async openOrReveal(backupStore: HanaSqlBackupStore): Promise<void> {
+  async openOrReveal(backupStore: HanaSqlBackupStore, session: HanaSqlHistoryScope): Promise<void> {
     if (this.panel !== null) {
       this.panel.reveal(vscode.ViewColumn.One);
       return;
@@ -61,7 +62,7 @@ export class HanaSqlHistoryPanelManager implements vscode.Disposable {
     panelDisposables.push(
       panel.webview.onDidReceiveMessage(async (raw: unknown) => {
         const msg = raw as HistoryPanelMessage;
-        await this.handlePanelMessage(msg, panel, backupStore);
+        await this.handlePanelMessage(msg, panel, backupStore, session);
       })
     );
 
@@ -74,17 +75,30 @@ export class HanaSqlHistoryPanelManager implements vscode.Disposable {
 
     // Initial load
     const entries = await backupStore.listBackups(200);
-    void panel.webview.postMessage({ type: 'entriesLoaded', entries: entries.map(serializeEntry) });
+    void panel.webview.postMessage({
+      type: 'entriesLoaded',
+      entries: entries.map(serializeEntry),
+      region: session.region,
+      org: session.orgName,
+      space: session.spaceName
+    });
   }
 
   private async handlePanelMessage(
     msg: HistoryPanelMessage,
     panel: vscode.WebviewPanel,
-    backupStore: HanaSqlBackupStore
+    backupStore: HanaSqlBackupStore,
+    session: HanaSqlHistoryScope
   ): Promise<void> {
     if (msg.type === 'loadEntries') {
       const entries = await backupStore.listBackups(200);
-      void panel.webview.postMessage({ type: 'entriesLoaded', entries: entries.map(serializeEntry) });
+      void panel.webview.postMessage({
+        type: 'entriesLoaded',
+        entries: entries.map(serializeEntry),
+        region: session.region,
+        org: session.orgName,
+        space: session.spaceName
+      });
       return;
     }
 
@@ -234,6 +248,15 @@ function buildHistoryPanelCss(): string {
       --mono: var(--vscode-editor-font-family, "Cascadia Code", Menlo, Consolas, monospace);
       --font-size: var(--vscode-font-size, 13px);
       --radius: 6px;
+
+      /* SQL highlight colors — hardcoded because vscode-symbolIcon vars are
+         not injected into webviews; these match VS Code Dark+ token colors. */
+      --sql-keyword: #569cd6;
+      --sql-builtin: #4ec9b0;
+      --sql-string: #ce9178;
+      --sql-number: #b5cea8;
+      --sql-comment: #6a9955;
+      --sql-punctuation: var(--vscode-editor-foreground, #cccccc);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: var(--font-size); height: 100vh; overflow: hidden; }
@@ -261,6 +284,7 @@ function buildHistoryPanelCss(): string {
     .entry-badge { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
     .badge-update { background: rgba(14, 99, 156, 0.25); color: #4db8ff; }
     .badge-delete { background: rgba(248, 81, 73, 0.18); color: #f85149; }
+    .badge-insert { background: rgba(46, 160, 67, 0.18); color: #3fb950; }
     .badge-merge  { background: rgba(46, 160, 67, 0.18); color: #2ea043; }
     .entry-table { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
     .entry-meta { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -273,23 +297,37 @@ function buildHistoryPanelCss(): string {
     .empty-icon { font-size: 48px; opacity: 0.5; }
 
     .detail-layout { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-    .detail-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; flex-shrink: 0; }
-    .detail-title-block { flex: 1; min-width: 0; }
-    .detail-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .detail-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
-    .chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
-    .copy-btn { padding: 6px 12px; border-radius: var(--radius); background: var(--accent); color: var(--accent-fg); border: none; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: opacity 0.15s; flex-shrink: 0; }
-    .copy-btn:hover { opacity: 0.88; }
-    .copy-btn.is-copied { background: var(--success); }
+
+    /* Header: badge + table name left, timestamp right */
+    .detail-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+    .detail-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .detail-scope { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .detail-ts { font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
 
     .detail-body { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 14px; }
 
     .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 6px; }
-    .sql-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; line-height: 1.5; }
+
+    /* Section label row with inline button */
+    .section-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .section-label-row .section-label { margin-bottom: 0; }
+
+    /* ── SQL highlighted block ───────────────────────────────────────── */
+    .sql-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; line-height: 1.6; }
+    .sql-kw  { color: var(--sql-keyword, #569cd6); font-weight: 700; }
+    .sql-fn  { color: var(--sql-builtin, #4ec9b0); }
+    .sql-str { color: var(--sql-string, #ce9178); }
+    .sql-num { color: var(--sql-number, #b5cea8); }
+    .sql-cmt { color: var(--sql-comment, #6a9955); font-style: italic; }
+
+    .copy-btn { padding: 4px 10px; border-radius: var(--radius); background: var(--accent); color: var(--accent-fg); border: none; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: opacity 0.15s; flex-shrink: 0; }
+    .copy-btn:hover { opacity: 0.88; }
+    .copy-btn.is-copied { background: var(--success); }
 
     /* ── Data table ─────────────────────────────────────────────────── */
-    .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); max-height: calc(100vh - 340px); }
-    .data-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    /* overflow-x: auto enables horizontal scrolling when many columns */
+    .table-wrap { overflow-x: auto; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); max-height: calc(100vh - 360px); }
+    .data-table { border-collapse: collapse; min-width: 100%; font-size: 12px; }
     .data-table th, .data-table td { padding: 5px 9px; border-bottom: 1px solid var(--border); white-space: nowrap; text-align: left; }
     .data-table th { background: var(--surface); font-weight: 700; position: sticky; top: 0; z-index: 1; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
     .data-table td.row-num { color: var(--muted); user-select: none; }
@@ -333,19 +371,20 @@ function buildHistoryPanelJs(): string {
 
       function renderEntryList() {
         if (entries.length === 0) {
-          entryList.innerHTML = '<p class="empty-list">No backups found yet.<br/>Backups are created automatically when you run UPDATE, DELETE, or MERGE statements with a WHERE clause.</p>';
+          entryList.innerHTML = '<p class="empty-list">No backups found yet.<br/>Backups are created automatically when you run UPDATE or DELETE statements with a WHERE clause.</p>';
           return;
         }
         entryList.innerHTML = entries.map((entry, i) => {
           const badgeClass = 'badge-' + entry.statementType.toLowerCase();
           const isSelected = entry.id === selectedId;
           const divider = i > 0 ? '<div class="entry-divider"></div>' : '';
+          // List item: only show org below the badge + table name line
           return divider + '<div class="entry-item' + (isSelected ? ' is-selected' : '') + '" role="option" aria-selected="' + isSelected + '" data-id="' + escapeAttr(entry.id) + '" tabindex="0">' +
             '<div class="entry-top">' +
               '<span class="entry-badge ' + badgeClass + '">' + escapeHtml(entry.statementType) + '</span>' +
               '<span class="entry-table">' + escapeHtml(entry.tableName) + '</span>' +
             '</div>' +
-            '<div class="entry-meta">' + escapeHtml(entry.appName) + ' · ' + escapeHtml(entry.region) + '</div>' +
+            '<div class="entry-meta">' + escapeHtml(entry.org) + '</div>' +
             '<div class="entry-ts">' + escapeHtml(entry.timestampLabel) + '</div>' +
           '</div>';
         }).join('');
@@ -385,25 +424,32 @@ function buildHistoryPanelJs(): string {
             '<div class="row-count-label">' + escapeHtml(rowLabel) + '</div>'
           : '<p class="no-data-msg">No rows were captured in this backup.</p>';
 
+        const scopeLabel = 'Region: ' + escapeHtml(entry.region) + ' &mdash; Org: ' + escapeHtml(entry.org) + ' &mdash; Space: ' + escapeHtml(entry.space);
+
         detailPane.innerHTML =
           '<div class="detail-layout">' +
             '<div class="detail-header">' +
-              '<div class="detail-title-block">' +
+              '<div>' +
                 '<div class="detail-title">' +
                   '<span class="entry-badge ' + badgeClass + '">' + escapeHtml(entry.statementType) + '</span>' +
                   escapeHtml(entry.tableName) +
                 '</div>' +
-                '<div class="detail-chips">' +
-                  '<span class="chip">' + escapeHtml(entry.timestampLabel) + '</span>' +
-                  '<span class="chip">' + escapeHtml(entry.region) + '</span>' +
-                  '<span class="chip">' + escapeHtml(entry.appName) + '</span>' +
-                '</div>' +
+                '<div class="detail-scope">' + scopeLabel + '</div>' +
               '</div>' +
-              '<button class="copy-btn" id="copy-btn" type="button">Copy CSV</button>' +
+              '<div class="detail-ts">' + escapeHtml(entry.timestampLabel) + '</div>' +
             '</div>' +
             '<div class="detail-body">' +
-              '<div><div class="section-label">SQL Statement</div><pre class="sql-block">' + escapeHtml(detail.sql || 'Not available') + '</pre></div>' +
-              '<div><div class="section-label">Backed-up Data</div>' + tableHtml + '</div>' +
+              '<div>' +
+                '<div class="section-label">SQL Statement</div>' +
+                '<pre class="sql-block">' + highlightSql(detail.sql || 'Not available') + '</pre>' +
+              '</div>' +
+              '<div>' +
+                '<div class="section-label-row">' +
+                  '<div class="section-label">Backed-up Data</div>' +
+                  '<button class="copy-btn" id="copy-btn" type="button">Copy CSV</button>' +
+                '</div>' +
+                tableHtml +
+              '</div>' +
             '</div>' +
           '</div>';
 
@@ -431,6 +477,112 @@ function buildHistoryPanelJs(): string {
         }, 2000);
       }
 
+      /**
+       * Minimal SQL syntax highlighter.
+       * Tokenizes the SQL string and wraps known token types in <span> tags.
+       * Handles: keywords, built-in functions, string literals, numbers, line/block comments.
+       */
+      function highlightSql(sql) {
+        const KEYWORDS = new Set([
+          'SELECT','FROM','WHERE','AND','OR','NOT','IN','EXISTS','BETWEEN','LIKE','IS','NULL',
+          'INSERT','INTO','VALUES','UPDATE','SET','DELETE','MERGE','USING','MATCHED','WHEN',
+          'CREATE','ALTER','DROP','TABLE','VIEW','INDEX','ON','AS','JOIN','LEFT','RIGHT',
+          'INNER','OUTER','FULL','CROSS','GROUP','BY','ORDER','HAVING','LIMIT','OFFSET',
+          'DISTINCT','ALL','UNION','EXCEPT','INTERSECT','CASE','WHEN','THEN','ELSE','END',
+          'WITH','TOP','FETCH','NEXT','ROWS','ONLY','REPLACE','TRUNCATE','COLUMN','ADD',
+          'PRIMARY','KEY','FOREIGN','REFERENCES','CONSTRAINT','DEFAULT','UNIQUE','CHECK',
+          'SCHEMA','DATABASE','IF','BEGIN','COMMIT','ROLLBACK','TRANSACTION','DECLARE',
+          'PROCEDURE','FUNCTION','RETURN','CALL','EXEC','EXECUTE','TRIGGER','FOR','EACH',
+          'ROW','AFTER','BEFORE','INSTEAD','OF','ASC','DESC','NULL','TRUE','FALSE'
+        ]);
+        const BUILTINS = new Set([
+          'COUNT','SUM','AVG','MIN','MAX','COALESCE','NULLIF','ISNULL','NVL','DECODE',
+          'CAST','CONVERT','TO_CHAR','TO_DATE','TO_NUMBER','TRIM','LTRIM','RTRIM',
+          'UPPER','LOWER','SUBSTR','SUBSTRING','LENGTH','LEN','REPLACE','CHARINDEX',
+          'INSTR','CONCAT','NOW','SYSDATE','GETDATE','DATEADD','DATEDIFF','ROUND',
+          'FLOOR','CEIL','CEILING','ABS','MOD','ROW_NUMBER','RANK','DENSE_RANK',
+          'LAG','LEAD','FIRST_VALUE','LAST_VALUE','OVER','PARTITION'
+        ]);
+
+        const result = [];
+        let i = 0;
+
+        while (i < sql.length) {
+          // Line comment --
+          if (sql[i] === '-' && sql[i+1] === '-') {
+            const end = sql.indexOf('\\n', i);
+            const chunk = end < 0 ? sql.slice(i) : sql.slice(i, end);
+            result.push('<span class="sql-cmt">' + escHtml(chunk) + '</span>');
+            i = end < 0 ? sql.length : end;
+            continue;
+          }
+          // Block comment /* */
+          if (sql[i] === '/' && sql[i+1] === '*') {
+            const end = sql.indexOf('*/', i + 2);
+            const chunk = end < 0 ? sql.slice(i) : sql.slice(i, end + 2);
+            result.push('<span class="sql-cmt">' + escHtml(chunk) + '</span>');
+            i = end < 0 ? sql.length : end + 2;
+            continue;
+          }
+          // Single-quoted string
+          if (sql[i] === "'") {
+            let j = i + 1;
+            while (j < sql.length) {
+              if (sql[j] === "'" && sql[j+1] === "'") { j += 2; continue; }
+              if (sql[j] === "'") { j++; break; }
+              j++;
+            }
+            result.push('<span class="sql-str">' + escHtml(sql.slice(i, j)) + '</span>');
+            i = j;
+            continue;
+          }
+          // Double-quoted identifier
+          if (sql[i] === '"') {
+            let j = i + 1;
+            while (j < sql.length && sql[j] !== '"') j++;
+            result.push(escHtml(sql.slice(i, j + 1)));
+            i = j + 1;
+            continue;
+          }
+          // Number
+          if (/[0-9]/.test(sql[i]) || (sql[i] === '.' && /[0-9]/.test(sql[i+1] || ''))) {
+            let j = i;
+            while (j < sql.length && /[0-9.]/.test(sql[j])) j++;
+            result.push('<span class="sql-num">' + escHtml(sql.slice(i, j)) + '</span>');
+            i = j;
+            continue;
+          }
+          // Word (keyword / builtin / identifier)
+          if (/[A-Za-z_]/.test(sql[i])) {
+            let j = i;
+            while (j < sql.length && /[A-Za-z0-9_]/.test(sql[j])) j++;
+            const word = sql.slice(i, j);
+            const upper = word.toUpperCase();
+            if (KEYWORDS.has(upper)) {
+              result.push('<span class="sql-kw">' + escHtml(word) + '</span>');
+            } else if (BUILTINS.has(upper)) {
+              result.push('<span class="sql-fn">' + escHtml(word) + '</span>');
+            } else {
+              result.push(escHtml(word));
+            }
+            i = j;
+            continue;
+          }
+          // Operators / punctuation
+          result.push(escHtml(sql[i]));
+          i++;
+        }
+        return result.join('');
+      }
+
+      function escHtml(str) {
+        return String(str)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;');
+      }
+
       function escapeHtml(str) {
         return String(str)
           .replaceAll('&', '&amp;')
@@ -448,3 +600,4 @@ function buildHistoryPanelJs(): string {
     })();
   `;
 }
+

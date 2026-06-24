@@ -112,6 +112,8 @@
     "mmss",
     "slugified",
     "Cascadia",
-    "Menlo"
+    "Menlo",
+    "LTRIM",
+    "RTRIM"
   ]
 }

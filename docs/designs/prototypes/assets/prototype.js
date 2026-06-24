@@ -1998,7 +1998,8 @@ function shouldRefreshWorkspaceSqlOnly(action, modeBeforeAction, tabBeforeAction
     action === 'copy-sql-result-row-object' ||
     action === 'copy-sql-result-cell-value' ||
     action === 'export-sql-result-csv' ||
-    action === 'export-sql-result-json';
+    action === 'export-sql-result-json' ||
+    action === 'open-sql-backup-history';
   if (!isSqlOnlyAction) {
     return false;
   }
@@ -2390,6 +2391,10 @@ function handleSqlTabAction(action, actionElement) {
   if (action === 'toggle-sql-result-export-menu') {
     hanaSqlResultExportMenuOpen = !hanaSqlResultExportMenuOpen;
     hanaSqlResultContextMenuState = null;
+    return true;
+  }
+
+  if (action === 'open-sql-backup-history') {
     return true;
   }
 

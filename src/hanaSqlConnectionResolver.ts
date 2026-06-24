@@ -24,6 +24,12 @@ export interface ResolveHanaConnectionResult {
   readonly schema: string;
 }
 
+export interface HanaSqlHistoryScope {
+  readonly region: string;
+  readonly orgName: string;
+  readonly spaceName: string;
+}
+
 interface ResolveHanaConnectionDependencies {
   readonly prepareCfCliSession: typeof prepareCfCliSession;
   readonly fetchDefaultEnvJsonFromTarget: typeof fetchDefaultEnvJsonFromTarget;

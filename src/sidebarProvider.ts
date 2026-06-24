@@ -2901,8 +2901,16 @@ export class RegionSidebarProvider
       this.outputChannel.appendLine('[sql-history] history panel manager or backup store not available');
       return;
     }
+    if (this.currentConfirmedScope === undefined) {
+      this.outputChannel.appendLine('[sql-history] active scope not available');
+      return;
+    }
     this.outputChannel.appendLine('[sql-history] opening backup history panel');
-    await this.hanaSqlHistoryPanelManager.openOrReveal(this.hanaSqlBackupStore);
+    await this.hanaSqlHistoryPanelManager.openOrReveal(this.hanaSqlBackupStore, {
+      region: this.currentConfirmedScope.regionCode,
+      orgName: this.currentConfirmedScope.orgName,
+      spaceName: this.currentConfirmedScope.spaceName
+    });
   }
 
   private async publishHanaTablesForApp(
