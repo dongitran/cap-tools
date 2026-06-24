@@ -480,111 +480,7 @@ function buildHistoryPanelJs(): string {
         }, 2000);
       }
 
-      /**
-       * Minimal SQL syntax highlighter.
-       * Tokenizes the SQL string and wraps known token types in <span> tags.
-       * Handles: keywords, built-in functions, string literals, numbers, line/block comments.
-       */
-      function highlightSql(sql) {
-        const KEYWORDS = new Set([
-          'SELECT','FROM','WHERE','AND','OR','NOT','IN','EXISTS','BETWEEN','LIKE','IS','NULL',
-          'INSERT','INTO','VALUES','UPDATE','SET','DELETE','MERGE','USING','MATCHED','WHEN',
-          'CREATE','ALTER','DROP','TABLE','VIEW','INDEX','ON','AS','JOIN','LEFT','RIGHT',
-          'INNER','OUTER','FULL','CROSS','GROUP','BY','ORDER','HAVING','LIMIT','OFFSET',
-          'DISTINCT','ALL','UNION','EXCEPT','INTERSECT','CASE','WHEN','THEN','ELSE','END',
-          'WITH','TOP','FETCH','NEXT','ROWS','ONLY','REPLACE','TRUNCATE','COLUMN','ADD',
-          'PRIMARY','KEY','FOREIGN','REFERENCES','CONSTRAINT','DEFAULT','UNIQUE','CHECK',
-          'SCHEMA','DATABASE','IF','BEGIN','COMMIT','ROLLBACK','TRANSACTION','DECLARE',
-          'PROCEDURE','FUNCTION','RETURN','CALL','EXEC','EXECUTE','TRIGGER','FOR','EACH',
-          'ROW','AFTER','BEFORE','INSTEAD','OF','ASC','DESC','NULL','TRUE','FALSE'
-        ]);
-        const BUILTINS = new Set([
-          'COUNT','SUM','AVG','MIN','MAX','COALESCE','NULLIF','ISNULL','NVL','DECODE',
-          'CAST','CONVERT','TO_CHAR','TO_DATE','TO_NUMBER','TRIM','LTRIM','RTRIM',
-          'UPPER','LOWER','SUBSTR','SUBSTRING','LENGTH','LEN','REPLACE','CHARINDEX',
-          'INSTR','CONCAT','NOW','SYSDATE','GETDATE','DATEADD','DATEDIFF','ROUND',
-          'FLOOR','CEIL','CEILING','ABS','MOD','ROW_NUMBER','RANK','DENSE_RANK',
-          'LAG','LEAD','FIRST_VALUE','LAST_VALUE','OVER','PARTITION'
-        ]);
-
-        const result = [];
-        let i = 0;
-
-        while (i < sql.length) {
-          // Line comment --
-          if (sql[i] === '-' && sql[i+1] === '-') {
-            const end = sql.indexOf('\\n', i);
-            const chunk = end < 0 ? sql.slice(i) : sql.slice(i, end);
-            result.push('<span class="sql-cmt">' + escHtml(chunk) + '</span>');
-            i = end < 0 ? sql.length : end;
-            continue;
-          }
-          // Block comment /* */
-          if (sql[i] === '/' && sql[i+1] === '*') {
-            const end = sql.indexOf('*/', i + 2);
-            const chunk = end < 0 ? sql.slice(i) : sql.slice(i, end + 2);
-            result.push('<span class="sql-cmt">' + escHtml(chunk) + '</span>');
-            i = end < 0 ? sql.length : end + 2;
-            continue;
-          }
-          // Single-quoted string
-          if (sql[i] === "'") {
-            let j = i + 1;
-            while (j < sql.length) {
-              if (sql[j] === "'" && sql[j+1] === "'") { j += 2; continue; }
-              if (sql[j] === "'") { j++; break; }
-              j++;
-            }
-            result.push('<span class="sql-str">' + escHtml(sql.slice(i, j)) + '</span>');
-            i = j;
-            continue;
-          }
-          // Double-quoted identifier
-          if (sql[i] === '"') {
-            let j = i + 1;
-            while (j < sql.length && sql[j] !== '"') j++;
-            result.push(escHtml(sql.slice(i, j + 1)));
-            i = j + 1;
-            continue;
-          }
-          // Number
-          if (/[0-9]/.test(sql[i]) || (sql[i] === '.' && /[0-9]/.test(sql[i+1] || ''))) {
-            let j = i;
-            while (j < sql.length && /[0-9.]/.test(sql[j])) j++;
-            result.push('<span class="sql-num">' + escHtml(sql.slice(i, j)) + '</span>');
-            i = j;
-            continue;
-          }
-          // Word (keyword / builtin / identifier)
-          if (/[A-Za-z_]/.test(sql[i])) {
-            let j = i;
-            while (j < sql.length && /[A-Za-z0-9_]/.test(sql[j])) j++;
-            const word = sql.slice(i, j);
-            const upper = word.toUpperCase();
-            if (KEYWORDS.has(upper)) {
-              result.push('<span class="sql-kw">' + escHtml(word) + '</span>');
-            } else if (BUILTINS.has(upper)) {
-              result.push('<span class="sql-fn">' + escHtml(word) + '</span>');
-            } else {
-              result.push(escHtml(word));
-            }
-            i = j;
-            continue;
-          }
-          // Operators / punctuation
-          result.push(escHtml(sql[i]));
-          i++;
-        }
-        return result.join('');
-      }
-
-      function escHtml(str) {
-        return String(str)
-          .replaceAll('&', '&amp;')
-          .replaceAll('<', '&lt;')
-          .replaceAll('>', '&gt;')
-          .replaceAll('"', '&quot;');
-      }
+      ${highlightSql.toString()}
 
       function escapeHtml(str) {
         return String(str)
@@ -602,5 +498,105 @@ function buildHistoryPanelJs(): string {
       vscode.postMessage({ type: 'loadEntries' });
     })();
   `;
+}
+
+/**
+ * Minimal SQL syntax highlighter.
+ * Tokenizes the SQL string and wraps known token types in <span> tags.
+ * Handles: keywords, built-in functions, string literals, numbers, line/block comments.
+ */
+export function highlightSql(sql: string): string {
+  const KEYWORDS = new Set([
+    'SELECT','FROM','WHERE','AND','OR','NOT','IN','EXISTS','BETWEEN','LIKE','IS','NULL',
+    'INSERT','INTO','VALUES','UPDATE','SET','DELETE','MERGE','USING','MATCHED','WHEN',
+    'CREATE','ALTER','DROP','TABLE','VIEW','INDEX','ON','AS','JOIN','LEFT','RIGHT',
+    'INNER','OUTER','FULL','CROSS','GROUP','BY','ORDER','HAVING','LIMIT','OFFSET',
+    'DISTINCT','ALL','UNION','EXCEPT','INTERSECT','CASE','THEN','ELSE','END',
+    'WITH','TOP','FETCH','NEXT','ROWS','ONLY','REPLACE','TRUNCATE','COLUMN','ADD',
+    'PRIMARY','KEY','FOREIGN','REFERENCES','CONSTRAINT','DEFAULT','UNIQUE','CHECK',
+    'SCHEMA','DATABASE','IF','BEGIN','COMMIT','ROLLBACK','TRANSACTION','DECLARE',
+    'PROCEDURE','FUNCTION','RETURN','CALL','EXEC','EXECUTE','TRIGGER','FOR','EACH',
+    'ROW','AFTER','BEFORE','INSTEAD','OF','ASC','DESC','TRUE','FALSE'
+  ]);
+  const BUILTINS = new Set([
+    'COUNT','SUM','AVG','MIN','MAX','COALESCE','NULLIF','ISNULL','NVL','DECODE',
+    'CAST','CONVERT','TO_CHAR','TO_DATE','TO_NUMBER','TRIM','LTRIM','RTRIM',
+    'UPPER','LOWER','SUBSTR','SUBSTRING','LENGTH','LEN','CHARINDEX',
+    'INSTR','CONCAT','NOW','SYSDATE','GETDATE','DATEADD','DATEDIFF','ROUND',
+    'FLOOR','CEIL','CEILING','ABS','MOD','ROW_NUMBER','RANK','DENSE_RANK',
+    'LAG','LEAD','FIRST_VALUE','LAST_VALUE','OVER','PARTITION'
+  ]);
+
+  const escHtml = (str: string): string => str.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+
+  const result: string[] = [];
+  let i = 0;
+
+  while (i < sql.length) {
+    // Line comment --
+    if (sql[i] === '-' && sql[i+1] === '-') {
+      const end = sql.indexOf('\n', i);
+      const chunk = end < 0 ? sql.slice(i) : sql.slice(i, end);
+      result.push('<span class="sql-cmt">' + escHtml(chunk) + '</span>');
+      i = end < 0 ? sql.length : end;
+      continue;
+    }
+    // Block comment /* */
+    if (sql[i] === '/' && sql[i+1] === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      const chunk = end < 0 ? sql.slice(i) : sql.slice(i, end + 2);
+      result.push('<span class="sql-cmt">' + escHtml(chunk) + '</span>');
+      i = end < 0 ? sql.length : end + 2;
+      continue;
+    }
+    // Single-quoted string
+    if (sql[i] === "'") {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'" && sql[j+1] === "'") { j += 2; continue; }
+        if (sql[j] === "'") { j++; break; }
+        j++;
+      }
+      result.push('<span class="sql-str">' + escHtml(sql.slice(i, j)) + '</span>');
+      i = j;
+      continue;
+    }
+    // Double-quoted identifier
+    if (sql[i] === '"') {
+      let j = i + 1;
+      while (j < sql.length && sql[j] !== '"') j++;
+      result.push(escHtml(sql.slice(i, j + 1)));
+      i = j + 1;
+      continue;
+    }
+    // Number
+    if (/[0-9]/.test(sql[i] ?? '') || (sql[i] === '.' && /[0-9]/.test(sql[i+1] ?? ''))) {
+      let j = i;
+      while (j < sql.length && /[0-9.]/.test(sql[j] ?? '')) j++;
+      result.push('<span class="sql-num">' + escHtml(sql.slice(i, j)) + '</span>');
+      i = j;
+      continue;
+    }
+    // Word (keyword / builtin / identifier)
+    if (/[A-Za-z_]/.test(sql[i] ?? '')) {
+      let j = i;
+      while (j < sql.length && /[A-Za-z0-9_]/.test(sql[j] ?? '')) j++;
+      const word = sql.slice(i, j);
+      const upper = word.toUpperCase();
+      if (KEYWORDS.has(upper)) {
+        result.push('<span class="sql-kw">' + escHtml(word) + '</span>');
+      } else if (BUILTINS.has(upper)) {
+        result.push('<span class="sql-fn">' + escHtml(word) + '</span>');
+      } else {
+        result.push(escHtml(word));
+      }
+      i = j;
+      continue;
+    }
+    // Operators / punctuation
+    result.push(escHtml(sql[i] ?? ''));
+    i++;
+  }
+  return result.join('');
 }
 

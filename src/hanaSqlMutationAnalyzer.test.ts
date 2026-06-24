@@ -106,5 +106,21 @@ describe('hanaSqlMutationAnalyzer', () => {
       const result = analyzeMutatingStatement(sql, 'SCH');
       expect(result).toBeDefined();
     });
+
+    it('should handle complex nested parentheses in WHERE clause correctly', () => {
+      const sql = 'UPDATE "Users" SET "Status" = 0 WHERE "ID" IN (SELECT "UserID" FROM "Bans" WHERE "Reason" IN (SELECT "Code" FROM "Reasons" WHERE (Type = 1) AND (Severity > (SELECT MAX(X) FROM Y))))';
+      const result = analyzeMutatingStatement(sql, 'SCH');
+      expect(result).not.toBeNull();
+      expect(result?.whereClause).toBe('"ID" IN (SELECT "UserID" FROM "Bans" WHERE "Reason" IN (SELECT "Code" FROM "Reasons" WHERE (Type = 1) AND (Severity > (SELECT MAX(X) FROM Y))))');
+    });
+
+    it('should correctly parse complex MERGE statement with multiple ON conditions', () => {
+      const sql = 'MERGE INTO "Dest" USING "Source" ON "Dest"."ID" = "Source"."ID" AND ("Dest"."Cat" = "Source"."Cat" OR "Dest"."Type" = 5) WHEN MATCHED THEN UPDATE SET "Val" = 1';
+      const result = analyzeMutatingStatement(sql, 'SCH');
+      expect(result).not.toBeNull();
+      expect(result?.statementType).toBe('MERGE');
+      expect(result?.tableName).toBe('"Dest"');
+      expect(result?.whereClause).toBe('"Dest"."ID" = "Source"."ID" AND ("Dest"."Cat" = "Source"."Cat" OR "Dest"."Type" = 5)');
+    });
   });
 });

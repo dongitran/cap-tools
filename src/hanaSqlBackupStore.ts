@@ -219,7 +219,7 @@ function buildFolderName(
  * Since each segment is separated by '-' and can itself contain '-', we anchor
  * on the ISO timestamp suffix (14 digits: YYYYMMDDHHmmss).
  */
-function parseFolderNameToEntry(
+export function parseFolderNameToEntry(
   folderName: string,
   folderPath: string
 ): HanaSqlBackupEntry | null {

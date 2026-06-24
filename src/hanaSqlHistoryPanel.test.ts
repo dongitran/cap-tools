@@ -9,9 +9,72 @@ vi.mock('vscode', () => ({
   }
 }));
 
-import { parseCsvForDisplay } from './hanaSqlHistoryPanel';
+import { parseCsvForDisplay, highlightSql } from './hanaSqlHistoryPanel';
 
 describe('hanaSqlHistoryPanel', () => {
+  describe('highlightSql', () => {
+    it('should highlight basic keywords', () => {
+      const sql = 'SELECT * FROM table';
+      const result = highlightSql(sql);
+      expect(result).toContain('<span class="sql-kw">SELECT</span>');
+      expect(result).toContain('<span class="sql-kw">FROM</span>');
+    });
+
+    it('should highlight built-in functions', () => {
+      const sql = 'SELECT COUNT(id), ROUND(price, 2) FROM sales';
+      const result = highlightSql(sql);
+      expect(result).toContain('<span class="sql-fn">COUNT</span>');
+      expect(result).toContain('<span class="sql-fn">ROUND</span>');
+    });
+
+    it('should highlight string literals and handle escape characters safely', () => {
+      const sql = 'WHERE name = \'Alice\' AND html = \'<html>\'';
+      const result = highlightSql(sql);
+      // 'Alice' should be highlighted
+      expect(result).toContain(`<span class="sql-str">'Alice'</span>`);
+      // '<html>' should be safely escaped
+      expect(result).toContain(`<span class="sql-str">'&lt;html&gt;'</span>`);
+    });
+
+    it('should correctly escape HTML outside of tokens', () => {
+      const sql = 'SELECT id < 5 AND name > "Bob"';
+      const result = highlightSql(sql);
+      expect(result).toContain(' &lt; <span class="sql-num">5</span> ');
+      expect(result).toContain(' &gt; &quot;Bob&quot;');
+    });
+
+    it('should highlight numbers', () => {
+      const sql = 'LIMIT 100 OFFSET 20.5';
+      const result = highlightSql(sql);
+      expect(result).toContain('<span class="sql-num">100</span>');
+      expect(result).toContain('<span class="sql-num">20.5</span>');
+    });
+
+    it('should highlight line comments', () => {
+      const sql = 'SELECT 1 -- this is a comment\nFROM t';
+      const result = highlightSql(sql);
+      expect(result).toContain('<span class="sql-cmt">-- this is a comment</span>');
+    });
+
+    it('should highlight block comments', () => {
+      const sql = 'SELECT /* multi\nline */ 1';
+      const result = highlightSql(sql);
+      expect(result).toContain('<span class="sql-cmt">/* multi\nline */</span>');
+    });
+
+    it('should not choke on unclosed string literals', () => {
+      const sql = 'SELECT \'unclosed';
+      const result = highlightSql(sql);
+      expect(result).toContain(`<span class="sql-str">'unclosed</span>`);
+    });
+
+    it('should correctly handle string with escaped quotes', () => {
+      const sql = 'SELECT \'O\'\'Connor\'';
+      const result = highlightSql(sql);
+      expect(result).toContain(`<span class="sql-str">'O''Connor'</span>`);
+    });
+  });
+
   describe('parseCsvForDisplay', () => {
     it('should parse basic CSV without quotes', () => {
       const csv = 'ID,Name,Age\n1,Alice,30\n2,Bob,25';

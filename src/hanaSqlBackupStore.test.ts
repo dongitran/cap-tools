@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { HanaSqlBackupStore, extractRegionFromEndpoint, type HanaSqlBackupEntry } from './hanaSqlBackupStore';
+import { HanaSqlBackupStore, extractRegionFromEndpoint, parseFolderNameToEntry, type HanaSqlBackupEntry } from './hanaSqlBackupStore';
 import * as fs from 'node:fs/promises';
 import type { HanaSqlScopeSession } from './hanaSqlConnectionResolver';
 
@@ -129,6 +129,49 @@ describe('hanaSqlBackupStore', () => {
       expect(list[0]?.id).toBe('20260624T120000');
       expect(list[1]?.id).toBe('20260624T100000');
       expect(list[2]?.id).toBe('20260501T000000');
+    });
+    it('should respect the limit parameter to save memory', async () => {
+      const store = new HanaSqlBackupStore();
+      
+      // Mock month bucket
+      vi.mocked(fs.readdir).mockResolvedValueOnce(['202606'] as unknown as string[]);
+      
+      // Mock 5 backups
+      const mockFolders = [
+        'eu10-org-space-app-update-table-20260624T100000',
+        'eu10-org-space-app-update-table-20260624T090000',
+        'eu10-org-space-app-update-table-20260624T080000',
+        'eu10-org-space-app-update-table-20260624T070000',
+        'eu10-org-space-app-update-table-20260624T060000',
+      ];
+      vi.mocked(fs.readdir).mockResolvedValueOnce(mockFolders as unknown as string[]);
+
+      // Mock metadata error so it uses parseFolderNameToEntry fallback for all of them
+      vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'));
+
+      const list = await store.listBackups(3); // limit to 3
+      expect(list).toHaveLength(3);
+      expect(list[0]?.id).toBe('eu10-org-space-app-update-table-20260624T100000');
+      expect(list[2]?.id).toBe('eu10-org-space-app-update-table-20260624T080000');
+    });
+  });
+
+  describe('parseFolderNameToEntry', () => {
+    it('should parse valid folder names correctly', () => {
+      const entry = parseFolderNameToEntry('eu10-finance-prod-uat-my-app-update-employees-20260624T194200', '/fake/path');
+      expect(entry).not.toBeNull();
+      expect(entry?.region).toBe('eu10');
+      expect(entry?.org).toBe('finance-prod-uat-my-app');
+      expect(entry?.space).toBe('');
+      expect(entry?.appName).toBe('path'); // basename of /fake/path
+      expect(entry?.statementType).toBe('UPDATE');
+      expect(entry?.tableName).toBe('EMPLOYEES');
+      expect(entry?.id).toBe('eu10-finance-prod-uat-my-app-update-employees-20260624T194200');
+    });
+
+    it('should return null for malformed folder names', () => {
+      expect(parseFolderNameToEntry('invalid-folder-name', '/fake/path')).toBeNull();
+      expect(parseFolderNameToEntry('no-timestamp-here', '/fake/path')).toBeNull();
     });
   });
 
