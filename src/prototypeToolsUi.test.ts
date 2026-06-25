@@ -93,6 +93,13 @@ async function readServiceExportStylesSource(): Promise<string> {
   );
 }
 
+async function readPackageStylesSource(): Promise<string> {
+  return readFile(
+    new URL('../docs/designs/prototypes/src/styles/05-packages.css', import.meta.url),
+    'utf8'
+  );
+}
+
 async function readSqlStylesSource(): Promise<string> {
   return readFile(
     new URL('../docs/designs/prototypes/src/styles/06-hana-sql.css', import.meta.url),
@@ -268,6 +275,19 @@ describe('prototype Log-API-Event workspace', () => {
     );
     expect(styles).toContain('.app-log-action-spinner');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+
+  it('keeps failed package error icons hoverable instead of revealing the Build button over them', async () => {
+    const styles = await readPackageStylesSource();
+    const renderSource = await readWorkspaceRenderSource();
+
+    expect(renderSource).toContain("isFailedResult ? ' is-failed' : ''");
+    expect(styles).toMatch(
+      /\.detected-pkg\.is-failed:hover \.detected-pkg-single-build\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?pointer-events:\s*none;/
+    );
+    expect(styles).toMatch(
+      /\.detected-pkg\.is-failed:hover \.detected-pkg-error-icon\s*\{[\s\S]*?opacity:\s*1;[\s\S]*?pointer-events:\s*auto;/
+    );
   });
 
   it('uses multi-binding state for the Event viewer (Add Binding workflow)', async () => {

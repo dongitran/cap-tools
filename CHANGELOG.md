@@ -1,5 +1,11 @@
 # SAP Tools Extension Changelog
 
+## 0.10.175 (stable)
+- Fix: Single-package builds in the Apps Packages list now build the full local dependency closure in dependency order, instead of rebuilding only the clicked package.
+- Fix: Local package installs now refresh broken pnpm lockfile entries before build, so downstream packages resolve the active dist-tag instead of a stale tarball URL.
+- UI/UX: Failed package rows keep the error icon hoverable/clickable on hover, instead of letting the Build button overlap it.
+- Test: Added focused unit coverage for targeted package ordering, lockfile refresh, and failed-row hover behavior.
+
 ## 0.10.174 (stable)
 - Audit: Successfully passed comprehensive verification loop.
 - Test: Expanded unit tests for core SQL utilities (`hanaSqlLimitGuard`, `hanaSqlMutationAnalyzer`) achieving 100% core coverage. Implemented EOF safety edge cases for unmatched quotes and missing block comments.

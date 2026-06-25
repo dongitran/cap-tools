@@ -5602,6 +5602,7 @@ function updateSinglePackageBuildUI(pkgName) {
     const isDone = statusObj?.status === 'done';
     const isFailed = statusObj?.status === 'failed';
     const isRunning = statusObj?.status === 'running';
+    const isFailedResult = (singleHasResult && !buildResultSuccess) || isFailed;
 
     let actionCell;
     const buildButtonHtml = `<button
@@ -5643,7 +5644,7 @@ function updateSinglePackageBuildUI(pkgName) {
       actionCell = buildButtonHtml;
     }
     
-    li.className = 'detected-pkg' + ((isRunning || isSingleBuilding) ? ' is-building' : '') + (singleHasResult || isDone || isFailed ? ' is-result' : '');
+    li.className = 'detected-pkg' + ((isRunning || isSingleBuilding) ? ' is-building' : '') + (singleHasResult || isDone || isFailed ? ' is-result' : '') + (isFailedResult ? ' is-failed' : '');
     
     if (li.contains(document.activeElement) && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -5724,6 +5725,7 @@ function renderDetectedPackagesInner() {
         const isDone = statusObj?.status === 'done';
         const isFailed = statusObj?.status === 'failed';
         const isRunning = statusObj?.status === 'running';
+        const isFailedResult = (singleHasResult && !buildResultSuccess) || isFailed;
 
         let actionCell;
         const buildButtonHtml = `<button
@@ -5768,7 +5770,8 @@ function renderDetectedPackagesInner() {
         const rowClass =
           'detected-pkg' +
           ((isRunning || isSingleBuilding) ? ' is-building' : '') +
-          (singleHasResult || isDone || isFailed ? ' is-result' : '');
+          (singleHasResult || isDone || isFailed ? ' is-result' : '') +
+          (isFailedResult ? ' is-failed' : '');
         return `
           <li class="${rowClass}" data-pkg-name="${escapeHtml(pkg.name)}">
             <span class="detected-pkg-order" title="Build order">#${escapeHtml(roundLabel)}</span>

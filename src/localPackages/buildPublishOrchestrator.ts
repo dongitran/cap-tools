@@ -1,12 +1,17 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { buildDependencyOrder, type PackageNode } from './dependencyGraph';
+import {
+  buildDependencyOrder,
+  buildOrderForService,
+  type PackageNode,
+} from './dependencyGraph';
 import type { LocalPackagesConfig } from './localPackagesConfig';
 import { scanLocalPackages, type LocalPackage } from './localPackageScanner';
-import { buildPackage } from './packageBuilder';
+import { buildPackage, type BuildOutcome } from './packageBuilder';
 import { publishPackage } from './packagePublisher';
 import { runCommand } from './processRunner';
+import { replaceServicePackageDependencyTags } from './serviceDependencyTags';
 
 /**
  * Drives the package pipeline: scan the root folder for locally-developed npm packages
@@ -46,6 +51,21 @@ export interface BuildPublishOutcome {
   readonly skippedCount: number;
 }
 
+interface BuildPublishCounts {
+  readonly builtCount: number;
+  readonly skippedCount: number;
+}
+
+interface PackagePipelineContext {
+  readonly request: BuildPublishRequest;
+  readonly pkg: LocalPackage;
+  readonly index: number;
+  readonly total: number;
+  readonly tag: string;
+  readonly tagPlaceholders: readonly string[];
+  readonly localPackageNames: readonly string[];
+}
+
 /**
  * Builds and publishes every detected local package, in dependency order (a package is
  * built only after everything it depends on). Throws if no packages are found or the
@@ -69,10 +89,7 @@ export async function runBuildPublishAll(
     name: pkg.name,
     deps: pkg.dependencyNames,
   }));
-  const fullOrder = buildDependencyOrder(nodes).ordered;
-  const order = request.targetPackageName !== undefined
-    ? fullOrder.filter((name) => name === request.targetPackageName)
-    : fullOrder;
+  const order = resolveRequestedOrder(nodes, request.targetPackageName);
 
   if (request.targetPackageName !== undefined && order.length === 0) {
     throw new Error(`Package "${request.targetPackageName}" not found under the root folder.`);
@@ -80,12 +97,30 @@ export async function runBuildPublishAll(
 
   request.onOrder?.(order);
 
-  const total = order.length;
-  const tag = request.config.registry.defaultTag;
-  const tagPlaceholders = request.config.packageJsonTagPlaceholder
-    .split(',')
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+  const counts = await buildPublishOrder(request, byName, order, packages);
+
+  return { order, ...counts };
+}
+
+function resolveRequestedOrder(
+  nodes: readonly PackageNode[],
+  targetPackageName: string | undefined
+): readonly string[] {
+  const fullOrder = buildDependencyOrder(nodes).ordered;
+  if (targetPackageName === undefined) {
+    return fullOrder;
+  }
+  return buildOrderForService([targetPackageName], nodes).ordered;
+}
+
+async function buildPublishOrder(
+  request: BuildPublishRequest,
+  byName: ReadonlyMap<string, LocalPackage>,
+  order: readonly string[],
+  packages: readonly LocalPackage[]
+): Promise<BuildPublishCounts> {
+  const localPackageNames = packages.map((pkg) => pkg.name);
+  const tagPlaceholders = parseTagPlaceholders(request.config);
   let builtCount = 0;
   let skippedCount = 0;
 
@@ -96,98 +131,154 @@ export async function runBuildPublishAll(
       continue;
     }
 
-    const packageJsonPath = join(pkg.dir, 'package.json');
-    let originalPackageJsonContent: string | undefined;
-
-    try {
-      if (tagPlaceholders.length > 0) {
-        const content = await readFile(packageJsonPath, 'utf8');
-        const hasAny = tagPlaceholders.some((p) => content.includes(p));
-        if (hasAny) {
-          originalPackageJsonContent = content;
-          const patched = tagPlaceholders.reduce(
-            (acc, placeholder) => acc.replaceAll(placeholder, tag),
-            content
-          );
-          await writeFile(packageJsonPath, patched, 'utf8');
-        }
-      }
-
-      if (request.config.prePublishScript.length > 0) {
-        request.onProgress({
-          packageName: name,
-          phase: 'pre-publish-script',
-          status: 'running',
-          index,
-          total,
-        });
-        await runCommand('node', ['-e', request.config.prePublishScript], {
-          cwd: pkg.dir,
-          onOutput: request.onOutput,
-        });
-        request.onProgress({
-          packageName: name,
-          phase: 'pre-publish-script',
-          status: 'done',
-          index,
-          total,
-        });
-      }
-
-      request.onProgress({ packageName: name, phase: 'build', status: 'running', index, total });
-      const buildOutcome = await buildPackage(pkg, {
-        registryUrl: request.registryUrl,
-        authToken: request.authToken,
-        deleteNpmrcBeforeBuild: request.config.deleteNpmrcBeforeBuild,
-        onOutput: request.onOutput,
-      });
-      if (buildOutcome === 'skipped') {
-        skippedCount += 1;
-      } else {
-        builtCount += 1;
-      }
-      request.onProgress({
-        packageName: name,
-        phase: 'build',
-        status: buildOutcome === 'skipped' ? 'skipped' : 'done',
-        index,
-        total,
-        ...(buildOutcome === 'skipped' ? { message: 'no build script' } : {}),
-      });
-
-      request.onProgress({ packageName: name, phase: 'publish', status: 'running', index, total });
-      const result = await publishPackage(pkg, {
-        registryUrl: request.registryUrl,
-        tag,
-        authToken: request.authToken,
-        versionBumpStrategy: request.config.versionBumpStrategy,
-        versionSuffix: request.config.registry.versionSuffix,
-        onOutput: request.onOutput,
-      });
-      request.onProgress({
-        packageName: name,
-        phase: 'publish',
-        status: 'done',
-        index,
-        total,
-        message: `${result.publishedVersion} (${result.tag})`,
-      });
-    } catch (error) {
-      request.onProgress({
-        packageName: name,
-        phase: 'publish',
-        status: 'failed',
-        index,
-        total,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    } finally {
-      if (originalPackageJsonContent !== undefined) {
-        await writeFile(packageJsonPath, originalPackageJsonContent, 'utf8');
-      }
+    const buildOutcome = await buildPublishPackage({
+      request,
+      pkg,
+      index,
+      total: order.length,
+      tag: request.config.registry.defaultTag,
+      tagPlaceholders,
+      localPackageNames,
+    });
+    if (buildOutcome === 'skipped') {
+      skippedCount += 1;
+    } else {
+      builtCount += 1;
     }
   }
 
-  return { order, builtCount, skippedCount };
+  return { builtCount, skippedCount };
+}
+
+function parseTagPlaceholders(config: LocalPackagesConfig): string[] {
+  return config.packageJsonTagPlaceholder
+    .split(',')
+    .map((placeholder) => placeholder.trim())
+    .filter((placeholder) => placeholder.length > 0);
+}
+
+async function buildPublishPackage(context: PackagePipelineContext): Promise<BuildOutcome> {
+  const packageJsonPath = join(context.pkg.dir, 'package.json');
+  let originalPackageJsonContent: string | undefined;
+
+  try {
+    originalPackageJsonContent = await patchPackageJsonForActiveTag(
+      packageJsonPath,
+      context
+    );
+    await runPrePublishScript(context);
+    const buildOutcome = await runBuildStep(context);
+    await runPublishStep(context);
+    return buildOutcome;
+  } catch (error) {
+    context.request.onProgress({
+      packageName: context.pkg.name,
+      phase: 'publish',
+      status: 'failed',
+      index: context.index,
+      total: context.total,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    if (originalPackageJsonContent !== undefined) {
+      await writeFile(packageJsonPath, originalPackageJsonContent, 'utf8');
+    }
+  }
+}
+
+async function patchPackageJsonForActiveTag(
+  packageJsonPath: string,
+  context: PackagePipelineContext
+): Promise<string | undefined> {
+  const content = await readFile(packageJsonPath, 'utf8');
+  const result = replaceServicePackageDependencyTags(content, {
+    placeholders: context.tagPlaceholders,
+    localPackageNames: context.localPackageNames,
+    tag: context.tag,
+  });
+  if (!result.changed) {
+    return undefined;
+  }
+  await writeFile(packageJsonPath, result.content, 'utf8');
+  return content;
+}
+
+async function runPrePublishScript(context: PackagePipelineContext): Promise<void> {
+  if (context.request.config.prePublishScript.length === 0) {
+    return;
+  }
+
+  context.request.onProgress({
+    packageName: context.pkg.name,
+    phase: 'pre-publish-script',
+    status: 'running',
+    index: context.index,
+    total: context.total,
+  });
+  await runCommand('node', ['-e', context.request.config.prePublishScript], {
+    cwd: context.pkg.dir,
+    onOutput: context.request.onOutput,
+  });
+  context.request.onProgress({
+    packageName: context.pkg.name,
+    phase: 'pre-publish-script',
+    status: 'done',
+    index: context.index,
+    total: context.total,
+  });
+}
+
+async function runBuildStep(context: PackagePipelineContext): Promise<BuildOutcome> {
+  context.request.onProgress({
+    packageName: context.pkg.name,
+    phase: 'build',
+    status: 'running',
+    index: context.index,
+    total: context.total,
+  });
+  const buildOutcome = await buildPackage(context.pkg, {
+    registryUrl: context.request.registryUrl,
+    authToken: context.request.authToken,
+    deleteNpmrcBeforeBuild: context.request.config.deleteNpmrcBeforeBuild,
+    localDependencyNames: context.pkg.dependencyNames.filter((name) =>
+      context.localPackageNames.includes(name)
+    ),
+    onOutput: context.request.onOutput,
+  });
+  context.request.onProgress({
+    packageName: context.pkg.name,
+    phase: 'build',
+    status: buildOutcome === 'skipped' ? 'skipped' : 'done',
+    index: context.index,
+    total: context.total,
+    ...(buildOutcome === 'skipped' ? { message: 'no build script' } : {}),
+  });
+  return buildOutcome;
+}
+
+async function runPublishStep(context: PackagePipelineContext): Promise<void> {
+  context.request.onProgress({
+    packageName: context.pkg.name,
+    phase: 'publish',
+    status: 'running',
+    index: context.index,
+    total: context.total,
+  });
+  const result = await publishPackage(context.pkg, {
+    registryUrl: context.request.registryUrl,
+    tag: context.tag,
+    authToken: context.request.authToken,
+    versionBumpStrategy: context.request.config.versionBumpStrategy,
+    versionSuffix: context.request.config.registry.versionSuffix,
+    onOutput: context.request.onOutput,
+  });
+  context.request.onProgress({
+    packageName: context.pkg.name,
+    phase: 'publish',
+    status: 'done',
+    index: context.index,
+    total: context.total,
+    message: `${result.publishedVersion} (${result.tag})`,
+  });
 }

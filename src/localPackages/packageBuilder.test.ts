@@ -74,4 +74,56 @@ describe('buildPackage', () => {
 
     await expect(readFile(npmrcPath, 'utf8')).resolves.toContain('registry=https://registry.npmjs.org/');
   });
+
+  it('refreshes broken lockfile entries before installing dependencies', async () => {
+    const dir = await makePackageDir();
+    runCommandMock.mockResolvedValue(undefined);
+
+    await buildPackage(createPackage(dir), {
+      registryUrl: 'http://localhost:4873',
+      authToken: 'token',
+      onOutput: () => undefined,
+    });
+
+    expect(runCommandMock).toHaveBeenNthCalledWith(
+      1,
+      'pnpm',
+      expect.arrayContaining(['i', '--fix-lockfile']),
+      expect.objectContaining({ cwd: dir })
+    );
+  });
+
+  it('updates local dependency lockfile resolutions before the main install', async () => {
+    const dir = await makePackageDir();
+    runCommandMock.mockResolvedValue(undefined);
+
+    await buildPackage(createPackage(dir), {
+      registryUrl: 'http://localhost:4873',
+      authToken: 'token',
+      localDependencyNames: ['@neutral/base', '@neutral/base'],
+      onOutput: () => undefined,
+    });
+
+    expect(runCommandMock).toHaveBeenNthCalledWith(
+      1,
+      'pnpm',
+      [
+        'update',
+        '@neutral/base',
+        '--fix-lockfile',
+        '--shamefully-hoist',
+        '--config.node-linker=hoisted',
+        '--registry',
+        'http://localhost:4873',
+        '--//localhost:4873/:_authToken=token',
+      ],
+      expect.objectContaining({ cwd: dir })
+    );
+    expect(runCommandMock).toHaveBeenNthCalledWith(
+      2,
+      'pnpm',
+      expect.arrayContaining(['i', '--fix-lockfile']),
+      expect.objectContaining({ cwd: dir })
+    );
+  });
 });

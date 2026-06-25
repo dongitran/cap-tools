@@ -2251,6 +2251,11 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
   pointer-events: auto;
 }
 
+.detected-pkg.is-failed:hover .detected-pkg-single-build {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* While building, keep the button pinned visible regardless of hover. */
 .detected-pkg.is-building .detected-pkg-single-build {
   opacity: 1;
@@ -2332,6 +2337,11 @@ body.vscode-high-contrast-light.prototype-page .app-log-start {
 .detected-pkg:hover .detected-pkg-error-icon {
   opacity: 0;
   pointer-events: none;
+}
+
+.detected-pkg.is-failed:hover .detected-pkg-error-icon {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .detected-pkg-error-icon:hover {

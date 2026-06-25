@@ -22,6 +22,7 @@ export interface BuildOptions {
    * cannot hijack local publishes.
    */
   readonly deleteNpmrcBeforeBuild?: boolean;
+  readonly localDependencyNames?: readonly string[];
   readonly onOutput: (chunk: string) => void;
 }
 
@@ -35,18 +36,8 @@ export async function buildPackage(
 
   const authKey = npmRegistryAuthKey(options.registryUrl);
 
-  await runCommand(
-    'pnpm',
-    [
-      'i',
-      '--shamefully-hoist',
-      '--config.node-linker=hoisted',
-      '--registry',
-      options.registryUrl,
-      `--${authKey}:_authToken=${options.authToken}`,
-    ],
-    { cwd: pkg.dir, onOutput: options.onOutput, timeoutMs: 600000 }
-  );
+  await refreshLocalDependencyResolution(pkg, options, authKey);
+  await installDependencies(pkg, options, authKey);
 
   if (pkg.buildScript === undefined) {
     return 'skipped';
@@ -58,6 +49,54 @@ export async function buildPackage(
     timeoutMs: 600000,
   });
   return 'built';
+}
+
+async function refreshLocalDependencyResolution(
+  pkg: LocalPackage,
+  options: BuildOptions,
+  authKey: string
+): Promise<void> {
+  const localDependencyNames = [...new Set(options.localDependencyNames ?? [])]
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  if (localDependencyNames.length === 0) {
+    return;
+  }
+
+  await runCommand(
+    'pnpm',
+    [
+      'update',
+      ...localDependencyNames,
+      '--fix-lockfile',
+      '--shamefully-hoist',
+      '--config.node-linker=hoisted',
+      '--registry',
+      options.registryUrl,
+      `--${authKey}:_authToken=${options.authToken}`,
+    ],
+    { cwd: pkg.dir, onOutput: options.onOutput, timeoutMs: 600000 }
+  );
+}
+
+async function installDependencies(
+  pkg: LocalPackage,
+  options: BuildOptions,
+  authKey: string
+): Promise<void> {
+  await runCommand(
+    'pnpm',
+    [
+      'i',
+      '--fix-lockfile',
+      '--shamefully-hoist',
+      '--config.node-linker=hoisted',
+      '--registry',
+      options.registryUrl,
+      `--${authKey}:_authToken=${options.authToken}`,
+    ],
+    { cwd: pkg.dir, onOutput: options.onOutput, timeoutMs: 600000 }
+  );
 }
 
 async function deletePackageNpmrc(packageDir: string): Promise<void> {
