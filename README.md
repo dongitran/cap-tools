@@ -99,3 +99,13 @@ Investigate runtime behavior from the same app context instead of jumping betwee
 ## 📜 License
 
 [MIT](LICENSE)
+
+---
+
+## 👨‍💻 Author
+
+**dongtran** ✨
+
+---
+
+Made with ❤️ to make your work life easier!
