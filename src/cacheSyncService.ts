@@ -71,6 +71,7 @@ export class CacheSyncService implements vscode.Disposable {
   private readonly cancelledSyncRuns = new Map<number, string>();
   private readonly latestSyncRunByUser = new Map<string, number>();
   private readonly listeners = new Set<SnapshotListener>();
+  private credentialUpdateQueue: Promise<void> = Promise.resolve();
   private disposed = false;
   private hasSeededE2eStaleSync = false;
   private readonly testMode = process.env['SAP_TOOLS_TEST_MODE'] === '1';
@@ -100,6 +101,18 @@ export class CacheSyncService implements vscode.Disposable {
   }
 
   async setCredentials(
+    credentials: CfCredentials | null
+  ): Promise<CacheRuntimeSnapshot> {
+    const update = this.credentialUpdateQueue.then(() => this.applyCredentials(credentials));
+    this.credentialUpdateQueue = update.then(
+      () => undefined,
+      () => undefined
+    );
+
+    return update;
+  }
+
+  private async applyCredentials(
     credentials: CfCredentials | null
   ): Promise<CacheRuntimeSnapshot> {
     if (credentials === null) {

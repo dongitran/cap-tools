@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.178 (stable)
+- Fix: Cache credential initialization is now serialized so activation and sidebar resolution cannot interleave stale-sync recovery with a new background sync.
+- Test: Added Ubuntu SQL backup history E2E screenshot baselines and hardened Apps mapping/stale-sync E2E assertions against expected hydration timing.
+
 ## 0.10.177 (stable)
 - Fix: Apps artifact export now recovers from stale Cloud Foundry CLI auth/target state in SAP Tools' isolated `CF_HOME`, re-authenticating and retrying transient `cf ssh` authorization failures before surfacing the final error.
 - Test: Added focused coverage for CF CLI auth-failure detection, retry recovery, and export session preparation.

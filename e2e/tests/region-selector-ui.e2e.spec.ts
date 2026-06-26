@@ -80,7 +80,11 @@ function getOrgStageButtons(webviewFrame: Frame): Locator {
 }
 
 function getMappedServiceIcons(webviewFrame: Frame): Locator {
-  return webviewFrame.getByRole('img', { name: 'Mapped service' });
+  return webviewFrame.getByRole('img', { name: /^Mapped service$/ });
+}
+
+function getUnmappedServiceIcons(webviewFrame: Frame): Locator {
+  return webviewFrame.getByRole('img', { name: /^Unmapped service$/ });
 }
 
 function getMappedServiceIconForApp(webviewFrame: Frame, appName: string): Locator {
@@ -88,7 +92,7 @@ function getMappedServiceIconForApp(webviewFrame: Frame, appName: string): Locat
     .locator('.service-map-row', {
       has: webviewFrame.locator('.service-map-name', { hasText: appName }),
     })
-    .getByRole('img', { name: 'Mapped service' });
+    .getByRole('img', { name: /^Mapped service$/ });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1460,9 +1464,7 @@ test.describe('SAP Tools region selector', () => {
       await expect(webviewFrame.getByText('finance-uat-api')).toBeVisible();
       await expect(webviewFrame.getByText('finance-uat-worker')).toBeVisible();
       await expect(webviewFrame.getByText('finance-uat-audit')).toBeVisible();
-      await expect(
-        webviewFrame.locator('.service-map-row.is-unmapped')
-      ).toHaveCount(3);
+      await expect(getUnmappedServiceIcons(webviewFrame)).toHaveCount(3);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -1575,7 +1577,7 @@ test.describe('SAP Tools region selector', () => {
 
       await expect(webviewFrame.getByText(/Scanning local folders/i)).toHaveCount(0);
       await expect(webviewFrame.locator('.service-export-path')).toContainText('Root: Not selected');
-      await expect(webviewFrame.locator('.service-map-row.is-unmapped')).toHaveCount(3);
+      await expect(getUnmappedServiceIcons(webviewFrame)).toHaveCount(3);
     } finally {
       await cleanupExtensionHost(session);
     }
@@ -1666,7 +1668,9 @@ test.describe('SAP Tools region selector', () => {
         timeout: 15000,
       });
       await expect(reopenedMappedStateCells).toHaveCount(3, { timeout: 10000 });
-      await expect(reopenedFrame.locator('.service-map-row.is-unmapped')).toHaveCount(0);
+      await expect(getUnmappedServiceIcons(reopenedFrame)).toHaveCount(0, {
+        timeout: 10000,
+      });
     } finally {
       await cleanupExtensionHost(session);
       fs.rmSync(fixtureRootPath, { recursive: true, force: true });
@@ -1712,7 +1716,9 @@ test.describe('SAP Tools region selector', () => {
 
       const reopenedMappedStateCells = getMappedServiceIcons(reopenedFrame);
       await expect(reopenedMappedStateCells).toHaveCount(3, { timeout: 15000 });
-      await expect(reopenedFrame.locator('.service-map-row.is-unmapped')).toHaveCount(0);
+      await expect(getUnmappedServiceIcons(reopenedFrame)).toHaveCount(0, {
+        timeout: 15000,
+      });
       await expect(reopenedFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
     } finally {
       await cleanupExtensionHost(session);
@@ -1759,7 +1765,7 @@ test.describe('SAP Tools region selector', () => {
       await clickWithFallback(webviewFrame.getByRole('tab', { name: 'Apps' }));
       await expect(webviewFrame.locator('.service-map-row')).toHaveCount(3, { timeout: 15000 });
       await expect(getMappedServiceIcons(webviewFrame)).toHaveCount(3);
-      await expect(webviewFrame.getByRole('img', { name: 'Unmapped service' })).toHaveCount(0);
+      await expect(getUnmappedServiceIcons(webviewFrame)).toHaveCount(0);
       await expect(webviewFrame.locator('.service-export-path')).toContainText(fixtureRootPath);
     } finally {
       await cleanupExtensionHost(session);
@@ -1983,8 +1989,10 @@ test.describe('SAP Tools region selector', () => {
       await expect(webviewFrame.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
       const syncStatusMessage = webviewFrame.locator('.settings-status-message');
+      await expect(syncStatusMessage).not.toContainText(/sync in progress/i, {
+        timeout: 20000,
+      });
       await expect(syncStatusMessage).toContainText(/interrupted/i);
-      await expect(syncStatusMessage).not.toContainText(/sync in progress/i);
     } finally {
       await cleanupExtensionHost(session);
     }

@@ -686,4 +686,73 @@ describe('CacheSyncService', () => {
       restoreEnv();
     }
   });
+
+  it('serializes concurrent credential updates before stale sync scheduling', async () => {
+    const restoreEnv = enableE2eStaleSyncSeedEnv();
+
+    try {
+      ensureCfHomeDirMock.mockResolvedValue('/tmp/sap-tools-cf-home');
+      fetchCfLoginInfoMock.mockRejectedValue(new Error('Unexpected sync'));
+
+      const context = createMockContext({
+        version: 1,
+        settings: { syncIntervalHours: 24 },
+        users: {},
+        exportRootFolders: {},
+      });
+      const cacheStore = new CacheStore(context);
+      const originalUpsertUser = cacheStore.upsertUser.bind(cacheStore);
+      const seedWriteStarted = createDeferred<undefined>();
+      const releaseSeedWrite = createDeferred<undefined>();
+      let heldSeedWrite = false;
+
+      vi.spyOn(cacheStore, 'upsertUser').mockImplementation(
+        async (email: string, updater: Parameters<CacheStore['upsertUser']>[1]) => {
+          const currentUser = await cacheStore.getUser(email);
+          const nextUser = updater(currentUser);
+          const isSeedWrite =
+            nextUser.syncInProgress &&
+            nextUser.lastSyncCompletedAt !== null &&
+            nextUser.lastSyncError.length === 0;
+
+          if (isSeedWrite && !heldSeedWrite) {
+            heldSeedWrite = true;
+            seedWriteStarted.resolve(undefined);
+            await releaseSeedWrite.promise;
+          }
+
+          return originalUpsertUser(email, () => nextUser);
+        }
+      );
+
+      const service = new CacheSyncService(cacheStore, context, createOutputChannel());
+      const credentials = {
+        email: 'dev@example.com',
+        password: 'secret',
+      };
+
+      const firstSnapshotPromise = service.initialize(credentials);
+      await seedWriteStarted.promise;
+      const secondSnapshotPromise = service.setCredentials(credentials);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 25);
+      });
+      releaseSeedWrite.resolve(undefined);
+
+      const [firstSnapshot, secondSnapshot] = await Promise.all([
+        firstSnapshotPromise,
+        secondSnapshotPromise,
+      ]);
+      const user = await cacheStore.getUser('dev@example.com');
+
+      expect(firstSnapshot.syncInProgress).toBe(false);
+      expect(secondSnapshot.syncInProgress).toBe(false);
+      expect(user?.syncInProgress).toBe(false);
+      expect(user?.lastSyncError.toLowerCase()).toContain('interrupted');
+      expect(ensureCfHomeDirMock).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
+    }
+  });
 });

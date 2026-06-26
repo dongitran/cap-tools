@@ -1572,6 +1572,45 @@ export class RegionSidebarProvider
     }
 
     this.selectedLocalRootFolderPath = cachedEntry.rootFolderPath;
+    this.preloadServiceFolderMappingsForPersistedScope(
+      credentials.email,
+      persistedScope,
+      cachedEntry.rootFolderPath
+    );
+  }
+
+  private preloadServiceFolderMappingsForPersistedScope(
+    email: string,
+    persistedScope: PersistedConfirmedScopeEntry,
+    rootFolderPath: string
+  ): void {
+    const scopeKey = buildServiceMappingsScopeKey(
+      email,
+      persistedScope.regionCode,
+      persistedScope.orgGuid,
+      persistedScope.spaceName,
+      rootFolderPath
+    );
+    if (scopeKey.length === 0) {
+      return;
+    }
+
+    const cachedEntry = this.readServiceMappingCacheByScope()[scopeKey];
+    if (cachedEntry === undefined || cachedEntry.mappings.length === 0) {
+      return;
+    }
+
+    this.serviceFolderSelections.clear();
+    for (const mapping of cachedEntry.mappings) {
+      if (
+        mapping.hasConflict &&
+        mapping.folderPath.length > 0 &&
+        mapping.candidateFolderPaths.includes(mapping.folderPath)
+      ) {
+        this.serviceFolderSelections.set(mapping.appId, mapping.folderPath);
+      }
+    }
+    this.serviceFolderMappings = this.applyServiceFolderSelections(cachedEntry.mappings);
   }
 
   private async restoreConfirmedScopeForCurrentUser(): Promise<void> {
@@ -1865,7 +1904,7 @@ export class RegionSidebarProvider
       await this.persistRootFolderForCurrentScope(this.selectedLocalRootFolderPath);
     }
 
-    await this.refreshServiceFolderMappings();
+    await this.refreshServiceFolderMappings(payload.appNames);
   }
 
   private handleSelectServiceFolderMapping(
@@ -1897,7 +1936,9 @@ export class RegionSidebarProvider
     void this.persistServiceFolderMappingsForCurrentScope(this.serviceFolderMappings);
   }
 
-  private async refreshServiceFolderMappings(): Promise<void> {
+  private async refreshServiceFolderMappings(
+    requestedAppNames: readonly string[] = []
+  ): Promise<void> {
     // Scan for local npm packages independently of the CF-app service mapping below.
     void this.postDetectedLocalPackages();
 
@@ -1909,7 +1950,12 @@ export class RegionSidebarProvider
       return;
     }
 
-    if (this.currentApps.length === 0) {
+    const appNames =
+      this.currentApps.length > 0
+        ? this.currentApps.map((app) => app.name)
+        : requestedAppNames;
+
+    if (appNames.length === 0) {
       this.serviceFolderMappings = [];
       this.postMessage({
         type: MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
@@ -1921,7 +1967,7 @@ export class RegionSidebarProvider
     try {
       const mappings = await buildServiceFolderMappings(
         this.selectedLocalRootFolderPath,
-        this.currentApps.map((app) => app.name),
+        appNames,
         readSharedAppFolderMappings()
       );
       this.serviceFolderMappings = this.applyServiceFolderSelections(mappings);

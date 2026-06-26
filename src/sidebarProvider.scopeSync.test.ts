@@ -1,5 +1,5 @@
 // cspell:words unstub
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -129,6 +129,11 @@ interface SidebarProviderTestAccess {
     payload: ConfirmScopePayloadForTest,
     options?: ConfirmScopeOptionsForTest
   ): Promise<void>;
+  handleRequestInitialState(): Promise<void>;
+  handleRefreshServiceFolderMappings(payload: {
+    readonly rootFolderPath: string;
+    readonly appNames: readonly string[];
+  }): Promise<void>;
   handleWebviewMessage(message: unknown): Promise<void>;
   handleExternalScopeChange(scope: SharedCfScope): Promise<void>;
   hydrateQuickConfirmedScope(payload: ConfirmScopePayloadForTest): Promise<void>;
@@ -221,6 +226,16 @@ function createProviderFixture(): ProviderFixture {
     getCachedApps: vi.fn(),
     getCachedOrgs: vi.fn(),
     getCachedSpaces: vi.fn(),
+    getRuntimeSnapshot: vi.fn(async () => ({
+      activeUserEmail: 'test@example.com',
+      syncInProgress: false,
+      lastSyncStartedAt: null,
+      lastSyncCompletedAt: null,
+      lastSyncError: '',
+      syncIntervalHours: 24,
+      nextSyncAt: null,
+      regionAccessById: {},
+    })),
     subscribe: vi.fn(() => ({ dispose: vi.fn() })),
   } as unknown as CacheSyncService;
   const cacheStore = {
@@ -963,6 +978,112 @@ describe('RegionSidebarProvider shared CF scope sync', () => {
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: 'sapTools.localRootFolderUpdated',
         path: '',
+      });
+    } finally {
+      rmSync(rootFolder, { recursive: true, force: true });
+    }
+  });
+
+  it('restores cached service mappings with the initial root folder state', async () => {
+    const rootFolder = mkdtempSync(join(tmpdir(), 'sap-tools-root-'));
+    try {
+      const { access, cacheStoreGetExportRootFolderMock, globalStateUpdateMock } =
+        createProviderFixture();
+      const postMessageSpy = vi.spyOn(access, 'postMessage');
+      const folderPath = join(rootFolder, 'finance_uat_api');
+      const confirmedScope = {
+        regionId: 'us10',
+        regionCode: 'us-10',
+        regionName: 'US East (VA)',
+        regionArea: 'Americas',
+        orgGuid: 'org-guid-1',
+        orgName: 'demo-org',
+        spaceName: 'uat',
+        confirmedAt: '2026-06-26T00:00:00.000Z',
+      };
+      const serviceMappingsScopeKey = JSON.stringify([
+        'test@example.com',
+        'us-10',
+        'org-guid-1',
+        'uat',
+        rootFolder,
+      ]);
+
+      await globalStateUpdateMock('sapTools.confirmedScopeByEmail.v1', {
+        'test@example.com': confirmedScope,
+      });
+      await globalStateUpdateMock('sapTools.serviceMappingsByScope.v1', {
+        [serviceMappingsScopeKey]: {
+          rootFolderPath: rootFolder,
+          updatedAt: '2026-06-26T00:01:00.000Z',
+          mappings: [
+            {
+              appId: 'finance-uat-api',
+              appName: 'finance-uat-api',
+              folderPath,
+              matchType: 'underscore',
+              candidateFolderPaths: [folderPath],
+              hasConflict: false,
+            },
+          ],
+        },
+      });
+      cacheStoreGetExportRootFolderMock.mockResolvedValue({
+        rootFolderPath: rootFolder,
+        updatedAt: '2026-06-26T00:02:00.000Z',
+      });
+      vi.spyOn(access, 'hydrateRestoredScope').mockResolvedValue(undefined);
+
+      await access.handleRequestInitialState();
+
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: 'sapTools.localRootFolderUpdated',
+        path: rootFolder,
+      });
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: 'sapTools.serviceFolderMappingsLoaded',
+        mappings: [
+          {
+            appId: 'finance-uat-api',
+            appName: 'finance-uat-api',
+            folderPath,
+            matchType: 'underscore',
+            candidateFolderPaths: [folderPath],
+            hasConflict: false,
+          },
+        ],
+      });
+    } finally {
+      rmSync(rootFolder, { recursive: true, force: true });
+    }
+  });
+
+  it('scans refresh payload app names before provider app hydration completes', async () => {
+    const rootFolder = mkdtempSync(join(tmpdir(), 'sap-tools-root-'));
+    try {
+      const serviceFolder = join(rootFolder, 'finance_uat_api');
+      mkdirSync(serviceFolder, { recursive: true });
+      writeFileSync(join(serviceFolder, 'package.json'), '{ "name": "fixture" }\n', 'utf8');
+      const { access } = createProviderFixture();
+      const postMessageSpy = vi.spyOn(access, 'postMessage');
+
+      await access.handleRefreshServiceFolderMappings({
+        rootFolderPath: rootFolder,
+        appNames: ['finance-uat-api'],
+      });
+
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: 'sapTools.serviceFolderMappingsLoaded',
+        mappings: [
+          {
+            appId: 'finance-uat-api',
+            appName: 'finance-uat-api',
+            folderPath: serviceFolder,
+            matchType: 'underscore',
+            candidateFolderPaths: [serviceFolder],
+            hasConflict: false,
+          },
+        ],
       });
     } finally {
       rmSync(rootFolder, { recursive: true, force: true });
