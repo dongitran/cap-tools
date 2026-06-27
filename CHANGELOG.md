@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.182 (stable)
+
+- Refactor `RegionSidebarProvider` to safely extract handlers and reduce file size.
+
 ## 0.10.181 (stable)
 
 - Refactor RegionSidebarProvider to extract types and helper functions.
