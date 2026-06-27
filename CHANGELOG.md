@@ -1,5 +1,9 @@
 # SAP Tools Extension Changelog
 
+## 0.10.181 (stable)
+
+- Refactor RegionSidebarProvider to extract types and helper functions.
+
 ## 0.10.180 (stable)
 
 - Refined SSH Proxy UI in the settings page to match the cds-debug interface.

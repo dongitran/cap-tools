@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
@@ -16,8 +16,6 @@ import type { CacheRuntimeSnapshot, CacheSyncService } from './cacheSyncService'
 import { normalizeUserEmail, type CacheStore } from './cacheStore';
 import type { CfLogsPanelProvider } from './cfLogsPanel';
 import { clearCredentials, getEffectiveCredentials, storeCredentials } from './credentialStore';
-import { isSyncIntervalHours } from './cacheModels';
-import type { SyncIntervalHours } from './cacheModels';
 import {
   buildServiceFolderMappings,
   type ServiceFolderMapping,
@@ -30,7 +28,6 @@ import {
 import { readSharedAppFolderMappings, readSharedRemoteRoot } from './sharedDebugConfig';
 import { exportSqlToolsConfig } from './sqlToolsConfigExporter';
 import type { ApisExplorerPanelManager, ApisExplorerPanelSession } from './apisExplorerPanel';
-import type { EventMeshTargetParams } from './eventMeshPanel';
 import {
   resolveMockApps,
   resolveMockCfTopology,
@@ -60,7 +57,6 @@ import { scanLocalPackages } from './localPackages/localPackageScanner';
 import { buildDependencyOrder } from './localPackages/dependencyGraph';
 import {
   replaceServicePackageDependencyTags,
-  type ServiceDependencyTagReplacementResult,
 } from './localPackages/serviceDependencyTags';
 import {
   readMicrosoftGraphToolRunRequest,
@@ -69,275 +65,181 @@ import {
   type MicrosoftGraphToolStepProgress,
   sanitizeGraphMessage,
 } from './microsoftGraphTools';
-import type { EventMeshStopReason } from './eventMeshProviderRouter';
 
-export const REGION_VIEW_ID = 'sapTools.regionView';
 
-const PROTOTYPE_DESIGN_ID = '34';
+import { buildMainHtml, buildLoginGateHtml } from './sidebarProvider.html';
+
+import type {
+  RegionSelectionPayload,
+  OrgSelectionPayload,
+  SpaceSelectionPayload,
+  ConfirmScopePayload,
+  ConfirmScopeOptions,
+  TopologyOrgSelectedPayload,
+  QuickScopeConfirmPayload,
+  RefreshServiceFolderMappingsPayload,
+  SelectServiceFolderMappingPayload,
+  ExportServiceArtifactsPayload,
+  ExportSqlToolsConfigPayload,
+  OpenHanaSqlFilePayload,
+  RefreshHanaTablesPayload,
+  RunHanaTableSelectPayload,
+  LogoutResultPayload,
+  CacheStatePayload,
+  CfLogSessionSeed,
+  SidebarAppEntry,
+  PersistedConfirmedScopeEntry,
+  LoadedScopeState,
+  AppListReloadRequest,
+  RootFolderCacheScope,
+  PersistedServiceMappingScopeEntry,
+  EventMeshViewerController
+} from './sidebarProvider.types';
+import {
+  MSG_REQUEST_INITIAL_STATE,
+  MSG_LOGIN_SUBMIT,
+  MSG_REGION_SELECTED,
+  MSG_ORG_SELECTED,
+  MSG_SPACE_SELECTED,
+  MSG_CONFIRM_SCOPE,
+  MSG_TOPOLOGY_ORG_SELECTED,
+  MSG_QUICK_SCOPE_CONFIRM,
+  MSG_REQUEST_CF_TOPOLOGY,
+  MSG_OPEN_CF_LOGS_PANEL,
+  MSG_ACTIVE_APPS_CHANGED,
+  MSG_PAUSED_APPS_CHANGED,
+  MSG_UPDATE_SYNC_INTERVAL,
+  MSG_SYNC_NOW,
+  MSG_GET_SSH_PROXY_STATUS,
+  MSG_SAVE_SSH_PROXY_SETTINGS,
+  MSG_CLEAR_SSH_PROXY_SETTINGS,
+  MSG_LOGOUT,
+  MSG_SELECT_LOCAL_ROOT_FOLDER,
+  MSG_REFRESH_SERVICE_FOLDER_MAPPINGS,
+  MSG_SELECT_SERVICE_FOLDER_MAPPING,
+  MSG_EXPORT_SERVICE_ARTIFACTS,
+  MSG_REPLACE_SERVICE_PACKAGE_PLACEHOLDER,
+  MSG_EXPORT_SQLTOOLS_CONFIG,
+  MSG_OPEN_HANA_SQL_FILE,
+  MSG_OPEN_APIS_EXPLORER,
+  MSG_OPEN_EVENT_MESH,
+  MSG_RUN_HANA_TABLE_SELECT,
+  MSG_OPEN_SQLTOOLS_EXTENSION,
+  MSG_BUILD_PUBLISH_ALL,
+  MSG_BUILD_SINGLE_PACKAGE,
+  MSG_LOCAL_REGISTRY_START,
+  MSG_LOCAL_REGISTRY_STOP,
+  MSG_LOCAL_REGISTRY_STATUS,
+  MSG_OPEN_LOCAL_PACKAGES_SETTINGS,
+  MSG_RUN_MICROSOFT_GRAPH_TOOL,
+  MSG_RELOAD_APP_LIST,
+  MSG_OPEN_SQL_BACKUP_HISTORY,
+  SQLTOOLS_EXTENSION_ID,
+  SQLTOOLS_ACTIVITY_BAR_COMMAND,
+  BUILTIN_EXTENSION_OPEN_COMMAND,
+  MSG_LOGIN_RESULT,
+  MSG_SSH_PROXY_STATUS,
+  MSG_LOGOUT_RESULT,
+  MSG_ORGS_LOADED,
+  MSG_ORGS_ERROR,
+  MSG_SPACES_LOADED,
+  MSG_SPACES_ERROR,
+  MSG_APPS_LOADED,
+  MSG_APPS_ERROR,
+  MSG_APPS_RELOAD_ERROR,
+  MSG_CACHE_STATE,
+  MSG_LOCAL_ROOT_FOLDER_UPDATED,
+  MSG_SERVICE_FOLDER_MAPPINGS_LOADED,
+  MSG_SERVICE_FOLDER_MAPPINGS_ERROR,
+  MSG_EXPORT_ARTIFACT_PROGRESS,
+  MSG_EXPORT_ARTIFACT_RESULT,
+  MSG_EXPORT_SQLTOOLS_PROGRESS,
+  MSG_EXPORT_SQLTOOLS_RESULT,
+  MSG_RESTORE_CONFIRMED_SCOPE,
+  MSG_HANA_SQL_FILE_OPEN_RESULT,
+  MSG_HANA_TABLES_LOADED,
+  MSG_HANA_TUNNEL_STATE,
+  MSG_HANA_TABLE_SELECT_RESULT,
+  MSG_REFRESH_HANA_TABLES,
+  MSG_CF_TOPOLOGY,
+  MSG_TOPOLOGY_SCOPE_RESOLVED,
+  MSG_LOCAL_REGISTRY_STATE,
+  MSG_LOCAL_PACKAGES_LOADED,
+  MSG_LOCAL_PACKAGES_LOADING,
+  MSG_BUILD_PUBLISH_PREVIEW,
+  MSG_BUILD_PUBLISH_PROGRESS,
+  MSG_BUILD_PUBLISH_RESULT,
+  MSG_MICROSOFT_GRAPH_TOOL_PROGRESS,
+  MSG_MICROSOFT_GRAPH_TOOL_RESULT,
+  MSG_APIS_EXPLORER_SETTLED,
+  MSG_EVENT_MESH_VIEWER_SETTLED
+} from './sidebarProvider.types';
+
+export { REGION_VIEW_ID } from './sidebarProvider.types';
+
+import {
+  isTestMode,
+  buildSharedScopeFromConfirmPayload,
+  areSharedScopesEqual,
+  areReloadScopesEqual,
+  isLoadedScopeForConfirmedScope,
+  areRegionCodesEquivalent,
+  appListsEqual,
+  formatAppListReloadFailure,
+  resolveE2eTestModeAppsDelayMs,
+  sleep,
+  buildScopeLabel,
+  createNonce,
+  sanitizeForLog,
+  sanitizeErrorForLog,
+  readOptionalString,
+  buildServiceMappingsScopeKey,
+  normalizePersistedServiceMappingsByScope,
+  normalizeServiceMappingForPersistence,
+  haveSameOrgEntries,
+  shouldSkipSensitiveExportConfirmation,
+  pathExists,
+  isRecord,
+  isLoginSubmitMessage,
+  readLoginSubmitPayload,
+  isRegionSelectedMessage,
+  readRegionSelectionPayload,
+  isOrgSelectedMessage,
+  readOrgSelectionPayload,
+  isSpaceSelectedMessage,
+  readSpaceSelectionPayload,
+  isTopologyOrgSelectedMessage,
+  readTopologyOrgSelectedPayload,
+  isQuickScopeConfirmMessage,
+  readQuickScopeConfirmPayload,
+  isConfirmScopeMessage,
+  readConfirmScopePayload,
+  isActiveAppsChangedMessage,
+  readActiveAppsChangedPayload,
+  isUpdateSyncIntervalMessage,
+  readUpdateSyncIntervalPayload,
+  isRefreshServiceFolderMappingsMessage,
+  readRefreshServiceFolderMappingsPayload,
+  isSelectServiceFolderMappingMessage,
+  readSelectServiceFolderMappingPayload,
+  isExportServiceArtifactsMessage,
+  readExportServiceArtifactsPayload,
+  isExportSqlToolsConfigMessage,
+  readExportSqlToolsConfigPayload,
+  isOpenHanaSqlFileMessage,
+  readOpenHanaSqlFilePayload,
+  isRefreshHanaTablesMessage,
+  readRefreshHanaTablesPayload,
+  isRunHanaTableSelectMessage,
+  readRunHanaTableSelectPayload,
+  formatServicePackageReplaceMessage,
+  sanitizeSqlUiLogValue,
+  buildLocalPackagesCacheKey,
+  areLocalPackageListsEqual
+} from './sidebarProvider.helpers';
+
 const CONFIRMED_SCOPE_BY_EMAIL_GLOBAL_STATE_KEY = 'sapTools.confirmedScopeByEmail.v1';
 const SERVICE_MAPPINGS_BY_SCOPE_GLOBAL_STATE_KEY = 'sapTools.serviceMappingsByScope.v1';
-
-// ── Inbound message types (webview → extension) ─────────────────────────────
-
-const MSG_REQUEST_INITIAL_STATE = 'sapTools.requestInitialState';
-const MSG_LOGIN_SUBMIT = 'sapTools.loginSubmit';
-const MSG_REGION_SELECTED = 'sapTools.regionSelected';
-const MSG_ORG_SELECTED = 'sapTools.orgSelected';
-const MSG_SPACE_SELECTED = 'sapTools.spaceSelected';
-const MSG_CONFIRM_SCOPE = 'sapTools.confirmScope';
-const MSG_TOPOLOGY_ORG_SELECTED = 'sapTools.topologyOrgSelected';
-const MSG_QUICK_SCOPE_CONFIRM = 'sapTools.quickScopeConfirm';
-const MSG_REQUEST_CF_TOPOLOGY = 'sapTools.requestCfTopology';
-const MSG_OPEN_CF_LOGS_PANEL = 'sapTools.openCfLogsPanel';
-const MSG_ACTIVE_APPS_CHANGED = 'sapTools.activeAppsChanged';
-const MSG_PAUSED_APPS_CHANGED = 'sapTools.pausedAppsChanged';
-const MSG_UPDATE_SYNC_INTERVAL = 'sapTools.updateSyncInterval';
-const MSG_SYNC_NOW = 'sapTools.syncNow';
-const MSG_GET_SSH_PROXY_STATUS = 'sapTools.getSshProxyStatus';
-const MSG_SAVE_SSH_PROXY_SETTINGS = 'sapTools.saveSshProxySettings';
-const MSG_CLEAR_SSH_PROXY_SETTINGS = 'sapTools.clearSshProxySettings';
-
-const MSG_LOGOUT = 'sapTools.logout';
-const MSG_SELECT_LOCAL_ROOT_FOLDER = 'sapTools.selectLocalRootFolder';
-const MSG_REFRESH_SERVICE_FOLDER_MAPPINGS = 'sapTools.refreshServiceFolderMappings';
-const MSG_SELECT_SERVICE_FOLDER_MAPPING = 'sapTools.selectServiceFolderMapping';
-const MSG_EXPORT_SERVICE_ARTIFACTS = 'sapTools.exportServiceArtifacts';
-const MSG_REPLACE_SERVICE_PACKAGE_PLACEHOLDER = 'sapTools.replaceServicePackagePlaceholder';
-const MSG_EXPORT_SQLTOOLS_CONFIG = 'sapTools.exportSqlToolsConfig';
-const MSG_OPEN_HANA_SQL_FILE = 'sapTools.openHanaSqlFile';
-const MSG_OPEN_APIS_EXPLORER = 'saptools.openApisExplorer';
-const MSG_OPEN_EVENT_MESH = 'saptools.openEventMesh';
-const MSG_RUN_HANA_TABLE_SELECT = 'sapTools.runHanaTableSelect';
-const MSG_OPEN_SQLTOOLS_EXTENSION = 'sapTools.openSqlToolsExtension';
-const MSG_BUILD_PUBLISH_ALL = 'sapTools.buildPublishAll';
-const MSG_BUILD_SINGLE_PACKAGE = 'sapTools.buildSinglePackage';
-const MSG_LOCAL_REGISTRY_START = 'sapTools.localRegistryStart';
-const MSG_LOCAL_REGISTRY_STOP = 'sapTools.localRegistryStop';
-const MSG_LOCAL_REGISTRY_STATUS = 'sapTools.localRegistryStatus';
-const MSG_OPEN_LOCAL_PACKAGES_SETTINGS = 'sapTools.openLocalPackagesSettings';
-const MSG_RUN_MICROSOFT_GRAPH_TOOL = 'sapTools.runMicrosoftGraphTool';
-const MSG_RELOAD_APP_LIST = 'sapTools.reloadAppList';
-const MSG_OPEN_SQL_BACKUP_HISTORY = 'sapTools.openSqlBackupHistory';
-const SQLTOOLS_EXTENSION_ID = 'mtxr.sqltools';
-const SQLTOOLS_ACTIVITY_BAR_COMMAND = 'workbench.view.extension.sqltools-activity-bar';
-const BUILTIN_EXTENSION_OPEN_COMMAND = 'extension.open';
-
-// ── Outbound message types (extension → webview) ────────────────────────────
-
-const MSG_LOGIN_RESULT = 'sapTools.loginResult';
-const MSG_SSH_PROXY_STATUS = 'sapTools.sshProxyStatus';
-
-const MSG_LOGOUT_RESULT = 'sapTools.logoutResult';
-const MSG_ORGS_LOADED = 'sapTools.orgsLoaded';
-const MSG_ORGS_ERROR = 'sapTools.orgsError';
-const MSG_SPACES_LOADED = 'sapTools.spacesLoaded';
-const MSG_SPACES_ERROR = 'sapTools.spacesError';
-const MSG_APPS_LOADED = 'sapTools.appsLoaded';
-const MSG_APPS_ERROR = 'sapTools.appsError';
-const MSG_APPS_RELOAD_ERROR = 'sapTools.appsReloadError';
-const MSG_CACHE_STATE = 'sapTools.cacheState';
-const MSG_LOCAL_ROOT_FOLDER_UPDATED = 'sapTools.localRootFolderUpdated';
-const MSG_SERVICE_FOLDER_MAPPINGS_LOADED = 'sapTools.serviceFolderMappingsLoaded';
-const MSG_SERVICE_FOLDER_MAPPINGS_ERROR = 'sapTools.serviceFolderMappingsError';
-const MSG_EXPORT_ARTIFACT_PROGRESS = 'sapTools.exportArtifactProgress';
-const MSG_EXPORT_ARTIFACT_RESULT = 'sapTools.exportArtifactResult';
-const MSG_EXPORT_SQLTOOLS_PROGRESS = 'sapTools.exportSqlToolsProgress';
-const MSG_EXPORT_SQLTOOLS_RESULT = 'sapTools.exportSqlToolsResult';
-const MSG_RESTORE_CONFIRMED_SCOPE = 'sapTools.restoreConfirmedScope';
-const MSG_HANA_SQL_FILE_OPEN_RESULT = 'sapTools.hanaSqlFileOpenResult';
-const MSG_HANA_TABLES_LOADED = 'sapTools.hanaTablesLoaded';
-const MSG_HANA_TUNNEL_STATE = 'sapTools.hanaTunnelState';
-const MSG_HANA_TABLE_SELECT_RESULT = 'sapTools.hanaTableSelectResult';
-const MSG_REFRESH_HANA_TABLES = 'sapTools.refreshHanaTables';
-const MSG_CF_TOPOLOGY = 'sapTools.cfTopology';
-const MSG_TOPOLOGY_SCOPE_RESOLVED = 'sapTools.topologyScopeResolved';
-const MSG_LOCAL_REGISTRY_STATE = 'sapTools.localRegistryState';
-const MSG_LOCAL_PACKAGES_LOADED = 'sapTools.localPackagesLoaded';
-const MSG_LOCAL_PACKAGES_LOADING = 'sapTools.localPackagesLoading';
-const MSG_BUILD_PUBLISH_PREVIEW = 'sapTools.buildPublishPreview';
-const MSG_BUILD_PUBLISH_PROGRESS = 'sapTools.buildPublishProgress';
-const MSG_BUILD_PUBLISH_RESULT = 'sapTools.buildPublishResult';
-const MSG_MICROSOFT_GRAPH_TOOL_PROGRESS = 'sapTools.microsoftGraphToolProgress';
-const MSG_MICROSOFT_GRAPH_TOOL_RESULT = 'sapTools.microsoftGraphToolResult';
-const MSG_APIS_EXPLORER_SETTLED = 'sapTools.apisExplorerSettled';
-const MSG_EVENT_MESH_VIEWER_SETTLED = 'sapTools.eventMeshViewerSettled';
-
-// ── Payload interfaces ───────────────────────────────────────────────────────
-
-interface RegionSelectionPayload {
-  readonly id: string;
-  readonly name: string;
-  readonly code: string;
-  readonly area: string;
-}
-
-interface OrgSelectionPayload {
-  readonly guid: string;
-  readonly name: string;
-}
-
-interface SpaceSelectionPayload {
-  readonly spaceName: string;
-  readonly orgGuid: string;
-  readonly orgName: string;
-}
-
-interface ConfirmScopePayload {
-  readonly regionId: string;
-  readonly regionCode: string;
-  readonly regionName: string;
-  readonly regionArea: string;
-  readonly orgGuid: string;
-  readonly orgName: string;
-  readonly spaceName: string;
-}
-
-interface ConfirmScopeOptions {
-  readonly invalidateHanaAppContexts?: boolean;
-  readonly writeSharedScope?: boolean;
-}
-
-interface TopologyOrgSelectedPayload {
-  readonly regionKey: string;
-  readonly orgName: string;
-}
-
-interface QuickScopeConfirmPayload {
-  readonly regionKey: string;
-  readonly orgName: string;
-  readonly spaceName: string;
-}
-
-interface ActiveAppsChangedPayload {
-  readonly appNames: string[];
-}
-
-interface UpdateSyncIntervalPayload {
-  readonly syncIntervalHours: SyncIntervalHours;
-}
-
-interface RefreshServiceFolderMappingsPayload {
-  readonly rootFolderPath: string;
-  readonly appNames: readonly string[];
-}
-
-interface SelectServiceFolderMappingPayload {
-  readonly appId: string;
-  readonly folderPath: string;
-}
-
-interface ExportServiceArtifactsPayload {
-  readonly appId: string;
-  readonly appName: string;
-  readonly rootFolderPath: string;
-}
-
-interface ExportSqlToolsConfigPayload {
-  readonly appId: string;
-  readonly appName: string;
-  readonly rootFolderPath: string;
-}
-
-interface OpenHanaSqlFilePayload {
-  readonly requestId: number;
-  readonly serviceId: string;
-  readonly serviceName: string;
-}
-
-interface RefreshHanaTablesPayload {
-  readonly serviceId: string;
-  readonly serviceName: string;
-}
-
-interface RunHanaTableSelectPayload {
-  readonly serviceId: string;
-  readonly serviceName: string;
-  readonly tableName: string;
-}
-
-interface LogoutResultPayload {
-  readonly type: string;
-  readonly success: boolean;
-  readonly error?: string;
-}
-
-interface CacheStatePayload {
-  readonly type: string;
-  readonly snapshot: {
-    readonly activeUserEmail: string | null;
-    readonly syncInProgress: boolean;
-    readonly lastSyncStartedAt: string | null;
-    readonly lastSyncCompletedAt: string | null;
-    readonly lastSyncError: string;
-    readonly syncIntervalHours: number;
-    readonly nextSyncAt: string | null;
-    readonly regionAccessById: Record<string, string>;
-  };
-}
-
-interface CfLogSessionSeed {
-  readonly apiEndpoint: string;
-  readonly email: string;
-  readonly password: string;
-  readonly orgName: string;
-  readonly spaceName: string;
-  readonly cfHomeDir: string;
-}
-
-interface SidebarAppEntry {
-  readonly id: string;
-  readonly name: string;
-  readonly runningInstances: number;
-}
-
-interface PersistedConfirmedScopeEntry {
-  readonly regionId: string;
-  readonly regionCode: string;
-  readonly regionName: string;
-  readonly regionArea: string;
-  readonly orgGuid: string;
-  readonly orgName: string;
-  readonly spaceName: string;
-  readonly confirmedAt: string;
-}
-
-interface LoadedScopeState {
-  readonly regionId: string;
-  readonly regionCode: string;
-  readonly orgGuid: string;
-  readonly orgName: string;
-  readonly spaceName: string;
-}
-
-interface AppListReloadRequest {
-  readonly scope: SharedCfScope;
-  readonly loadedScope: LoadedScopeState | null;
-  readonly regionId: string;
-  readonly regionCode: string;
-  readonly orgGuid: string;
-  readonly spaceSelectionRequestId: number;
-}
-
-interface RootFolderCacheScope {
-  readonly email: string;
-  readonly regionCode: string;
-  readonly orgGuid: string;
-  readonly spaceName: string;
-}
-
-interface PersistedServiceMappingScopeEntry {
-  readonly rootFolderPath: string;
-  readonly mappings: readonly ServiceFolderMapping[];
-  readonly updatedAt: string;
-}
-
-interface EventMeshViewerController {
-  openEventMeshViewer(appId: string, targetParams?: EventMeshTargetParams): void | Promise<void>;
-  stopAllListeners(reason: EventMeshStopReason): void;
-}
-
-// ── Provider ─────────────────────────────────────────────────────────────────
-
 export class RegionSidebarProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
 {
@@ -459,8 +361,8 @@ export class RegionSidebarProvider
 
     webviewView.webview.html =
       credentials !== null
-        ? this.buildMainHtml(webviewView.webview, nonce, assetsRoot)
-        : this.buildLoginGateHtml(webviewView.webview, nonce, assetsRoot);
+        ? buildMainHtml(webviewView.webview, nonce, assetsRoot)
+        : buildLoginGateHtml(webviewView.webview, nonce, assetsRoot);
 
     const messageSubscription = webviewView.webview.onDidReceiveMessage(
       (message: unknown): void => {
@@ -3265,7 +3167,7 @@ export class RegionSidebarProvider
       'assets'
     );
     const nonce = createNonce();
-    this.webviewView.webview.html = this.buildMainHtml(
+    this.webviewView.webview.html = buildMainHtml(
       this.webviewView.webview,
       nonce,
       assetsRoot
@@ -3285,7 +3187,7 @@ export class RegionSidebarProvider
       'assets'
     );
     const nonce = createNonce();
-    this.webviewView.webview.html = this.buildLoginGateHtml(
+    this.webviewView.webview.html = buildLoginGateHtml(
       this.webviewView.webview,
       nonce,
       assetsRoot
@@ -3990,839 +3892,4 @@ private sendSshProxyStatus(): void {
   }
 
   // ── HTML builders ────────────────────────────────────────────────────────
-
-  private buildMainHtml(
-    webview: vscode.Webview,
-    nonce: string,
-    assetsRoot: vscode.Uri
-  ): string {
-    const scriptSrc = webview
-      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'prototype.js'))
-      .toString();
-    const cssSrc = webview
-      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'prototype.css'))
-      .toString();
-    const themeCssSrc = webview
-      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'themes', 'design.css'))
-      .toString();
-
-    const csp = buildCsp(webview, nonce);
-
-    return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="${csp}" />
-    <title>SAP Tools</title>
-    <link rel="stylesheet" href="${cssSrc}" />
-    <link rel="stylesheet" href="${themeCssSrc}" />
-  </head>
-  <body class="prototype-page saptools-extension" data-design-id="${PROTOTYPE_DESIGN_ID}">
-    <main id="app"></main>
-    <script nonce="${nonce}" type="module" src="${scriptSrc}"></script>
-  </body>
-</html>`;
-  }
-
-  private buildLoginGateHtml(
-    webview: vscode.Webview,
-    nonce: string,
-    assetsRoot: vscode.Uri
-  ): string {
-    const scriptSrc = webview
-      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'login-gate.js'))
-      .toString();
-    const cssSrc = webview
-      .asWebviewUri(vscode.Uri.joinPath(assetsRoot, 'login-gate.css'))
-      .toString();
-    const csp = buildCsp(webview, nonce);
-
-    return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="${csp}" />
-    <title>SAP Tools Login</title>
-    <link rel="stylesheet" href="${cssSrc}" />
-  </head>
-  <body class="login-gate-page saptools-extension">
-    <main class="login-shell">
-      <header class="layout-head">
-        <div class="layout-title-row">
-          <h1>SAP Tools Login</h1>
-          <span class="layout-chip">Secure</span>
-        </div>
-        <p class="layout-subline">Connect your SAP account to open region workspace.</p>
-      </header>
-
-      <section class="login-card" aria-label="SAP credential setup">
-        <form id="login-gate-form" class="login-form" novalidate>
-          <div class="field-row">
-            <label for="sap-email">SAP Email</label>
-            <input
-              id="sap-email"
-              name="sap-email"
-              type="email"
-              autocomplete="email"
-              placeholder="developer@company.com"
-              required
-            />
-          </div>
-
-          <div class="field-row">
-            <label for="sap-password">SAP Password</label>
-            <input
-              id="sap-password"
-              name="sap-password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Enter SAP password"
-              required
-            />
-          </div>
-
-          <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
-
-          <button id="submit-login-gate" type="submit">Save and Continue</button>
-        </form>
-      </section>
-    </main>
-
-    <script nonce="${nonce}" type="module" src="${scriptSrc}"></script>
-  </body>
-</html>`;
-  }
-}
-
-function isTestMode(): boolean {
-  return process.env['SAP_TOOLS_TEST_MODE'] === '1';
-}
-
-function buildSharedScopeFromConfirmPayload(
-  payload: ConfirmScopePayload
-): SharedCfScope {
-  return {
-    regionCode: payload.regionId,
-    orgName: payload.orgName,
-    spaceName: payload.spaceName,
-  };
-}
-
-function areSharedScopesEqual(
-  left: SharedCfScope | undefined,
-  right: SharedCfScope | undefined
-): boolean {
-  if (left === undefined || right === undefined) {
-    return false;
-  }
-
-  return (
-    left.regionCode === right.regionCode &&
-    left.orgName === right.orgName &&
-    left.spaceName === right.spaceName
-  );
-}
-
-function areReloadScopesEqual(
-  left: SharedCfScope | undefined,
-  right: SharedCfScope | undefined
-): boolean {
-  if (left === undefined || right === undefined) {
-    return false;
-  }
-
-  return (
-    areRegionCodesEquivalent(left.regionCode, right.regionCode) &&
-    left.orgName === right.orgName &&
-    left.spaceName === right.spaceName
-  );
-}
-
-function isLoadedScopeForConfirmedScope(
-  loadedScope: LoadedScopeState,
-  confirmedScope: SharedCfScope
-): boolean {
-  return (
-    areRegionCodesEquivalent(loadedScope.regionCode, confirmedScope.regionCode) &&
-    loadedScope.orgName === confirmedScope.orgName &&
-    loadedScope.spaceName === confirmedScope.spaceName
-  );
-}
-
-function areRegionCodesEquivalent(left: string, right: string): boolean {
-  return normalizeRegionCodeForComparison(left) === normalizeRegionCodeForComparison(right);
-}
-
-function normalizeRegionCodeForComparison(value: string): string {
-  return value.trim().toLowerCase().replaceAll('-', '');
-}
-
-/**
- * Order-independent equality for two app lists. App names are unique within a
- * space, so a length check plus matching id/name/runningInstances keys is exact.
- * Used to skip a redundant re-post when a topology refresh returns the same apps
- * the dashboard already shows.
- */
-function appListsEqual(
-  left: readonly SidebarAppEntry[],
-  right: readonly SidebarAppEntry[]
-): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  const toKey = (app: SidebarAppEntry): string =>
-    `${app.id} ${app.name} ${String(app.runningInstances)}`;
-  const leftKeys = new Set(left.map(toKey));
-  return right.every((app) => leftKeys.has(toKey(app)));
-}
-
-function formatAppListReloadFailure(
-  result: Exclude<Awaited<ReturnType<typeof refreshCfSyncSpace>>, { readonly status: 'refreshed' }>
-): string {
-  if (result.status === 'failed') {
-    return result.error instanceof Error
-      ? result.error.message
-      : 'Failed to reload apps from Cloud Foundry.';
-  }
-  return result.reason === 'missing-credentials'
-    ? 'No credentials found. Please re-open SAP Tools and log in.'
-    : 'Could not resolve the Cloud Foundry region for this scope.';
-}
-
-function resolveE2eTestModeAppsDelayMs(): number {
-  if (process.env['SAP_TOOLS_E2E'] !== '1') {
-    return 0;
-  }
-
-  const rawDelay = process.env['SAP_TOOLS_E2E_TESTMODE_APPS_DELAY_MS'] ?? '';
-  const parsedDelay = Number.parseInt(rawDelay, 10);
-  if (!Number.isFinite(parsedDelay) || parsedDelay <= 0) {
-    return 0;
-  }
-
-  return Math.min(parsedDelay, 30_000);
-}
-
-async function sleep(delayMs: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-function buildCsp(webview: vscode.Webview, nonce: string): string {
-  return [
-    "default-src 'none'",
-    `img-src ${webview.cspSource} data:`,
-    `style-src ${webview.cspSource}`,
-    `font-src ${webview.cspSource}`,
-    `script-src 'nonce-${nonce}' ${webview.cspSource}`,
-  ].join('; ');
-}
-
-function buildScopeLabel(regionCode: string, orgName: string, spaceName: string): string {
-  const normalizedRegionCode = regionCode.trim().length > 0 ? regionCode.trim() : 'no-region';
-  const normalizedOrgName = orgName.trim().length > 0 ? orgName.trim() : 'no-org';
-  const normalizedSpaceName = spaceName.trim().length > 0 ? spaceName.trim() : 'no-space';
-  return `${normalizedRegionCode} \u2192 ${normalizedOrgName} \u2192 ${normalizedSpaceName}`;
-}
-
-function createNonce(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let nonce = '';
-  for (let index = 0; index < 24; index += 1) {
-    const randomIndex = Math.floor(Math.random() * alphabet.length);
-    nonce += alphabet[randomIndex] ?? 'A';
-  }
-  return nonce;
-}
-
-function sanitizeForLog(value: string): string {
-  return value.replaceAll(/\s+/g, ' ').trim();
-}
-
-function sanitizeErrorForLog(value: string): string {
-  return sanitizeForLog(value)
-    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1<redacted>')
-    .replace(/(access_token=)[^&\s]+/gi, '$1<redacted>')
-    .replace(/(refresh_token=)[^&\s]+/gi, '$1<redacted>')
-    .replace(/(client_secret=)[^&\s]+/gi, '$1<redacted>')
-    .replace(/(password\s*[:=]\s*)[^\s,;]+/gi, '$1<redacted>');
-}
-
-function readOptionalString(value: unknown, maxLength: number): string {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  const normalized = value.trim();
-  if (normalized.length === 0 || normalized.length > maxLength) {
-    return '';
-  }
-
-  return normalized;
-}
-
-function buildServiceMappingsScopeKey(
-  email: string,
-  regionCode: string,
-  orgGuid: string,
-  spaceName: string,
-  rootFolderPath: string
-): string {
-  const normalizedEmail = normalizeUserEmail(email);
-  const normalizedRegionCode = regionCode.trim().toLowerCase();
-  const normalizedOrgGuid = orgGuid.trim().toLowerCase();
-  const normalizedSpaceName = spaceName.trim().toLowerCase();
-  const normalizedRootFolderPath = rootFolderPath.trim();
-
-  if (
-    normalizedEmail.length === 0 ||
-    normalizedRegionCode.length === 0 ||
-    normalizedOrgGuid.length === 0 ||
-    normalizedSpaceName.length === 0 ||
-    normalizedRootFolderPath.length === 0
-  ) {
-    return '';
-  }
-
-  return JSON.stringify([
-    normalizedEmail,
-    normalizedRegionCode,
-    normalizedOrgGuid,
-    normalizedSpaceName,
-    normalizedRootFolderPath,
-  ]);
-}
-
-function normalizePersistedServiceMappingsByScope(
-  rawValue: unknown
-): Record<string, PersistedServiceMappingScopeEntry> {
-  if (!isRecord(rawValue)) {
-    return {};
-  }
-
-  const normalizedEntries: Record<string, PersistedServiceMappingScopeEntry> = {};
-  for (const [scopeKeyRaw, entryRaw] of Object.entries(rawValue)) {
-    const scopeKey = scopeKeyRaw.trim();
-    if (scopeKey.length === 0) {
-      continue;
-    }
-
-    const entry = normalizePersistedServiceMappingScopeEntry(entryRaw);
-    if (entry === null) {
-      continue;
-    }
-
-    normalizedEntries[scopeKey] = entry;
-  }
-
-  return normalizedEntries;
-}
-
-function normalizePersistedServiceMappingScopeEntry(
-  rawValue: unknown
-): PersistedServiceMappingScopeEntry | null {
-  if (!isRecord(rawValue)) {
-    return null;
-  }
-
-  const rootFolderPath = readOptionalString(rawValue['rootFolderPath'], 4096);
-  const updatedAt = readOptionalString(rawValue['updatedAt'], 96);
-  const rawMappings = rawValue['mappings'];
-  if (rootFolderPath.length === 0 || updatedAt.length === 0 || !Array.isArray(rawMappings)) {
-    return null;
-  }
-
-  const mappings = rawMappings
-    .map((mapping) => normalizeServiceMappingForPersistence(mapping))
-    .filter((mapping): mapping is ServiceFolderMapping => mapping !== null);
-
-  return {
-    rootFolderPath,
-    updatedAt,
-    mappings,
-  };
-}
-
-function normalizeServiceMappingForPersistence(rawValue: unknown): ServiceFolderMapping | null {
-  if (!isRecord(rawValue)) {
-    return null;
-  }
-
-  const appId = readOptionalString(rawValue['appId'], 128);
-  const appName = readOptionalString(rawValue['appName'], 128);
-  const folderPath = readOptionalString(rawValue['folderPath'], 4096);
-  const matchTypeRaw = readOptionalString(rawValue['matchType'], 16);
-  const matchType =
-    matchTypeRaw === 'exact' ||
-    matchTypeRaw === 'underscore' ||
-    matchTypeRaw === 'none' ||
-    matchTypeRaw === 'ambiguous'
-      ? matchTypeRaw
-      : 'none';
-
-  if (appId.length === 0 || appName.length === 0) {
-    return null;
-  }
-
-  const rawCandidateFolderPaths = Array.isArray(rawValue['candidateFolderPaths'])
-    ? rawValue['candidateFolderPaths']
-    : [];
-  const candidateFolderPaths = rawCandidateFolderPaths
-    .map((candidatePath) => readOptionalString(candidatePath, 4096))
-    .filter((candidatePath) => candidatePath.length > 0);
-
-  const hasConflict = rawValue['hasConflict'] === true;
-  const effectiveFolderPath =
-    hasConflict && folderPath.length > 0 && !candidateFolderPaths.includes(folderPath)
-      ? ''
-      : folderPath;
-
-  return {
-    appId,
-    appName,
-    folderPath: effectiveFolderPath,
-    matchType,
-    candidateFolderPaths,
-    hasConflict,
-  };
-}
-
-function haveSameOrgEntries(
-  leftOrgs: readonly { readonly guid: string; readonly name: string }[],
-  rightOrgs: readonly { readonly guid: string; readonly name: string }[]
-): boolean {
-  if (leftOrgs.length !== rightOrgs.length) {
-    return false;
-  }
-
-  const rightByGuid = new Map(
-    rightOrgs.map((org) => {
-      return [org.guid, org.name] as const;
-    })
-  );
-
-  for (const leftOrg of leftOrgs) {
-    const rightName = rightByGuid.get(leftOrg.guid);
-    if (rightName === undefined || rightName !== leftOrg.name) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function shouldSkipSensitiveExportConfirmation(): boolean {
-  return process.env['SAP_TOOLS_E2E'] === '1' || process.env['SAP_TOOLS_TEST_MODE'] === '1';
-}
-
-async function pathExists(pathValue: string): Promise<boolean> {
-  const normalizedPath = pathValue.trim();
-  if (normalizedPath.length === 0) {
-    return false;
-  }
-
-  try {
-    await access(normalizedPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ── Type guards ─────────────────────────────────────────────────────────────
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isNonEmptyString(value: unknown, maxLength: number): value is string {
-  if (typeof value !== 'string') {
-    return false;
-  }
-  const normalized = value.trim();
-  return normalized.length > 0 && normalized.length <= maxLength;
-}
-
-function isLoginSubmitMessage(value: Record<string, unknown>): boolean {
-  return isNonEmptyString(value['email'], 256) && isNonEmptyString(value['password'], 256);
-}
-
-function readLoginSubmitPayload(value: Record<string, unknown>): {
-  readonly email: string;
-  readonly password: string;
-} {
-  return {
-    email: String(value['email']),
-    password: String(value['password']),
-  };
-}
-
-function isRegionSelectedMessage(value: Record<string, unknown>): boolean {
-  const region = value['region'];
-  if (!isRecord(region)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(region['id'], 64) &&
-    isNonEmptyString(region['name'], 96) &&
-    isNonEmptyString(region['code'], 32) &&
-    isNonEmptyString(region['area'], 64)
-  );
-}
-
-function readRegionSelectionPayload(value: Record<string, unknown>): RegionSelectionPayload {
-  const region = value['region'] as Record<string, unknown>;
-  return {
-    id: String(region['id']),
-    name: String(region['name']),
-    code: String(region['code']),
-    area: String(region['area']),
-  };
-}
-
-function isOrgSelectedMessage(value: Record<string, unknown>): boolean {
-  const org = value['org'];
-  if (!isRecord(org)) {
-    return false;
-  }
-  return isNonEmptyString(org['guid'], 128) && isNonEmptyString(org['name'], 128);
-}
-
-function readOrgSelectionPayload(value: Record<string, unknown>): OrgSelectionPayload {
-  const org = value['org'] as Record<string, unknown>;
-  return {
-    guid: String(org['guid']),
-    name: String(org['name']),
-  };
-}
-
-function isSpaceSelectedMessage(value: Record<string, unknown>): boolean {
-  const scope = value['scope'];
-  if (!isRecord(scope)) {
-    return false;
-  }
-
-  return (
-    isNonEmptyString(scope['spaceName'], 128) &&
-    isNonEmptyString(scope['orgGuid'], 128) &&
-    isNonEmptyString(scope['orgName'], 128)
-  );
-}
-
-function readSpaceSelectionPayload(value: Record<string, unknown>): SpaceSelectionPayload {
-  const scope = value['scope'] as Record<string, unknown>;
-  return {
-    spaceName: String(scope['spaceName']),
-    orgGuid: String(scope['orgGuid']),
-    orgName: String(scope['orgName']),
-  };
-}
-
-function isTopologyOrgSelectedMessage(value: Record<string, unknown>): boolean {
-  const payload = value['payload'];
-  if (!isRecord(payload)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(payload['regionKey'], 32) &&
-    isNonEmptyString(payload['orgName'], 128)
-  );
-}
-
-function readTopologyOrgSelectedPayload(
-  value: Record<string, unknown>
-): TopologyOrgSelectedPayload {
-  const payload = value['payload'] as Record<string, unknown>;
-  return {
-    regionKey: String(payload['regionKey']).trim(),
-    orgName: String(payload['orgName']).trim(),
-  };
-}
-
-function isQuickScopeConfirmMessage(value: Record<string, unknown>): boolean {
-  const payload = value['payload'];
-  if (!isRecord(payload)) {
-    return false;
-  }
-  return (
-    isNonEmptyString(payload['regionKey'], 32) &&
-    isNonEmptyString(payload['orgName'], 128) &&
-    isNonEmptyString(payload['spaceName'], 128)
-  );
-}
-
-function readQuickScopeConfirmPayload(
-  value: Record<string, unknown>
-): QuickScopeConfirmPayload {
-  const payload = value['payload'] as Record<string, unknown>;
-  return {
-    regionKey: String(payload['regionKey']).trim(),
-    orgName: String(payload['orgName']).trim(),
-    spaceName: String(payload['spaceName']).trim(),
-  };
-}
-
-function isConfirmScopeMessage(value: Record<string, unknown>): boolean {
-  const scope = value['scope'];
-  if (!isRecord(scope)) {
-    return false;
-  }
-
-  return (
-    isNonEmptyString(scope['regionId'], 64) &&
-    isNonEmptyString(scope['regionCode'], 32) &&
-    isNonEmptyString(scope['regionName'], 96) &&
-    isNonEmptyString(scope['regionArea'], 96) &&
-    isNonEmptyString(scope['orgGuid'], 128) &&
-    isNonEmptyString(scope['orgName'], 128) &&
-    isNonEmptyString(scope['spaceName'], 128)
-  );
-}
-
-function readConfirmScopePayload(value: Record<string, unknown>): ConfirmScopePayload {
-  const scope = value['scope'] as Record<string, unknown>;
-  return {
-    regionId: String(scope['regionId']).trim(),
-    regionCode: String(scope['regionCode']).trim(),
-    regionName: String(scope['regionName']).trim(),
-    regionArea: String(scope['regionArea']).trim(),
-    orgGuid: String(scope['orgGuid']).trim(),
-    orgName: String(scope['orgName']).trim(),
-    spaceName: String(scope['spaceName']).trim(),
-  };
-}
-
-function isActiveAppsChangedMessage(value: Record<string, unknown>): boolean {
-  const appNames = value['appNames'];
-  if (!Array.isArray(appNames) || appNames.length > 64) {
-    return false;
-  }
-
-  for (const appName of appNames) {
-    if (!isNonEmptyString(appName, 128)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function readActiveAppsChangedPayload(
-  value: Record<string, unknown>
-): ActiveAppsChangedPayload {
-  return {
-    appNames: (value['appNames'] as string[]).map((name) => name.trim()),
-  };
-}
-
-function isUpdateSyncIntervalMessage(value: Record<string, unknown>): boolean {
-  const syncIntervalHours = value['syncIntervalHours'];
-  return typeof syncIntervalHours === 'number' && isSyncIntervalHours(syncIntervalHours);
-}
-
-function readUpdateSyncIntervalPayload(
-  value: Record<string, unknown>
-): UpdateSyncIntervalPayload {
-  return {
-    syncIntervalHours: value['syncIntervalHours'] as SyncIntervalHours,
-  };
-}
-
-function isRefreshServiceFolderMappingsMessage(
-  value: Record<string, unknown>
-): boolean {
-  const rootFolderPath = value['rootFolderPath'];
-  const appNames = value['appNames'];
-  if (
-    typeof rootFolderPath !== 'string' ||
-    rootFolderPath.trim().length > 4096 ||
-    !Array.isArray(appNames) ||
-    appNames.length > 256
-  ) {
-    return false;
-  }
-
-  for (const appName of appNames) {
-    if (!isNonEmptyString(appName, 128)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function readRefreshServiceFolderMappingsPayload(
-  value: Record<string, unknown>
-): RefreshServiceFolderMappingsPayload {
-  const appNamesRaw = value['appNames'] as string[];
-  return {
-    rootFolderPath: String(value['rootFolderPath']).trim(),
-    appNames: appNamesRaw.map((appName) => appName.trim()),
-  };
-}
-
-function isSelectServiceFolderMappingMessage(value: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(value['appId'], 128) &&
-    typeof value['folderPath'] === 'string' &&
-    value['folderPath'].trim().length <= 4096
-  );
-}
-
-function readSelectServiceFolderMappingPayload(
-  value: Record<string, unknown>
-): SelectServiceFolderMappingPayload {
-  return {
-    appId: String(value['appId']).trim(),
-    folderPath: String(value['folderPath']).trim(),
-  };
-}
-
-function isExportServiceArtifactsMessage(value: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(value['appId'], 128) &&
-    isNonEmptyString(value['appName'], 128) &&
-    typeof value['rootFolderPath'] === 'string' &&
-    value['rootFolderPath'].trim().length <= 4096
-  );
-}
-
-function readExportServiceArtifactsPayload(
-  value: Record<string, unknown>
-): ExportServiceArtifactsPayload {
-  return {
-    appId: String(value['appId']).trim(),
-    appName: String(value['appName']).trim(),
-    rootFolderPath: String(value['rootFolderPath']).trim(),
-  };
-}
-
-function isExportSqlToolsConfigMessage(value: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(value['appId'], 128) &&
-    isNonEmptyString(value['appName'], 128) &&
-    typeof value['rootFolderPath'] === 'string' &&
-    value['rootFolderPath'].trim().length <= 4096
-  );
-}
-
-function readExportSqlToolsConfigPayload(
-  value: Record<string, unknown>
-): ExportSqlToolsConfigPayload {
-  return {
-    appId: String(value['appId']).trim(),
-    appName: String(value['appName']).trim(),
-    rootFolderPath: String(value['rootFolderPath']).trim(),
-  };
-}
-
-function isOpenHanaSqlFileMessage(value: Record<string, unknown>): boolean {
-  return (
-    typeof value['requestId'] === 'number' &&
-    Number.isSafeInteger(value['requestId']) &&
-    value['requestId'] > 0 &&
-    isNonEmptyString(value['serviceId'], 128) &&
-    isNonEmptyString(value['serviceName'], 128)
-  );
-}
-
-function readOpenHanaSqlFilePayload(
-  value: Record<string, unknown>
-): OpenHanaSqlFilePayload {
-  return {
-    requestId: Number(value['requestId']),
-    serviceId: String(value['serviceId']).trim(),
-    serviceName: String(value['serviceName']).trim(),
-  };
-}
-
-function isRefreshHanaTablesMessage(value: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(value['serviceId'], 128) &&
-    isNonEmptyString(value['serviceName'], 128)
-  );
-}
-
-function readRefreshHanaTablesPayload(
-  value: Record<string, unknown>
-): RefreshHanaTablesPayload {
-  return {
-    serviceId: String(value['serviceId']).trim(),
-    serviceName: String(value['serviceName']).trim(),
-  };
-}
-
-function isRunHanaTableSelectMessage(value: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(value['serviceId'], 128) &&
-    isNonEmptyString(value['serviceName'], 128) &&
-    isNonEmptyString(value['tableName'], 256)
-  );
-}
-
-function readRunHanaTableSelectPayload(
-  value: Record<string, unknown>
-): RunHanaTableSelectPayload {
-  return {
-    serviceId: String(value['serviceId']).trim(),
-    serviceName: String(value['serviceName']).trim(),
-    tableName: String(value['tableName']).trim(),
-  };
-}
-
-function formatServicePackageReplaceMessage(
-  appName: string,
-  tag: string,
-  result: ServiceDependencyTagReplacementResult
-): string {
-  const actions: string[] = [];
-  if (result.placeholderReplacementCount > 0) {
-    actions.push(
-      `replaced ${formatCount(result.placeholderReplacementCount, 'placeholder')} with "${tag}"`
-    );
-  }
-  if (result.updatedPackageNames.length > 0) {
-    actions.push(
-      `set ${formatCount(result.updatedPackageNames.length, 'local package dependency')} to "${tag}"`
-    );
-  }
-
-  return `SAP Tools: Updated package.json for "${appName}": ${actions.join('; ')}.`;
-}
-
-function formatCount(count: number, singularLabel: string): string {
-  return `${String(count)} ${singularLabel}${count === 1 ? '' : 's'}`;
-}
-
-function sanitizeSqlUiLogValue(value: string): string {
-  return value.replaceAll(/[\r\n\t]+/g, ' ').slice(0, 500);
-}
-
-function buildLocalPackagesCacheKey(rootFolderPath: string, namePatterns: string): string {
-  return `${rootFolderPath.trim()}::${namePatterns.trim()}`;
-}
-
-function areLocalPackageListsEqual(
-  left: readonly { name: string; version: string; hasBuildScript: boolean; round: number | null }[],
-  right: readonly { readonly name: string; readonly version: string; readonly hasBuildScript: boolean; readonly round: number | null }[]
-): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  for (let i = 0; i < left.length; i++) {
-    const l = left[i];
-    const r = right[i];
-    if (l === undefined || r === undefined) {
-      return false;
-    }
-    if (l.name !== r.name || l.version !== r.version || l.hasBuildScript !== r.hasBuildScript || l.round !== r.round) {
-      return false;
-    }
-  }
-  return true;
 }
