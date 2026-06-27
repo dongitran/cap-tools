@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 async function readSidebarProviderSource(): Promise<string> {
-  return readFile(new URL('./sidebarProvider.ts', import.meta.url), 'utf8');
+  const providerSource = await readFile(new URL('./sidebarProvider.ts', import.meta.url), 'utf8');
+  const handlersSource = await readFile(new URL('./sidebar/handlers/sidebarHandlers.ts', import.meta.url), 'utf8');
+  return providerSource + '\n' + handlersSource;
 }
 
 describe('RegionSidebarProvider Microsoft Graph logging', () => {
