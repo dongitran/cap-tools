@@ -17,6 +17,7 @@ export {
   type HanaSqlResultExportFormat,
 } from './hanaSqlResultExport';
 export {
+  MAX_RENDERED_RESULT_ROWS,
   buildHanaSqlResultHtml,
   buildSqlBatchSectionUpdate,
   escapeHtml,

@@ -70,6 +70,80 @@ describe('hanaSqlBackupStore', () => {
       expect(fs.writeFile).toHaveBeenCalledTimes(3); // query.sql, backup.csv, metadata.json
     });
 
+    it('should include milliseconds in the folder name so same-second backups differ', async () => {
+      const store = new HanaSqlBackupStore();
+      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+
+      const save = (timestamp: Date): ReturnType<typeof store.saveBackup> =>
+        store.saveBackup({
+          session: {
+            apiEndpoint: 'https://api.cf.eu10.hana.ondemand.com',
+            orgName: 'finance-prod',
+            spaceName: 'uat',
+          } as HanaSqlScopeSession,
+          appName: 'my-app',
+          statementType: 'DELETE',
+          tableName: 'ORDERS',
+          originalSql: 'DELETE FROM ORDERS WHERE ID = 1',
+          csvContent: 'ID\n1',
+          rowCount: 1,
+          timestamp,
+        });
+
+      const first = await save(new Date('2026-06-24T19:42:00.120Z'));
+      const second = await save(new Date('2026-06-24T19:42:00.870Z'));
+
+      expect(first?.id).toContain('20260624T194200120');
+      expect(second?.id).toContain('20260624T194200870');
+      expect(first?.folderPath).not.toBe(second?.folderPath);
+    });
+
+    it('should never overwrite an existing backup folder', async () => {
+      const store = new HanaSqlBackupStore();
+      const existing = new Set<string>();
+      vi.mocked(fs.mkdir).mockImplementation((async (
+        target: string,
+        options?: { recursive?: boolean }
+      ) => {
+        if (options?.recursive === true) return undefined;
+        if (existing.has(target)) {
+          const error = new Error('EEXIST') as NodeJS.ErrnoException;
+          error.code = 'EEXIST';
+          throw error;
+        }
+        existing.add(target);
+        return undefined;
+      }) as unknown as typeof fs.mkdir);
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+
+      // Identical timestamp AND identical target: the folder name collides exactly.
+      const timestamp = new Date('2026-06-24T19:42:00.500Z');
+      const save = (): ReturnType<typeof store.saveBackup> =>
+        store.saveBackup({
+          session: {
+            apiEndpoint: 'https://api.cf.eu10.hana.ondemand.com',
+            orgName: 'finance-prod',
+            spaceName: 'uat',
+          } as HanaSqlScopeSession,
+          appName: 'my-app',
+          statementType: 'DELETE',
+          tableName: 'ORDERS',
+          originalSql: 'DELETE FROM ORDERS WHERE ID = 1',
+          csvContent: 'ID\n1',
+          rowCount: 1,
+          timestamp,
+        });
+
+      const first = await save();
+      const second = await save();
+
+      expect(first).not.toBeNull();
+      expect(second).not.toBeNull();
+      expect(second?.folderPath).not.toBe(first?.folderPath);
+      expect(second?.id).not.toBe(first?.id);
+    });
+
     it('should catch errors and return null instead of throwing', async () => {
       const store = new HanaSqlBackupStore();
       vi.mocked(fs.mkdir).mockRejectedValue(new Error('Disk full'));
@@ -200,6 +274,22 @@ describe('hanaSqlBackupStore', () => {
       expect(entry?.statementType).toBe('UPDATE');
       expect(entry?.tableName).toBe('EMPLOYEES');
       expect(entry?.id).toBe('eu10-finance-prod-uat-my-app-update-employees-20260624T194200');
+    });
+
+    it('should parse millisecond-precision folder names written by newer versions', () => {
+      const entry = parseFolderNameToEntry('eu10-finance-prod-uat-my-app-update-employees-20260624T194200875', '/fake/path');
+      expect(entry).not.toBeNull();
+      expect(entry?.statementType).toBe('UPDATE');
+      expect(entry?.tableName).toBe('EMPLOYEES');
+      expect(entry?.timestamp).toBe('2026-06-24T19:42:00.875Z');
+    });
+
+    it('should parse a de-duplicated folder name carrying a collision suffix', () => {
+      const entry = parseFolderNameToEntry('eu10-finance-prod-uat-my-app-delete-orders-20260624T194200875-2', '/fake/path');
+      expect(entry).not.toBeNull();
+      expect(entry?.statementType).toBe('DELETE');
+      expect(entry?.tableName).toBe('ORDERS');
+      expect(entry?.timestamp).toBe('2026-06-24T19:42:00.875Z');
     });
 
     it('should return null for malformed folder names', () => {

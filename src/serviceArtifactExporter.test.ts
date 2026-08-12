@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   writeFileMock,
   prepareCfCliSessionMock,
+  runWithCfTargetSpy,
   fetchDefaultEnvJsonFromTargetMock,
   fetchPnpmLockFromTargetMock,
   fetchRemoteTextFileFromTargetMock,
@@ -10,6 +11,7 @@ const {
 } = vi.hoisted(() => ({
   writeFileMock: vi.fn(),
   prepareCfCliSessionMock: vi.fn(),
+  runWithCfTargetSpy: vi.fn(),
   fetchDefaultEnvJsonFromTargetMock: vi.fn(),
   fetchPnpmLockFromTargetMock: vi.fn(),
   fetchRemoteTextFileFromTargetMock: vi.fn(),
@@ -22,6 +24,13 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('./cfClient', () => ({
   prepareCfCliSession: prepareCfCliSessionMock,
+  // runWithCfTarget now wraps prepare + operation in one CF_HOME slot; route it
+  // through the existing prepare mock so the target assertions below still apply.
+  runWithCfTarget: async (params: unknown, operation: () => Promise<unknown>) => {
+    runWithCfTargetSpy(params);
+    await prepareCfCliSessionMock(params);
+    return operation();
+  },
   fetchDefaultEnvJsonFromTarget: fetchDefaultEnvJsonFromTargetMock,
   fetchPnpmLockFromTarget: fetchPnpmLockFromTargetMock,
   fetchRemoteTextFileFromTarget: fetchRemoteTextFileFromTargetMock,
@@ -114,6 +123,10 @@ describe('exportServiceArtifacts', () => {
       includeDefaultEnv: true,
       includePnpmLock: true,
     });
+
+    // Deliberately NOT holding the CF_HOME slot: this runs a series of `cf ssh`
+    // calls and would stall every other CF feature for its whole duration.
+    expect(runWithCfTargetSpy).not.toHaveBeenCalled();
 
     expect(prepareCfCliSessionMock).toHaveBeenCalledTimes(1);
     expect(prepareCfCliSessionMock).toHaveBeenCalledWith({

@@ -178,6 +178,9 @@ describe('CacheSyncService', () => {
     expect(snapshot.regionAccessById['eu10-004']).toBe('accessible');
     expect(snapshot.regionAccessById['eu20-002']).toBe('accessible');
     expect(snapshot.syncInProgress).toBe(false);
+    // The background walk re-targets every org/space, so it must run on its own
+    // CF_HOME — on the shared one it would retarget the user's live commands.
+    expect(ensureCfHomeDirMock).toHaveBeenCalledWith(expect.anything(), 'sync');
   });
 
   it('marks region as inaccessible when auth fails', async () => {

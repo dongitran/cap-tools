@@ -14,6 +14,7 @@ import type {
 
 const {
   executeCommandMock,
+  executeHanaQueryBatchMock,
   onDidChangeActiveTextEditorMock,
   onDidCloseTextDocumentMock,
   openTextDocumentMock,
@@ -23,8 +24,11 @@ const {
   setTextDocumentLanguageMock,
   showHanaSqlShortcutNotificationMock,
   showTextDocumentMock,
+  showWarningMessageMock,
 } = vi.hoisted(() => ({
   executeCommandMock: vi.fn(),
+  executeHanaQueryBatchMock: vi.fn(),
+  showWarningMessageMock: vi.fn(),
   onDidChangeActiveTextEditorMock: vi.fn(() => ({ dispose: vi.fn() })),
   onDidCloseTextDocumentMock: vi.fn(() => ({ dispose: vi.fn() })),
   openTextDocumentMock: vi.fn(),
@@ -51,6 +55,11 @@ vi.mock('./hanaSqlConnectionResolver', () => ({
 vi.mock('./hanaSqlShortcutNotification', () => ({
   showHanaSqlShortcutNotification: showHanaSqlShortcutNotificationMock,
 }));
+
+vi.mock('./hanaSqlService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./hanaSqlService')>();
+  return { ...actual, executeHanaQueryBatch: executeHanaQueryBatchMock };
+});
 
 function createMockUri(scheme: string, fsPath: string) {
   return {
@@ -93,7 +102,7 @@ vi.mock('vscode', () => ({
     onDidChangeActiveTextEditor: onDidChangeActiveTextEditorMock,
     showErrorMessage: vi.fn(),
     showTextDocument: showTextDocumentMock,
-    showWarningMessage: vi.fn(),
+    showWarningMessage: showWarningMessageMock,
     visibleTextEditors: [],
   },
   workspace: {
@@ -103,7 +112,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { HanaSqlWorkbench } from './hanaSqlWorkbench';
+import { HANA_SQL_BACKUP_ROW_LIMIT, HanaSqlWorkbench } from './hanaSqlWorkbench';
 
 interface HanaSqlAppContextForTest {
   readonly appId: string;
@@ -157,19 +166,21 @@ interface HanaSqlWorkbenchQuickSelectTestAccess extends HanaSqlWorkbenchTestAcce
   ): Promise<HanaQueryResult>;
 }
 
+interface PreparedStatementForTest {
+  readonly executionSql: string;
+  readonly statementKind: HanaSqlStatementKind;
+  readonly tableName: string;
+}
+
 interface HanaSqlWorkbenchBackupTestAccess extends HanaSqlWorkbenchTestAccess {
-  backupSingleStatement(
+  backupMutatingStatements(
     context: HanaSqlAppContextForTest,
-    statement: {
-      readonly executionSql: string;
-      readonly statementKind: HanaSqlStatementKind;
-      readonly tableName: string;
-    }
+    prepared: readonly PreparedStatementForTest[]
   ): Promise<void>;
   withTunnelFallback(
     context: HanaSqlAppContextForTest,
-    run: (connection: HanaConnection) => Promise<HanaQueryResult>
-  ): Promise<HanaQueryResult>;
+    run: (connection: HanaConnection) => Promise<unknown>
+  ): Promise<unknown>;
 }
 
 function createWorkbench(): HanaSqlWorkbench {
@@ -184,7 +195,9 @@ function createBackupTestHarness(): {
   readonly context: HanaSqlAppContextForTest;
   readonly saveBackup: ReturnType<typeof vi.fn>;
 } {
-  const saveBackup = vi.fn(async (): Promise<null> => null);
+  // saveBackup resolves to the created entry; `null` is its documented failure
+  // signal, so the default here must be a successful write.
+  const saveBackup = vi.fn(async (): Promise<{ id: string }> => ({ id: 'backup-1' }));
   const workbench = new HanaSqlWorkbench(
     { appendLine: vi.fn() } as unknown as ConstructorParameters<typeof HanaSqlWorkbench>[0],
     null,
@@ -263,23 +276,86 @@ describe('HanaSqlWorkbench shortcut notification', () => {
 });
 
 describe('HanaSqlWorkbench mutation backups', () => {
+  function mutating(executionSql: string): PreparedStatementForTest {
+    return { executionSql, statementKind: 'mutating', tableName: 'Orders' };
+  }
+
+  function resultset(rows: string[][], columns = ['ID', 'NOTE']): HanaQueryResult {
+    return { kind: 'resultset', columns, rows, rowCount: rows.length, elapsedMs: 4 };
+  }
+
+  /** Let withTunnelFallback actually invoke the batch so the SQL sent is observable. */
+  function passThroughTunnel(access: HanaSqlWorkbenchBackupTestAccess): void {
+    access.withTunnelFallback = vi.fn(
+      async (
+        _context: HanaSqlAppContextForTest,
+        run: (connection: HanaConnection) => Promise<unknown>
+      ) => run({ host: 'h', port: 443, user: 'u', password: 'p' })
+    );
+  }
+
+  function batchInputs(): { sql: string; statementKind: string }[] {
+    const call = executeHanaQueryBatchMock.mock.calls[0] as
+      | [unknown, { sql: string; statementKind: string }[], unknown]
+      | undefined;
+    return call?.[1] ?? [];
+  }
+
+  interface FakeOutcome {
+    sql: string;
+    statementKind: string;
+    status: string;
+    result?: HanaQueryResult;
+    errorMessage?: string;
+  }
+
+  /**
+   * Behave like the real executeHanaQueryBatch: fire onStatementComplete for each
+   * outcome, and honour discardResultsAfterCallback by stripping `result` from
+   * the returned summary. Without that the production code's "consume inside the
+   * callback" contract would not be exercised at all.
+   */
+  function mockBatch(outcomes: FakeOutcome[]): void {
+    executeHanaQueryBatchMock.mockImplementation(
+      async (
+        _connection: unknown,
+        _inputs: unknown,
+        options: {
+          onStatementComplete?: (index: number, outcome: FakeOutcome) => void;
+          discardResultsAfterCallback?: boolean;
+        }
+      ) => {
+        outcomes.forEach((outcome, index) => options.onStatementComplete?.(index, outcome));
+        const retained = options.discardResultsAfterCallback === true
+          ? outcomes.map((outcome) => { const copy = { ...outcome }; delete copy.result; return copy; })
+          : outcomes;
+        return {
+          outcomes: retained,
+          usedTransaction: false,
+          committed: false,
+          rolledBack: false,
+          elapsedMs: 1,
+        };
+      }
+    );
+  }
+
+  beforeEach(() => {
+    executeHanaQueryBatchMock.mockReset();
+    showWarningMessageMock.mockReset();
+  });
+
   test('saves the pre-mutation resultset as CSV for a filtered update', async () => {
     const { access, context, saveBackup } = createBackupTestHarness();
-    access.withTunnelFallback = vi.fn(async (): Promise<HanaQueryResult> => ({
-      kind: 'resultset',
-      columns: ['ID', 'NOTE'],
-      rows: [['7', 'ready, now']],
-      rowCount: 1,
-      elapsedMs: 4,
-    }));
+    passThroughTunnel(access);
+    mockBatch([
+        { sql: 'a', statementKind: 'readonly', status: 'success', result: resultset([['7', 'ready, now']]) },
+      ]);
 
-    await access.backupSingleStatement(context, {
-      executionSql: 'UPDATE "Orders" SET "Status" = \'DONE\' WHERE "Id" = 7',
-      statementKind: 'mutating',
-      tableName: 'Orders',
-    });
+    await access.backupMutatingStatements(context, [
+      mutating('UPDATE "Orders" SET "Status" = \'DONE\' WHERE "Id" = 7'),
+    ]);
 
-    expect(access.withTunnelFallback).toHaveBeenCalledTimes(1);
     expect(saveBackup).toHaveBeenCalledWith(expect.objectContaining({
       session: context.session,
       appName: 'finance-uat-api',
@@ -290,35 +366,232 @@ describe('HanaSqlWorkbench mutation backups', () => {
       rowCount: 1,
       timestamp: expect.any(Date),
     }));
+    expect(showWarningMessageMock).not.toHaveBeenCalled();
+  });
+
+  test('runs every backup of a batch over a single connection', async () => {
+    const { access, context, saveBackup } = createBackupTestHarness();
+    passThroughTunnel(access);
+    mockBatch([
+        { sql: 'a', statementKind: 'readonly', status: 'success', result: resultset([['1', 'a']]) },
+        { sql: 'b', statementKind: 'readonly', status: 'success', result: resultset([['2', 'b']]) },
+      ]);
+
+    await access.backupMutatingStatements(context, [
+      mutating('DELETE FROM "Orders" WHERE "Id" = 1'),
+      mutating('DELETE FROM "Orders" WHERE "Id" = 2'),
+    ]);
+
+    expect(access.withTunnelFallback).toHaveBeenCalledTimes(1);
+    expect(executeHanaQueryBatchMock).toHaveBeenCalledTimes(1);
+    expect(batchInputs()).toHaveLength(2);
+    expect(saveBackup).toHaveBeenCalledTimes(2);
+  });
+
+  test('asks the driver to keep going after a failed backup', async () => {
+    const { access, context } = createBackupTestHarness();
+    passThroughTunnel(access);
+    mockBatch([]);
+
+    await access.backupMutatingStatements(context, [mutating('DELETE FROM "Orders" WHERE "Id" = 1')]);
+
+    const options = executeHanaQueryBatchMock.mock.calls[0]?.[2] as { continueOnError?: boolean };
+    expect(options.continueOnError).toBe(true);
+  });
+
+  test('caps each backup query so a broad predicate cannot pull the whole table', async () => {
+    const { access, context } = createBackupTestHarness();
+    passThroughTunnel(access);
+    mockBatch([]);
+
+    await access.backupMutatingStatements(context, [
+      mutating('UPDATE "Orders" SET "Flag" = 1 WHERE "Status" = \'OPEN\''),
+    ]);
+
+    // Exactly cap+1: the extra row is what distinguishes "the table happened to
+    // hold exactly the cap" from "we truncated", so the margin is load-bearing.
+    expect(batchInputs()[0]?.sql).toMatch(
+      new RegExp(`LIMIT ${String(HANA_SQL_BACKUP_ROW_LIMIT + 1)}$`)
+    );
+    expect(batchInputs()[0]?.statementKind).toBe('readonly');
+  });
+
+  test('treats exactly the cap as a complete backup, not a truncated one', async () => {
+    const { access, context, saveBackup } = createBackupTestHarness();
+    passThroughTunnel(access);
+    const exactRows = Array.from({ length: HANA_SQL_BACKUP_ROW_LIMIT }, (_, i) => [String(i), 'x']);
+    mockBatch([
+      { sql: 'a', statementKind: 'readonly', status: 'success', result: resultset(exactRows) },
+    ]);
+
+    await access.backupMutatingStatements(context, [
+      mutating('UPDATE "Orders" SET "Flag" = 1 WHERE "Status" = \'OPEN\''),
+    ]);
+
+    expect(saveBackup).toHaveBeenCalledWith(
+      expect.objectContaining({ rowCount: HANA_SQL_BACKUP_ROW_LIMIT })
+    );
+    expect(showWarningMessageMock).not.toHaveBeenCalled();
+  });
+
+  test('asks the batch to drop each result once it has been written to disk', async () => {
+    const { access, context } = createBackupTestHarness();
+    passThroughTunnel(access);
+    mockBatch([]);
+
+    await access.backupMutatingStatements(context, [mutating('DELETE FROM "Orders" WHERE "Id" = 1')]);
+
+    // Without this the batch retains every backup's rows at once, which is
+    // N x the row cap resident in the extension host.
+    const options = executeHanaQueryBatchMock.mock.calls[0]?.[2] as {
+      discardResultsAfterCallback?: boolean;
+      onStatementComplete?: unknown;
+    };
+    expect(options.discardResultsAfterCallback).toBe(true);
+    expect(typeof options.onStatementComplete).toBe('function');
+  });
+
+  test('re-raises a connectivity failure so the tunnel fallback still runs', async () => {
+    const { access, context } = createBackupTestHarness();
+    // Capture what escapes the callback — that IS the contract. Merely counting
+    // invocations passes whether or not the re-raise exists.
+    let threw: unknown = null;
+    access.withTunnelFallback = vi.fn(
+      async (
+        _context: HanaSqlAppContextForTest,
+        run: (connection: HanaConnection) => Promise<unknown>
+      ) => {
+        try {
+          return await run({ host: 'h', port: 443, user: 'u', password: 'p' });
+        } catch (error) {
+          threw = error;
+          return undefined;
+        }
+      }
+    );
+    mockBatch([
+      {
+        sql: 'a',
+        statementKind: 'readonly',
+        status: 'error',
+        errorMessage: 'Client network socket disconnected before secure TLS connection was established',
+      },
+    ]);
+
+    await access.backupMutatingStatements(context, [mutating('DELETE FROM "Orders" WHERE "Id" = 1')]);
+
+    // continueOnError would otherwise report this as a plain per-statement error
+    // and withTunnelFallback would never see a connectivity problem.
+    expect(threw).toBeInstanceOf(Error);
+    expect(String(threw)).toContain('socket disconnected');
+    // The stub swallows it, so no warning here — the warning path when
+    // withTunnelFallback itself rethrows is covered by the batch-failure test.
+  });
+
+  test('does not re-raise a plain SQL error as a connectivity failure', async () => {
+    const { access, context, saveBackup } = createBackupTestHarness();
+    passThroughTunnel(access);
+    mockBatch([
+      { sql: 'a', statementKind: 'readonly', status: 'error', errorMessage: 'invalid column name: SO.ID' },
+    ]);
+
+    await access.backupMutatingStatements(context, [mutating('DELETE FROM "Orders" WHERE "Id" = 1')]);
+
+    expect(saveBackup).not.toHaveBeenCalled();
+    expect(String(showWarningMessageMock.mock.calls[0]?.[0])).toContain('invalid column name');
+    expect(String(showWarningMessageMock.mock.calls[0]?.[0])).not.toContain('no backup captured');
+  });
+
+  test('still backs up the other statements when one backup fails', async () => {
+    const { access, context, saveBackup } = createBackupTestHarness();
+    passThroughTunnel(access);
+    mockBatch([
+        { sql: 'a', statementKind: 'readonly', status: 'error', errorMessage: 'invalid column name' },
+        { sql: 'b', statementKind: 'readonly', status: 'success', result: resultset([['2', 'b']]) },
+      ]);
+
+    await access.backupMutatingStatements(context, [
+      mutating('DELETE FROM "Orders" WHERE "Id" = 1'),
+      mutating('DELETE FROM "Orders" WHERE "Id" = 2'),
+    ]);
+
+    expect(saveBackup).toHaveBeenCalledTimes(1);
+    expect(showWarningMessageMock).toHaveBeenCalledTimes(1);
+    expect(String(showWarningMessageMock.mock.calls[0]?.[0])).toContain('invalid column name');
+  });
+
+  test('tells the user when the whole backup batch could not run', async () => {
+    const { access, context, saveBackup } = createBackupTestHarness();
+    access.withTunnelFallback = vi.fn(async () => {
+      throw new Error('Backup query failed');
+    });
+
+    await expect(
+      access.backupMutatingStatements(context, [mutating('DELETE FROM "Orders" WHERE "Id" = 7')])
+    ).resolves.toBeUndefined();
+
+    expect(saveBackup).not.toHaveBeenCalled();
+    expect(String(showWarningMessageMock.mock.calls[0]?.[0])).toContain('Backup query failed');
+  });
+
+  test('marks a backup that hit the row cap as incomplete', async () => {
+    const { access, context, saveBackup } = createBackupTestHarness();
+    passThroughTunnel(access);
+    const overflowRows = Array.from({ length: HANA_SQL_BACKUP_ROW_LIMIT + 1 }, (_, index) => [
+      String(index),
+      'x',
+    ]);
+    mockBatch([
+        { sql: 'a', statementKind: 'readonly', status: 'success', result: resultset(overflowRows) },
+      ]);
+
+    await access.backupMutatingStatements(context, [
+      mutating('UPDATE "Orders" SET "Flag" = 1 WHERE "Status" = \'OPEN\''),
+    ]);
+
+    expect(saveBackup).toHaveBeenCalledWith(
+      expect.objectContaining({ rowCount: HANA_SQL_BACKUP_ROW_LIMIT })
+    );
+    expect(String(showWarningMessageMock.mock.calls[0]?.[0])).toContain('first');
   });
 
   test('skips pre-mutation queries when an update has no where clause', async () => {
     const { access, context, saveBackup } = createBackupTestHarness();
     access.withTunnelFallback = vi.fn();
 
-    await access.backupSingleStatement(context, {
-      executionSql: 'UPDATE "Orders" SET "Status" = \'DONE\'',
-      statementKind: 'mutating',
-      tableName: 'Orders',
-    });
+    await access.backupMutatingStatements(context, [
+      mutating('UPDATE "Orders" SET "Status" = \'DONE\''),
+    ]);
 
     expect(access.withTunnelFallback).not.toHaveBeenCalled();
+    expect(executeHanaQueryBatchMock).not.toHaveBeenCalled();
     expect(saveBackup).not.toHaveBeenCalled();
   });
 
-  test('keeps mutation execution unblocked when the backup query fails', async () => {
+  test('ignores readonly statements entirely', async () => {
+    const { access, context } = createBackupTestHarness();
+    access.withTunnelFallback = vi.fn();
+
+    await access.backupMutatingStatements(context, [
+      { executionSql: 'SELECT * FROM "Orders"', statementKind: 'readonly', tableName: 'Orders' },
+    ]);
+
+    expect(access.withTunnelFallback).not.toHaveBeenCalled();
+  });
+
+  test('reports a backup the store refused to write', async () => {
     const { access, context, saveBackup } = createBackupTestHarness();
-    access.withTunnelFallback = vi.fn(async (): Promise<HanaQueryResult> => {
-      throw new Error('Backup query failed');
-    });
+    passThroughTunnel(access);
+    saveBackup.mockResolvedValue(null as unknown as { id: string });
+    mockBatch([
+        { sql: 'a', statementKind: 'readonly', status: 'success', result: resultset([['7', 'x']]) },
+      ]);
 
-    await expect(access.backupSingleStatement(context, {
-      executionSql: 'DELETE FROM "Orders" WHERE "Id" = 7',
-      statementKind: 'mutating',
-      tableName: 'Orders',
-    })).resolves.toBeUndefined();
+    await access.backupMutatingStatements(context, [
+      mutating('DELETE FROM "Orders" WHERE "Id" = 7'),
+    ]);
 
-    expect(saveBackup).not.toHaveBeenCalled();
+    expect(String(showWarningMessageMock.mock.calls[0]?.[0])).toContain('could not be written');
   });
 });
 
@@ -823,3 +1096,4 @@ describe('HanaSqlWorkbench SQL result table display names', () => {
     expect(context.session).toBeNull();
   });
 });
+

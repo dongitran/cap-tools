@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { prepareCfCliSessionMock } = vi.hoisted(() => ({
+const { prepareCfCliSessionMock, runWithCfTargetMock } = vi.hoisted(() => ({
   prepareCfCliSessionMock: vi.fn(),
+  // Pass-through so the retry/backoff logic under test is observable; holding
+  // the CF_HOME slot around the operation is covered in cfClient.test.ts.
+  runWithCfTargetMock: vi.fn(
+    async (_params: unknown, operation: () => Promise<unknown>) => operation()
+  ),
 }));
 
 vi.mock('./cfClient', () => ({
   prepareCfCliSession: prepareCfCliSessionMock,
+  runWithCfTarget: runWithCfTargetMock,
 }));
 
 import {
@@ -24,6 +30,10 @@ const session = {
 
 beforeEach(() => {
   prepareCfCliSessionMock.mockReset();
+  runWithCfTargetMock.mockReset();
+  runWithCfTargetMock.mockImplementation(
+    async (_params: unknown, operation: () => Promise<unknown>) => operation()
+  );
 });
 
 describe('isRecoverableCfCliAuthError', () => {
@@ -57,7 +67,10 @@ describe('runWithCfCliAuthRecovery', () => {
 
     await expect(runWithCfCliAuthRecovery(session, operation)).resolves.toBe('ok');
 
+    // Default path does NOT hold the CF_HOME slot: the operation may be a long
+    // artifact export, and holding it would stall every other CF feature.
     expect(prepareCfCliSessionMock).toHaveBeenCalledWith(session);
+    expect(runWithCfTargetMock).not.toHaveBeenCalled();
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
@@ -70,14 +83,31 @@ describe('runWithCfCliAuthRecovery', () => {
     await expect(runWithCfCliAuthRecovery(session, operation)).resolves.toBe('ok');
 
     expect(prepareCfCliSessionMock).toHaveBeenNthCalledWith(1, session);
-    expect(prepareCfCliSessionMock).toHaveBeenNthCalledWith(2, {
-      ...session,
-      forceReauth: true,
-    });
-    expect(prepareCfCliSessionMock).toHaveBeenNthCalledWith(3, {
-      ...session,
-      forceReauth: true,
-    });
+    expect(prepareCfCliSessionMock).toHaveBeenNthCalledWith(2, { ...session, forceReauth: true });
+    expect(prepareCfCliSessionMock).toHaveBeenNthCalledWith(3, { ...session, forceReauth: true });
     expect(operation).toHaveBeenCalledTimes(3);
+  });
+
+  it('holds the CF_HOME slot across the operation when holdTarget is set', async () => {
+    const operation = vi.fn().mockResolvedValue('ok');
+
+    await expect(
+      runWithCfCliAuthRecovery(session, operation, { holdTarget: true })
+    ).resolves.toBe('ok');
+
+    expect(runWithCfTargetMock).toHaveBeenCalledWith(session, operation);
+    expect(prepareCfCliSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps retrying under holdTarget', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(new Error('CF SSH failed (cli: not authorized)'))
+      .mockResolvedValueOnce('ok');
+
+    await expect(
+      runWithCfCliAuthRecovery(session, operation, { holdTarget: true })
+    ).resolves.toBe('ok');
+
+    expect(runWithCfTargetMock).toHaveBeenNthCalledWith(2, { ...session, forceReauth: true }, operation);
   });
 });

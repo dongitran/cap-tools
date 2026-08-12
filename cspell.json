@@ -114,6 +114,8 @@
     "Cascadia",
     "Menlo",
     "LTRIM",
-    "RTRIM"
+    "RTRIM",
+    "retarget",
+    "retargets"
   ]
 }

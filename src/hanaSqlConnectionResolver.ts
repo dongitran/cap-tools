@@ -1,7 +1,8 @@
 import {
-  fetchDefaultEnvJsonFromTarget,
-  prepareCfCliSession,
+  fetchAppEnvironmentFromTarget,
+  runWithCfTarget,
 } from './cfClient';
+import { assertResolvedAppScope } from './cfAppScopeGuard';
 import { extractHanaCredentialsFromDefaultEnv } from './sqlToolsConfigExporter';
 import type { HanaConnection } from './hanaSqlService';
 
@@ -31,13 +32,13 @@ export interface HanaSqlHistoryScope {
 }
 
 interface ResolveHanaConnectionDependencies {
-  readonly prepareCfCliSession: typeof prepareCfCliSession;
-  readonly fetchDefaultEnvJsonFromTarget: typeof fetchDefaultEnvJsonFromTarget;
+  readonly runWithCfTarget: typeof runWithCfTarget;
+  readonly fetchAppEnvironmentFromTarget: typeof fetchAppEnvironmentFromTarget;
 }
 
 const defaultDependencies: ResolveHanaConnectionDependencies = {
-  prepareCfCliSession,
-  fetchDefaultEnvJsonFromTarget,
+  runWithCfTarget,
+  fetchAppEnvironmentFromTarget,
 };
 
 function parseDefaultEnv(defaultEnvJson: string): Record<string, unknown> {
@@ -55,6 +56,7 @@ function parseDefaultEnv(defaultEnvJson: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+
 function parsePort(portRaw: string, appName: string): number {
   const parsedPort = Number.parseInt(portRaw, 10);
   if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
@@ -67,21 +69,33 @@ export async function resolveHanaConnectionFromApp(
   options: ResolveHanaConnectionOptions,
   dependencies: ResolveHanaConnectionDependencies = defaultDependencies
 ): Promise<ResolveHanaConnectionResult> {
-  await dependencies.prepareCfCliSession({
-    apiEndpoint: options.session.apiEndpoint,
-    email: options.session.email,
-    password: options.session.password,
-    orgName: options.session.orgName,
-    spaceName: options.session.spaceName,
-    cfHomeDir: options.session.cfHomeDir,
-  });
+  // Target and lookup happen inside one CF_HOME slot so no other feature can
+  // retarget between them; assertResolvedAppScope is the belt to that braces.
+  const environment = await dependencies.runWithCfTarget(
+    {
+      apiEndpoint: options.session.apiEndpoint,
+      email: options.session.email,
+      password: options.session.password,
+      orgName: options.session.orgName,
+      spaceName: options.session.spaceName,
+      cfHomeDir: options.session.cfHomeDir,
+    },
+    () =>
+      dependencies.fetchAppEnvironmentFromTarget({
+        appName: options.appName,
+        cfHomeDir: options.session.cfHomeDir,
+      })
+  );
+  assertResolvedAppScope(
+    {
+      appName: options.appName,
+      orgName: options.session.orgName,
+      spaceName: options.session.spaceName,
+    },
+    environment.identity
+  );
 
-  const defaultEnvJson = await dependencies.fetchDefaultEnvJsonFromTarget({
-    appName: options.appName,
-    cfHomeDir: options.session.cfHomeDir,
-  });
-
-  const parsedPayload = parseDefaultEnv(defaultEnvJson);
+  const parsedPayload = parseDefaultEnv(environment.defaultEnvJson);
   const credentials = extractHanaCredentialsFromDefaultEnv(parsedPayload);
   if (credentials === null) {
     throw new Error(

@@ -1,5 +1,14 @@
 import type { HanaQueryResult, HanaQueryResultSet } from './hanaSqlService';
 
+/**
+ * Upper bound on rows written into the result document. The whole result set is
+ * still held in the extension host and every row reaches the CSV/JSON export —
+ * only the rendered table is capped. Without it a `LIMIT 100000` query builds a
+ * ~90 MB HTML string, structured-clones it to the webview, and freezes both
+ * sides while ~1M DOM nodes are parsed.
+ */
+export const MAX_RENDERED_RESULT_ROWS = 5_000;
+
 export type SqlResultStatementStatus = 'pending' | 'success' | 'error' | 'skipped';
 
 export interface SqlResultStatementView {
@@ -79,6 +88,14 @@ const SHARED_THEME_STYLE = `
         min-height: 100vh;
         background: var(--saptools-bg);
         color: var(--saptools-fg);
+      }
+      .result-truncation-note {
+        margin: 0;
+        padding: 6px 8px;
+        border-top: 1px solid var(--saptools-border);
+        background: var(--saptools-surface);
+        color: var(--saptools-muted);
+        font-size: 12px;
       }
 `;
 
@@ -871,14 +888,24 @@ function renderResultTable(columns: readonly string[], rows: readonly string[][]
     '<th class="row-number">#</th>',
     ...columns.map((column) => `<th>${escapeHtml(column)}</th>`),
   ].join('');
-  const bodyRows = rows.map(renderResultRow(columns)).join('');
+  const visibleRows =
+    rows.length > MAX_RENDERED_RESULT_ROWS ? rows.slice(0, MAX_RENDERED_RESULT_ROWS) : rows;
+  const bodyRows = visibleRows.map(renderResultRow(columns)).join('');
 
   return `
     <table>
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${bodyRows}</tbody>
     </table>
+    ${renderResultTruncationNote(visibleRows.length, rows.length)}
   `;
+}
+
+function renderResultTruncationNote(visibleCount: number, totalCount: number): string {
+  if (visibleCount >= totalCount) {
+    return '';
+  }
+  return `<p class="result-truncation-note">Showing the first ${String(visibleCount)} of ${String(totalCount)} rows. Export the result to get every row.</p>`;
 }
 
 function renderResultRow(columns: readonly string[]): (row: readonly string[], index: number) => string {

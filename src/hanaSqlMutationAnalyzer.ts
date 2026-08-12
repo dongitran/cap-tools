@@ -61,17 +61,34 @@ function analyzeUpdate(
   tokens: readonly SqlWordToken[],
   schema: string
 ): MutationAnalysis | null {
-  // Syntax: UPDATE [schema.]table SET ... [WHERE ...]
+  // Syntax: UPDATE [schema.]table [[AS] alias] SET ... [WHERE ...]
   const updateIdx = tokens.findIndex((t) => t.depth === 0 && t.upper === 'UPDATE');
   if (updateIdx < 0) return null;
 
   const tableToken = findNextTopLevelToken(tokens, updateIdx);
   if (tableToken === undefined) return null;
 
-  const tableName = resolveFullTableName(tokens, tableToken, sql);
+  const reference = readTableReference(tokens, tableToken, sql);
   const whereClause = extractWhereClause(sql, tokens);
 
-  return buildAnalysis('UPDATE', tableName, whereClause, schema);
+  // HANA allows `UPDATE t SET ... FROM <from_clause> WHERE ...`. The WHERE then
+  // references tables the backup's single-table FROM does not have, exactly the
+  // failure that was fixed for MERGE — decline rather than emit broken SQL.
+  if (hasTopLevelKeyword(tokens, 'FROM')) {
+    return {
+      canBackup: false,
+      statementType: 'UPDATE',
+      tableName: reference.tableName,
+      whereClause: null,
+      backupSelectSql: null,
+    };
+  }
+
+  return buildAnalysis('UPDATE', reference.tableName, whereClause, schema, reference.alias);
+}
+
+function hasTopLevelKeyword(tokens: readonly SqlWordToken[], keyword: string): boolean {
+  return tokens.some((token) => token.depth === 0 && token.upper === keyword);
 }
 
 // ── DELETE ───────────────────────────────────────────────────────────────────
@@ -98,10 +115,10 @@ function analyzeDelete(
     tableToken = afterDelete;
   }
 
-  const tableName = resolveFullTableName(tokens, tableToken, sql);
+  const reference = readTableReference(tokens, tableToken, sql);
   const whereClause = extractWhereClause(sql, tokens);
 
-  return buildAnalysis('DELETE', tableName, whereClause, schema);
+  return buildAnalysis('DELETE', reference.tableName, whereClause, schema, reference.alias);
 }
 
 // ── MERGE ────────────────────────────────────────────────────────────────────
@@ -111,7 +128,7 @@ function analyzeMerge(
   tokens: readonly SqlWordToken[],
   schema: string
 ): MutationAnalysis | null {
-  // Syntax: MERGE INTO [schema.]table USING ... ON ...
+  // Syntax: MERGE INTO [schema.]table [[AS] alias] USING <source> [[AS] alias] ON <cond> WHEN ...
   const mergeIdx = tokens.findIndex((t) => t.depth === 0 && t.upper === 'MERGE');
   if (mergeIdx < 0) return null;
 
@@ -127,12 +144,160 @@ function analyzeMerge(
     tableToken = afterMerge;
   }
 
-  const tableName = resolveFullTableName(tokens, tableToken, sql);
-
-  // MERGE has no WHERE for pre-backup; extract the ON clause as the condition.
+  const target = readTableReference(tokens, tableToken, sql);
+  // MERGE has no WHERE; the ON clause is the row filter.
   const onClause = extractMergeOnClause(sql, tokens);
+  const source = readMergeSource(sql, tokens);
 
-  return buildAnalysis('MERGE', tableName, onClause, schema);
+  return buildMergeAnalysis(target, source, onClause, schema);
+}
+
+/**
+ * A MERGE's ON clause references the USING source, so filtering the target by it
+ * alone produces a query that cannot resolve. Bring the source into scope with a
+ * semi-join instead:
+ * `SELECT * FROM <target> [alias] WHERE EXISTS (SELECT 1 FROM <source> [alias] WHERE <cond>)`.
+ *
+ * EXISTS rather than an inner join on purpose — a join fans out when the source
+ * matches a target row more than once, which would duplicate rows in the backup
+ * and burn the row cap on copies. The semi-join returns each matching target row
+ * exactly once, which is precisely the set the MERGE will update.
+ *
+ * When the source or the condition cannot be recovered, decline the backup rather
+ * than emit SQL that is guaranteed to fail.
+ */
+function buildMergeAnalysis(
+  target: TableReference,
+  source: MergeSource | null,
+  onClause: string | null,
+  schema: string
+): MutationAnalysis {
+  const trimmedTableName = target.tableName.trim();
+  const declined: MutationAnalysis = {
+    canBackup: false,
+    statementType: 'MERGE',
+    tableName: target.tableName,
+    whereClause: onClause === null || onClause.trim().length === 0 ? null : onClause.trim(),
+    backupSelectSql: null,
+  };
+  if (!isUsableTableName(trimmedTableName)) return { ...declined, whereClause: null };
+  if (source === null || declined.whereClause === null) return declined;
+
+  const qualifiedTarget = qualifyTableName(target.tableName, schema);
+  const targetClause = target.alias === null ? qualifiedTarget : `${qualifiedTarget} ${target.alias}`;
+  // The source needs the same schema treatment as the target: unqualified in the
+  // MERGE it resolves against the session schema, which the backup cannot assume.
+  const sourceText = source.isSubquery ? source.text : qualifyTableName(source.text, schema);
+  const sourceClause = source.alias === null ? sourceText : `${sourceText} ${source.alias}`;
+
+  return {
+    canBackup: true,
+    statementType: 'MERGE',
+    tableName: target.tableName,
+    whereClause: declined.whereClause,
+    // The closing paren goes on its own line: the ON clause is copied verbatim and
+    // may end in a `--` comment, which would otherwise swallow the paren.
+    backupSelectSql: `SELECT * FROM ${targetClause} WHERE EXISTS (SELECT 1 FROM ${sourceClause} WHERE ${declined.whereClause}\n)`,
+  };
+}
+
+interface MergeSource {
+  /** Raw source text — a table reference or a parenthesized subquery, verbatim. */
+  readonly text: string;
+  readonly alias: string | null;
+  /** Subqueries carry their own FROM and must not be schema-qualified. */
+  readonly isSubquery: boolean;
+}
+
+function readMergeSource(sql: string, tokens: readonly SqlWordToken[]): MergeSource | null {
+  const usingIdx = tokens.findIndex((t) => t.depth === 0 && t.upper === 'USING');
+  const usingToken = usingIdx < 0 ? undefined : tokens[usingIdx];
+  if (usingToken === undefined) return null;
+
+  const openIndex = findNextNonWhitespaceIndex(sql, usingToken.end);
+  if (openIndex >= 0 && sql[openIndex] === '(') {
+    const closeIndex = findMatchingParenIndex(sql, openIndex);
+    if (closeIndex < 0) return null;
+    return {
+      text: sql.slice(openIndex, closeIndex + 1),
+      alias: readAliasAfterOffset(tokens, closeIndex),
+      isSubquery: true,
+    };
+  }
+
+  const startToken = findNextTopLevelToken(tokens, usingIdx);
+  if (startToken === undefined || isTableReferenceStopWord(startToken.upper)) return null;
+  const reference = readTableReference(tokens, startToken, sql);
+  if (!isUsableTableName(reference.tableName.trim())) return null;
+  // A table function source (`USING MY_FUNC(1) s`) loses its argument list here,
+  // so the backup would join a table that does not exist — decline instead.
+  if (isFollowedByOpenParen(sql, startToken, reference)) return null;
+  return { text: reference.tableName, alias: reference.alias, isSubquery: false };
+}
+
+function isFollowedByOpenParen(
+  sql: string,
+  startToken: SqlWordToken,
+  reference: TableReference
+): boolean {
+  const nameEnd = sql.indexOf(reference.tableName, startToken.start);
+  if (nameEnd < 0) return false;
+  const next = findNextNonWhitespaceIndex(sql, nameEnd + reference.tableName.length);
+  return next >= 0 && sql[next] === '(';
+}
+
+
+/**
+ * Next index that is neither whitespace nor comment. Comments matter here: a
+ * `USING /* note *\/ (SELECT …)` would otherwise look like a plain table
+ * reference and the derived-table alias would be read as the source table.
+ */
+function findNextNonWhitespaceIndex(sql: string, start: number): number {
+  let index = start;
+  while (index < sql.length) {
+    const char = sql[index] ?? '';
+    if (/\s/.test(char)) {
+      index += 1;
+    } else if (char === '-' && sql[index + 1] === '-') {
+      index = skipLineComment(sql, index);
+    } else if (char === '/' && sql[index + 1] === '*') {
+      const end = skipBlockComment(sql, index);
+      if (end === index) return -1;
+      index = end;
+    } else {
+      return index;
+    }
+  }
+  return -1;
+}
+
+/** Match the closing paren for `openIndex`, skipping quoted text and comments. */
+function findMatchingParenIndex(sql: string, openIndex: number): number {
+  let depth = 0;
+  let index = openIndex;
+  while (index < sql.length) {
+    const char = sql[index] ?? '';
+    const next = sql[index + 1] ?? '';
+    if (char === "'") {
+      index = skipSingleQuotedString(sql, index);
+    } else if (char === '"') {
+      index = skipDoubleQuotedIdentifier(sql, index);
+    } else if (char === '-' && next === '-') {
+      index = skipLineComment(sql, index);
+    } else if (char === '/' && next === '*') {
+      index = skipBlockComment(sql, index);
+    } else if (char === '(') {
+      depth += 1;
+      index += 1;
+    } else if (char === ')') {
+      depth -= 1;
+      if (depth === 0) return index;
+      index += 1;
+    } else {
+      index += 1;
+    }
+  }
+  return -1;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -141,13 +306,11 @@ function buildAnalysis(
   statementType: MutatingStatementType,
   tableName: string,
   whereClause: string | null,
-  schema: string
+  schema: string,
+  alias: string | null = null
 ): MutationAnalysis {
   const trimmedTableName = tableName.trim();
-  const hasEmptyQuotedIdentifier = trimmedTableName
-    .split('.')
-    .some((segment) => segment.trim() === '""');
-  if (trimmedTableName.length === 0 || hasEmptyQuotedIdentifier) {
+  if (!isUsableTableName(trimmedTableName)) {
     return { canBackup: false, statementType, tableName, whereClause: null, backupSelectSql: null };
   }
 
@@ -157,7 +320,8 @@ function buildAnalysis(
   }
 
   const qualifiedTable = qualifyTableName(tableName, schema);
-  const backupSelectSql = `SELECT * FROM ${qualifiedTable} WHERE ${whereClause.trim()}`;
+  const fromClause = alias === null ? qualifiedTable : `${qualifiedTable} ${alias}`;
+  const backupSelectSql = `SELECT * FROM ${fromClause} WHERE ${whereClause.trim()}`;
 
   return {
     canBackup: true,
@@ -166,6 +330,11 @@ function buildAnalysis(
     whereClause: whereClause.trim(),
     backupSelectSql,
   };
+}
+
+function isUsableTableName(trimmedTableName: string): boolean {
+  if (trimmedTableName.length === 0) return false;
+  return !trimmedTableName.split('.').some((segment) => segment.trim() === '""');
 }
 
 /**
@@ -182,17 +351,41 @@ function qualifyTableName(tableName: string, schema: string): string {
   return `${schema}.${tableName}`;
 }
 
+interface TableReference {
+  /** Full qualified name as written, e.g. `T`, `SCH.T`, `"SCH"."T"`. */
+  readonly tableName: string;
+  /** Correlation name that follows it, with or without `AS`. */
+  readonly alias: string | null;
+}
+
+/**
+ * Words that may legally follow a table reference but are never an alias. Without
+ * this, `DELETE FROM T WHERE ...` would read `WHERE` as the table's alias.
+ */
+const TABLE_REFERENCE_STOP_WORDS = new Set([
+  'AND', 'AS', 'CROSS', 'DELETE', 'FETCH', 'FOR', 'FROM', 'FULL', 'GROUP',
+  'HAVING', 'INNER', 'INSERT', 'INTO', 'JOIN', 'LEFT', 'LIMIT', 'MATCHED',
+  'MERGE', 'NOT', 'OFFSET', 'ON', 'OR', 'ORDER', 'RIGHT', 'SELECT', 'SET',
+  'THEN', 'UPDATE', 'USING', 'VALUES', 'WHEN', 'WHERE', 'WITH',
+]);
+
+function isTableReferenceStopWord(upper: string): boolean {
+  return TABLE_REFERENCE_STOP_WORDS.has(upper);
+}
+
 /**
  * Given the token that starts a table reference, read the full qualified name
- * including an optional schema prefix (`schema.table` or `"SCHEMA"."TABLE"`).
+ * (`schema.table` or `"SCHEMA"."TABLE"`) plus any alias that follows it. The
+ * alias matters because a predicate written against it — `WHERE so.ID = 1` —
+ * only resolves if the backup SELECT declares the same correlation name.
  */
-function resolveFullTableName(
+function readTableReference(
   tokens: readonly SqlWordToken[],
   startToken: SqlWordToken,
   sql: string
-): string {
+): TableReference {
   const startIdx = tokens.indexOf(startToken);
-  if (startIdx < 0) return '';
+  if (startIdx < 0) return { tableName: '', alias: null };
 
   // Read identifiers separated by dots at depth 0
   let name = extractIdentifierText(sql, startToken);
@@ -212,7 +405,30 @@ function resolveFullTableName(
     }
   }
 
-  return name;
+  return { tableName: name, alias: readAliasAtTokenIndex(tokens, nextIdx) };
+}
+
+function readAliasAtTokenIndex(
+  tokens: readonly SqlWordToken[],
+  index: number
+): string | null {
+  const token = tokens[index];
+  if (token?.depth !== 0) return null;
+  if (token.upper === 'AS') {
+    const aliasToken = tokens[index + 1];
+    if (aliasToken?.depth !== 0) return null;
+    return isTableReferenceStopWord(aliasToken.upper) ? null : aliasToken.text;
+  }
+  return isTableReferenceStopWord(token.upper) ? null : token.text;
+}
+
+/** Read the alias sitting after a raw character offset (used after a subquery's `)`). */
+function readAliasAfterOffset(
+  tokens: readonly SqlWordToken[],
+  offset: number
+): string | null {
+  const index = tokens.findIndex((token) => token.depth === 0 && token.start > offset);
+  return index < 0 ? null : readAliasAtTokenIndex(tokens, index);
 }
 
 /**
@@ -271,30 +487,49 @@ function stripTrailingClauses(whereBody: string, tokens: readonly SqlWordToken[]
 }
 
 /**
- * For MERGE, extract the ON clause condition as the backup filter.
+ * For MERGE, extract the ON clause condition as the backup filter. The clause is
+ * bounded by the first top-level `WHEN` *token* — a raw substring search would
+ * also match inside a literal (`ON T.CODE = 'WHEN MATCHED'`) or inside a column
+ * name (`T.WHEN_CREATED`), truncating the condition mid-expression.
  */
 function extractMergeOnClause(sql: string, tokens: readonly SqlWordToken[]): string | null {
-  let onStart = -1;
-  let usingDepth = -1;
-
+  let usingSeen = false;
+  let onToken: SqlWordToken | undefined;
   for (const token of tokens) {
-    if (token.depth === 0 && token.upper === 'USING') {
-      usingDepth = 0;
+    if (token.depth !== 0) continue;
+    if (token.upper === 'USING') {
+      usingSeen = true;
+      continue;
     }
-    if (usingDepth >= 0 && token.depth === 0 && token.upper === 'ON') {
-      onStart = token.end;
+    if (usingSeen && token.upper === 'ON') {
+      onToken = token;
       break;
     }
   }
+  if (onToken === undefined) return null;
 
-  if (onStart < 0) return null;
-
-  const afterOn = sql.slice(onStart).trimStart();
-  const whenIdx = sql.toUpperCase().indexOf('WHEN', onStart);
-  if (whenIdx > onStart) {
-    return sql.slice(onStart, whenIdx).trim();
+  const onEnd = onToken.end;
+  // An unparenthesized `CASE WHEN` inside the ON clause owns its own WHEN, so the
+  // first WHEN after ON is not necessarily the MERGE's. Skip any WHEN that sits
+  // inside an open CASE.
+  let caseDepth = 0;
+  let boundary: number | null = null;
+  for (const token of tokens) {
+    if (token.depth !== 0 || token.start < onEnd) continue;
+    if (token.upper === 'CASE') {
+      caseDepth += 1;
+    } else if (token.upper === 'END') {
+      caseDepth = Math.max(0, caseDepth - 1);
+    } else if (token.upper === 'WHEN' && caseDepth === 0) {
+      boundary = token.start;
+      break;
+    }
   }
-  return afterOn.trim();
+  // An unbalanced CASE means the boundary could not be located reliably — decline
+  // rather than emit a truncated condition that would back up the wrong rows.
+  if (boundary === null && caseDepth > 0) return null;
+  const clause = sql.slice(onEnd, boundary ?? sql.length).trim();
+  return clause.length > 0 ? clause : null;
 }
 
 function findNextTopLevelToken(

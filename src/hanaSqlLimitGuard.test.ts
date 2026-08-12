@@ -195,4 +195,69 @@ WHERE ID = 1`;
       });
     });
   });
+
+  describe('statements ending inside a line comment', () => {
+    test('breaks the line so a trailing -- comment cannot swallow the limit', () => {
+      const sql = 'SELECT * FROM ORDERS -- all orders';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: 'SELECT * FROM ORDERS -- all orders\nLIMIT 100',
+      });
+    });
+
+    test('breaks the line when the last line of a multi-line script is a comment', () => {
+      const sql = 'SELECT * FROM ORDERS\n-- WHERE STATUS = 1';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: 'SELECT * FROM ORDERS\n-- WHERE STATUS = 1\nLIMIT 100',
+      });
+    });
+
+    test('keeps a trailing option on its own line when a comment precedes it', () => {
+      const sql = 'SELECT * FROM ORDERS -- note\nFOR UPDATE';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: 'SELECT * FROM ORDERS -- note\nLIMIT 100 FOR UPDATE',
+      });
+    });
+
+    test('still appends inline when the comment is closed by a newline', () => {
+      const sql = 'SELECT * FROM ORDERS -- note\nWHERE ID = 1';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: 'SELECT * FROM ORDERS -- note\nWHERE ID = 1 LIMIT 100',
+      });
+    });
+
+    test('treats -- inside a string literal as data, not a comment', () => {
+      const sql = "SELECT * FROM ORDERS WHERE CODE = '-- not a comment'";
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: `${sql} LIMIT 100`,
+      });
+    });
+
+    test('treats -- inside a quoted identifier as data, not a comment', () => {
+      const sql = 'SELECT * FROM "ORDERS -- LEGACY"';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: `${sql} LIMIT 100`,
+      });
+    });
+
+    test('treats -- inside a closed block comment as data, not a comment', () => {
+      const sql = 'SELECT * FROM ORDERS /* -- inner */';
+      expect(applyDefaultHanaSelectLimit(sql)).toEqual({
+        applied: true,
+        limit: HANA_SQL_DEFAULT_SELECT_LIMIT,
+        sql: `${sql} LIMIT 100`,
+      });
+    });
+  });
 });

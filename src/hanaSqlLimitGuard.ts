@@ -132,10 +132,43 @@ function findNextTopLevelToken(
 function insertLimitClause(sql: string, insertionIndex: number, limit: number): string {
   const before = sql.slice(0, insertionIndex).trimEnd();
   const after = sql.slice(insertionIndex).trimStart();
+  // Trimming collapses the newline that closed a trailing `--` comment, so an
+  // inline separator would push LIMIT (and anything after it) into that comment
+  // and HANA would run the statement uncapped.
+  const separator = endsInsideLineComment(before) ? '\n' : ' ';
   if (after.length === 0) {
-    return `${before} LIMIT ${String(limit)}`;
+    return `${before}${separator}LIMIT ${String(limit)}`;
   }
-  return `${before} LIMIT ${String(limit)} ${after}`;
+  return `${before}${separator}LIMIT ${String(limit)} ${after}`;
+}
+
+/**
+ * True when `sql` stops while a `--` line comment is still open. Quotes and
+ * block comments are skipped so a `--` that is merely part of a literal or an
+ * identifier does not count.
+ */
+function endsInsideLineComment(sql: string): boolean {
+  let index = 0;
+  while (index < sql.length) {
+    const char = sql[index] ?? '';
+    const next = sql[index + 1] ?? '';
+    if (char === "'") {
+      index = skipSingleQuotedString(sql, index);
+    } else if (char === '"') {
+      index = skipDoubleQuotedIdentifier(sql, index);
+    } else if (char === '-' && next === '-') {
+      const newlineIndex = sql.indexOf('\n', index + 2);
+      if (newlineIndex < 0) {
+        return true;
+      }
+      index = newlineIndex + 1;
+    } else if (char === '/' && next === '*') {
+      index = skipBlockComment(sql, index);
+    } else {
+      index += 1;
+    }
+  }
+  return false;
 }
 
 function tokenizeSqlWords(sql: string): SqlWordToken[] {

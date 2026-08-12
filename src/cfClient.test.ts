@@ -27,6 +27,7 @@ vi.mock('node:child_process', () => ({
 import {
   configureCfCommandLogger,
   ensureCfAppSshEnabled,
+  fetchAppEnvironmentFromTarget,
   fetchDefaultEnvJsonFromTarget,
   fetchOrgs,
   fetchPnpmLockFromTarget,
@@ -41,6 +42,7 @@ import {
   parseCfAppsOutput,
   prepareCfCliSession,
   resetCfCliSessionReuse,
+  runWithCfTarget,
   spawnAppLogStreamFromTarget,
 } from './cfClient';
 
@@ -217,6 +219,61 @@ describe('prepareCfCliSession', () => {
     // api, api, auth, auth, target, target) AND the second preparation reuses
     // the freshly-established api/auth, re-running only `cf target`.
     expect(order).toEqual(['api', 'auth', 'target', 'target']);
+  });
+
+  it('runWithCfTarget keeps another preparation from retargeting mid-operation', async () => {
+    const order: string[] = [];
+    execFileAsyncMock.mockImplementation((_cmd: string, args: string[]) => {
+      const verb = args[0] ?? '';
+      const target = verb === 'target' ? `target:${args[2] ?? ''}` : verb;
+      order.push(target);
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({ stdout: '' }), 2);
+      });
+    });
+
+    const base = {
+      apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+      email: 'test@example.com',
+      password: 'super-secret-password',
+      cfHomeDir: '/tmp/sap-tools-cf-home-with-target',
+    };
+
+    // The operation is slow enough that an unguarded competitor would slip its
+    // `cf target` in before the dependent command runs.
+    const guarded = runWithCfTarget({ ...base, orgName: 'org-a', spaceName: 'dev' }, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      order.push('operation:org-a');
+      return 'done';
+    });
+    const competitor = prepareCfCliSession({ ...base, orgName: 'org-b', spaceName: 'prod' });
+
+    await expect(guarded).resolves.toBe('done');
+    await competitor;
+
+    const operationIndex = order.indexOf('operation:org-a');
+    const competingTargetIndex = order.indexOf('target:org-b');
+    expect(operationIndex).toBeGreaterThanOrEqual(0);
+    expect(competingTargetIndex).toBeGreaterThan(operationIndex);
+  });
+
+  it('runWithCfTarget releases the queue when the operation throws', async () => {
+    execFileAsyncMock.mockResolvedValue({ stdout: '' });
+    const params = {
+      apiEndpoint: 'https://api.cf.us10.hana.ondemand.com',
+      email: 'test@example.com',
+      password: 'super-secret-password',
+      orgName: 'finance-services-prod',
+      spaceName: 'uat',
+      cfHomeDir: '/tmp/sap-tools-cf-home-throwing',
+    };
+
+    await expect(
+      runWithCfTarget(params, () => Promise.reject(new Error('operation blew up')))
+    ).rejects.toThrow('operation blew up');
+
+    // A later caller on the same CF_HOME must not be stuck behind the failure.
+    await expect(runWithCfTarget(params, () => Promise.resolve('ok'))).resolves.toBe('ok');
   });
 
   it('reuses an established session and only re-targets within the reuse window', async () => {
@@ -692,6 +749,79 @@ describe('fetchDefaultEnvJsonFromTarget', () => {
         appName: 'finance-uat-api',
       })
     ).rejects.toThrow('Unexpected JSON format for CF app environment payload.');
+  });
+});
+
+describe('fetchAppEnvironmentFromTarget', () => {
+  beforeEach(() => {
+    execFileAsyncMock.mockReset();
+  });
+
+  /**
+   * Shaped like a real `cf curl /v3/apps/:guid/env` response. The identity lives
+   * in `application_env_json`, which is a SEPARATE group from `system_env_json`
+   * and is deliberately not merged into default-env.json — if that key name ever
+   * drifts, the org/space guard in hanaSqlConnectionResolver silently stops
+   * firing, so it is pinned here.
+   */
+  function mockAppEnvResponse(applicationEnvJson: unknown): void {
+    execFileAsyncMock
+      .mockResolvedValueOnce({ stdout: 'app-guid-123\n' })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          system_env_json: { VCAP_SERVICES: { hana: [{ name: 'hana-service' }] } },
+          environment_variables: { NODE_ENV: 'production' },
+          ...(applicationEnvJson === undefined ? {} : { application_env_json: applicationEnvJson }),
+        }),
+      });
+  }
+
+  it('reads org and space from application_env_json.VCAP_APPLICATION', async () => {
+    mockAppEnvResponse({
+      VCAP_APPLICATION: {
+        application_name: 'finance-uat-api',
+        organization_name: 'finance-services-prod',
+        space_name: 'uat',
+      },
+    });
+
+    const environment = await fetchAppEnvironmentFromTarget({
+      appName: 'finance-uat-api',
+      cfHomeDir: '/tmp/sap-tools-cf-home',
+    });
+
+    expect(environment.identity).toEqual({
+      organizationName: 'finance-services-prod',
+      spaceName: 'uat',
+    });
+    // The default-env payload itself is unchanged by the identity extraction.
+    const parsed = JSON.parse(environment.defaultEnvJson) as Record<string, unknown>;
+    expect(parsed['VCAP_SERVICES']).toEqual({ hana: [{ name: 'hana-service' }] });
+  });
+
+  it('reports no identity when application_env_json is absent', async () => {
+    mockAppEnvResponse(undefined);
+
+    const environment = await fetchAppEnvironmentFromTarget({ appName: 'finance-uat-api' });
+
+    expect(environment.identity).toBeNull();
+  });
+
+  it('reports no identity when org or space name is missing or empty', async () => {
+    mockAppEnvResponse({ VCAP_APPLICATION: { organization_name: 'org-only' } });
+    await expect(
+      fetchAppEnvironmentFromTarget({ appName: 'a' }).then((e) => e.identity)
+    ).resolves.toBeNull();
+
+    mockAppEnvResponse({ VCAP_APPLICATION: { organization_name: '', space_name: 'uat' } });
+    await expect(
+      fetchAppEnvironmentFromTarget({ appName: 'a' }).then((e) => e.identity)
+    ).resolves.toBeNull();
+
+    mockAppEnvResponse({ VCAP_APPLICATION: 'not-an-object' });
+    await expect(
+      fetchAppEnvironmentFromTarget({ appName: 'a' }).then((e) => e.identity)
+    ).resolves.toBeNull();
   });
 });
 

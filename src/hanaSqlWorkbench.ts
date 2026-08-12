@@ -11,6 +11,7 @@ import {
   type HanaBatchExecutionSummary,
   type HanaConnection,
   type HanaQueryResult,
+  type HanaQueryResultSet,
   type HanaSqlStatementKind,
   type HanaStatementInput,
   type HanaStatementOutcome,
@@ -124,6 +125,22 @@ interface PreparedStatement {
   readonly executionSql: string;
   readonly statementKind: HanaSqlStatementKind;
   readonly tableName: string;
+}
+
+/**
+ * Ceiling on rows captured per pre-mutation backup. The generated SELECT has only
+ * the statement's own WHERE clause to bound it, so a broad predicate would
+ * otherwise stream an entire fact table into the extension host and into one
+ * in-memory CSV string.
+ */
+export const HANA_SQL_BACKUP_ROW_LIMIT = 50_000;
+const HANA_SQL_BACKUP_TIMEOUT_MS = 60_000;
+
+interface StatementBackupPlan {
+  readonly statement: PreparedStatement;
+  readonly analysis: NonNullable<ReturnType<typeof analyzeMutatingStatement>>;
+  /** Backup SELECT with the row cap already applied. */
+  readonly sql: string;
 }
 
 function describeBatchCounts(views: readonly SqlResultStatementView[]): string {
@@ -1034,68 +1051,170 @@ export class HanaSqlWorkbench
   }
 
   /**
-   * For each mutating statement in the batch that has a WHERE clause, run a
-   * backup SELECT and persist the result to disk BEFORE the mutation executes.
-   * Failures are purely best-effort — a backup error never blocks the query.
+   * Capture the rows each mutating statement is about to change, BEFORE the batch
+   * runs. Every backup SELECT goes over one shared connection: opening a fresh
+   * hdb connection per statement made a 100-statement script wait through 100 TLS
+   * handshakes before anything executed.
+   *
+   * A backup failure never blocks the mutation — but it is no longer silent
+   * either. The point of the feature is that the user believes a safety net
+   * exists, so when one is missing they are told.
    */
   private async backupMutatingStatements(
     context: HanaSqlAppContext,
     prepared: readonly PreparedStatement[]
   ): Promise<void> {
     if (this.backupStore === null || context.session === null) return;
-
-    for (const statement of prepared) {
-      if (statement.statementKind !== 'mutating') continue;
-      await this.backupSingleStatement(context, statement);
-    }
-  }
-
-  private async backupSingleStatement(
-    context: HanaSqlAppContext,
-    statement: PreparedStatement
-  ): Promise<void> {
-    if (this.backupStore === null || context.session === null) return;
     const session = context.session;
-    const analysis = analyzeMutatingStatement(statement.executionSql, context.schema);
-    if (analysis === null || !analysis.canBackup || analysis.backupSelectSql === null) {
-      if (analysis !== null && !analysis.canBackup) {
-        this.logSql(
-          `backup skipped for ${analysis.statementType} on ${sanitizeSqlLogValue(analysis.tableName)} — no WHERE clause`
-        );
-      }
+
+    const { plans, declines } = this.planStatementBackups(context, prepared);
+    if (plans.length === 0) {
+      this.warnBackupIssues(declines);
       return;
     }
 
-    this.logSql(
-      `running backup SELECT for ${analysis.statementType} on ${sanitizeSqlLogValue(analysis.tableName)}`
-    );
+    this.logSql(`running ${String(plans.length)} backup SELECT(s) before the batch`);
+    // Survives a tunnel retry, which replays the whole batch: a statement already
+    // written must not be captured a second time into another folder.
+    const persisted = new Set<number>();
     try {
-      const result = await this.withTunnelFallback(context, (connection, overrides) =>
-        executeHanaQuery(connection, analysis.backupSelectSql ?? '', { statementKind: 'readonly', timeoutMs: 30_000, ...overrides })
-      );
-      if (result.kind !== 'resultset') return;
-
-      const csvContent = formatHanaSqlResultSetCsv(result);
-      const timestamp = new Date();
-      const saved = await this.backupStore.saveBackup({
-        session,
-        appName: context.appName,
-        statementType: analysis.statementType,
-        tableName: analysis.tableName,
-        originalSql: statement.executionSql,
-        csvContent,
-        rowCount: result.rowCount,
-        timestamp,
-      });
-      if (saved !== null) {
-        this.logSql(
-          `backup saved: ${sanitizeSqlLogValue(saved.id)} (${String(result.rowCount)} rows)`
+      await this.withTunnelFallback(context, async (connection, overrides) => {
+        // Each result is written to disk from inside the callback and then
+        // dropped, so only one backup's rows are resident at a time. Retaining
+        // them all would put N × the row cap in memory at once.
+        const pendingWrites: Promise<string | null>[] = [];
+        const batch = await executeHanaQueryBatch(
+          connection,
+          plans.map((plan) => ({ sql: plan.sql, statementKind: 'readonly' as const })),
+          {
+            timeoutMs: HANA_SQL_BACKUP_TIMEOUT_MS,
+            continueOnError: true,
+            discardResultsAfterCallback: true,
+            onStatementComplete: (index, outcome) => {
+              const plan = plans[index];
+              if (plan === undefined || persisted.has(index)) return;
+              if (outcome.status === 'success') persisted.add(index);
+              pendingWrites.push(this.persistStatementBackup(session, context, plan, outcome));
+            },
+            ...overrides,
+          }
         );
-      }
+        // continueOnError turns a dropped connection into per-statement errors,
+        // which would hide it from withTunnelFallback and skip the tunnel retry.
+        // Re-raise it so the fallback still gets its chance.
+        const connectivityFailure = findBatchConnectivityFailure(batch);
+        if (connectivityFailure !== null) throw connectivityFailure;
+
+        const issues = (await Promise.all(pendingWrites)).filter(
+          (issue): issue is string => issue !== null
+        );
+        this.warnBackupIssues([...declines, ...issues]);
+        return batch;
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logSql(`backup SELECT failed for ${sanitizeSqlLogValue(analysis.tableName)}: ${sanitizeSqlLogValue(message)}`);
+      this.logSql(`backup batch failed: ${sanitizeSqlLogValue(message)}`);
+      this.warnBackupIssues([
+        ...declines,
+        `no backup captured for ${String(plans.length - persisted.size)} statement(s): ${message}`,
+      ]);
     }
+  }
+
+  private planStatementBackups(
+    context: HanaSqlAppContext,
+    prepared: readonly PreparedStatement[]
+  ): { readonly plans: readonly StatementBackupPlan[]; readonly declines: readonly string[] } {
+    const plans: StatementBackupPlan[] = [];
+    const declines: string[] = [];
+    for (const statement of prepared) {
+      if (statement.statementKind !== 'mutating') continue;
+      const analysis = analyzeMutatingStatement(statement.executionSql, context.schema);
+      if (analysis === null) continue;
+      if (!analysis.canBackup || analysis.backupSelectSql === null) {
+        this.logSql(
+          `backup skipped for ${analysis.statementType} on ${sanitizeSqlLogValue(analysis.tableName)} — no recoverable row filter`
+        );
+        // A missing WHERE is the documented, expected case and stays log-only.
+        // Anything else means we could not build a backup for a statement the
+        // user probably assumes is covered, so say so.
+        if (analysis.whereClause !== null) {
+          declines.push(
+            `${analysis.statementType} on ${analysis.tableName} — no backup possible for this statement shape`
+          );
+        }
+        continue;
+      }
+      // One row over the cap so an overflow is detectable rather than silently partial.
+      const guarded = applyDefaultHanaSelectLimit(
+        analysis.backupSelectSql,
+        HANA_SQL_BACKUP_ROW_LIMIT + 1
+      );
+      plans.push({ statement, analysis, sql: guarded.sql });
+    }
+    return { plans, declines };
+  }
+
+  private async persistStatementBackup(
+    session: HanaSqlScopeSession,
+    context: HanaSqlAppContext,
+    plan: StatementBackupPlan,
+    outcome: HanaStatementOutcome | undefined
+  ): Promise<string | null> {
+    const label = `${plan.analysis.statementType} on ${plan.analysis.tableName}`;
+    if (outcome?.status !== 'success' || outcome.result?.kind !== 'resultset') {
+      const detail = outcome?.errorMessage ?? 'the backup query returned no rows to save';
+      this.logSql(
+        `backup SELECT failed for ${sanitizeSqlLogValue(plan.analysis.tableName)}: ${sanitizeSqlLogValue(detail)}`
+      );
+      return `${label} — ${detail}`;
+    }
+
+    const result = outcome.result;
+    const truncated = result.rowCount > HANA_SQL_BACKUP_ROW_LIMIT;
+    const captured: HanaQueryResultSet = truncated
+      ? {
+          ...result,
+          rows: result.rows.slice(0, HANA_SQL_BACKUP_ROW_LIMIT),
+          rowCount: HANA_SQL_BACKUP_ROW_LIMIT,
+        }
+      : result;
+
+    try {
+      const saved = await this.backupStore?.saveBackup({
+        session,
+        appName: context.appName,
+        statementType: plan.analysis.statementType,
+        tableName: plan.analysis.tableName,
+        originalSql: plan.statement.executionSql,
+        csvContent: formatHanaSqlResultSetCsv(captured),
+        rowCount: captured.rowCount,
+        timestamp: new Date(),
+      });
+      if (saved === null || saved === undefined) {
+        return `${label} — the backup could not be written to disk`;
+      }
+      this.logSql(
+        `backup saved: ${sanitizeSqlLogValue(saved.id)} (${String(captured.rowCount)} rows${truncated ? ', truncated' : ''})`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSql(`backup save failed for ${sanitizeSqlLogValue(plan.analysis.tableName)}: ${sanitizeSqlLogValue(message)}`);
+      return `${label} — ${message}`;
+    }
+
+    return truncated
+      ? `${label} — only the first ${String(HANA_SQL_BACKUP_ROW_LIMIT)} rows were captured`
+      : null;
+  }
+
+  private warnBackupIssues(issues: readonly string[]): void {
+    if (issues.length === 0) return;
+    const shown = issues.slice(0, 3).join('; ');
+    const rest = issues.length > 3 ? ` (+${String(issues.length - 3)} more)` : '';
+    void vscode.window.showWarningMessage(
+      `SQL pre-mutation backup incomplete — ${shown}${rest}. See the SAP Tools output channel.`
+    );
   }
 
   private async prefetchTableNames(appId: string): Promise<void> {
@@ -1451,6 +1570,27 @@ export class HanaSqlWorkbench
   private logSql(message: string): void {
     this.outputChannel.appendLine(`[sql] ${message}`);
   }
+}
+
+/**
+ * The first outcome that failed because the connection itself was unusable, as a
+ * throwable error. Returns null when every failure was a genuine per-statement
+ * SQL error, which must NOT trigger a tunnel retry.
+ */
+function findBatchConnectivityFailure(batch: HanaBatchExecutionSummary): Error | null {
+  for (const outcome of batch.outcomes) {
+    if (outcome.status !== 'error') continue;
+    const message = outcome.errorMessage ?? '';
+    // Gate on exactly what withTunnelFallback itself gates on, so the re-raise
+    // only fires when a retry will actually happen. `errorKind === 'connection'`
+    // is deliberately NOT used: hdb reports plenty of per-statement SQL failures
+    // under that kind, and re-raising one would turn a partial success into a
+    // reported total failure.
+    if (isHanaConnectivityError(new Error(message))) {
+      return new HanaQueryError('connection', message);
+    }
+  }
+  return null;
 }
 
 function resolvePreparedStatementTableName(

@@ -131,6 +131,13 @@ export interface HdbClient {
   ): void;
   disconnect(callback?: (err: HdbCallbackError) => void): void;
   close(): void;
+  /**
+   * hdb's immediate teardown (`Client.prototype.destroy` → socket destroy). Both
+   * `disconnect()` and `close()` are cooperative: while the connection is still
+   * busy they only register a 'drain' listener and return, so after a query
+   * timeout neither actually releases the socket or the HANA session.
+   */
+  destroy?(error?: Error): void;
   on?(event: 'error', listener: (error: Error) => void): void;
   setAutoCommit?(autoCommit: boolean): void;
   commit?(callback: (err: HdbCallbackError) => void): void;
@@ -213,6 +220,23 @@ export interface ExecuteHanaQueryBatchOptions {
     index: number,
     outcome: HanaStatementOutcome
   ) => void;
+  /**
+   * Keep executing after a statement fails instead of aborting and marking the
+   * rest as skipped. Intended for independent read-only batches — the
+   * pre-mutation backup SELECTs, where one statement that cannot be backed up
+   * must not cost the others their backup. A transaction that saw any failure is
+   * still rolled back rather than committed.
+   */
+  readonly continueOnError?: boolean;
+  /**
+   * Drop each statement's `result` from the returned summary once
+   * `onStatementComplete` has seen it. Without this every result set in the batch
+   * is retained until the batch finishes — for the pre-mutation backups that is
+   * N × the row cap held in memory at once, where the previous one-connection-
+   * per-statement code only ever held one. Callers that set this MUST consume
+   * results inside the callback.
+   */
+  readonly discardResultsAfterCallback?: boolean;
 }
 
 export async function executeHanaQuery(
@@ -295,6 +319,8 @@ export async function executeHanaQueryBatch(
   let committed = false;
   let rolledBack = false;
   let errorIndex = -1;
+  let sawFailure = false;
+  const continueOnError = options.continueOnError === true;
   let commitFailureMessage: string | undefined;
   const batchStartedAt = Date.now();
 
@@ -327,8 +353,10 @@ export async function executeHanaQueryBatch(
           result,
           elapsedMs: Date.now() - statementStartedAt,
         };
-        outcomes.push(outcome);
         notifyStatementOutcome(options.onStatementComplete, index, outcome);
+        outcomes.push(
+          options.discardResultsAfterCallback === true ? withoutResult(outcome) : outcome
+        );
       } catch (error) {
         const mapped = toHanaQueryError(error, 'exec');
         const outcome: HanaStatementOutcome = {
@@ -341,6 +369,10 @@ export async function executeHanaQueryBatch(
         };
         outcomes.push(outcome);
         notifyStatementOutcome(options.onStatementComplete, index, outcome);
+        sawFailure = true;
+        if (continueOnError) {
+          continue;
+        }
         errorIndex = index;
         break;
       }
@@ -363,7 +395,7 @@ export async function executeHanaQueryBatch(
     }
 
     if (usedTransaction) {
-      if (errorIndex >= 0) {
+      if (sawFailure) {
         await rollbackTransaction(client, timeoutMs).catch(() => {
           /* best effort */
         });
@@ -396,6 +428,13 @@ export async function executeHanaQueryBatch(
     ...(commitFailureMessage === undefined ? {} : { commitFailureMessage }),
   };
   return summary;
+}
+
+/** Same outcome minus the row payload, so the batch does not retain every result set. */
+function withoutResult(outcome: HanaStatementOutcome): HanaStatementOutcome {
+  const rest = { ...outcome };
+  delete (rest as { result?: unknown }).result;
+  return rest;
 }
 
 function notifyStatementOutcome(
@@ -846,27 +885,36 @@ function runWithTimeout<T>(
   });
 }
 
+/**
+ * How long a graceful disconnect gets before the socket is torn down by force.
+ * A statement that hit its timeout leaves the hdb queue busy, and in that state
+ * `disconnect()` never invokes its callback.
+ */
+export const HANA_DISCONNECT_GRACE_MS = 1500;
+
 async function safeDisconnect(client: HdbClient): Promise<void> {
   await new Promise<void>((resolve) => {
     let settled = false;
-    const finish = (): void => {
+    const finish = (graceful: boolean): void => {
       if (settled) return;
       settled = true;
-      safeClose(client);
+      if (graceful) {
+        safeClose(client);
+      } else {
+        forceClose(client);
+      }
       resolve();
     };
     try {
       client.disconnect((err) => {
-        if (hasHdbCallbackError(err)) {
-          finish();
-          return;
-        }
-        finish();
+        finish(!hasHdbCallbackError(err));
       });
     } catch {
-      finish();
+      finish(false);
     }
-    setTimeout(finish, 1500);
+    setTimeout(() => {
+      finish(false);
+    }, HANA_DISCONNECT_GRACE_MS);
   });
 }
 
@@ -876,6 +924,20 @@ function safeClose(client: HdbClient): void {
   } catch {
     /* ignore double close */
   }
+}
+
+/**
+ * The connection did not shut down cleanly (timeout still in flight, or
+ * disconnect reported an error), so release the socket outright instead of
+ * leaving it — and the server-side session — pinned until the statement drains.
+ */
+function forceClose(client: HdbClient): void {
+  try {
+    client.destroy?.();
+  } catch {
+    /* ignore — best effort teardown */
+  }
+  safeClose(client);
 }
 
 function hasHdbCallbackError(error: HdbCallbackError): error is Error {
@@ -973,12 +1035,32 @@ export function stripLeadingSqlComments(sql: string): string {
   return remaining;
 }
 
+/**
+ * Words that close a construct which does NOT open a block. `END IF`, `END WHILE`,
+ * `END FOR` and `END LOOP` must not be counted as closing the enclosing `BEGIN`,
+ * or a procedure body would appear to end early and its remaining semicolons
+ * would be treated as statement separators.
+ */
+const SQL_BLOCK_END_QUALIFIERS = new Set(['IF', 'WHILE', 'FOR', 'LOOP']);
+
+/** The words that make a trailing `FOR` a SELECT option rather than a loop close. */
+const SQL_TRAILING_FOR_OPTIONS = new Set(['UPDATE', 'SHARE', 'JSON', 'XML']);
+
+function isTrailingSelectForOption(sql: string, afterFor: number): boolean {
+  return SQL_TRAILING_FOR_OPTIONS.has(readNextSqlWord(sql, afterFor).text);
+}
+
 export function findTopLevelSqlSemicolons(sql: string): readonly number[] {
   const positions: number[] = [];
   let inSingleQuote = false;
   let inDoubleQuote = false;
   let inLineComment = false;
   let inBlockComment = false;
+  // Depth of open BEGIN/CASE constructs. Semicolons inside a block belong to the
+  // block body (SQLScript separates its own statements with `;`), so they are not
+  // statement boundaries. CASE is counted too because its bare `END` would
+  // otherwise unbalance the count.
+  let blockDepth = 0;
 
   for (let index = 0; index < sql.length; index += 1) {
     const char = sql[index] ?? '';
@@ -995,7 +1077,13 @@ export function findTopLevelSqlSemicolons(sql: string): readonly number[] {
       else if (char === '/' && next === '*') inBlockComment = true;
       else if (char === "'") inSingleQuote = true;
       else if (char === '"') inDoubleQuote = true;
-      else if (char === ';') positions.push(index);
+      else if (char === ';') {
+        if (blockDepth === 0) positions.push(index);
+      } else if (isSqlWordStartChar(char)) {
+        const step = applyBlockKeyword(sql, index, readSqlWordEndIndex(sql, index + 1), blockDepth);
+        blockDepth = step.depth;
+        index = step.nextIndex - 1;
+      }
     } else if (inSingleQuote && char === "'") {
       if (next === "'") index += 1;
       else inSingleQuote = false;
@@ -1005,6 +1093,89 @@ export function findTopLevelSqlSemicolons(sql: string): readonly number[] {
   }
 
   return positions;
+}
+
+interface BlockKeywordStep {
+  readonly depth: number;
+  /** Where scanning resumes — past the qualifier when `END <qualifier>` was consumed. */
+  readonly nextIndex: number;
+}
+
+function applyBlockKeyword(
+  sql: string,
+  start: number,
+  end: number,
+  blockDepth: number
+): BlockKeywordStep {
+  const word = sql.slice(start, end).toUpperCase();
+  if (word === 'BEGIN' || word === 'CASE') {
+    return { depth: blockDepth + 1, nextIndex: end };
+  }
+  if (word !== 'END') {
+    return { depth: blockDepth, nextIndex: end };
+  }
+
+  const qualifier = readNextSqlWord(sql, end);
+  if (qualifier.text === 'CASE') {
+    // SQLScript's statement form closes with `END CASE`. Consume the qualifier —
+    // left alone it would be counted again as a newly opened CASE, leaving the
+    // depth permanently one too high and swallowing every later statement.
+    return { depth: decrementBlockDepth(blockDepth), nextIndex: qualifier.end };
+  }
+  if (qualifier.text === 'FOR' && isTrailingSelectForOption(sql, qualifier.end)) {
+    // `END FOR UPDATE|SHARE|JSON|XML` is a CASE expression followed by a trailing
+    // SELECT option, not a loop close — the bare END still closes the CASE. Without
+    // this the depth stays raised and every later semicolon is suppressed.
+    return { depth: decrementBlockDepth(blockDepth), nextIndex: end };
+  }
+  if (SQL_BLOCK_END_QUALIFIERS.has(qualifier.text)) {
+    // END IF / END WHILE / END FOR / END LOOP close constructs this scanner never
+    // counted, so the depth is unchanged.
+    return { depth: blockDepth, nextIndex: qualifier.end };
+  }
+  return { depth: decrementBlockDepth(blockDepth), nextIndex: end };
+}
+
+/** Clamped so a stray END cannot go negative and make a later BEGIN look balanced. */
+function decrementBlockDepth(blockDepth: number): number {
+  return Math.max(0, blockDepth - 1);
+}
+
+function readNextSqlWord(sql: string, from: number): { readonly text: string; readonly end: number } {
+  let index = from;
+  // Skip whitespace AND comments: `END /* note */ CASE` must still be recognized
+  // as one construct, or the trailing CASE is counted as a new block.
+  while (index < sql.length) {
+    const char = sql[index] ?? '';
+    if (/\s/.test(char)) {
+      index += 1;
+    } else if (char === '-' && sql[index + 1] === '-') {
+      const newlineIndex = sql.indexOf('\n', index + 2);
+      if (newlineIndex < 0) return { text: '', end: from };
+      index = newlineIndex + 1;
+    } else if (char === '/' && sql[index + 1] === '*') {
+      const endIndex = sql.indexOf('*/', index + 2);
+      if (endIndex < 0) return { text: '', end: from };
+      index = endIndex + 2;
+    } else {
+      break;
+    }
+  }
+  if (index >= sql.length || !isSqlWordStartChar(sql[index] ?? '')) {
+    return { text: '', end: from };
+  }
+  const end = readSqlWordEndIndex(sql, index + 1);
+  return { text: sql.slice(index, end).toUpperCase(), end };
+}
+
+function isSqlWordStartChar(char: string): boolean {
+  return /^[A-Za-z_]$/.test(char);
+}
+
+function readSqlWordEndIndex(sql: string, start: number): number {
+  let index = start;
+  while (index < sql.length && /^[A-Za-z0-9_$#]$/.test(sql[index] ?? '')) index += 1;
+  return index;
 }
 
 function hasSqlDelimiterOutsideLiteral(sql: string): boolean {

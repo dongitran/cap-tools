@@ -107,8 +107,11 @@ export class HanaSqlBackupStore {
 
     const monthBucket = formatMonthBucket(timestamp);
     const region = extractRegionFromEndpoint(session.apiEndpoint);
-    const folderName = buildFolderName(region, session.orgName, session.spaceName, appName, statementType, tableName, timestamp);
-    const folderPath = join(SAPTOOLS_BACKUP_ROOT, monthBucket, folderName);
+    const monthPath = join(SAPTOOLS_BACKUP_ROOT, monthBucket);
+    await mkdir(monthPath, { recursive: true });
+
+    const baseFolderName = buildFolderName(region, session.orgName, session.spaceName, appName, statementType, tableName, timestamp);
+    const { folderName, folderPath } = await claimBackupFolder(monthPath, baseFolderName);
 
     const entryData = {
       id: folderName,
@@ -124,7 +127,6 @@ export class HanaSqlBackupStore {
       folderPath,
     };
 
-    await mkdir(folderPath, { recursive: true });
     await writeFile(join(folderPath, 'query.sql'), originalSql, 'utf8');
     await writeFile(join(folderPath, 'backup.csv'), csvContent, 'utf8');
     await writeFile(join(folderPath, 'metadata.json'), JSON.stringify(entryData, null, 2), 'utf8');
@@ -193,9 +195,38 @@ export class HanaSqlBackupStore {
 
 // ── Folder naming ──────────────────────────────────────────────────────────────
 
+/** How many suffixed names to try before giving up on a colliding backup folder. */
+const MAX_BACKUP_FOLDER_ATTEMPTS = 100;
+
+/**
+ * Create the backup folder, appending `-2`, `-3`, … until an unused name is
+ * found. `mkdir` without `recursive` fails with EEXIST instead of silently
+ * succeeding, which makes the claim atomic — two mutations landing in the same
+ * millisecond (same batch, or two windows) each get their own folder rather than
+ * the second overwriting the first one's query.sql/backup.csv.
+ */
+async function claimBackupFolder(
+  monthPath: string,
+  baseFolderName: string
+): Promise<{ readonly folderName: string; readonly folderPath: string }> {
+  for (let attempt = 1; attempt <= MAX_BACKUP_FOLDER_ATTEMPTS; attempt += 1) {
+    const folderName = attempt === 1 ? baseFolderName : `${baseFolderName}-${String(attempt)}`;
+    const folderPath = join(monthPath, folderName);
+    try {
+      await mkdir(folderPath);
+      return { folderName, folderPath };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error;
+      }
+    }
+  }
+  throw new Error(`Could not allocate a unique backup folder for "${baseFolderName}".`);
+}
+
 /**
  * Build a safe folder name from all the relevant dimensions.
- * Pattern: region-org-space-app-type-table-YYYYMMDDTHHmmss
+ * Pattern: region-org-space-app-type-table-YYYYMMDDTHHmmssSSS
  */
 function buildFolderName(
   region: string,
@@ -226,14 +257,17 @@ function buildFolderName(
  * Pattern: region-org-space-app-type-table-ts
  * We store region+org+space+app+type+table as slugs, and timestamp at the end.
  * Since each segment is separated by '-' and can itself contain '-', we anchor
- * on the ISO timestamp suffix (14 digits: YYYYMMDDHHmmss).
+ * on the trailing timestamp — `YYYYMMDDTHHmmss` from folders written before
+ * milliseconds were added, `YYYYMMDDTHHmmssSSS` since, either optionally
+ * followed by a `-2`/`-3` de-duplication suffix.
  */
 export function parseFolderNameToEntry(
   folderName: string,
   folderPath: string
 ): HanaSqlBackupEntry | null {
-  // Timestamp is always the last 15 chars: YYYYMMDDTHHmmss
-  const tsMatch = /(\d{8}T\d{6})$/.exec(folderName);
+  // Trailing timestamp, with or without the milliseconds added in a later
+  // version, and with or without the `-2`/`-3` de-duplication suffix.
+  const tsMatch = /(\d{8}T\d{6}(?:\d{3})?)(?:-\d+)?$/.exec(folderName);
   if (tsMatch === null) return null;
 
   const tsStr = tsMatch[1] ?? '';
@@ -242,7 +276,7 @@ export function parseFolderNameToEntry(
   if (timestamp === null) return null;
 
   // Parse remaining parts: region-org-space-app-type-table
-  const withoutTs = folderName.slice(0, -(tsStr.length + 1)); // remove -TS suffix
+  const withoutTs = folderName.slice(0, Math.max(0, tsMatch.index - 1)); // drop the '-' before the timestamp
   const parts = withoutTs.split('-');
   if (parts.length < 6) return null;
 
@@ -296,7 +330,10 @@ function formatTimestampForFolder(date: Date): string {
   const h = String(date.getUTCHours()).padStart(2, '0');
   const mi = String(date.getUTCMinutes()).padStart(2, '0');
   const s = String(date.getUTCSeconds()).padStart(2, '0');
-  return `${y}${mo}${d}T${h}${mi}${s}`;
+  // Milliseconds included: a batch backs up several statements per second, and
+  // second-resolution names collided into one folder.
+  const ms = String(date.getUTCMilliseconds()).padStart(3, '0');
+  return `${y}${mo}${d}T${h}${mi}${s}${ms}`;
 }
 
 function formatTimestampLabel(date: Date): string {
@@ -304,8 +341,8 @@ function formatTimestampLabel(date: Date): string {
 }
 
 function parseTimestampFolder(ts: string): Date | null {
-  // YYYYMMDDTHHmmss
-  const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/.exec(ts);
+  // YYYYMMDDTHHmmss, or YYYYMMDDTHHmmssSSS from a version that writes milliseconds
+  const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})?$/.exec(ts);
   if (match === null) return null;
   const y = match[1] ?? '';
   const mo = match[2] ?? '';
@@ -313,7 +350,8 @@ function parseTimestampFolder(ts: string): Date | null {
   const h = match[4] ?? '';
   const mi = match[5] ?? '';
   const s = match[6] ?? '';
-  const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}Z`);
+  const ms = match[7] ?? '000';
+  const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}Z`);
   return isNaN(date.getTime()) ? null : date;
 }
 

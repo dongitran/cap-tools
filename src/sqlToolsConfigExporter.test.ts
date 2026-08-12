@@ -6,14 +6,18 @@ const {
   writeFileMock,
   mkdirMock,
   prepareCfCliSessionMock,
+  runWithCfTargetSpy,
   fetchDefaultEnvJsonFromTargetMock,
+  appEnvIdentity,
 } = vi.hoisted(() => ({
   existsSyncMock: vi.fn(),
   readFileMock: vi.fn(),
   writeFileMock: vi.fn(),
   mkdirMock: vi.fn(),
   prepareCfCliSessionMock: vi.fn(),
+  runWithCfTargetSpy: vi.fn(),
   fetchDefaultEnvJsonFromTargetMock: vi.fn(),
+  appEnvIdentity: { current: null as { organizationName: string; spaceName: string } | null },
 }));
 
 vi.mock('node:fs', () => ({
@@ -28,7 +32,21 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('./cfClient', () => ({
   prepareCfCliSession: prepareCfCliSessionMock,
+  // runWithCfTarget now wraps prepare + operation in one CF_HOME slot; route it
+  // through the existing prepare mock so the target assertions below still apply.
+  runWithCfTarget: async (params: unknown, operation: () => Promise<unknown>) => {
+    runWithCfTargetSpy(params);
+    await prepareCfCliSessionMock(params);
+    return operation();
+  },
   fetchDefaultEnvJsonFromTarget: fetchDefaultEnvJsonFromTargetMock,
+  // Delegates to the existing default-env mock so every pre-existing test keeps
+  // working, while `appEnvIdentity` lets the scope-guard tests steer the org/space
+  // CF reports back.
+  fetchAppEnvironmentFromTarget: async (params: unknown) => ({
+    defaultEnvJson: await fetchDefaultEnvJsonFromTargetMock(params),
+    identity: appEnvIdentity.current,
+  }),
 }));
 
 import {
@@ -85,6 +103,7 @@ const BASE_EXPORT_OPTIONS = {
 };
 
 beforeEach(() => {
+  appEnvIdentity.current = { organizationName: 'finance-services-prod', spaceName: 'uat' };
   existsSyncMock.mockReset();
   readFileMock.mockReset();
   writeFileMock.mockReset();
@@ -290,6 +309,11 @@ describe('exportSqlToolsConfig', () => {
 
     const result = await exportSqlToolsConfig(BASE_EXPORT_OPTIONS);
 
+    // This writes HANA credentials into settings.json, so it must hold the
+    // CF_HOME slot across the lookup — otherwise a concurrent retarget can hand
+    // it another org's binding.
+    expect(runWithCfTargetSpy).toHaveBeenCalled();
+    expect(writeFileMock).toHaveBeenCalled();
     expect(prepareCfCliSessionMock).toHaveBeenCalledWith({
       apiEndpoint: BASE_EXPORT_OPTIONS.session.apiEndpoint,
       email: BASE_EXPORT_OPTIONS.session.email,
@@ -480,6 +504,45 @@ describe('exportSqlToolsConfig', () => {
       username: HANA_CREDENTIALS.user,
       database: HANA_CREDENTIALS.schema,
       driver: 'SAPHana',
+    });
+  });
+
+  describe('scope verification', () => {
+    it('refuses to write credentials CF resolved in a different org', async () => {
+      existsSyncMock.mockReturnValue(false);
+      appEnvIdentity.current = { organizationName: 'finance-services-dev', spaceName: 'uat' };
+      fetchDefaultEnvJsonFromTargetMock.mockResolvedValueOnce(
+        `${JSON.stringify(VALID_DEFAULT_ENV, null, 2)}\n`
+      );
+
+      await expect(exportSqlToolsConfig(BASE_EXPORT_OPTIONS)).rejects.toThrow(
+        /finance-services-dev/
+      );
+      // Nothing may reach settings.json when the scope does not match.
+      expect(writeFileMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses to write credentials CF resolved in a different space', async () => {
+      existsSyncMock.mockReturnValue(false);
+      appEnvIdentity.current = { organizationName: 'finance-services-prod', spaceName: 'prod' };
+      fetchDefaultEnvJsonFromTargetMock.mockResolvedValueOnce(
+        `${JSON.stringify(VALID_DEFAULT_ENV, null, 2)}\n`
+      );
+
+      await expect(exportSqlToolsConfig(BASE_EXPORT_OPTIONS)).rejects.toThrow(/prod/);
+      expect(writeFileMock).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when CF reports no identity rather than blocking the export', async () => {
+      existsSyncMock.mockReturnValue(false);
+      appEnvIdentity.current = null;
+      fetchDefaultEnvJsonFromTargetMock.mockResolvedValueOnce(
+        `${JSON.stringify(VALID_DEFAULT_ENV, null, 2)}\n`
+      );
+
+      await expect(exportSqlToolsConfig(BASE_EXPORT_OPTIONS)).resolves.toMatchObject({
+        settingsPath: expect.any(String),
+      });
     });
   });
 });

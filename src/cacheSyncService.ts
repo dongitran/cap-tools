@@ -462,7 +462,10 @@ export class CacheSyncService implements vscode.Disposable {
 
     try {
       this.throwIfRunCancelled(runId);
-      const cfHomeDir = await ensureCfHomeDir(this.context);
+      // Its own CF_HOME: this walk re-targets every org/space in the account, and
+      // on the shared directory that churn lands between a user operation's
+      // `cf target` and the commands that read it.
+      const cfHomeDir = await ensureCfHomeDir(this.context, 'sync');
       this.throwIfRunCancelled(runId);
       const regions = await syncAllRegions(
         credentials,

@@ -1,5 +1,21 @@
 # SAP Tools Extension Changelog
 
+## 0.10.189 (stable)
+
+- Fix: The automatic `LIMIT 100` was appended after a trailing `--` comment, so it landed inside the comment and the query ran uncapped against the full table while the log still reported the limit as applied. Any statement ending in a comment line was affected.
+- Fix: SQL result tables are now capped at 5,000 rendered rows with a "showing the first N of M" note. A `LIMIT 100000` query previously built a ~94 MB HTML document and froze the result panel; CSV/JSON export still receives every row.
+- Fix: Pre-mutation backup folders now carry milliseconds and are claimed with a non-recursive `mkdir`, so two backups of the same table in the same second no longer overwrite each other. Folders written by earlier versions are still listed and opened.
+- Fix: HANA credentials are now verified against `VCAP_APPLICATION` before use — the SQL workbench and the SQLTools export both refuse a binding Cloud Foundry resolved in a different org/space instead of silently connecting to another tenant's database.
+- Fix: `cf target` and the commands that depend on it now run inside a single CF_HOME lock (`runWithCfTarget`), and the background topology sync uses its own CF_HOME so its org/space walk can no longer retarget an in-flight user operation.
+- Fix: Anonymous blocks and `CREATE PROCEDURE`/`FUNCTION`/`TRIGGER` bodies are no longer split on the semicolons inside them, so procedural SQL is executable from the workbench. `END IF`/`END WHILE`/`END FOR`/`END CASE` and a trailing `FOR UPDATE`/`SHARE`/`JSON`/`XML` are all distinguished correctly.
+- Fix: `UPDATE`/`DELETE` backups keep the statement's table alias, so alias-qualified predicates resolve. `MERGE` backups now reproduce the `USING` source as a semi-join instead of reusing the `ON` clause against the target alone, which could never execute.
+- Fix: Statements whose rows cannot be captured (`UPDATE ... FROM`, an unsupported `MERGE` source, an `ON` clause that cannot be parsed) now decline the backup and tell the user, rather than issuing SQL that always fails.
+- Fix: Pre-mutation backups run as one batch over one connection instead of opening a connection per statement, are capped per statement, and no longer hold every result set in memory at once. A dropped connection still falls back to the cf-ssh tunnel, and a retry no longer re-writes backups already captured.
+- Fix: Backup failures are surfaced to the user instead of only reaching the output channel.
+- Fix: A query that times out now has its socket destroyed, releasing the TCP connection, the HANA session and the prepared statement that `disconnect()`/`close()` leave pinned while the connection is busy.
+- Fix: The SQL backup history panel parses backup CSV across the whole document, so a backed-up cell containing newlines renders as one row, and the row-count label no longer claims "500+" when there are exactly 500.
+- Test: Added coverage for all of the above, including mutation checks that the connectivity re-raise, the batch result-discard, the sync CF_HOME and the SQLTools `holdTarget` wiring each fail when removed.
+
 ## 0.10.188 (stable)
 
 - Automate GitHub Release creation from `main` pushes using the package version.

@@ -1,8 +1,9 @@
 // cspell:ignore mypw s3cret
 // cspell:words EHDBTIMEOUT
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
+  HANA_DISCONNECT_GRACE_MS,
   HanaQueryError,
   buildHdbCreateClientArgs,
   classifyHanaSqlStatement,
@@ -38,6 +39,8 @@ interface FakeClientOptions {
   readonly prepareError?: Error;
   readonly statement?: FakeStatementOptions;
   readonly disconnectError?: Error;
+  /** Mimic hdb deferring disconnect while the connection is still busy. */
+  readonly disconnectNeverCompletes?: boolean;
 }
 
 interface FakeClientCallLog {
@@ -102,10 +105,16 @@ function createFakeClient(
     },
     disconnect: (callback) => {
       events.push('client.disconnect');
+      if (options.disconnectNeverCompletes === true) {
+        return;
+      }
       setImmediate(() => callback?.(options.disconnectError ?? null));
     },
     close: () => {
       events.push('client.close');
+    },
+    destroy: () => {
+      events.push('client.destroy');
     },
     on: () => {
       // no-op
@@ -774,6 +783,61 @@ function createBatchFakeClient(
   return { client, log: { events }, autoCommitState };
 }
 
+describe('connection teardown', () => {
+  test('destroys the socket when disconnect never completes', async () => {
+    vi.useFakeTimers();
+    try {
+      const { client, log } = createFakeClient({
+        statement: { rowsOrAffected: [{ ID: 1 }] },
+        disconnectNeverCompletes: true,
+      });
+
+      const pending = executeHanaQuery(
+        { host: 'h', port: 443, user: 'u', password: 'p' },
+        'SELECT 1 FROM DUMMY',
+        { clientFactory: () => client }
+      );
+      await vi.advanceTimersByTimeAsync(HANA_DISCONNECT_GRACE_MS + 50);
+      await pending;
+
+      // hdb's disconnect()/close() only queue a 'drain' listener while the
+      // connection is busy; without destroy() the socket and HANA session leak.
+      expect(log.events).toContain('client.destroy');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('does not destroy the socket after a clean disconnect', async () => {
+    const { client, log } = createFakeClient({ statement: { rowsOrAffected: [{ ID: 1 }] } });
+
+    await executeHanaQuery(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      'SELECT 1 FROM DUMMY',
+      { clientFactory: () => client }
+    );
+
+    expect(log.events).toContain('client.disconnect');
+    expect(log.events).toContain('client.close');
+    expect(log.events).not.toContain('client.destroy');
+  });
+
+  test('destroys the socket when disconnect reports an error', async () => {
+    const { client, log } = createFakeClient({
+      statement: { rowsOrAffected: [{ ID: 1 }] },
+      disconnectError: new Error('connection already broken'),
+    });
+
+    await executeHanaQuery(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      'SELECT 1 FROM DUMMY',
+      { clientFactory: () => client }
+    );
+
+    expect(log.events).toContain('client.destroy');
+  });
+});
+
 describe('executeHanaQueryBatch', () => {
   test('returns an empty error when no statements are provided', async () => {
     const { client } = createBatchFakeClient();
@@ -809,6 +873,123 @@ describe('executeHanaQueryBatch', () => {
     expect(log.events.filter((event) => event === 'client.disconnect')).toHaveLength(1);
     expect(log.events).not.toContain('client.commit');
     expect(log.events).not.toContain('client.rollback');
+  });
+
+  test('continueOnError keeps running the remaining statements after one fails', async () => {
+    const behaviorBySql = new Map<string, BatchStatementBehavior>([
+      ['SELECT 1 FROM A', { rowsOrAffected: [{ ID: 1 }] }],
+      ['SELECT 2 FROM MISSING', { execError: Object.assign(new Error('table not found'), { code: 259 }) }],
+      ['SELECT 3 FROM C', { rowsOrAffected: [{ ID: 3 }] }],
+    ]);
+    const { client, log } = createBatchFakeClient({ behaviorBySql });
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [
+        { sql: 'SELECT 1 FROM A', statementKind: 'readonly' },
+        { sql: 'SELECT 2 FROM MISSING', statementKind: 'readonly' },
+        { sql: 'SELECT 3 FROM C', statementKind: 'readonly' },
+      ],
+      { clientFactory: () => client, continueOnError: true }
+    );
+
+    expect(summary.outcomes.map((outcome) => outcome.status)).toEqual([
+      'success',
+      'error',
+      'success',
+    ]);
+    expect(summary.outcomes[1]?.errorMessage).toContain('table not found');
+    // Still one connection for the whole set.
+    expect(log.events.filter((event) => event === 'client.connect')).toHaveLength(1);
+    expect(log.events.filter((event) => event === 'client.disconnect')).toHaveLength(1);
+  });
+
+  test('continueOnError reports every outcome to the progress callback', async () => {
+    const behaviorBySql = new Map<string, BatchStatementBehavior>([
+      ['SELECT 1 FROM A', { execError: Object.assign(new Error('nope'), { code: 259 }) }],
+      ['SELECT 2 FROM B', { rowsOrAffected: [{ ID: 2 }] }],
+    ]);
+    const { client } = createBatchFakeClient({ behaviorBySql });
+    const progress: { index: number; status: string }[] = [];
+
+    await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [
+        { sql: 'SELECT 1 FROM A', statementKind: 'readonly' },
+        { sql: 'SELECT 2 FROM B', statementKind: 'readonly' },
+      ],
+      {
+        clientFactory: () => client,
+        continueOnError: true,
+        onStatementComplete: (index, outcome) => {
+          progress.push({ index, status: outcome.status });
+        },
+      }
+    );
+
+    expect(progress).toEqual([
+      { index: 0, status: 'error' },
+      { index: 1, status: 'success' },
+    ]);
+  });
+
+  test('discardResultsAfterCallback hands the rows to the callback but drops them from the summary', async () => {
+    const { client } = createBatchFakeClient({ defaultBehavior: { rowsOrAffected: [{ ID: 1 }] } });
+    const seen: (string | undefined)[] = [];
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [{ sql: 'SELECT 1 FROM A', statementKind: 'readonly' }],
+      {
+        clientFactory: () => client,
+        discardResultsAfterCallback: true,
+        onStatementComplete: (_index, outcome) => {
+          seen.push(outcome.result?.kind);
+        },
+      }
+    );
+
+    // The consumer must still receive the rows...
+    expect(seen).toEqual(['resultset']);
+    // ...but the batch must not retain them, or N result sets pile up at once.
+    expect(summary.outcomes[0]?.result).toBeUndefined();
+    expect(summary.outcomes[0]?.status).toBe('success');
+  });
+
+  test('keeps results in the summary when discardResultsAfterCallback is not set', async () => {
+    const { client } = createBatchFakeClient({ defaultBehavior: { rowsOrAffected: [{ ID: 1 }] } });
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [{ sql: 'SELECT 1 FROM A', statementKind: 'readonly' }],
+      { clientFactory: () => client }
+    );
+
+    // The workbench renders multi-statement results from this array; stripping it
+    // unconditionally would blank every batch result table.
+    expect(summary.outcomes[0]?.result?.kind).toBe('resultset');
+  });
+
+  test('continueOnError still rolls back a mutating transaction that saw a failure', async () => {
+    const behaviorBySql = new Map<string, BatchStatementBehavior>([
+      ['UPDATE T SET X = 1', { rowsOrAffected: 1 }],
+      ['UPDATE T SET X = 2', { execError: Object.assign(new Error('boom'), { code: 257 }) }],
+    ]);
+    const { client, log } = createBatchFakeClient({ behaviorBySql });
+
+    const summary = await executeHanaQueryBatch(
+      { host: 'h', port: 443, user: 'u', password: 'p' },
+      [
+        { sql: 'UPDATE T SET X = 1', statementKind: 'mutating' },
+        { sql: 'UPDATE T SET X = 2', statementKind: 'mutating' },
+      ],
+      { clientFactory: () => client, continueOnError: true }
+    );
+
+    expect(summary.rolledBack).toBe(true);
+    expect(summary.committed).toBe(false);
+    expect(log.events).toContain('client.rollback');
+    expect(log.events).not.toContain('client.commit');
   });
 
   test('wraps mutating statements in a transaction and commits on success', async () => {

@@ -1,4 +1,4 @@
-import { prepareCfCliSession } from './cfClient';
+import { prepareCfCliSession, runWithCfTarget } from './cfClient';
 import { isRecoverableCfCliAuthError } from './cfCliAuthError';
 
 export { isRecoverableCfCliAuthError } from './cfCliAuthError';
@@ -14,14 +14,34 @@ export interface CfCliAuthRecoverySession {
   readonly cfHomeDir?: string;
 }
 
+export interface CfCliAuthRecoveryOptions {
+  /**
+   * Hold the CF_HOME slot across the operation so nothing can retarget between
+   * `cf target` and the operation's own `cf` commands.
+   *
+   * Off by default, and deliberately so: the slot is global to the CF_HOME, and
+   * a long operation (an artifact export runs a series of `cf ssh` calls) would
+   * stall every other CF-backed feature for its whole duration. Turn it on only
+   * for short operations whose result depends on the targeted scope — resolving
+   * service credentials being the case that matters, since a wrong target there
+   * silently yields another org's database.
+   */
+  readonly holdTarget?: boolean;
+}
+
 export async function runWithCfCliAuthRecovery<T>(
   session: CfCliAuthRecoverySession,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
+  options: CfCliAuthRecoveryOptions = {}
 ): Promise<T> {
   let lastError: unknown = null;
   for (let retryIndex = 0; retryIndex <= CF_CLI_AUTH_RECOVERY_RETRIES; retryIndex += 1) {
+    const params = buildSessionParams(session, retryIndex > 0);
     try {
-      await prepareCfCliSession(buildSessionParams(session, retryIndex > 0));
+      if (options.holdTarget === true) {
+        return await runWithCfTarget(params, operation);
+      }
+      await prepareCfCliSession(params);
       return await operation();
     } catch (error) {
       lastError = error;

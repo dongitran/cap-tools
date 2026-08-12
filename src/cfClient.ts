@@ -279,12 +279,36 @@ export function resetCfCliSessionReuse(): void {
  * authenticates against UAA each time.
  */
 export async function prepareCfCliSession(params: CfCliTargetParams): Promise<void> {
-  const queueKey = params.cfHomeDir ?? '';
+  return enqueueOnCfHome(params.cfHomeDir ?? '', () => runCfCliSessionPreparation(params));
+}
+
+/**
+ * Target the given org/space and run `operation` **while still holding the
+ * CF_HOME slot**, so nothing can retarget in between.
+ *
+ * `prepareCfCliSession` alone is not enough: it releases the slot as soon as the
+ * api→auth→target triplet finishes, and the CF CLI resolves app names against
+ * whatever `.cf/config.json` says at the moment each command runs. A concurrent
+ * `cf target` landing in that window makes commands like `cf app <name> --guid`
+ * resolve in the wrong space — and if a same-named app exists there, they succeed
+ * with the wrong app's data. Use this for any command whose result depends on the
+ * targeted scope.
+ *
+ * Keep `operation` short. It blocks every other CF CLI call on this CF_HOME.
+ */
+export async function runWithCfTarget<T>(
+  params: CfCliTargetParams,
+  operation: () => Promise<T>
+): Promise<T> {
+  return enqueueOnCfHome(params.cfHomeDir ?? '', async () => {
+    await runCfCliSessionPreparation(params);
+    return operation();
+  });
+}
+
+function enqueueOnCfHome<T>(queueKey: string, work: () => Promise<T>): Promise<T> {
   const previous = cfCliSessionQueues.get(queueKey) ?? Promise.resolve();
-  const run = previous.then(
-    () => runCfCliSessionPreparation(params),
-    () => runCfCliSessionPreparation(params)
-  );
+  const run = previous.then(work, work);
   // Store a non-rejecting tail so the next caller always chains, even on failure.
   const tail = run.then(
     () => undefined,
@@ -395,10 +419,35 @@ export async function fetchRecentAppLogsFromTarget(params: {
  * Fetch a synthesized default-env.json payload for an app from CF runtime environment data.
  * Requires CF CLI to be already targeted to the intended org/space.
  */
+/** The org/space CF itself reported for an app, read from `VCAP_APPLICATION`. */
+export interface CfAppEnvironmentIdentity {
+  readonly organizationName: string;
+  readonly spaceName: string;
+}
+
+export interface CfAppEnvironment {
+  readonly defaultEnvJson: string;
+  /**
+   * Where CF says this app actually lives. `null` when the payload carries no
+   * usable `VCAP_APPLICATION`. Callers use it to confirm the ambient CF target
+   * was still the intended one when the app was resolved — the CF_HOME config is
+   * shared, so another operation can change it between `cf target` and here.
+   */
+  readonly identity: CfAppEnvironmentIdentity | null;
+}
+
 export async function fetchDefaultEnvJsonFromTarget(params: {
   readonly appName: string;
   readonly cfHomeDir?: string;
 }): Promise<string> {
+  const environment = await fetchAppEnvironmentFromTarget(params);
+  return environment.defaultEnvJson;
+}
+
+export async function fetchAppEnvironmentFromTarget(params: {
+  readonly appName: string;
+  readonly cfHomeDir?: string;
+}): Promise<CfAppEnvironment> {
   const cfHomeOptions = buildCfHomeOptions(params.cfHomeDir);
   const appGuidStdout = await runCfCommand(['app', params.appName, '--guid'], {
     ...cfHomeOptions,
@@ -418,7 +467,37 @@ export async function fetchDefaultEnvJsonFromTarget(params: {
   const appEnvPayload = parseJsonRecord(appEnvStdout, 'CF app environment payload');
   const defaultEnvPayload = buildDefaultEnvPayload(appEnvPayload);
 
-  return `${JSON.stringify(defaultEnvPayload, null, 2)}\n`;
+  return {
+    defaultEnvJson: `${JSON.stringify(defaultEnvPayload, null, 2)}\n`,
+    identity: extractAppEnvironmentIdentity(appEnvPayload),
+  };
+}
+
+/**
+ * Read org/space from `application_env_json.VCAP_APPLICATION`. That group is
+ * deliberately not merged into the default-env payload (it is not a service
+ * binding), so it is pulled out separately here.
+ */
+function extractAppEnvironmentIdentity(
+  appEnvPayload: Record<string, unknown>
+): CfAppEnvironmentIdentity | null {
+  const applicationEnv = appEnvPayload['application_env_json'];
+  if (!isRecord(applicationEnv)) {
+    return null;
+  }
+  const vcapApplication = applicationEnv['VCAP_APPLICATION'];
+  if (!isRecord(vcapApplication)) {
+    return null;
+  }
+  const organizationName = vcapApplication['organization_name'];
+  const spaceName = vcapApplication['space_name'];
+  if (typeof organizationName !== 'string' || organizationName.length === 0) {
+    return null;
+  }
+  if (typeof spaceName !== 'string' || spaceName.length === 0) {
+    return null;
+  }
+  return { organizationName, spaceName };
 }
 
 /**

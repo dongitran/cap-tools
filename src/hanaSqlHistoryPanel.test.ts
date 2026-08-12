@@ -132,6 +132,59 @@ describe('hanaSqlHistoryPanel', () => {
       expect(result.rows).toEqual([]);
     });
 
+    it('should keep a quoted cell that spans several lines in one row', () => {
+      const csv = 'ID,NOTE,STATUS\n1,"line1\nline2",OK\n2,plain,OK';
+      const result = parseCsvForDisplay(csv);
+
+      expect(result.columns).toEqual(['ID', 'NOTE', 'STATUS']);
+      expect(result.rows).toHaveLength(2);
+      expect(result.rows[0]).toEqual(['1', 'line1\nline2', 'OK']);
+      expect(result.rows[1]).toEqual(['2', 'plain', 'OK']);
+    });
+
+    it('should keep a blank line inside a quoted cell', () => {
+      const csv = 'ID,NOTE\n1,"before\n\nafter"';
+      const result = parseCsvForDisplay(csv);
+
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0]).toEqual(['1', 'before\n\nafter']);
+    });
+
+    it('should keep a quoted cell containing a comma and a newline together', () => {
+      const csv = 'ID,NOTE\n1,"a, b\nc, d"';
+      const result = parseCsvForDisplay(csv);
+      expect(result.rows[0]).toEqual(['1', 'a, b\nc, d']);
+    });
+
+    it('should tolerate CRLF line endings', () => {
+      const result = parseCsvForDisplay('ID,NAME\r\n1,Alice\r\n2,Bob');
+      expect(result.columns).toEqual(['ID', 'NAME']);
+      expect(result.rows).toEqual([['1', 'Alice'], ['2', 'Bob']]);
+    });
+
+    it('should preserve empty trailing cells', () => {
+      const result = parseCsvForDisplay('A,B,C\n1,,');
+      expect(result.rows[0]).toEqual(['1', '', '']);
+    });
+
+    it('should not report truncation when the row count is exactly the cap', () => {
+      const lines = ['ID,Val'];
+      for (let index = 0; index < 500; index += 1) lines.push(`${String(index)},Val${String(index)}`);
+
+      const result = parseCsvForDisplay(lines.join('\n'));
+      expect(result.rows).toHaveLength(500);
+      expect(result.truncated).toBe(false);
+    });
+
+    it('should report truncation when there are more rows than the cap', () => {
+      const lines = ['ID,Val'];
+      for (let index = 0; index < 501; index += 1) lines.push(`${String(index)},Val${String(index)}`);
+
+      const result = parseCsvForDisplay(lines.join('\n'));
+      expect(result.rows).toHaveLength(500);
+      expect(result.truncated).toBe(true);
+    });
+
     it('should handle trailing newlines gracefully', () => {
       const csv = 'A,B\n1,2\n\n\n';
       const result = parseCsvForDisplay(csv);

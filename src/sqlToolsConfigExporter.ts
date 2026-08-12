@@ -3,8 +3,9 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fetchDefaultEnvJsonFromTarget } from './cfClient';
+import { fetchAppEnvironmentFromTarget } from './cfClient';
 import { runWithCfCliAuthRecovery } from './cfCliAuthRecovery';
+import { assertResolvedAppScope } from './cfAppScopeGuard';
 import type { ServiceExportSession } from './serviceArtifactExporter';
 
 // ── Fixed SQLTools constants (mirrors 01-saptools/src/vscode.ts) ────────────
@@ -238,18 +239,35 @@ function isSqlToolsConnectionEntry(value: unknown): value is SqlToolsConnectionE
 export async function exportSqlToolsConfig(
   options: SqlToolsConfigExportOptions
 ): Promise<SqlToolsConfigExportResult> {
-  return runWithCfCliAuthRecovery(options.session, () =>
-    exportSqlToolsConfigAttempt(options)
+  // holdTarget: this writes HANA credentials into .vscode/settings.json, so it
+  // must not pick up another org's binding if something retargets mid-flight.
+  // The operation is two `cf` calls, short enough to hold the slot for.
+  return runWithCfCliAuthRecovery(
+    options.session,
+    () => exportSqlToolsConfigAttempt(options),
+    { holdTarget: true }
   );
 }
 
 async function exportSqlToolsConfigAttempt(
   options: SqlToolsConfigExportOptions
 ): Promise<SqlToolsConfigExportResult> {
-  const defaultEnvJson = await fetchDefaultEnvJsonFromTarget({
+  const environment = await fetchAppEnvironmentFromTarget({
     appName: options.appName,
     cfHomeDir: options.session.cfHomeDir,
   });
+  // Same guard as the SQL workbench: this writes a HANA connection to disk, so it
+  // must not accept a binding CF resolved in some other org because a concurrent
+  // operation moved the shared CF target.
+  assertResolvedAppScope(
+    {
+      appName: options.appName,
+      orgName: options.session.orgName,
+      spaceName: options.session.spaceName,
+    },
+    environment.identity
+  );
+  const defaultEnvJson = environment.defaultEnvJson;
 
   let parsedPayload: Record<string, unknown>;
   try {

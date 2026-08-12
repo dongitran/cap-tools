@@ -25,6 +25,7 @@ interface EntryDetail {
   readonly csv: string;
   readonly columns: string[];
   readonly rows: string[][];
+  readonly truncated: boolean;
 }
 
 export class HanaSqlHistoryPanelManager implements vscode.Disposable {
@@ -113,8 +114,8 @@ export class HanaSqlHistoryPanelManager implements vscode.Disposable {
         backupStore.readBackupSql(entry),
         backupStore.readBackupCsv(entry),
       ]);
-      const { columns, rows } = parseCsvForDisplay(csv ?? '');
-      const detail: EntryDetail = { sql: sql ?? '', csv: csv ?? '', columns, rows };
+      const { columns, rows, truncated } = parseCsvForDisplay(csv ?? '');
+      const detail: EntryDetail = { sql: sql ?? '', csv: csv ?? '', columns, rows, truncated };
       void panel.webview.postMessage({ type: 'detailLoaded', id: msg.id, detail });
       return;
     }
@@ -153,44 +154,83 @@ function createWebviewNonce(): string {
   return randomBytes(16).toString('base64url');
 }
 
-/**
- * Parse a CSV string into columns + rows for table display.
- * Handles RFC 4180 quoting. Limited to first 500 rows for safety.
- */
-export function parseCsvForDisplay(csv: string): { columns: string[]; rows: string[][] } {
-  const lines = csv.split('\n').filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return { columns: [], rows: [] };
-  const columns = parseCsvLine(lines[0] ?? '');
-  const rows = lines.slice(1, 501).map((line) => parseCsvLine(line));
-  return { columns, rows };
+/** Rows rendered in the detail pane; the CSV on disk is never truncated. */
+export const HISTORY_MAX_DISPLAY_ROWS = 500;
+
+export interface CsvDisplayTable {
+  readonly columns: string[];
+  readonly rows: string[][];
+  /** True when the backup holds more rows than the panel renders. */
+  readonly truncated: boolean;
 }
 
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let i = 0;
-  while (i < line.length) {
-    if (line[i] === '"') {
-      let cell = '';
-      i += 1;
-      while (i < line.length) {
-        if (line[i] === '"' && line[i + 1] === '"') { cell += '"'; i += 2; continue; }
-        if (line[i] === '"') { i += 1; break; }
-        cell += line[i] ?? ''; i += 1;
+/**
+ * Parse a CSV string into columns + rows for table display.
+ *
+ * Quoting is handled across the whole document rather than line by line: a cell
+ * may legitimately contain newlines (formatHanaSqlResultSetCsv quotes it but
+ * keeps the literal newline, per RFC 4180), and splitting on '\n' first shredded
+ * such a row into several malformed ones.
+ */
+export function parseCsvForDisplay(csv: string): CsvDisplayTable {
+  const records = parseCsvRecords(csv);
+  if (records.length === 0) return { columns: [], rows: [], truncated: false };
+  const [columns = [], ...dataRows] = records;
+  return {
+    columns,
+    rows: dataRows.slice(0, HISTORY_MAX_DISPLAY_ROWS),
+    truncated: dataRows.length > HISTORY_MAX_DISPLAY_ROWS,
+  };
+}
+
+function parseCsvRecords(csv: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  let sawContent = false;
+
+  const endRecord = (): void => {
+    record.push(cell);
+    cell = '';
+    // A bare empty line carries no data — keep the previous "skip blank lines"
+    // behavior rather than rendering a phantom row.
+    if (!(record.length === 1 && record[0] === '')) records.push(record);
+    record = [];
+    sawContent = false;
+  };
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const char = csv[index] ?? '';
+    if (inQuotes) {
+      if (char !== '"') {
+        cell += char;
+      } else if (csv[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = false;
       }
-      cells.push(cell);
-      if (i < line.length && line[i] === ',') {
-        i += 1;
-        if (i === line.length) cells.push('');
-      }
-    } else {
-      const comma = line.indexOf(',', i);
-      if (comma < 0) { cells.push(line.slice(i)); break; }
-      cells.push(line.slice(i, comma));
-      i = comma + 1;
-      if (i === line.length) { cells.push(''); break; }
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = true;
+      sawContent = true;
+    } else if (char === ',') {
+      record.push(cell);
+      cell = '';
+      sawContent = true;
+    } else if (char === '\n') {
+      endRecord();
+    } else if (char !== '\r') {
+      cell += char;
+      sawContent = true;
     }
   }
-  return cells;
+  if (sawContent || cell.length > 0 || record.length > 0) {
+    endRecord();
+  }
+  return records;
 }
 
 // ── HTML Builder ──────────────────────────────────────────────────────────────
@@ -411,7 +451,9 @@ function buildHistoryPanelJs(): string {
         if (!entry) return;
 
         const badgeClass = 'badge-' + entry.statementType.toLowerCase();
-        const rowLabel = detail.rows.length === 500 ? '500+ rows (showing first 500)' : detail.rows.length + ' row' + (detail.rows.length !== 1 ? 's' : '');
+        const rowLabel = detail.truncated
+          ? 'Showing the first ' + detail.rows.length + ' rows — use Copy CSV for the full backup'
+          : detail.rows.length + ' row' + (detail.rows.length !== 1 ? 's' : '');
 
         const tableHtml = detail.columns.length > 0
           ? '<div class="table-wrap"><table class="data-table"><thead><tr>' +

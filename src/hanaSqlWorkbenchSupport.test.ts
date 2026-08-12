@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 
-import type { HanaQueryResultSet } from './hanaSqlService';
+import type { HanaQueryResult, HanaQueryResultSet } from './hanaSqlService';
 import {
+  MAX_RENDERED_RESULT_ROWS,
   QUICK_SELECT_ROW_LIMIT,
   SQL_KEYWORDS,
   TABLE_SUGGESTION_LIMIT,
@@ -858,6 +859,85 @@ describe('buildHanaSqlResultHtml', () => {
     expect(html).toContain('&lt;script&gt;alert(3)&lt;/script&gt;');
   });
 });
+
+describe('buildHanaSqlResultHtml row rendering cap', () => {
+  function buildResultSet(rowCount: number): HanaQueryResult {
+    return {
+      kind: 'resultset',
+      columns: ['ID', 'NAME'],
+      rows: Array.from({ length: rowCount }, (_, index) => [String(index + 1), `row-${String(index + 1)}`]),
+      rowCount,
+      elapsedMs: 7,
+    };
+  }
+
+  test('renders every row when the result fits under the cap', () => {
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      tableName: 'ORDERS',
+      sql: 'SELECT * FROM ORDERS',
+      executedAt: '2026-04-25T00:00:00Z',
+      result: buildResultSet(MAX_RENDERED_RESULT_ROWS),
+    });
+
+    expect(countRenderedRows(html)).toBe(MAX_RENDERED_RESULT_ROWS);
+    // The class is always present in the stylesheet; only the element must be absent.
+    expect(html).not.toContain('<p class="result-truncation-note">');
+  });
+
+  test('caps rendered rows and explains the truncation when the result is larger', () => {
+    const rowCount = MAX_RENDERED_RESULT_ROWS + 250;
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      tableName: 'ORDERS',
+      sql: 'SELECT * FROM ORDERS LIMIT 100000',
+      executedAt: '2026-04-25T00:00:00Z',
+      result: buildResultSet(rowCount),
+    });
+
+    expect(countRenderedRows(html)).toBe(MAX_RENDERED_RESULT_ROWS);
+    expect(html).toContain('<p class="result-truncation-note">');
+    expect(html).toContain(
+      `Showing the first ${String(MAX_RENDERED_RESULT_ROWS)} of ${String(rowCount)} rows`
+    );
+    expect(html).toContain('Export the result to get every row.');
+  });
+
+  test('caps rows inside each section of a batch view', () => {
+    const rowCount = MAX_RENDERED_RESULT_ROWS + 10;
+    const html = buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT 1; SELECT 2',
+      executedAt: '2026-04-25T00:00:00Z',
+      statements: [
+        { sql: 'SELECT * FROM A', status: 'success', elapsedMs: 1, result: buildResultSet(rowCount) },
+        { sql: 'SELECT * FROM B', status: 'success', elapsedMs: 1, result: buildResultSet(2) },
+      ],
+    });
+
+    expect(countRenderedRows(html)).toBe(MAX_RENDERED_RESULT_ROWS + 2);
+    expect(html).toContain('<p class="result-truncation-note">');
+  });
+
+  test('keeps the whole result available to the CSV export after capping the view', () => {
+    const rowCount = MAX_RENDERED_RESULT_ROWS + 3;
+    const result = buildResultSet(rowCount);
+
+    expect(countRenderedRows(buildHanaSqlResultHtml({
+      appName: 'finance-uat-api',
+      sql: 'SELECT * FROM ORDERS',
+      executedAt: '2026-04-25T00:00:00Z',
+      result,
+    }))).toBe(MAX_RENDERED_RESULT_ROWS);
+
+    if (result.kind !== 'resultset') throw new Error('expected a resultset');
+    expect(formatHanaSqlResultSetCsv(result).split('\n')).toHaveLength(rowCount + 1);
+  });
+});
+
+function countRenderedRows(html: string): number {
+  return html.split('data-role="sql-result-row"').length - 1;
+}
 
 describe('buildHanaSqlResultHtml result meta layout', () => {
   test('renders table metadata without executed time for status results', () => {
